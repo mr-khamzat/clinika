@@ -616,3 +616,173 @@ async def get_integrations_stats(
         results["last_successful_webhook"] = None
 
     return results
+
+
+# ─── Этап 10: новые drill-down эндпоинты ─────────────────────────────────────
+
+
+@router.get("/health")
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """
+    Публичная проверка здоровья (без авторизации).
+    Используется load-balancer-ами и uptime-мониторами.
+    """
+    try:
+        await db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    redis_ok = False
+    try:
+        import redis.asyncio as aioredis
+        from app.config import settings
+        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2, socket_timeout=2)
+        await r.ping()
+        await r.aclose()
+        redis_ok = True
+    except Exception:
+        pass
+
+    status = "ok" if (db_ok and redis_ok) else "degraded"
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=200 if status == "ok" else 503,
+        content={
+            "status": status,
+            "db": "ok" if db_ok else "error",
+            "redis": "ok" if redis_ok else "error",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
+@router.get("/metrics")
+async def get_request_metrics(
+    window: int = 60,
+    _: User = Depends(require_manager),
+):
+    """
+    Метрики запросов за последние N минут (из Redis).
+    Включает: total, error_rate, latency p50/p95/p99, top endpoints, timeseries.
+    """
+    from app.utils.metrics import get_request_metrics as _metrics
+    return await _metrics(window_minutes=min(window, 180))
+
+
+@router.get("/metrics/endpoints")
+async def get_endpoint_breakdown(
+    window: int = 60,
+    _: User = Depends(require_manager),
+):
+    """Топ эндпоинтов по кол-ву запросов + средняя задержка."""
+    from app.utils.metrics import get_request_metrics as _metrics
+    data = await _metrics(window_minutes=min(window, 180))
+    return {
+        "window_minutes": window,
+        "endpoints": data.get("top_endpoints", []),
+        "status_breakdown": data.get("status_breakdown", {}),
+    }
+
+
+@router.get("/health/history")
+async def get_health_history(
+    limit: int = 12,
+    _: User = Depends(require_manager),
+):
+    """
+    История снимков здоровья системы (до 144 записей = 24 ч при интервале 10 мин).
+    """
+    from app.utils.metrics import get_health_history as _history
+    return await _history(limit=min(limit, 144))
+
+
+@router.post("/health/snapshot")
+async def save_health_snapshot(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    """
+    Сохранить текущий снимок здоровья системы в Redis (вызывается вручную или по cron).
+    """
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    server_stats, db_stats, redis_stats = await asyncio.gather(
+        loop.run_in_executor(None, _get_server_stats),
+        _get_db_stats(db),
+        _get_redis_stats(),
+    )
+
+    snapshot = {
+        "cpu": server_stats.get("cpu_percent"),
+        "ram": server_stats.get("ram_percent"),
+        "disk": server_stats.get("disk_percent"),
+        "db_connections": db_stats.get("connections"),
+        "redis_mb": redis_stats.get("used_memory_mb"),
+        "db_status": db_stats.get("status"),
+        "redis_status": redis_stats.get("status"),
+    }
+
+    from app.utils.metrics import save_health_snapshot as _save
+    await _save(snapshot)
+    return {"saved": True, "snapshot": snapshot}
+
+
+@router.get("/pool")
+async def get_db_pool_stats(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    """
+    Статус пула соединений SQLAlchemy + PostgreSQL pg_stat_activity.
+    """
+    from app.database import engine
+
+    # SQLAlchemy pool stats
+    pool = engine.pool
+    pool_stats = {}
+    try:
+        pool_stats = {
+            "size":        pool.size(),
+            "checked_out": pool.checkedout(),
+            "overflow":    pool.overflow(),
+            "checked_in":  pool.checkedin(),
+            "invalid":     pool.invalidated() if hasattr(pool, "invalidated") else None,
+        }
+    except Exception as e:
+        pool_stats = {"error": str(e)}
+
+    # PostgreSQL pg_stat_activity
+    try:
+        r = await db.execute(text("""
+            SELECT state, wait_event_type, COUNT(*) as cnt
+            FROM pg_stat_activity
+            WHERE datname = current_database()
+            GROUP BY state, wait_event_type
+            ORDER BY cnt DESC
+        """))
+        pg_sessions = [
+            {"state": row.state, "wait_event_type": row.wait_event_type, "count": row.cnt}
+            for row in r.fetchall()
+        ]
+    except Exception as e:
+        pg_sessions = [{"error": str(e)}]
+
+    # Длительность самого долгого запроса
+    try:
+        r = await db.execute(text("""
+            SELECT MAX(EXTRACT(EPOCH FROM (NOW() - query_start))) as max_sec
+            FROM pg_stat_activity
+            WHERE state = 'active' AND query_start IS NOT NULL
+            AND query NOT LIKE '%pg_stat_activity%'
+        """))
+        max_query_sec = r.scalar()
+    except Exception:
+        max_query_sec = None
+
+    return {
+        "pool": pool_stats,
+        "pg_sessions": pg_sessions,
+        "longest_query_sec": round(max_query_sec, 1) if max_query_sec else None,
+    }

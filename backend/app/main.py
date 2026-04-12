@@ -40,6 +40,15 @@ def _register_plugins():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Инициализация rate limiter (Redis)
+    # Инициализация Redis-клиента для метрик (независимо от rate limiter)
+    try:
+        import redis.asyncio as _aio
+        _rc = _aio.from_url(settings.redis_url, encoding="utf8", decode_responses=True)
+        from app.utils.metrics import set_redis_client as _smr
+        _smr(_rc)
+    except Exception as _e:
+        import logging; logging.getLogger("startup").warning(f"Metrics Redis: {_e}")
+
     try:
         import redis.asyncio as aioredis
         from fastapi_limiter import FastAPILimiter
@@ -217,6 +226,21 @@ app.add_middleware(
 )
 
 # ─── Security headers ───
+@app.middleware("http")
+async def request_metrics_middleware(request: Request, call_next):
+    """Собирает метрики каждого запроса в Redis."""
+    import time as _time
+    _start = _time.monotonic()
+    response = await call_next(request)
+    _latency = (_time.monotonic() - _start) * 1000
+    try:
+        from app.utils.metrics import record_request as _rec
+        await _rec(request.method, request.url.path, response.status_code, _latency)
+    except Exception:
+        pass
+    return response
+
+
 @app.middleware("http")
 async def device_detection_middleware(request: Request, call_next):
     from app.utils.device import parse_user_agent
