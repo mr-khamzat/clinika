@@ -12,6 +12,7 @@ from app.routers.tenant import router as tenant_router
 from app.routers.plugins import router as plugins_router
 from app.routers.modules import router as modules_router
 from app.routers.geo import router as geo_router
+from app.routers.scheduling import router as scheduling_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
@@ -141,6 +142,25 @@ async def _seed_default_tenant(db):
     await db.commit()
 
 
+
+async def _seed_cities(db):
+    from app.models.city import City
+    from sqlalchemy import select
+    result = await db.execute(select(City).limit(1))
+    if result.scalar_one_or_none():
+        return
+    cities_data = [
+        {"name": "Грозный",        "region": "Чеченская Республика",  "latitude": 43.317, "longitude": 45.698},
+        {"name": "Москва",         "region": "Московская область",     "latitude": 55.751, "longitude": 37.618},
+        {"name": "Санкт-Петербург","region": "Ленинградская область",  "latitude": 59.939, "longitude": 30.316},
+        {"name": "Краснодар",      "region": "Краснодарский край",     "latitude": 45.040, "longitude": 38.976},
+        {"name": "Ставрополь",     "region": "Ставропольский край",    "latitude": 45.047, "longitude": 41.969},
+    ]
+    for c in cities_data:
+        db.add(City(**c))
+    await db.commit()
+
+
 async def expire_old_referrals_loop():
     """Фоновая задача: переводит просроченные направления в статус EXPIRED."""
     import logging
@@ -232,6 +252,7 @@ app.include_router(tenant_router)
 app.include_router(plugins_router)
 app.include_router(modules_router)
 app.include_router(geo_router)
+app.include_router(scheduling_router)
 
 
 @app.get("/health")

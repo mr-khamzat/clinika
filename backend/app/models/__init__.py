@@ -13,9 +13,11 @@ from app.models.discount import Discount, DiscountType
 from app.models.support import SupportMessage
 from app.models.tenant import Tenant, TenantLicense, TenantBranding
 from app.models.city import City
+from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
 
 __all__ = ["User", "UserRole", "Clinic", "ClinicSchedule", "Service",
            "City",
+           "Doctor", "DoctorSchedule", "Appointment", "AppointmentStatus",
            "Referral", "ReferralStatus", "ReferralComment",
            "Bonus", "BonusStatus", "BonusType", "SystemSettings",
            "KpiTarget", "ActivityLog", "Invitation", "Discount", "DiscountType",
