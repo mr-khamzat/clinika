@@ -26,8 +26,16 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.ADMIN)
     clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # 152-ФЗ
+    consent_given: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
+    consent_given_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    consent_version: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="users")
     referrals_created: Mapped[list["Referral"]] = relationship("Referral", back_populates="created_by", foreign_keys="Referral.created_by_admin_id")
     bonuses: Mapped[list["Bonus"]] = relationship("Bonus", back_populates="admin")
+
+
+# 152-ФЗ поля (добавлены в Этапе 11)
+# Добавляются как nullable для совместимости с существующими записями

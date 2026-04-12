@@ -17,6 +17,8 @@ from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentSt
 from app.models.ledger import LedgerEntry
 from app.models.audit import AuditEntry
 from app.models.billing import Subscription, Invoice, Payment
+from app.models.refresh_token import RefreshToken
+from app.models.consent import ConsentRecord
 
 __all__ = [
     "User", "UserRole", "Clinic", "ClinicSchedule", "Service",
@@ -27,4 +29,5 @@ __all__ = [
     "KpiTarget", "ActivityLog", "Invitation", "Discount", "DiscountType",
     "SupportMessage", "Tenant", "TenantLicense", "TenantBranding",
     "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
+    "RefreshToken", "ConsentRecord",
 ]

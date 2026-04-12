@@ -1,38 +1,79 @@
 """
-========================================
-БЛОК: Аутентификация и регистрация
-========================================
-Методы входа:
-  - Telegram Mini App (authTelegram)
-  - Логин/пароль (для системной панели и партнёров)
-  - Регистрация по инвайт-коду (для партнёров)
-========================================
+Аутентификация: Telegram Mini App, логин/пароль, инвайт.
+Refresh tokens: /auth/refresh, /auth/logout.
 """
 import logging
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.invitation import Invitation
+from app.models.refresh_token import RefreshToken
 from app.schemas.auth import TelegramAuthData, PasswordLoginData, TokenResponse
-from app.core.security import create_access_token, verify_password, hash_password, verify_telegram_init_data
+from app.core.security import (
+    create_access_token, create_refresh_token, hash_refresh_token,
+    verify_password, hash_password, verify_telegram_init_data,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+)
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("auth")
 
+REFRESH_TOKEN_EXPIRE = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
 
 def _login_limiter():
-    """10 попыток входа / 5 минут с одного IP."""
     try:
         from fastapi_limiter.depends import RateLimiter
         return [Depends(RateLimiter(times=10, seconds=300))]
     except Exception as e:
-        logger.warning(f"Rate limiter недоступен — брутфорс не защищён: {e}")
+        logger.warning(f"Rate limiter недоступен: {e}")
         return []
+
+
+def _get_ip(request: Request) -> str | None:
+    return (
+        request.headers.get("x-real-ip")
+        or (request.headers.get("x-forwarded-for", "").split(",")[0].strip() or None)
+        or (request.client.host if request.client else None)
+    )
+
+
+async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
+    """Выпускает access + refresh токены, сохраняет refresh в БД."""
+    access = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "tid": str(user.tenant_id) if user.tenant_id else None,
+    })
+    raw_refresh, token_hash = create_refresh_token(str(user.id))
+
+    ua = request.headers.get("user-agent", "")[:200]
+    rt = RefreshToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        device_info=ua or None,
+        ip=_get_ip(request),
+        expires_at=datetime.utcnow() + REFRESH_TOKEN_EXPIRE,
+    )
+    db.add(rt)
+    await db.commit()
+
+    return {
+        "access_token": access,
+        "refresh_token": raw_refresh,
+        "token_type": "bearer",
+        "expires_in": 30 * 60,  # 30 мин в секундах
+        "user_id": str(user.id),
+        "role": user.role.value,
+        "clinic_id": str(user.clinic_id) if user.clinic_id else None,
+        "full_name": user.full_name,
+    }
 
 
 # ─── Схемы инвайта ───
@@ -51,16 +92,14 @@ class InviteRegisterRequest(BaseModel):
     password: str
 
 
-# ─── Вход через Telegram Mini App ───
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
-@router.post("/telegram", response_model=TokenResponse)
-async def telegram_auth(data: TelegramAuthData, db: AsyncSession = Depends(get_db)):
-    """
-    Вход через Telegram Mini App.
-    Верифицирует подпись initData если бот-токен настроен.
-    Создаёт пользователя при первом входе.
-    """
-    # Верификация подписи Telegram
+
+# ─── Telegram Mini App ───
+
+@router.post("/telegram")
+async def telegram_auth(data: TelegramAuthData, request: Request, db: AsyncSession = Depends(get_db)):
     if not verify_telegram_init_data(data.init_data or ""):
         raise HTTPException(status_code=401, detail="Недействительная подпись Telegram")
 
@@ -79,7 +118,7 @@ async def telegram_auth(data: TelegramAuthData, db: AsyncSession = Depends(get_d
             telegram_id=tg_id,
             full_name=full_name,
             phone_number=data.phone_number,
-            role=auto_role
+            role=auto_role,
         )
         db.add(user)
         await db.commit()
@@ -90,60 +129,137 @@ async def telegram_auth(data: TelegramAuthData, db: AsyncSession = Depends(get_d
             user.role = UserRole.MANAGER
         await db.commit()
 
-    token = create_access_token({"sub": str(user.id), "role": user.role.value, "tid": str(user.tenant_id) if user.tenant_id else None})
-    return TokenResponse(
-        access_token=token,
-        user_id=str(user.id),
-        role=user.role.value,
-        clinic_id=str(user.clinic_id) if user.clinic_id else None,
-        full_name=user.full_name
-    )
+    return await _issue_tokens(user, request, db)
 
 
-# ─── Вход по логину/паролю (системная панель и партнёры) ───
+# ─── Вход по логину/паролю ───
 
-@router.post("/login", response_model=TokenResponse, dependencies=_login_limiter())
-async def password_login(data: PasswordLoginData, db: AsyncSession = Depends(get_db)):
-    """Вход по логину и паролю — для системной панели и партнёров."""
+@router.post("/login", dependencies=_login_limiter())
+async def password_login(data: PasswordLoginData, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == data.username))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
 
-    token = create_access_token({"sub": str(user.id), "role": user.role.value, "tid": str(user.tenant_id) if user.tenant_id else None})
-    return TokenResponse(
-        access_token=token,
-        user_id=str(user.id),
-        role=user.role.value,
-        clinic_id=str(user.clinic_id) if user.clinic_id else None,
-        full_name=user.full_name
+    return await _issue_tokens(user, request, db)
+
+
+# ─── Обновление access token через refresh ───
+
+@router.post("/refresh")
+async def refresh_access_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Обменивает refresh token на новый access token (не ротирует refresh)."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.revoked == False,  # noqa: E712
+        )
     )
+    rt = result.scalar_one_or_none()
+
+    if not rt:
+        raise HTTPException(status_code=401, detail="Недействительный refresh token")
+    if rt.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Refresh token истёк")
+
+    user_result = await db.execute(select(User).where(User.id == rt.user_id))
+    user = user_result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Пользователь не найден или заблокирован")
+
+    access = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "tid": str(user.tenant_id) if user.tenant_id else None,
+    })
+    return {"access_token": access, "token_type": "bearer", "expires_in": 30 * 60}
 
 
-# ─── БЛОК: Регистрация по инвайт-коду (для партнёров) ───
+# ─── Выход (revoke refresh token) ───
+
+@router.post("/logout")
+async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Отзывает refresh token (выход с устройства)."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    rt = result.scalar_one_or_none()
+    if rt:
+        rt.revoked = True
+        await db.commit()
+    return {"ok": True}
+
+
+# ─── Выход со всех устройств ───
+
+@router.post("/logout-all")
+async def logout_all(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Отзывает все refresh токены пользователя."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    rt = result.scalar_one_or_none()
+    if not rt:
+        raise HTTPException(status_code=401, detail="Недействительный refresh token")
+
+    await db.execute(
+        delete(RefreshToken).where(
+            RefreshToken.user_id == rt.user_id,
+            RefreshToken.revoked == False,  # noqa: E712
+        )
+    )
+    await db.commit()
+    return {"ok": True, "message": "Выход со всех устройств выполнен"}
+
+
+# ─── Активные сессии ───
+
+@router.post("/sessions")
+async def get_sessions(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    """Список активных refresh-сессий пользователя."""
+    token_hash = hash_refresh_token(body.refresh_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    rt = result.scalar_one_or_none()
+    if not rt:
+        raise HTTPException(status_code=401, detail="Недействительный refresh token")
+
+    sessions_result = await db.execute(
+        select(RefreshToken)
+        .where(RefreshToken.user_id == rt.user_id, RefreshToken.revoked == False)  # noqa: E712
+        .order_by(RefreshToken.created_at.desc())
+    )
+    sessions = sessions_result.scalars().all()
+    return {
+        "sessions": [
+            {
+                "id": str(s.id),
+                "device_info": s.device_info,
+                "ip": s.ip,
+                "created_at": s.created_at.isoformat(),
+                "expires_at": s.expires_at.isoformat(),
+                "current": s.token_hash == token_hash,
+            }
+            for s in sessions
+        ]
+    }
+
+
+# ─── Инвайт ───
 
 @router.get("/invite/{code}", response_model=InviteInfoResponse)
 async def get_invite_info(code: str, db: AsyncSession = Depends(get_db)):
-    """Публичный эндпоинт. Возвращает информацию об инвайте для страницы регистрации."""
     from app.models.clinic import Clinic
     result = await db.execute(select(Invitation).where(Invitation.code == code))
     invite = result.scalar_one_or_none()
-
     if not invite:
         return InviteInfoResponse(valid=False, clinic_id="", clinic_name="", role="")
-
     if invite.expires_at and invite.expires_at < datetime.utcnow():
         return InviteInfoResponse(valid=False, clinic_id="", clinic_name="Инвайт устарел", role="")
-
     if invite.uses_count >= invite.max_uses:
         return InviteInfoResponse(valid=False, clinic_id="", clinic_name="Инвайт исчерпан", role="")
-
     clinic = (await db.execute(select(Clinic).where(Clinic.id == invite.clinic_id))).scalar_one_or_none()
-
     return InviteInfoResponse(
         valid=True,
         clinic_id=str(invite.clinic_id),
@@ -152,12 +268,10 @@ async def get_invite_info(code: str, db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.post("/register-invite", response_model=TokenResponse)
-async def register_by_invite(data: InviteRegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Регистрация нового партнёра по инвайт-коду. Телефон становится логином для входа."""
+@router.post("/register-invite")
+async def register_by_invite(data: InviteRegisterRequest, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Invitation).where(Invitation.code == data.code))
     invite = result.scalar_one_or_none()
-
     if not invite:
         raise HTTPException(status_code=404, detail="Инвайт не найден")
     if invite.expires_at and invite.expires_at < datetime.utcnow():
@@ -166,7 +280,6 @@ async def register_by_invite(data: InviteRegisterRequest, db: AsyncSession = Dep
         raise HTTPException(status_code=400, detail="Инвайт исчерпан")
 
     normalized_phone = "".join(c for c in data.phone_number if c.isdigit() or c == "+")
-
     existing = await db.execute(select(User).where(User.username == normalized_phone))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Пользователь с таким телефоном уже существует")
@@ -185,11 +298,4 @@ async def register_by_invite(data: InviteRegisterRequest, db: AsyncSession = Dep
     await db.commit()
     await db.refresh(user)
 
-    token = create_access_token({"sub": str(user.id), "role": user.role.value, "tid": str(user.tenant_id) if user.tenant_id else None})
-    return TokenResponse(
-        access_token=token,
-        user_id=str(user.id),
-        role=user.role.value,
-        clinic_id=str(user.clinic_id) if user.clinic_id else None,
-        full_name=user.full_name
-    )
+    return await _issue_tokens(user, request, db)
