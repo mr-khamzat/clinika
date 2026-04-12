@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.services import audit_service
+from app.services.audit_service import AuditAction
 from app.models.user import User, UserRole
 from app.models.clinic import Clinic
 from app.schemas.manager import (
@@ -37,6 +39,13 @@ async def assign_clinic(
         if not clinic_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Клиника не найдена")
     admin.clinic_id = body.clinic_id
+    await audit_service.write_safe(
+        db, AuditAction.USER_UPDATED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type=user, entity_id=admin.id,
+        before=_before,
+        after={full_name: admin.full_name, role: str(admin.role), is_active: admin.is_active},
+    )
     await db.commit()
     await db.refresh(admin)
     return UserResponse.model_validate(admin)
@@ -74,6 +83,13 @@ async def create_admin(
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
+    await audit_service.write_safe(
+        db, AuditAction.USER_CREATED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type=user, entity_id=new_user.id,
+        after={username: new_user.username, full_name: new_user.full_name, role: str(new_user.role)},
+    )
+    await db.commit()
     return UserResponse.model_validate(new_user)
 
 
@@ -92,6 +108,7 @@ async def update_admin(
     if current_user.clinic_id is not None and admin.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому сотруднику")
 
+    _before = {full_name: admin.full_name, role: str(admin.role), is_active: admin.is_active, clinic_id: str(admin.clinic_id) if admin.clinic_id else None}
     if body.full_name is not None: admin.full_name = body.full_name
     if body.username is not None: admin.username = body.username
     if body.password: admin.password_hash = hash_password(body.password)

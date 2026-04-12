@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.services import audit_service
+from app.services.audit_service import AuditAction
 from app.models.user import User, UserRole
 from app.schemas.manager import CommissionSettings, UpdateCommissionRequest
 from app.services.settings_service import get_setting, set_setting

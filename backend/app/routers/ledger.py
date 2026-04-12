@@ -22,6 +22,8 @@ from app.core.tenant import require_feature
 from app.models.user import User
 from app.services import ledger_service
 from app.services.ledger_service import OpType
+from app.services import audit_service
+from app.services.audit_service import AuditAction
 
 router = APIRouter(prefix="/ledger", tags=["ledger"])
 
@@ -165,6 +167,12 @@ async def manual_adjust(
         operation_type=op_type,
         description=body.description,
         created_by_id=current_user.id,
+    )
+    await audit_service.write_safe(
+        db, AuditAction.LEDGER_ADJUSTED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type="user", entity_id=body.user_id,
+        after={"amount": body.amount, "op_type": op_type, "description": body.description},
     )
     await db.commit()
     return {

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,8 @@ from app.models.clinic import Clinic
 from app.models.service import Service
 from app.schemas.manager import MarkPaidResponse
 from app.services.activity_service import log_activity
+from app.services import audit_service
+from app.services.audit_service import AuditAction
 
 router = APIRouter(tags=["manager:bonuses"])
 
@@ -35,8 +37,14 @@ async def mark_bonus_paid(
         raise HTTPException(status_code=404, detail="Бонус не найден")
     if bonus.status == BonusStatus.PAID:
         raise HTTPException(status_code=400, detail="Бонус уже оплачен")
+    before = {status: bonus.status, amount: float(bonus.amount)}
     bonus.status = BonusStatus.PAID
     bonus.paid_at = datetime.utcnow()
+    await audit_service.write_safe(db, AuditAction.BONUS_PAID,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type=bonus, entity_id=bonus.id,
+        before=before, after={status: PAID, amount: float(bonus.amount)},
+    )
     await db.commit()
     await db.refresh(bonus)
     return bonus
