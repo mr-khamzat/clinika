@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===== ГЛОБАЛЬНЫЕ СТИЛИ: Клинический дизайн ===== */
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply text-gray-900 dark:text-gray-100;
+  }
+
+  /* Тёмная тема: нативный color-scheme для браузерных form элементов */
+  :root { color-scheme: light; }
+  html.dark { color-scheme: dark; }
+
+  /* Лучший скроллбар */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-gray-400 dark:bg-gray-500; }
+}
+
+/* ===== ТЁМНАЯ ТЕМА: автокоррекция форм без явных dark:-классов ===== */
+/* Работает для страниц где dark: классы не указаны (AdminPanel, ManagerDashboard и т.д.) */
+/* Если на элементе есть явный dark:bg-* или dark:text-* — он имеет приоритет (специфичность выше) */
+@layer components {
+
+  /* Все input (кроме чекбоксов/радио) в тёмной теме */
+  .dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="submit"]) {
+    color: rgb(243 244 246);           /* gray-100 */
+    background-color: rgb(31 41 55);   /* gray-800 */
+    border-color: rgb(75 85 99);       /* gray-600 */
+  }
+
+  /* Textarea */
+  .dark textarea {
+    color: rgb(243 244 246);
+    background-color: rgb(31 41 55);
+    border-color: rgb(75 85 99);
+  }
+
+  /* Select */
+  .dark select {
+    color: rgb(243 244 246);
+    background-color: rgb(31 41 55);
+    border-color: rgb(75 85 99);
+  }
+
+  /* Placeholder цвет в тёмной теме */
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: rgb(107 114 128); /* gray-500 */
+  }
+
+  /* Labels в тёмной теме */
+  .dark label {
+    color: rgb(209 213 219); /* gray-300 */
+  }
+
+  /* Таблицы: заголовки и ячейки без dark: классов */
+  .dark th {
+    color: rgb(156 163 175); /* gray-400 */
+  }
+  .dark td {
+    color: rgb(209 213 219); /* gray-300 */
+  }
+}

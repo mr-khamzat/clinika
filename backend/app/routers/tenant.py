@@ -1,0 +1,159 @@
+"""
+Роутер тенанта: /tenant/*
+Информация о текущем тенанте, брендинге, лицензии.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel
+from typing import Optional
+import uuid
+from datetime import datetime
+
+from app.database import get_db
+from app.core.deps import get_current_user, require_manager
+from app.models.user import User
+from app.models.tenant import Tenant, TenantLicense, TenantBranding
+from app.core.tenant import get_current_tenant
+
+router = APIRouter(prefix="/tenant", tags=["tenant"])
+
+
+# --- Схемы ответов ---
+
+class TenantOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    domain: Optional[str]
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LicenseOut(BaseModel):
+    plan: str
+    max_clinics: int
+    max_users: int
+    features: Optional[dict]
+    valid_from: datetime
+    valid_until: Optional[datetime]
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class BrandingOut(BaseModel):
+    brand_name: Optional[str]
+    logo_url: Optional[str]
+    primary_color: str
+    sidebar_color: str
+    bg_color: str
+    font_family: str
+
+    class Config:
+        from_attributes = True
+
+
+class BrandingUpdate(BaseModel):
+    brand_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    sidebar_color: Optional[str] = None
+    bg_color: Optional[str] = None
+    font_family: Optional[str] = None
+
+
+# --- Эндпоинты ---
+
+@router.get("/current", response_model=TenantOut)
+async def get_tenant_current(
+    tenant: Tenant | None = Depends(get_current_tenant),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Информация о текущем тенанте."""
+    if tenant is None:
+        # single-tenant режим — возвращаем дефолтный
+        result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
+        tenant = result.scalar_one_or_none()
+        if tenant is None:
+            raise HTTPException(status_code=404, detail="Тенант не найден")
+    return tenant
+
+
+@router.get("/branding", response_model=BrandingOut)
+async def get_branding(
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Настройки брендинга тенанта."""
+    if tenant is None:
+        result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
+        tenant = result.scalar_one_or_none()
+    if tenant is None:
+        # Возвращаем дефолтные значения
+        return BrandingOut(
+            brand_name=None, logo_url=None,
+            primary_color="#0097A7", sidebar_color="#004D5F",
+            bg_color="#F0F5F6", font_family="Inter",
+        )
+    result = await db.execute(select(TenantBranding).where(TenantBranding.tenant_id == tenant.id))
+    branding = result.scalar_one_or_none()
+    if branding is None:
+        return BrandingOut(
+            brand_name=None, logo_url=None,
+            primary_color="#0097A7", sidebar_color="#004D5F",
+            bg_color="#F0F5F6", font_family="Inter",
+        )
+    return branding
+
+
+@router.patch("/branding", response_model=BrandingOut)
+async def update_branding(
+    data: BrandingUpdate,
+    tenant: Tenant | None = Depends(get_current_tenant),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновление брендинга (только менеджер)."""
+    if tenant is None:
+        result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
+        tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    result = await db.execute(select(TenantBranding).where(TenantBranding.tenant_id == tenant.id))
+    branding = result.scalar_one_or_none()
+    if branding is None:
+        branding = TenantBranding(tenant_id=tenant.id)
+        db.add(branding)
+
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(branding, field, value)
+
+    await db.commit()
+    await db.refresh(branding)
+    return branding
+
+
+@router.get("/license", response_model=LicenseOut)
+async def get_license(
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лицензия тенанта."""
+    if tenant is None:
+        result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
+        tenant = result.scalar_one_or_none()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    result = await db.execute(select(TenantLicense).where(TenantLicense.tenant_id == tenant.id))
+    lic = result.scalar_one_or_none()
+    if lic is None:
+        raise HTTPException(status_code=404, detail="Лицензия не найдена")
+    return lic

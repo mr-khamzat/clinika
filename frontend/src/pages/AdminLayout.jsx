@@ -1,0 +1,3887 @@
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import axios from 'axios'
+import HelpModal from '../components/HelpModal'
+import AdminSupportPanel from '../components/AdminSupportPanel'
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function authHeaders(token) {
+  return { Authorization: `Bearer ${token}` }
+}
+
+function apiFetch(method, url, token, data) {
+  return axios({ method, url: `/clinika/api${url}`, headers: authHeaders(token), data })
+}
+
+function Spinner() {
+  return (
+    <div className="flex justify-center py-12">
+      <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+function ErrorBox({ msg }) {
+  if (!msg) return null
+  return (
+    <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-xl p-3 mb-4">
+      <p className="text-red-600 dark:text-red-400 text-sm">{msg}</p>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// NAV items
+// ---------------------------------------------------------------------------
+function SupportAdminWrapper({ token }) {
+  return (
+    <div className="p-4 md:p-6">
+      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+        <span className="material-symbols-outlined" style={{fontVariationSettings: "'FILL' 1"}}>support_agent</span>
+        Чат поддержки
+      </h2>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        <AdminSupportPanel tokenProp={token} />
+      </div>
+    </div>
+  )
+}
+
+
+const NAV = [
+  { key: 'home',       label: 'Главная',    icon: 'dashboard' },
+  { key: 'staff',      label: 'Сотрудники', icon: 'group' },
+  { key: 'clinics',    label: 'Клиники',    icon: 'local_hospital' },
+  { key: 'services',   label: 'Услуги',     icon: 'medical_services' },
+  { key: 'reports',    label: 'Отчёты',     icon: 'analytics' },
+  { key: 'bonuses',    label: 'Бонусы',     icon: 'payments' },
+  { key: 'commission', label: 'Комиссия',   icon: 'percent' },
+  { key: 'partners',   label: 'Партнёры',   icon: 'handshake' },
+  { key: 'discounts',  label: 'Скидки',     icon: 'sell' },
+  { key: 'settings',   label: 'Настройки',  icon: 'settings' },
+  { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart' },
+  { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
+]
+
+// ---------------------------------------------------------------------------
+// Staff section
+// ---------------------------------------------------------------------------
+
+const EMPTY_STAFF_FORM = {
+  full_name: '',
+  telegram_id: '',
+  username: '',
+  password: '',
+  phone_number: '+7',
+  date_of_birth: '',
+  clinic_id: '',
+  role: 'admin',
+  category: '',
+}
+
+function formatPhone(val) {
+  if (!val.startsWith('+7')) return '+7'
+  const digits = val.slice(2).replace(/\D/g, '')
+  let out = '+7'
+  if (digits.length > 0) out += ' (' + digits.slice(0, 3)
+  if (digits.length >= 3) out += ') ' + digits.slice(3, 6)
+  if (digits.length >= 6) out += '-' + digits.slice(6, 8)
+  if (digits.length >= 8) out += '-' + digits.slice(8, 10)
+  return out
+}
+
+function StaffModal({ token, clinics, existing, onClose, onDone }) {
+  const isEdit = !!existing
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          full_name: existing.full_name || '',
+          telegram_id: existing.telegram_id ? String(existing.telegram_id) : '',
+          username: existing.username || '',
+          password: '',
+          phone_number: existing.phone_number ? formatPhone(existing.phone_number) : '+7',
+          date_of_birth: existing.date_of_birth ? existing.date_of_birth.slice(0, 10) : '',
+          clinic_id: existing.clinic_id ? String(existing.clinic_id) : '',
+          role: existing.role || 'admin',
+          category: existing.category || '',
+        }
+      : { ...EMPTY_STAFF_FORM }
+  )
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.full_name.trim()) { setError('Введите ФИО'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const payload = { full_name: form.full_name.trim(), role: form.role }
+      if (form.telegram_id.trim()) payload.telegram_id = form.telegram_id.trim()
+      if (form.username.trim()) payload.username = form.username.trim()
+      if (form.password.trim()) payload.password = form.password.trim()
+      payload.phone_number = (form.phone_number && form.phone_number !== '+7') ? form.phone_number : null
+      if (form.date_of_birth) payload.date_of_birth = form.date_of_birth
+      payload.clinic_id = form.clinic_id || null
+      if (!form.clinic_id) payload.unset_clinic = true
+      payload.category = form.category || null
+
+      if (isEdit) {
+        await apiFetch('patch', `/manager/admins/${existing.id}`, token, payload)
+      } else {
+        await apiFetch('post', '/manager/admins/', token, payload)
+      }
+      onDone()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
+          {isEdit ? 'Редактировать сотрудника' : 'Новый сотрудник'}
+        </h2>
+
+        <ErrorBox msg={error} />
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              ФИО <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.full_name}
+              onChange={e => set('full_name', e.target.value)}
+              placeholder="Иванов Иван Иванович"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Telegram ID</label>
+              <input
+                type="text"
+                value={form.telegram_id}
+                onChange={e => set('telegram_id', e.target.value)}
+                placeholder="293633093"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Логин</label>
+              <input
+                type="text"
+                value={form.username}
+                onChange={e => set('username', e.target.value)}
+                placeholder="login"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Пароль{isEdit ? ' (оставьте пустым, чтобы не менять)' : ''}
+            </label>
+            <input
+              type="password"
+              value={form.password}
+              onChange={e => set('password', e.target.value)}
+              placeholder="••••••••"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Телефон</label>
+              <input
+                type="tel"
+                value={form.phone_number}
+                onChange={e => set('phone_number', formatPhone(e.target.value))}
+                onFocus={e => { if (e.target.value === '+7') setTimeout(() => e.target.setSelectionRange(e.target.value.length, e.target.value.length), 0) }}
+                placeholder="+7 (900) 000-00-00"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Дата рождения</label>
+              <input
+                type="date"
+                value={form.date_of_birth}
+                onChange={e => set('date_of_birth', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Клиника</label>
+              <select
+                value={form.clinic_id}
+                onChange={e => set('clinic_id', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Без клиники</option>
+                {clinics.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Роль</label>
+              <select
+                value={form.role}
+                onChange={e => set('role', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              >
+                <option value="admin">Администратор</option>
+                <option value="manager">Руководитель</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Должность</label>
+              <select
+                value={form.category}
+                onChange={e => set('category', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Не указана</option>
+                <option value="doctor">Врач</option>
+                <option value="nurse">Медсестра</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-blue-700 transition"
+            >
+              {loading ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </form>
+
+        {isEdit && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
+            <button type="button" onClick={() => setConfirmDelete(true)}
+              className="w-full border border-red-200 text-red-500 rounded-xl py-2.5 text-sm font-medium hover:bg-red-50 transition">
+              Удалить сотрудника
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Delete confirmation overlay — rendered on top of the modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2 text-center">Удалить сотрудника?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-5">
+              Аккаунт будет удалён безвозвратно. Направления останутся в системе.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmDelete(false)}
+                className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium">
+                Отмена
+              </button>
+              <button type="button" disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await apiFetch('delete', `/manager/admins/${existing.id}?hard=true`, token)
+                    onDone()
+                  } catch (e) {
+                    alert(e?.response?.data?.detail || 'Ошибка удаления')
+                    setConfirmDelete(false)
+                  } finally { setDeleting(false) }
+                }}
+                className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
+                {deleting ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// HomeDashboard — главная панель системного администратора
+// ---------------------------------------------------------------------------
+
+function HomeDashboard({ token }) {
+  const [todayStats, setTodayStats] = useState(null)
+  const [topAdmins, setTopAdmins] = useState([])
+  const [cancelCount, setCancelCount] = useState(0)
+  const [misStatus, setMisStatus] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [chartData, setChartData] = useState([])
+  const [recentActivity, setRecentActivity] = useState([])
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.allSettled([
+      apiFetch('get', '/manager/reports/today', token),
+      apiFetch('get', '/manager/reports/admins', token),
+      apiFetch('get', '/manager/cancel-requests/', token),
+      apiFetch('get', '/manager/mis/status', token),
+      apiFetch('get', '/manager/reports/chart', token),
+      apiFetch('get', '/manager/activity/', token),
+    ]).then(([todayR, adminsR, cancelR, misR, chartR, activityR]) => {
+      if (todayR.status === 'fulfilled') setTodayStats(todayR.value.data)
+      if (adminsR.status === 'fulfilled') {
+        const sorted = (Array.isArray(adminsR.value.data) ? adminsR.value.data : [])
+          .sort((a, b) => (b.confirmed_referrals ?? 0) - (a.confirmed_referrals ?? 0))
+          .slice(0, 5)
+        setTopAdmins(sorted)
+      }
+      if (cancelR.status === 'fulfilled') setCancelCount(Array.isArray(cancelR.value.data) ? cancelR.value.data.length : 0)
+      if (misR.status === 'fulfilled') setMisStatus(misR.value.data)
+      if (chartR.status === 'fulfilled' && Array.isArray(chartR.value.data)) setChartData(chartR.value.data)
+      if (activityR.status === 'fulfilled' && Array.isArray(activityR.value.data)) setRecentActivity(activityR.value.data.slice(0, 5))
+      setLoading(false)
+    })
+  }, [token])
+
+  const todayLabel = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+
+  const statCards = [
+    {
+      icon: 'moving', label: 'Направлений сегодня',
+      value: loading ? '…' : (todayStats?.total_today ?? 0),
+      color: '#006173', bg: 'rgba(0,97,115,0.08)', badge: null,
+    },
+    {
+      icon: 'check_circle', label: 'Подтверждено сегодня',
+      value: loading ? '…' : (todayStats?.confirmed_today ?? 0),
+      color: '#16a34a', bg: 'rgba(22,163,74,0.08)', badge: null,
+    },
+    {
+      icon: 'pending_actions', label: 'Запросов на удаление',
+      value: loading ? '…' : cancelCount,
+      color: cancelCount > 0 ? '#f59e0b' : '#6e797c', bg: 'rgba(245,158,11,0.08)', badge: cancelCount > 0 ? '!' : null,
+    },
+    {
+      icon: 'account_balance_wallet', label: 'Бонусов к выплате',
+      value: loading ? '…' : (todayStats?.pending_bonuses != null ? `${todayStats.pending_bonuses} Б` : '—'),
+      color: '#824b07', bg: 'rgba(130,75,7,0.08)', badge: null,
+    },
+  ]
+
+  return (
+    <div>
+      {/* Заголовок */}
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <h2 className="text-2xl font-headline font-extrabold text-ms-on-surface dark:text-white tracking-tight">Статистика</h2>
+          <p className="text-sm text-ms-on-surface-variant dark:text-gray-400 mt-1 capitalize">{todayLabel}</p>
+        </div>
+        {misStatus && (
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${
+            misStatus.online ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
+          }`}>
+            <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
+              {misStatus.online ? 'cloud_done' : 'cloud_off'}
+            </span>
+            МИС {misStatus.online ? 'онлайн' : 'недоступна'}
+          </div>
+        )}
+      </div>
+
+      {/* Bento-grid статкарты */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {statCards.map(card => (
+          <div key={card.label}
+            className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm hover:scale-[1.02] transition-transform duration-200 flex flex-col justify-between min-h-[130px]"
+            style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
+            <div className="flex justify-between items-start">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: card.bg }}>
+                <span className="material-symbols-outlined" style={{ color: card.color, fontVariationSettings: "'FILL' 1" }}>{card.icon}</span>
+              </div>
+              {card.badge && (
+                <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md">{card.badge}</span>
+              )}
+            </div>
+            <div>
+              <p className="text-ms-on-surface-variant dark:text-gray-400 text-xs font-medium mt-2">{card.label}</p>
+              <p className="text-2xl font-headline font-extrabold mt-0.5 dark:text-white" style={{ color: loading ? '#6e797c' : card.color }}>{card.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Двухколоночная сетка: график + топ сотрудников */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+        {/* График 7 дней */}
+        {chartData.length > 0 && (
+          <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm" style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
+            <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">Динамика за 7 дней</p>
+            <div className="flex items-end gap-2 h-28">
+              {chartData.map((d, i) => {
+                const maxVal = Math.max(...chartData.map(x => x.total), 1)
+                const totalH = Math.round((d.total / maxVal) * 96)
+                const confH = d.total > 0 ? Math.round((d.confirmed / d.total) * totalH) : 0
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                    <div className="w-full flex flex-col justify-end" style={{ height: 96 }}>
+                      <div className="w-full rounded-t bg-[#adecff] dark:bg-blue-900/40 relative overflow-hidden" style={{ height: totalH || 2 }}>
+                        <div className="absolute bottom-0 w-full rounded-t" style={{ height: confH, background: '#006173' }} />
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-ms-outline dark:text-gray-500 leading-none">{d.date}</span>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex items-center gap-4 mt-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-2.5 rounded-sm bg-[#adecff] dark:bg-blue-900/40" />
+                <span className="text-xs text-ms-on-surface-variant dark:text-gray-400">Создано</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-2.5 rounded-sm" style={{ background: '#006173' }} />
+                <span className="text-xs text-ms-on-surface-variant dark:text-gray-400">Подтверждено</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Топ сотрудников */}
+        {topAdmins.length > 0 && (
+          <div className={`${chartData.length > 0 ? 'lg:col-span-2' : 'lg:col-span-5'} bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden`} style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
+            <div className="px-5 pt-5 pb-3 border-b border-ms-outline-variant/30 dark:border-gray-700">
+              <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm">Лучшие сотрудники</p>
+            </div>
+            <div className="divide-y divide-ms-surface-container/60 dark:divide-gray-700">
+              {topAdmins.map((a, i) => (
+                <div key={String(a.admin_id ?? i)} className="flex items-center justify-between px-5 py-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                      style={{ background: i === 0 ? '#f59e0b' : i === 1 ? '#6e797c' : i === 2 ? '#824b07' : '#bec8cc' }}>
+                      {i + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-ms-on-surface dark:text-white leading-tight">{a.full_name ?? '—'}</p>
+                      <p className="text-xs text-ms-on-surface-variant dark:text-gray-400">{a.clinic_name ?? '—'}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold" style={{ color: '#006173' }}>{a.confirmed_referrals ?? 0}</p>
+                    <p className="text-xs text-ms-on-surface-variant dark:text-gray-400">подтв.</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Последние события */}
+      {recentActivity.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden" style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
+          <div className="px-5 pt-5 pb-3 border-b border-ms-outline-variant/30 dark:border-gray-700">
+            <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm">Последние события</p>
+          </div>
+          <div className="divide-y divide-ms-surface-container/60 dark:divide-gray-700">
+            {recentActivity.map((ev, i) => (
+              <div key={ev.id ?? i} className="px-5 py-3 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'rgba(0,97,115,0.1)' }}>
+                  <span className="material-symbols-outlined text-sm" style={{ color: '#006173' }}>history</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-ms-on-surface dark:text-white truncate">{ev.action}</p>
+                  <p className="text-xs text-ms-on-surface-variant dark:text-gray-400 mt-0.5">
+                    {ev.user_name ?? '—'} · {ev.created_at ? new Date(ev.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Staff section
+// ---------------------------------------------------------------------------
+
+function StaffSection({ token }) {
+  const [admins, setAdmins] = useState([])
+  const [clinics, setClinics] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [showCreate, setShowCreate] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+  const [deactivating, setDeactivating] = useState(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [ar, cr] = await Promise.all([
+        apiFetch('get', '/admins/', token),
+        apiFetch('get', '/manager/clinics/', token),
+      ])
+      setAdmins(Array.isArray(ar.data) ? ar.data : [])
+      setClinics(Array.isArray(cr.data) ? cr.data : [])
+    } catch {
+      setError('Не удалось загрузить данные')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleDeactivate = async (admin) => {
+    if (!window.confirm(`Деактивировать ${admin.full_name}?`)) return
+    setDeactivating(admin.id)
+    try {
+      await apiFetch('delete', `/manager/admins/${admin.id}`, token)
+      fetchData()
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Ошибка при деактивации')
+    } finally {
+      setDeactivating(null)
+    }
+  }
+
+  const clinicName = (id) => clinics.find(c => c.id === id)?.name || '—'
+
+  const filtered = admins.filter(a => {
+    if (roleFilter === 'manager' && a.role !== 'manager') return false
+    if (roleFilter === 'admin' && (a.role !== 'admin' || a.category)) return false
+    if (roleFilter === 'doctor' && a.category !== 'doctor') return false
+    if (roleFilter === 'nurse' && a.category !== 'nurse') return false
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      (a.full_name || '').toLowerCase().includes(q) ||
+      (a.phone_number || '').toLowerCase().includes(q) ||
+      (a.username || '').toLowerCase().includes(q)
+    )
+  })
+
+  // Группировка по клинике
+  const grouped = useMemo(() => {
+    const map = {}
+    filtered.forEach(a => {
+      const key = a.clinic_id || '__none__'
+      if (!map[key]) map[key] = []
+      map[key].push(a)
+    })
+    return Object.entries(map).sort(([ak], [bk]) => {
+      if (ak === '__none__') return 1
+      if (bk === '__none__') return -1
+      return clinicName(ak).localeCompare(clinicName(bk), 'ru')
+    })
+  }, [filtered, clinics])
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Сотрудники</h2>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition"
+        >
+          + Добавить сотрудника
+        </button>
+      </div>
+
+      <div className="mb-4 space-y-2">
+        {/* Фильтр по роли */}
+        <div className="flex gap-1.5 flex-wrap">
+          {[
+            { key: 'all', label: 'Все' },
+            { key: 'manager', label: 'Руководители' },
+            { key: 'admin', label: 'Администраторы' },
+            { key: 'doctor', label: 'Врачи' },
+            { key: 'nurse', label: 'Медсёстры' },
+          ].map(f => (
+            <button
+              key={f.key}
+              onClick={() => setRoleFilter(f.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                roleFilter === f.key
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Поиск */}
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Поиск по имени, телефону, логину..."
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      <ErrorBox msg={error} />
+
+      {loading ? (
+        <Spinner />
+      ) : filtered.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-10 text-center text-gray-400 dark:text-gray-500 text-sm shadow-sm">
+          {search.trim() ? 'Ничего не найдено' : 'Сотрудников нет'}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {grouped.map(([clinicKey, members]) => (
+            <div key={clinicKey} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              {/* Заголовок клиники */}
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm">🏥</span>
+                <span className="text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wide">
+                  {clinicKey === '__none__' ? 'Без клиники' : clinicName(clinicKey)}
+                </span>
+                <span className="ml-auto text-xs text-gray-400 dark:text-gray-500">{members.length} чел.</span>
+              </div>
+
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-700">
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">ФИО</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">Логин / TG</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">Роль / Должность</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">Телефон</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">Статус</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-2.5">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((a, i) => (
+                      <tr key={a.id} className={`border-b border-gray-50 dark:border-gray-700 ${i % 2 === 0 ? '' : 'bg-gray-50/50 dark:bg-gray-900/30'}`}>
+                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{a.full_name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                          {a.username && <div className="text-xs">{a.username}</div>}
+                          {a.telegram_id && <div className="text-xs text-blue-500">TG: {a.telegram_id}</div>}
+                          {!a.username && !a.telegram_id && '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {a.role === 'manager' ? (
+                            <span className="inline-block bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">Руководитель</span>
+                          ) : (
+                            <span className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs font-semibold px-2 py-0.5 rounded-full">Администратор</span>
+                          )}
+                          {a.category && (
+                            <div className="mt-0.5">
+                              <span className="inline-block bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs px-2 py-0.5 rounded-full">
+                                {a.category === 'doctor' ? 'Врач' : a.category === 'nurse' ? 'Медсестра' : a.category}
+                              </span>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{a.phone_number || '—'}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full ${a.is_active !== false ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
+                            {a.is_active !== false ? 'Активен' : 'Заблокирован'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button onClick={() => setEditTarget(a)}
+                              className="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg px-2.5 py-1.5 font-medium transition">
+                              Изменить
+                            </button>
+                            {a.is_active !== false && (
+                              <button onClick={() => handleDeactivate(a)} disabled={deactivating === a.id}
+                                className="text-xs bg-red-50 dark:bg-red-900/20 hover:bg-red-100 text-red-600 dark:text-red-400 rounded-lg px-2.5 py-1.5 font-medium transition disabled:opacity-50">
+                                {deactivating === a.id ? '...' : 'Деактивировать'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile cards */}
+              <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+                {members.map(a => (
+                  <div key={a.id} className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-gray-800 dark:text-white">{a.full_name}</p>
+                        {a.phone_number && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{a.phone_number}</p>}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${a.role === 'manager' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
+                          {a.role === 'manager' ? 'Руководитель' : 'Администратор'}
+                        </span>
+                        {a.category && (
+                          <span className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
+                            {a.category === 'doctor' ? 'Врач' : 'Медсестра'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {a.telegram_id && <p className="text-xs text-blue-500 mb-2">TG: {a.telegram_id}</p>}
+                    <div className="flex items-center justify-between">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${a.is_active !== false ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'}`}>
+                        {a.is_active !== false ? 'Активен' : 'Заблокирован'}
+                      </span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditTarget(a)}
+                          className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 font-medium">
+                          Изменить
+                        </button>
+                        {a.is_active !== false && (
+                          <button onClick={() => handleDeactivate(a)} disabled={deactivating === a.id}
+                            className="text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg px-3 py-1.5 font-medium disabled:opacity-50">
+                            {deactivating === a.id ? '...' : 'Деактивировать'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <StaffModal
+          token={token}
+          clinics={clinics}
+          existing={null}
+          onClose={() => setShowCreate(false)}
+          onDone={() => { setShowCreate(false); fetchData() }}
+        />
+      )}
+      {editTarget && (
+        <StaffModal
+          token={token}
+          clinics={clinics}
+          existing={editTarget}
+          onClose={() => setEditTarget(null)}
+          onDone={() => { setEditTarget(null); fetchData() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Clinics section
+// ---------------------------------------------------------------------------
+
+const EMPTY_CLINIC_FORM = { name: '', address: '', phone: '' }
+
+function ClinicModal({ token, existing, onClose, onDone }) {
+  const isEdit = !!existing
+  const [form, setForm] = useState(
+    isEdit
+      ? { name: existing.name || '', address: existing.address || '', phone: existing.phone || '' }
+      : { ...EMPTY_CLINIC_FORM }
+  )
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Введите название клиники'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const payload = { name: form.name.trim() }
+      if (form.address.trim()) payload.address = form.address.trim()
+      if (form.phone.trim()) payload.phone = form.phone.trim()
+
+      if (isEdit) {
+        await apiFetch('patch', `/manager/clinics/${existing.id}`, token, payload)
+      } else {
+        await apiFetch('post', '/manager/clinics/', token, payload)
+      }
+      onDone()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
+          {isEdit ? 'Редактировать клинику' : 'Новая клиника'}
+        </h2>
+
+        <ErrorBox msg={error} />
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              Название <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="Клиника Здоровье"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Адрес</label>
+            <input
+              type="text"
+              value={form.address}
+              onChange={e => set('address', e.target.value)}
+              placeholder="ул. Примерная, д. 1"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Телефон</label>
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={e => set('phone', e.target.value)}
+              placeholder="+7 900 000-00-00"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="flex gap-3 mt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-blue-700 transition"
+            >
+              {loading ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function ClinicsSection({ token }) {
+  const [clinics, setClinics] = useState([])
+  const [staffByClinic, setStaffByClinic] = useState({}) // clinic_id -> [staff]
+  const [expanded, setExpanded] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [loadingStaff, setLoadingStaff] = useState(null)
+  const [error, setError] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiFetch('get', '/manager/clinics/', token)
+      setClinics(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setError('Не удалось загрузить клиники')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const toggleClinic = async (clinic) => {
+    if (expanded === clinic.id) {
+      setExpanded(null)
+      return
+    }
+    setExpanded(clinic.id)
+    if (staffByClinic[clinic.id]) return // already loaded
+    setLoadingStaff(clinic.id)
+    try {
+      const res = await apiFetch('get', '/admins/', token)
+      const all = Array.isArray(res.data) ? res.data : []
+      // Group by clinic
+      const byClinic = {}
+      all.forEach(a => {
+        const cid = a.clinic_id || 'none'
+        if (!byClinic[cid]) byClinic[cid] = []
+        byClinic[cid].push(a)
+      })
+      setStaffByClinic(byClinic)
+    } catch {
+      // ignore
+    } finally {
+      setLoadingStaff(null)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Клиники</h2>
+        <button onClick={() => setShowCreate(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition">
+          + Добавить клинику
+        </button>
+      </div>
+
+      <ErrorBox msg={error} />
+
+      {loading ? <Spinner /> : (
+        <div className="space-y-3">
+          {clinics.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center text-gray-400 text-sm shadow-sm">Клиник нет</div>
+          ) : clinics.map(c => {
+            const isOpen = expanded === c.id
+            const staff = staffByClinic[c.id] || []
+            const isLoadingThis = loadingStaff === c.id
+            return (
+              <div key={c.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+                {/* Clinic header */}
+                <button onClick={() => toggleClinic(c)}
+                  className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                      <span className="text-lg">🏥</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-800 dark:text-white">{c.name}</p>
+                      {c.address && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.address}</p>}
+                      {c.phone && <p className="text-xs text-gray-400 dark:text-gray-500">{c.phone}</p>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-400 dark:text-gray-500 hidden sm:inline">
+                      {staffByClinic[c.id] ? `${staffByClinic[c.id].length} сотр.` : ''}
+                    </span>
+                    <button onClick={e => { e.stopPropagation(); setEditTarget(c) }}
+                      className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-2.5 py-1 font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition">
+                      Изменить
+                    </button>
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Expanded staff list */}
+                {isOpen && (
+                  <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3">
+                    {isLoadingThis ? (
+                      <p className="text-sm text-gray-400 py-3 text-center">Загрузка...</p>
+                    ) : staff.length === 0 ? (
+                      <p className="text-sm text-gray-400 py-3 text-center">Нет сотрудников</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">СОТРУДНИКИ ({staff.length})</p>
+                        {staff.map(a => (
+                          <div key={a.id} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-xs font-bold">{(a.full_name || '?').charAt(0).toUpperCase()}</span>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-gray-800 dark:text-white">{a.full_name}</p>
+                                {a.phone_number && <p className="text-xs text-gray-400">{a.phone_number}</p>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {a.category && (
+                                <span className="text-xs bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
+                                  {a.category === 'doctor' ? 'Врач' : 'Медсестра'}
+                                </span>
+                              )}
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                                a.role === 'manager' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
+                              }`}>
+                                {a.role === 'manager' ? 'Руководитель' : 'Администратор'}
+                              </span>
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.is_active !== false ? 'bg-green-500' : 'bg-red-400'}`} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {showCreate && (
+        <ClinicModal token={token} existing={null}
+          onClose={() => setShowCreate(false)}
+          onDone={() => { setShowCreate(false); fetchData() }} />
+      )}
+      {editTarget && (
+        <ClinicModal token={token} existing={editTarget}
+          onClose={() => setEditTarget(null)}
+          onDone={() => { setEditTarget(null); setStaffByClinic({}); fetchData() }} />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Reports section
+// ---------------------------------------------------------------------------
+
+function StatCard({ label, value, color }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm text-center">
+      <p className={`text-2xl font-bold ${color || 'text-gray-800 dark:text-white'}`}>{value ?? '—'}</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</p>
+    </div>
+  )
+}
+
+function ReportsSection({ token }) {
+  const [tab, setTab] = useState('overview')
+  const [summary, setSummary] = useState(null)
+  const [admins, setAdmins] = useState([])
+  const [clinics, setClinics] = useState([])
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [loadingAdmins, setLoadingAdmins] = useState(false)
+  const [loadingClinics, setLoadingClinics] = useState(false)
+  const [exportLoading, setExportLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const fetchAll = useCallback((params = {}) => {
+    setLoadingSummary(true)
+    apiFetch('get', `/manager/reports/summary?${new URLSearchParams(params)}`, token)
+      .then(r => setSummary(r.data))
+      .catch(() => setSummary(null))
+      .finally(() => setLoadingSummary(false))
+
+    setLoadingAdmins(true)
+    apiFetch('get', `/manager/reports/admins?${new URLSearchParams(params)}`, token)
+      .then(r => setAdmins(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setAdmins([]))
+      .finally(() => setLoadingAdmins(false))
+
+    setLoadingClinics(true)
+    apiFetch('get', '/manager/reports/clinics', token)
+      .then(r => setClinics(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setClinics([]))
+      .finally(() => setLoadingClinics(false))
+  }, [token])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  const handleApply = (e) => {
+    e.preventDefault()
+    const p = {}
+    if (dateFrom) p.date_from = dateFrom
+    if (dateTo) p.date_to = dateTo
+    fetchAll(p)
+  }
+
+  const handleExport = async () => {
+    setExportLoading(true)
+    try {
+      const res = await axios({
+        method: 'get',
+        url: '/clinika/api/manager/reports/export',
+        headers: authHeaders(token),
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'report.csv'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      setError('Ошибка экспорта CSV')
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  const REPORT_TABS = [
+    { key: 'overview', label: 'Обзор' },
+    { key: 'staff', label: 'Сотрудники' },
+    { key: 'clinics', label: 'Клиники' },
+    { key: 'export', label: 'Экспорт' },
+  ]
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Отчёты</h2>
+      <ErrorBox msg={error} />
+
+      {/* Вкладки */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-5">
+        {REPORT_TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+              tab === t.key
+                ? 'bg-white dark:bg-gray-700 text-gray-800 dark:text-white shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard label="Всего направлений" value={loadingSummary ? '...' : summary?.total_referrals ?? 0} />
+          <StatCard label="Подтверждено" value={loadingSummary ? '...' : summary?.confirmed_referrals ?? 0} color="text-green-600" />
+          <StatCard label="Бонусы в ожидании" value={loadingSummary ? '...' : summary?.total_pending_bonuses != null ? `${summary.total_pending_bonuses} Б` : '0 Б'} color="text-amber-500" />
+          <StatCard label="Выплачено бонусов" value={loadingSummary ? '...' : summary?.total_paid_bonuses != null ? `${summary.total_paid_bonuses} Б` : '0 Б'} color="text-blue-600" />
+        </div>
+      )}
+
+      {tab === 'staff' && (
+        <div>
+          <form onSubmit={handleApply} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm mb-4 flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">С даты</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+            <div className="flex-1 min-w-[140px]">
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">По дату</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+            <button type="submit" className="bg-blue-600 text-white rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-blue-700 transition">Применить</button>
+          </form>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
+            {loadingAdmins ? <div className="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
+            : admins.length === 0 ? <div className="p-6 text-center text-gray-400 text-sm">Нет данных</div>
+            : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Сотрудник</th>
+                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
+                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
+                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
+                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Бонусы</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {admins.map((row, i) => (
+                    <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                      <td className="px-4 py-3 text-gray-800 dark:text-white font-medium">{row.full_name || row.admin_name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
+                      <td className="px-4 py-3 text-right">{row.referral_count ?? row.total_referrals ?? 0}</td>
+                      <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed_count ?? row.confirmed_referrals ?? 0}</td>
+                      <td className="px-4 py-3 text-right text-blue-600 font-medium">
+                        {row.pending_bonuses != null ? `${row.pending_bonuses} Б` : (row.bonus_total != null ? `${row.bonus_total} Б` : '—')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'clinics' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
+          {loadingClinics ? <div className="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
+          : clinics.length === 0 ? <div className="p-6 text-center text-gray-400 text-sm">Нет данных о потоке</div>
+          : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Откуда</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Куда</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clinics.map((row, i) => (
+                  <tr key={`${row.from_clinic_id}-${row.to_clinic_id}-${i}`}
+                    className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                    <td className="px-4 py-3 text-gray-800 dark:text-white">{row.from_clinic_name || row.from_clinic || '—'}</td>
+                    <td className="px-4 py-3 text-gray-800 dark:text-white">{row.to_clinic_name || row.to_clinic || '—'}</td>
+                    <td className="px-4 py-3 text-right">{row.total ?? row.referral_count ?? 0}</td>
+                    <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed ?? row.confirmed_count ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'export' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm max-w-md">
+          <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200 mb-4">Экспорт в CSV</h3>
+          <div className="space-y-3 mb-5">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">С даты</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">По дату</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+          <button onClick={handleExport} disabled={exportLoading}
+            className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 text-sm font-semibold transition disabled:opacity-50">
+            {exportLoading ? '⏳ Экспорт...' : '⬇️ Скачать CSV'}
+          </button>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-3 text-center">
+            Все направления за выбранный период с данными о бонусах и сотрудниках
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Bonuses section
+// ---------------------------------------------------------------------------
+
+function BonusesSection({ token }) {
+  const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiFetch('get', '/manager/reports/admins', token)
+      setRows(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setError('Не удалось загрузить данные бонусов')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Бонусы</h2>
+        <button
+          onClick={fetchData}
+          className="text-sm text-blue-600 hover:text-blue-700 font-medium transition"
+        >
+          Обновить
+        </button>
+      </div>
+
+      <ErrorBox msg={error} />
+
+      {loading ? (
+        <Spinner />
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">ФИО сотрудника</th>
+                <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
+                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Начислено</th>
+                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Выплачено</th>
+                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">К выплате</th>
+                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
+                    Нет данных
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, i) => {
+                  const accrued = row.bonus_total ?? 0
+                  const paid = row.bonus_paid ?? 0
+                  const pending = row.bonus_pending ?? (accrued - paid)
+                  return (
+                    <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                      <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{row.full_name || row.admin_name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
+                      <td className="px-4 py-3 text-right text-gray-800 dark:text-white">{accrued} Б</td>
+                      <td className="px-4 py-3 text-right text-green-600 font-medium">{paid} Б</td>
+                      <td className="px-4 py-3 text-right font-semibold text-amber-600">{pending} Б</td>
+                      <td className="px-4 py-3 text-right">
+                        {pending > 0 && (
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`)) return
+                              try {
+                                await apiFetch('post', `/manager/bonuses/mark-paid-all/${row.admin_id}`, token)
+                                fetchData()
+                              } catch {
+                                alert('Ошибка при выплате')
+                              }
+                            }}
+                            className="text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 font-medium transition"
+                          >
+                            Выплатить
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Services section — управление услугами по категориям (МИС интеграция)
+// ---------------------------------------------------------------------------
+
+const EMPTY_SVC_FORM = { name: '', code: '', clinic_id: '', bonus_amount: '' }
+
+function ServiceModal({ token, clinics, existing, onClose, onDone }) {
+  const isEdit = !!existing
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          name: existing.name || '',
+          code: existing.code || '',
+          clinic_id: existing.clinic_id ? String(existing.clinic_id) : '',
+          bonus_amount: existing.bonus_amount != null ? String(existing.bonus_amount) : '',
+          is_active: existing.is_active !== false,
+        }
+      : { ...EMPTY_SVC_FORM }
+  )
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Введите название услуги'); return }
+    if (!form.code.trim()) { setError('Введите код услуги'); return }
+    if (!isEdit && !form.clinic_id) { setError('Выберите клинику'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const payload = {
+        name: form.name.trim(),
+        code: form.code.trim().toUpperCase(),
+        clinic_id: form.clinic_id || null,
+        bonus_amount: parseFloat(form.bonus_amount) || 0,
+      }
+      if (isEdit) {
+        await apiFetch('patch', `/manager/services/${existing.id}`, token, payload)
+      } else {
+        await apiFetch('post', '/manager/services/', token, payload)
+      }
+      onDone()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
+          {isEdit ? 'Редактировать услугу' : 'Новая услуга'}
+        </h2>
+        <ErrorBox msg={error} />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Название <span className="text-red-500">*</span></label>
+            <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
+              placeholder="МРТ головного мозга"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Код <span className="text-red-500">*</span></label>
+              <input type="text" value={form.code} onChange={e => set('code', e.target.value.toUpperCase())}
+                placeholder="MRI"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Комиссия (Б)</label>
+              <input type="number" min="0" step="0.01" value={form.bonus_amount} onChange={e => set('bonus_amount', e.target.value)}
+                placeholder="500"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Клиника <span className="text-red-500">*</span></label>
+            <select value={form.clinic_id} onChange={e => set('clinic_id', e.target.value)}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500">
+              <option value="">— Выберите клинику —</option>
+              {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          {isEdit && (
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="svc-active" checked={form.is_active !== false}
+                onChange={e => set('is_active', e.target.checked)}
+                className="w-4 h-4 accent-blue-600" />
+              <label htmlFor="svc-active" className="text-sm text-gray-700 dark:text-gray-200">Активна</label>
+            </div>
+          )}
+          <div className="flex gap-3 mt-3">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+              Отмена
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-blue-700 transition">
+              {loading ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Компонент: Строка редактирования услуги внутри категории
+// ---------------------------------------------------------------------------
+function ServiceRow({ svc, token, onUpdated }) {
+  const [bonus, setBonus] = useState(String(svc.bonus_amount))
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    const amount = parseFloat(bonus)
+    if (isNaN(amount) || amount < 0) return
+    setSaving(true)
+    try {
+      await apiFetch('patch', `/manager/services/${svc.id}`, token, { bonus_amount: amount })
+      onUpdated(svc.id, amount)
+    } catch { /* тихо */ } finally { setSaving(false) }
+  }
+
+  const handleDeactivate = async () => {
+    if (!window.confirm(`Отключить услугу "${svc.name}"?`)) return
+    await apiFetch('patch', `/manager/services/${svc.id}`, token, { bonus_amount: 0 })
+    onUpdated(svc.id, 0)
+  }
+
+  const changed = parseFloat(bonus) !== svc.bonus_amount
+
+  return (
+    <tr className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50/50 dark:hover:bg-gray-700/30">
+      <td className="px-4 py-2.5 text-sm text-gray-800 dark:text-white max-w-[220px]">
+        <div className="truncate">{svc.name}</div>
+        {svc.code && <span className="text-xs text-gray-400 font-mono">{svc.code}</span>}
+      </td>
+      <td className="px-4 py-2.5 text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
+        {svc.original_price ? `${svc.original_price.toLocaleString('ru')} Б` : '—'}
+      </td>
+      <td className="px-4 py-2.5">
+        {/* Инлайн-редактирование бонуса */}
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number" min="0" step="50"
+            value={bonus}
+            onChange={e => setBonus(e.target.value)}
+            onBlur={() => changed && handleSave()}
+            onKeyDown={e => e.key === 'Enter' && changed && handleSave()}
+            className={`w-20 border rounded-lg px-2 py-1 text-sm text-right font-semibold focus:outline-none focus:ring-1 transition
+              ${parseFloat(bonus) > 0
+                ? 'border-blue-300 dark:border-blue-600 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 focus:ring-blue-400'
+                : 'border-gray-200 dark:border-gray-600 text-gray-400 bg-white dark:bg-gray-800 focus:ring-gray-400'}`}
+          />
+          <span className="text-xs text-gray-400">Б</span>
+          {saving && <span className="text-xs text-gray-400">⏳</span>}
+          {changed && !saving && (
+            <button onClick={handleSave}
+              className="text-xs bg-blue-600 text-white rounded px-1.5 py-0.5 hover:bg-blue-700 transition">✓</button>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-2.5">
+        {parseFloat(bonus) > 0 && (
+          <button onClick={handleDeactivate}
+            className="text-xs text-red-400 hover:text-red-600 transition">Убрать</button>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Компонент: Карточка категории (аккордеон)
+// ---------------------------------------------------------------------------
+function CategoryCard({ cat, clinicId, token, onBonusSet, autoExpand = false }) {
+  const [expanded, setExpanded] = useState(autoExpand)
+  const [services, setServices] = useState(null)   // null = не загружено
+  const [loadingServices, setLoadingServices] = useState(false)
+  const [setBonusOpen, setSetBonusOpen] = useState(false)
+  const [bonusInput, setBonusInput] = useState('')
+  const [applying, setApplying] = useState(false)
+
+  // Внутренняя функция загрузки услуг
+  const loadServices = useCallback(async () => {
+    if (services !== null || loadingServices) return
+    setLoadingServices(true)
+    try {
+      const res = await apiFetch('get', `/manager/services/?clinic_id=${clinicId}&category=${encodeURIComponent(cat.category)}`, token)
+      setServices(Array.isArray(res.data) ? res.data : [])
+    } catch { setServices([]) }
+    finally { setLoadingServices(false) }
+  }, [clinicId, cat.category, token, services, loadingServices])
+
+  // Авто-загрузка если autoExpand=true
+  useEffect(() => {
+    if (autoExpand) loadServices()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Загрузка услуг при раскрытии
+  const handleExpand = async () => {
+    setExpanded(v => !v)
+    await loadServices()
+  }
+
+  // Обновление бонуса в локальном кеше строки
+  const handleRowUpdated = (svcId, newBonus) => {
+    setServices(prev => prev?.map(s => s.id === svcId ? { ...s, bonus_amount: newBonus } : s))
+    onBonusSet()
+  }
+
+  // Установить бонус для всей категории
+  const handleSetAll = async () => {
+    const amount = parseFloat(bonusInput)
+    if (isNaN(amount) || amount < 0) return
+    setApplying(true)
+    try {
+      await apiFetch('post', '/manager/services/set-category-bonus', token, {
+        category: cat.category, bonus_amount: amount, clinic_id: clinicId
+      })
+      // Обновляем локальный список услуг если уже загружен
+      if (services) {
+        setServices(prev => prev?.map(s => ({ ...s, bonus_amount: amount })))
+      }
+      setSetBonusOpen(false)
+      setBonusInput('')
+      onBonusSet()
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Ошибка')
+    } finally { setApplying(false) }
+  }
+
+  const hasBonus = cat.bonus_count > 0
+
+  return (
+    <div className={`border rounded-xl overflow-hidden transition-colors
+      ${hasBonus
+        ? 'border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800'
+        : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900'}`}>
+
+      {/* Заголовок категории */}
+      <div className="flex items-center gap-2 px-3 py-3">
+        <button onClick={handleExpand}
+          className="flex items-center gap-2 flex-1 min-w-0 text-left">
+          <span className="text-gray-400 text-xs flex-shrink-0">{expanded ? '▼' : '▶'}</span>
+          <span className={`font-semibold text-sm truncate ${hasBonus ? 'text-gray-800 dark:text-white' : 'text-gray-500 dark:text-gray-400'}`}>
+            {cat.category}
+          </span>
+          <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">{cat.total}</span>
+          {hasBonus && (
+            <span className="inline-block flex-shrink-0 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-semibold px-2 py-0.5 rounded-full">
+              ✓ {cat.bonus_count}
+            </span>
+          )}
+        </button>
+        {/* Кнопка установки бонуса для всей категории */}
+        <button onClick={() => setSetBonusOpen(v => !v)}
+          className="flex-shrink-0 text-xs border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-lg px-2 py-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+          <span className="hidden sm:inline">Установить бонус</span>
+          <span className="sm:hidden">Бонус</span>
+        </button>
+      </div>
+
+      {/* Панель быстрой установки бонуса для категории */}
+      {setSetBonusOpen && (
+        <div className="px-3 py-2.5 flex flex-wrap items-center gap-2 bg-amber-50 dark:bg-amber-900/10 border-t border-amber-100 dark:border-amber-900">
+          <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Бонус для {cat.total} услуг:</span>
+          <div className="flex items-center gap-1.5">
+            <input type="number" min="0" step="50" placeholder="0"
+              value={bonusInput} onChange={e => setBonusInput(e.target.value)}
+              className="w-20 border border-amber-300 dark:border-amber-700 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white dark:bg-gray-800 dark:text-white" />
+            <span className="text-xs text-gray-500 dark:text-gray-400">Б</span>
+          </div>
+          <button onClick={handleSetAll} disabled={applying || !bonusInput}
+            className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg px-3 py-1.5 font-medium transition">
+            {applying ? '⏳' : 'Применить'}
+          </button>
+          <button onClick={() => setSetBonusOpen(false)}
+            className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+      )}
+
+      {/* Список услуг категории */}
+      {expanded && (
+        <div className="border-t border-gray-100 dark:border-gray-700 overflow-x-auto">
+          {loadingServices ? (
+            <div className="px-4 py-3 text-sm text-gray-400">Загрузка...</div>
+          ) : (
+            <table className="w-full text-sm min-w-[500px]">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400">
+                  <th className="text-left px-4 py-2 font-medium">Название</th>
+                  <th className="text-right px-4 py-2 font-medium whitespace-nowrap">Цена МИС</th>
+                  <th className="text-left px-4 py-2 font-medium">Бонус</th>
+                  <th className="px-4 py-2 w-14"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {(services || []).length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-xs">Нет услуг</td></tr>
+                ) : (services || []).map(svc => (
+                  <ServiceRow key={svc.id} svc={svc} token={token} onUpdated={handleRowUpdated} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── КОНФИГУРАЦИЯ: Популярные категории для быстрого доступа ───
+const POPULAR_CAT_DEFS = [
+  { match: 'консультац', label: 'Консультации',      icon: '🩺' },
+  { match: 'узи',        label: 'УЗИ',               icon: '🔊' },
+  { match: 'хирург',     label: 'Хирургия',          icon: '⚕️'  },
+  { match: 'лаборатор',  label: 'Лабораторная',      icon: '🧪'  },
+  { match: 'физиотерап', label: 'Физиотерапия',      icon: '💆'  },
+  { match: 'отоларинг',  label: 'ЛОР',               icon: '👂'  },
+]
+
+// ---------------------------------------------------------------------------
+// Компонент: Раздел Услуги — 3-блочная структура
+// ---------------------------------------------------------------------------
+function ServicesSection({ token }) {
+  const [clinics, setClinics] = useState([])
+  const [selectedClinicId, setSelectedClinicId] = useState('')
+  const [categories, setCategories] = useState([])
+  const [loadingCats, setLoadingCats] = useState(false)
+  const [expandedPopular, setExpandedPopular] = useState(null)  // match-ключ открытой популярной
+  const [showRest, setShowRest] = useState(false)
+  const [restSearch, setRestSearch] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [catKey, setCatKey] = useState(0)   // сброс аккордеонов при смене клиники
+
+  // ─ Загрузка клиник ─
+  useEffect(() => {
+    apiFetch('get', '/manager/clinics/', token)
+      .then(r => {
+        const list = Array.isArray(r.data) ? r.data : []
+        setClinics(list)
+        if (list.length > 0) setSelectedClinicId(String(list[0].id))
+      })
+      .catch(() => {})
+  }, [token])
+
+  // ─ Загрузка категорий ─
+  const loadCategories = useCallback(async () => {
+    if (!selectedClinicId) return
+    setLoadingCats(true)
+    try {
+      const res = await apiFetch('get', `/manager/services/categories?clinic_id=${selectedClinicId}`, token)
+      setCategories(Array.isArray(res.data) ? res.data : [])
+    } catch { setCategories([]) }
+    finally { setLoadingCats(false) }
+  }, [selectedClinicId, token])
+
+  useEffect(() => {
+    if (selectedClinicId) { loadCategories(); setCatKey(k => k + 1); setExpandedPopular(null) }
+  }, [selectedClinicId])
+
+  // ─ Вычисление 3 групп ─
+
+  // Блок 1: Популярные — совпадают с POPULAR_CAT_DEFS по частичному вхождению
+  const popularCats = useMemo(() =>
+    POPULAR_CAT_DEFS
+      .map(def => ({ ...def, cat: categories.find(c => c.category.toLowerCase().includes(def.match)) }))
+      .filter(p => p.cat),
+    [categories]
+  )
+  const popularCatNames = useMemo(() => new Set(popularCats.map(p => p.cat.category)), [popularCats])
+
+  // Блок 2: Настроенные вами — bonus_count > 0, не в популярных
+  const configuredCats = useMemo(() =>
+    categories.filter(c => c.bonus_count > 0 && !popularCatNames.has(c.category)),
+    [categories, popularCatNames]
+  )
+
+  // Блок 3: Все остальные — bonus_count == 0, не в популярных
+  const restCatsAll = useMemo(() =>
+    categories.filter(c => c.bonus_count === 0 && !popularCatNames.has(c.category)),
+    [categories, popularCatNames]
+  )
+  const restCatsFiltered = useMemo(() =>
+    restSearch
+      ? restCatsAll.filter(c => c.category.toLowerCase().includes(restSearch.toLowerCase()))
+      : restCatsAll,
+    [restCatsAll, restSearch]
+  )
+
+  // ─ Синхронизация из МИС ─
+  const handleSyncMis = async () => {
+    if (!window.confirm('Синхронизировать все услуги из МИС?\nСуществующие бонусы сохранятся.')) return
+    setSyncing(true)
+    setSyncResult(null)
+    try {
+      const res = await apiFetch('post', '/manager/mis/sync-services', token)
+      setSyncResult({ ok: true, ...res.data })
+      loadCategories()
+    } catch (err) {
+      setSyncResult({ ok: false, error: err?.response?.data?.detail || 'Ошибка' })
+    } finally { setSyncing(false) }
+  }
+
+  const totalConfigured = categories.reduce((s, c) => s + c.bonus_count, 0)
+
+  return (
+    <div>
+      {/* ─── Заголовок и действия ─── */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">Услуги</h2>
+          {!loadingCats && totalConfigured > 0 && (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{totalConfigured} услуг с бонусом</p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button onClick={handleSyncMis} disabled={syncing}
+            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl px-3 py-2 text-sm font-medium transition">
+            {syncing ? '⏳ Синхронизация...' : '🔄 Из МИС'}
+          </button>
+          <button onClick={() => setShowCreate(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-3 py-2 text-sm font-medium transition">
+            + Добавить
+          </button>
+        </div>
+      </div>
+
+      {/* ─── Результат синхронизации ─── */}
+      {syncResult && (
+        <div className={`mb-4 p-3 rounded-xl text-sm ${syncResult.ok
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200'
+          : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200'}`}>
+          {syncResult.ok
+            ? `✅ Добавлено ${syncResult.added}, обновлено ${syncResult.updated} услуг в ${syncResult.clinics} клиниках`
+            : `❌ ${syncResult.error}`}
+          {syncResult.ok && syncResult.details?.map(d => (
+            <div key={d.clinic} className="mt-1 text-xs opacity-75">{d.clinic}: +{d.added} / ~{d.updated}</div>
+          ))}
+          <button onClick={() => setSyncResult(null)} className="float-right text-xs opacity-60 hover:opacity-100">✕</button>
+        </div>
+      )}
+
+      {/* ─── Выбор клиники ─── */}
+      <div className="mb-6">
+        <select value={selectedClinicId} onChange={e => setSelectedClinicId(e.target.value)}
+          className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-blue-400">
+          {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      </div>
+
+      {loadingCats ? <Spinner /> : categories.length === 0 ? (
+        <div className="text-center py-16 text-gray-400 dark:text-gray-500">
+          Нет категорий — нажмите «🔄 Из МИС» для синхронизации
+        </div>
+      ) : (
+        <>
+          {/* ══════ Блок 1: Популярные категории ══════ */}
+          {popularCats.length > 0 && (
+            <section className="mb-7">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
+                Популярные
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {popularCats.map(p => {
+                  const isActive = expandedPopular === p.match
+                  const hasBonus = p.cat.bonus_count > 0
+                  return (
+                    <button key={p.match}
+                      onClick={() => setExpandedPopular(isActive ? null : p.match)}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition
+                        ${isActive
+                          ? 'border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-900/20 shadow-sm'
+                          : hasBonus
+                            ? 'border-blue-200 dark:border-blue-800/70 bg-white dark:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-700'
+                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600'}`}>
+                      <span className="text-xl flex-shrink-0 leading-none">{p.icon}</span>
+                      <div className="min-w-0">
+                        <div className={`text-sm font-semibold truncate leading-tight
+                          ${isActive ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                          {p.label}
+                        </div>
+                        <div className="text-xs mt-0.5 text-gray-400 dark:text-gray-500">
+                          {hasBonus
+                            ? <span className="text-blue-500 dark:text-blue-400">✓ {p.cat.bonus_count} с бонусом</span>
+                            : `${p.cat.total} услуг`}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Инлайн-аккордеон выбранной популярной категории */}
+              {expandedPopular && (() => {
+                const p = popularCats.find(x => x.match === expandedPopular)
+                if (!p?.cat) return null
+                return (
+                  <div className="mt-3">
+                    <CategoryCard
+                      key={`${catKey}-pop-${p.cat.category}`}
+                      cat={p.cat}
+                      clinicId={selectedClinicId}
+                      token={token}
+                      onBonusSet={loadCategories}
+                      autoExpand
+                    />
+                  </div>
+                )
+              })()}
+            </section>
+          )}
+
+          {/* ══════ Блок 2: Настроенные вами ══════ */}
+          {configuredCats.length > 0 && (
+            <section className="mb-7">
+              <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
+                Настроены вами — {configuredCats.length} {configuredCats.length === 1 ? 'категория' : 'категории'}
+              </p>
+              <div className="flex flex-col gap-2">
+                {configuredCats.map(cat => (
+                  <CategoryCard
+                    key={`${catKey}-cfg-${cat.category}`}
+                    cat={cat}
+                    clinicId={selectedClinicId}
+                    token={token}
+                    onBonusSet={loadCategories}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ══════ Блок 3: Все остальные (свёрнуто) ══════ */}
+          {restCatsAll.length > 0 && (
+            <section>
+              <button
+                onClick={() => { setShowRest(v => !v); setRestSearch('') }}
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-dashed
+                  border-gray-300 dark:border-gray-600 text-sm
+                  text-gray-500 dark:text-gray-400
+                  hover:bg-gray-50 dark:hover:bg-gray-800/60 hover:border-gray-400 dark:hover:border-gray-500
+                  transition">
+                <span className="font-medium">
+                  {showRest ? '▲ Скрыть' : '▼ Все остальные категории'}
+                </span>
+                <span className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs rounded-full px-2 py-0.5 font-medium">
+                  {restCatsAll.length}
+                </span>
+              </button>
+
+              {showRest && (
+                <div className="mt-3">
+                  <input
+                    type="text"
+                    placeholder="Поиск по категории..."
+                    value={restSearch}
+                    onChange={e => setRestSearch(e.target.value)}
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm
+                      bg-white dark:bg-gray-800 text-gray-800 dark:text-white
+                      focus:outline-none focus:border-blue-400 mb-3"
+                  />
+                  {restCatsFiltered.length === 0 ? (
+                    <p className="text-center text-sm text-gray-400 py-4">Ничего не найдено</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {restCatsFiltered.map(cat => (
+                        <CategoryCard
+                          key={`${catKey}-rest-${cat.category}`}
+                          cat={cat}
+                          clinicId={selectedClinicId}
+                          token={token}
+                          onBonusSet={loadCategories}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      )}
+
+      {/* ─── Модал создания услуги вручную ─── */}
+      {showCreate && (
+        <ServiceModal token={token} clinics={clinics} existing={null}
+          onClose={() => setShowCreate(false)}
+          onDone={() => { setShowCreate(false); loadCategories() }} />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Commission section
+// ---------------------------------------------------------------------------
+
+function CommissionSection({ token }) {
+  const [settings, setSettings] = useState(null)
+  const [managers, setManagers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [sr, mr] = await Promise.all([
+        apiFetch('get', '/manager/settings/commission', token),
+        apiFetch('get', '/manager/managers/', token),
+      ])
+      setSettings(sr.data)
+      setManagers(Array.isArray(mr.data) ? mr.data : [])
+    } catch {
+      setError('Не удалось загрузить настройки')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleToggle = async () => {
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await apiFetch('patch', '/manager/settings/commission', token, {
+        commission_enabled: !settings.commission_enabled,
+      })
+      setSettings(res.data)
+      setSuccess(res.data.commission_enabled ? 'Комиссия включена' : 'Комиссия отключена')
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRateChange = async (rate) => {
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await apiFetch('patch', '/manager/settings/commission', token, {
+        commission_rate: parseFloat(rate),
+      })
+      setSettings(res.data)
+      setSuccess('Ставка обновлена')
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReceiverChange = async (id) => {
+    if (!id) return
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await apiFetch('patch', '/manager/settings/commission', token, {
+        commission_receiver_id: id,
+      })
+      setSettings(res.data)
+      setSuccess('Получатель комиссии обновлён')
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Ошибка')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <Spinner />
+
+  return (
+    <div>
+      <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200 mb-4">💰 Комиссия с бонусов</h3>
+
+      {error && <ErrorBox msg={error} />}
+      {success && (
+        <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-xl p-3 mb-4">
+          <p className="text-green-700 dark:text-green-400 text-sm">{success}</p>
+        </div>
+      )}
+
+      {/* Commission block */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-6 mb-5">
+        <h3 className="text-base font-semibold text-gray-800 dark:text-white mb-1">Комиссия с бонусов</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
+          Если включено, при каждом подтверждённом направлении из бонуса администратора
+          вычитается процент и начисляется выбранному руководителю.
+        </p>
+
+        {/* Toggle */}
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900 rounded-xl mb-4">
+          <div>
+            <div className="text-sm font-medium text-gray-800 dark:text-white">
+              {settings?.commission_enabled ? 'Комиссия включена' : 'Комиссия отключена'}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {settings?.commission_enabled
+                ? `${settings.commission_rate}% от каждого бонуса уходит руководителю`
+                : 'Администраторы получают полный бонус'}
+            </div>
+          </div>
+          <button
+            onClick={handleToggle}
+            disabled={saving}
+            className={`relative w-12 h-6 rounded-full transition-colors disabled:opacity-50 ${
+              settings?.commission_enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+            }`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+              settings?.commission_enabled ? 'translate-x-6' : 'translate-x-0.5'
+            }`} />
+          </button>
+        </div>
+
+        {/* Rate */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Ставка комиссии (%)</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0.1"
+                max="100"
+                step="0.1"
+                defaultValue={settings?.commission_rate ?? 10}
+                onBlur={e => handleRateChange(e.target.value)}
+                className="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Получатель комиссии</label>
+            <select
+              value={settings?.commission_receiver_id || ''}
+              onChange={e => handleReceiverChange(e.target.value)}
+              disabled={saving}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+            >
+              <option value="">— Не выбран —</option>
+              {managers.map(m => (
+                <option key={m.id} value={m.id}>
+                  {m.full_name || m.username}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {settings?.commission_receiver_name && (
+          <div className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+            Текущий получатель: <span className="font-medium text-blue-700 dark:text-blue-400">{settings.commission_receiver_name}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Settings section — Stitch redesign
+// ---------------------------------------------------------------------------
+
+function SettingsSection({ token }) {
+  const [form, setForm] = useState({ mis_url: '', mis_api_key: '', telegram_bot_token: '', telegram_admin_id: '' })
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+  const [misLiveStatus, setMisLiveStatus] = useState(null)
+  const [error, setError] = useState('')
+  const [versionInfo, setVersionInfo] = useState({ current: null })
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [showBotToken, setShowBotToken] = useState(false)
+
+  useEffect(() => {
+    apiFetch('get', '/manager/settings/general', token)
+      .then(r => {
+        const d = r.data || {}
+        setForm({
+          mis_url: d.mis_url || '',
+          mis_api_key: d.mis_api_key || '',
+          telegram_bot_token: d.telegram_bot_token || '',
+          telegram_admin_id: d.telegram_admin_id || '',
+        })
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+    apiFetch('get', '/system/version', token)
+      .then(r => setVersionInfo({ current: r.data?.version }))
+      .catch(() => {})
+    // Load live MIS status
+    apiFetch('get', '/manager/mis/status', token)
+      .then(r => setMisLiveStatus(r.data))
+      .catch(() => {})
+  }, [token])
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true); setError(''); setSaved(false)
+    try {
+      await apiFetch('patch', '/manager/settings/general', token, form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Ошибка сохранения')
+    } finally { setSaving(false) }
+  }
+
+  const handleTestMis = async () => {
+    setTesting(true); setTestResult(null)
+    try {
+      const res = await apiFetch('post', '/manager/settings/test-mis', token, { mis_url: form.mis_url, mis_api_key: form.mis_api_key })
+      setTestResult({ ok: true, msg: res.data?.message || 'Соединение успешно' })
+    } catch (err) {
+      setTestResult({ ok: false, msg: err?.response?.data?.detail || 'Ошибка соединения' })
+    } finally { setTesting(false) }
+  }
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="max-w-2xl space-y-4">
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-xl font-extrabold font-headline text-[#191c1e] dark:text-white tracking-tight">Настройки</h2>
+        {versionInfo.current && (
+          <span className="text-xs px-3 py-1 rounded-full bg-[#dae5ff] text-[#1565c0] font-bold">v{versionInfo.current}</span>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-100 rounded-2xl p-4 flex items-center gap-3">
+          <span className="material-symbols-outlined text-[#ba1a1a] flex-shrink-0" style={{fontVariationSettings:"'FILL' 1"}}>error</span>
+          <p className="text-sm text-[#ba1a1a]">{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSave} className="space-y-4">
+        {/* МИС Интеграция */}
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-[#dae5ff] flex items-center justify-center">
+                <span className="material-symbols-outlined text-[#1565c0] text-xl" style={{fontVariationSettings:"'FILL' 1"}}>local_hospital</span>
+              </div>
+              <h3 className="font-bold text-[#191c1e] dark:text-white font-headline">Интеграция МИС</h3>
+            </div>
+            {misLiveStatus && (
+              <span className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full ${misLiveStatus.online ? 'bg-[#dcfce7] text-[#166534]' : 'bg-red-100 text-[#ba1a1a]'}`}>
+                <span className="w-1.5 h-1.5 rounded-full inline-block" style={{background: misLiveStatus.online ? '#166534' : '#ba1a1a'}} />
+                {misLiveStatus.online ? 'Онлайн' : 'Недоступна'}
+              </span>
+            )}
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">URL МИС</label>
+              <input type="url" value={form.mis_url} onChange={e => set('mis_url', e.target.value)}
+                placeholder="http://mis.example.com:3010"
+                className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">API Ключ</label>
+              <div className="relative">
+                <input type={showApiKey ? 'text' : 'password'} value={form.mis_api_key} onChange={e => set('mis_api_key', e.target.value)}
+                  placeholder="••••••••••••••••••••••"
+                  className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 pr-12 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+                <button type="button" onClick={() => setShowApiKey(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#727783] hover:text-[#1565c0] transition">
+                  <span className="material-symbols-outlined text-xl">{showApiKey ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
+            </div>
+            {testResult && (
+              <div className={`p-3 rounded-2xl text-sm flex items-center gap-2 ${testResult.ok ? 'bg-[#dcfce7] text-[#166534]' : 'bg-red-50 text-[#ba1a1a]'}`}>
+                <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>{testResult.ok ? 'check_circle' : 'error'}</span>
+                {testResult.msg}
+              </div>
+            )}
+            <button type="button" onClick={handleTestMis} disabled={testing || !form.mis_url}
+              className="w-full bg-[#f2f4f6] hover:bg-[#eceef0] dark:bg-gray-700 text-[#1565c0] rounded-2xl py-2.5 text-sm font-semibold disabled:opacity-40 transition flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-base">{testing ? 'sync' : 'wifi_tethering'}</span>
+              {testing ? 'Проверка...' : 'Проверить соединение'}
+            </button>
+          </div>
+        </div>
+
+        {/* Telegram Bot */}
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-2xl bg-[#dae5ff] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[#1565c0] text-xl" style={{fontVariationSettings:"'FILL' 1"}}>send</span>
+            </div>
+            <h3 className="font-bold text-[#191c1e] dark:text-white font-headline">Telegram Bot</h3>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Bot Token</label>
+              <div className="relative">
+                <input type={showBotToken ? 'text' : 'password'} value={form.telegram_bot_token} onChange={e => set('telegram_bot_token', e.target.value)}
+                  placeholder="123456789:AABBccdd..."
+                  className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 pr-12 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+                <button type="button" onClick={() => setShowBotToken(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#727783] hover:text-[#1565c0] transition">
+                  <span className="material-symbols-outlined text-xl">{showBotToken ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Admin Telegram ID</label>
+              <input type="text" value={form.telegram_admin_id} onChange={e => set('telegram_admin_id', e.target.value)}
+                placeholder="293633093"
+                className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+            </div>
+          </div>
+        </div>
+
+        {saved && (
+          <div className="bg-[#dcfce7] rounded-2xl p-4 flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#166534]" style={{fontVariationSettings:"'FILL' 1"}}>check_circle</span>
+            <p className="text-[#166534] text-sm font-semibold">Настройки сохранены</p>
+          </div>
+        )}
+
+        <button type="submit" disabled={saving}
+          className="w-full py-3.5 rounded-2xl text-white text-sm font-bold disabled:opacity-50 transition active:scale-[0.99] flex items-center justify-center gap-2"
+          style={{background:'linear-gradient(135deg, #1565c0, #1e6fe8)', boxShadow:'0 8px 20px rgba(21,101,192,0.25)'}}>
+          <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>{saving ? 'sync' : 'save'}</span>
+          {saving ? 'Сохранение...' : 'Сохранить настройки'}
+        </button>
+      </form>
+
+      {/* Commission settings */}
+      <div className="pt-2">
+        <CommissionSection token={token} />
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Monitoring section
+// ---------------------------------------------------------------------------
+
+function MonitoringSection({ token }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(null)
+  const [activeTab, setActiveTab] = useState('system')
+  const [logs, setLogs] = useState(null)
+  const [logsContainer, setLogsContainer] = useState('clinika-backend')
+  const [logsLoading, setLogsLoading] = useState(false)
+  const [dbAnalysis, setDbAnalysis] = useState(null)
+  const [dbLoading, setDbLoading] = useState(false)
+
+  const load = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    else setLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/system', token)
+      setData(res.data)
+      setLastUpdated(new Date())
+    } catch {}
+    finally { setLoading(false); setRefreshing(false) }
+  }
+
+  useEffect(() => {
+    load()
+    const id = setInterval(() => load(true), 30000)
+    return () => clearInterval(id)
+  }, [token])
+
+  const loadLogs = async (container = logsContainer) => {
+    setLogsLoading(true)
+    try {
+      const res = await apiFetch('get', `/monitoring/logs?container=${container}&lines=150`, token)
+      setLogs(res.data)
+    } catch {} finally { setLogsLoading(false) }
+  }
+
+  const loadDbAnalysis = async () => {
+    setDbLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/db-analysis', token)
+      setDbAnalysis(res.data)
+    } catch {} finally { setDbLoading(false) }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'logs' && !logs) loadLogs()
+    if (activeTab === 'db' && !dbAnalysis) loadDbAnalysis()
+  }, [activeTab])
+
+  if (loading) return <Spinner />
+
+  const srv = data?.server || {}
+  const db = data?.database || {}
+  const redis = data?.redis || {}
+  const mis = data?.mis_integration || {}
+  const containers = Array.isArray(data?.containers) ? data.containers : []
+  const tasks = data?.background_tasks || {}
+
+  function GaugeBar({ value, max = 100, color, warnAt = 70, critAt = 85 }) {
+    const pct = Math.min(100, Math.round((value / max) * 100))
+    const barColor = pct >= critAt ? '#ba1a1a' : pct >= warnAt ? '#c2410c' : color
+    return (
+      <div className="w-full bg-[#f2f4f6] dark:bg-gray-700 rounded-full h-2 mt-2">
+        <div className="h-2 rounded-full transition-all duration-500" style={{width: `${pct}%`, background: barColor}} />
+      </div>
+    )
+  }
+
+  function StatCard({ icon, iconBg, iconColor, title, value, sub, gauge, gaugeMax, warnAt, critAt }) {
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${iconBg}`}>
+            <span className="material-symbols-outlined text-lg" style={{color: iconColor, fontVariationSettings:"'FILL' 1"}}>{icon}</span>
+          </div>
+          <p className="text-xs font-semibold text-[#727783] uppercase tracking-wider">{title}</p>
+        </div>
+        <p className="text-2xl font-extrabold font-headline text-[#191c1e] dark:text-white">{value ?? '—'}</p>
+        {sub && <p className="text-xs text-[#727783] mt-0.5">{sub}</p>}
+        {gauge != null && <GaugeBar value={gauge} max={gaugeMax} color={iconColor} warnAt={warnAt} critAt={critAt} />}
+      </div>
+    )
+  }
+
+  const containerClinika = containers.filter(c => c.name?.startsWith('clinika'))
+  const containerOther = containers.filter(c => !c.name?.startsWith('clinika'))
+
+  const allContainers = [...containerClinika, ...containerOther]
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-extrabold font-headline text-[#191c1e] dark:text-white tracking-tight">Мониторинг системы</h2>
+          {lastUpdated && <p className="text-xs text-[#727783] mt-0.5">Обновлено: {lastUpdated.toLocaleTimeString('ru-RU')}</p>}
+        </div>
+        <button onClick={() => load(true)} disabled={refreshing}
+          className="w-10 h-10 rounded-2xl bg-white dark:bg-gray-800 flex items-center justify-center text-[#727783] hover:text-[#1565c0] transition border border-[#eceef0]"
+          style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+          <span className={`material-symbols-outlined text-xl ${refreshing ? 'animate-spin' : ''}`}>refresh</span>
+        </button>
+      </div>
+
+      {/* Табы */}
+      <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-2xl p-1" style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+        {[
+          {key:'system', label:'Система', icon:'monitor_heart'},
+          {key:'logs',   label:'Логи',    icon:'receipt_long'},
+          {key:'db',     label:'База данных', icon:'database'},
+        ].map(tab => (
+          <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+              activeTab === tab.key ? 'bg-[#1565c0] text-white' : 'text-[#727783] hover:text-[#424752]'
+            }`}
+            style={activeTab === tab.key ? {boxShadow:'0 4px 12px rgba(21,101,192,0.2)'} : {}}>
+            <span className="material-symbols-outlined text-base">{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'logs' && (
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {['clinika-backend','clinika-frontend','clinika-db','clinika-redis'].map(c => (
+              <button key={c} onClick={() => { setLogsContainer(c); setLogs(null); loadLogs(c) }}
+                className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition ${logsContainer === c ? 'bg-[#1565c0] text-white' : 'bg-white text-[#727783] border border-[#eceef0]'}`}
+                style={logsContainer === c ? {boxShadow:'0 4px 12px rgba(21,101,192,0.2)'} : {}}>
+                {c}
+              </button>
+            ))}
+            <button onClick={() => loadLogs(logsContainer)} disabled={logsLoading}
+              className="ml-auto text-xs px-3 py-1.5 rounded-xl font-semibold bg-[#f2f4f6] text-[#424752] hover:bg-[#eceef0] transition flex items-center gap-1">
+              <span className={`material-symbols-outlined text-sm ${logsLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {logsLoading ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : logs ? (
+            <div className="bg-[#191c1e] rounded-3xl p-5 overflow-x-auto" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              <div className="space-y-0.5 font-mono text-xs">
+                {logs.lines.slice().reverse().map((line, i) => {
+                  const isErr = /error|exception|traceback|critical|fatal/i.test(line)
+                  const isWarn = /warn|warning/i.test(line)
+                  return (
+                    <div key={i} className={`leading-relaxed ${isErr ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-[#c2c6d4]'}`}>
+                      {line || ' '}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-[#727783] text-center py-8">Нажмите на контейнер для загрузки логов</p>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'db' && (
+        <div className="space-y-3">
+          <div className="flex justify-end">
+            <button onClick={loadDbAnalysis} disabled={dbLoading}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+              <span className={`material-symbols-outlined text-sm ${dbLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {dbLoading ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : dbAnalysis?.tables ? (
+            <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              <div className="px-5 py-3.5 border-b border-[#f2f4f6] dark:border-gray-700 grid grid-cols-4 gap-2 text-[10px] font-bold text-[#727783] uppercase tracking-wider">
+                <span>Таблица</span><span className="text-right">Строки</span><span className="text-right">Удалённые</span><span className="text-right">Размер</span>
+              </div>
+              {dbAnalysis.tables.map((t, i) => (
+                <div key={t.name} className={`px-5 py-3 grid grid-cols-4 gap-2 ${i < dbAnalysis.tables.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                  <span className="text-sm font-semibold text-[#191c1e] dark:text-white font-mono truncate">{t.name}</span>
+                  <span className="text-sm text-right text-[#424752] dark:text-gray-300">{t.rows?.toLocaleString()}</span>
+                  <span className={`text-sm text-right font-semibold ${t.dead_rows > 100 ? 'text-[#c2410c]' : 'text-[#727783]'}`}>{t.dead_rows?.toLocaleString()}</span>
+                  <span className="text-sm text-right text-[#727783]">{t.size}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-[#727783] text-center py-8">Нет данных</p>
+          )}
+        </div>
+      )}
+
+      {activeTab !== 'system' && null}
+
+      {activeTab === 'system' && <>
+
+      {/* Сервер — 4 метрики */}
+      {!srv.error && (
+        <div>
+          <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Сервер</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <StatCard icon="memory" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="CPU"
+              value={`${srv.cpu_percent ?? '—'}%`}
+              sub={srv.load_avg ? `Нагрузка: ${srv.load_avg[0]}` : undefined}
+              gauge={srv.cpu_percent} warnAt={70} critAt={90} />
+            <StatCard icon="storage" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="RAM"
+              value={`${srv.ram_percent ?? '—'}%`}
+              sub={srv.ram_used_mb ? `${Math.round(srv.ram_used_mb/1024*10)/10} / ${Math.round(srv.ram_total_mb/1024*10)/10} ГБ` : undefined}
+              gauge={srv.ram_percent} warnAt={75} critAt={90} />
+            <StatCard icon="hard_drive" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Диск"
+              value={`${srv.disk_percent ?? '—'}%`}
+              sub={srv.disk_used_gb ? `${srv.disk_used_gb} / ${srv.disk_total_gb} ГБ` : undefined}
+              gauge={srv.disk_percent} warnAt={75} critAt={90} />
+            <StatCard icon="schedule" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Аптайм"
+              value={srv.uptime_hours != null ? (srv.uptime_hours >= 24 ? `${Math.round(srv.uptime_hours/24)}д` : `${srv.uptime_hours}ч`) : '—'}
+              sub="Время работы сервера" />
+          </div>
+        </div>
+      )}
+
+      {/* БД + Redis + МИС */}
+      <div>
+        <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Сервисы</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* PostgreSQL */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-2xl bg-[#dcfce7] flex items-center justify-center">
+                <span className="material-symbols-outlined text-lg text-[#166534]" style={{fontVariationSettings:"'FILL' 1"}}>database</span>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#727783] uppercase tracking-wider">PostgreSQL</p>
+                <span className={`text-[11px] font-bold ${db.status === 'ok' ? 'text-[#166534]' : 'text-[#ba1a1a]'}`}>
+                  {db.status === 'ok' ? '● Работает' : '● Ошибка'}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-[#727783]">Размер БД</span>
+                <span className="font-bold text-[#191c1e] dark:text-white">{db.size_mb != null ? `${db.size_mb} МБ` : '—'}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[#727783]">Соединений</span>
+                <span className="font-bold text-[#191c1e] dark:text-white">{db.connections ?? '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Redis */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-2xl bg-orange-100 flex items-center justify-center">
+                <span className="material-symbols-outlined text-lg text-orange-600" style={{fontVariationSettings:"'FILL' 1"}}>speed</span>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#727783] uppercase tracking-wider">Redis</p>
+                <span className={`text-[11px] font-bold ${redis.status === 'ok' ? 'text-[#166534]' : 'text-[#ba1a1a]'}`}>
+                  {redis.status === 'ok' ? '● Работает' : '● Ошибка'}
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-[#727783]">Память</span>
+              <span className="font-bold text-[#191c1e] dark:text-white">{redis.used_memory_mb != null ? `${redis.used_memory_mb} МБ` : '—'}</span>
+            </div>
+          </div>
+
+          {/* МИС */}
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${mis.status === 'ok' ? 'bg-[#dcfce7]' : 'bg-red-100'}`}>
+                <span className={`material-symbols-outlined text-lg ${mis.status === 'ok' ? 'text-[#166534]' : 'text-[#ba1a1a]'}`} style={{fontVariationSettings:"'FILL' 1"}}>medical_services</span>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#727783] uppercase tracking-wider">МИС</p>
+                <span className={`text-[11px] font-bold ${mis.status === 'ok' ? 'text-[#166534]' : 'text-[#ba1a1a]'}`}>
+                  {mis.status === 'ok' ? '● Онлайн' : '● Недоступна'}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-[#727783]">Задержка</span>
+                <span className="font-bold text-[#191c1e] dark:text-white">{mis.response_time_ms != null ? `${mis.response_time_ms} мс` : '—'}</span>
+              </div>
+              {mis.error && <p className="text-xs text-[#ba1a1a] truncate">{mis.error}</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Docker контейнеры */}
+      {allContainers.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Контейнеры</p>
+          <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+            {allContainers.map((c, i) => (
+              <div key={c.name || i} className={`flex items-center justify-between px-5 py-3.5 ${i < allContainers.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    c.health === 'healthy' || (c.status === 'running' && c.health === 'ok') ? 'bg-[#166534]' :
+                    c.health === 'unhealthy' ? 'bg-[#ba1a1a]' :
+                    c.status === 'running' ? 'bg-[#166534]' : 'bg-[#727783]'
+                  }`} />
+                  <span className="text-sm font-semibold text-[#191c1e] dark:text-white font-mono">{c.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
+                    c.status === 'running' ? 'bg-[#dcfce7] text-[#166534]' : 'bg-red-100 text-[#ba1a1a]'
+                  }`}>{c.status}</span>
+                  {c.health !== 'ok' && c.health !== 'healthy' && (
+                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold ${
+                      c.health === 'unhealthy' ? 'bg-red-100 text-[#ba1a1a]' : 'bg-orange-100 text-orange-700'
+                    }`}>{c.health}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Фоновые задачи */}
+      <div>
+        <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Фоновые задачи</p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { key: 'auto_confirm', label: 'Авто-подтверждение', icon: 'check_circle' },
+            { key: 'expire_referrals', label: 'Истечение направлений', icon: 'schedule' },
+            { key: 'heartbeat', label: 'Heartbeat', icon: 'favorite' },
+          ].map(t => (
+            <div key={t.key} className="bg-white dark:bg-gray-800 rounded-3xl p-4 text-center" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              <span className={`material-symbols-outlined text-2xl mb-2 block ${tasks[t.key] === 'running' ? 'text-[#166534]' : 'text-[#727783]'}`}
+                style={{fontVariationSettings:"'FILL' 1"}}>{t.icon}</span>
+              <p className="text-[10px] font-semibold text-[#727783] leading-tight">{t.label}</p>
+              <p className={`text-xs font-bold mt-1 ${tasks[t.key] === 'running' ? 'text-[#166534]' : 'text-[#727783]'}`}>
+                {tasks[t.key] === 'running' ? 'Активна' : tasks[t.key] ?? '—'}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+      </>}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Partners section
+
+// ---------------------------------------------------------------------------
+// Partners section
+// ---------------------------------------------------------------------------
+
+const EMPTY_PARTNER_FORM = {
+  full_name: '',
+  username: '',
+  password: '',
+  phone_number: '+7',
+  telegram_id: '',
+}
+
+function PartnerModal({ token, existing, onClose, onDone }) {
+  const isEdit = !!existing
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          full_name: existing.full_name || '',
+          username: existing.username || '',
+          password: '',
+          phone_number: existing.phone_number ? formatPhone(existing.phone_number) : '+7',
+          telegram_id: existing.telegram_id ? String(existing.telegram_id) : '',
+        }
+      : { ...EMPTY_PARTNER_FORM }
+  )
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.full_name.trim()) { setError('Введите ФИО'); return }
+    if (!isEdit && !form.username.trim()) { setError('Введите логин'); return }
+    if (!isEdit && !form.password.trim()) { setError('Введите пароль'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const payload = { full_name: form.full_name.trim(), role: 'partner' }
+      if (form.username.trim()) payload.username = form.username.trim()
+      if (form.password.trim()) payload.password = form.password.trim()
+      payload.phone_number = (form.phone_number && form.phone_number !== '+7') ? form.phone_number : null
+      if (form.telegram_id.trim()) payload.telegram_id = form.telegram_id.trim()
+
+      if (isEdit) {
+        await apiFetch('patch', `/manager/partners/${existing.id}`, token, payload)
+      } else {
+        await apiFetch('post', '/manager/partners/', token, payload)
+      }
+      onDone()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
+          {isEdit ? 'Редактировать партнёра' : 'Новый партнёр'}
+        </h2>
+
+        <ErrorBox msg={error} />
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+              ФИО <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={form.full_name}
+              onChange={e => set('full_name', e.target.value)}
+              placeholder="Иванов Иван Иванович"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Логин{!isEdit && <span className="text-red-500"> *</span>}
+              </label>
+              <input
+                type="text"
+                value={form.username}
+                onChange={e => set('username', e.target.value)}
+                placeholder="partner_login"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Пароль{!isEdit && <span className="text-red-500"> *</span>}
+                {isEdit && <span className="text-gray-400"> (не менять — оставьте пустым)</span>}
+              </label>
+              <input
+                type="password"
+                value={form.password}
+                onChange={e => set('password', e.target.value)}
+                placeholder="••••••••"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Телефон</label>
+              <input
+                type="tel"
+                value={form.phone_number}
+                onChange={e => set('phone_number', formatPhone(e.target.value))}
+                onFocus={e => { if (e.target.value === '+7') setTimeout(() => e.target.setSelectionRange(e.target.value.length, e.target.value.length), 0) }}
+                placeholder="+7 (900) 000-00-00"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Telegram ID</label>
+              <input
+                type="text"
+                value={form.telegram_id}
+                onChange={e => set('telegram_id', e.target.value)}
+                placeholder="293633093"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3 mt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-blue-700 transition"
+            >
+              {loading ? 'Сохранение...' : isEdit ? 'Сохранить' : 'Создать'}
+            </button>
+          </div>
+        </form>
+
+        {isEdit && (
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2">
+            {existing.is_active !== false ? (
+              <button type="button"
+                onClick={async () => {
+                  if (!window.confirm(`Деактивировать ${existing.full_name}?`)) return
+                  try {
+                    await apiFetch('delete', `/manager/partners/${existing.id}`, token)
+                    onDone()
+                  } catch (e) {
+                    alert(e?.response?.data?.detail || 'Ошибка')
+                  }
+                }}
+                className="w-full border border-orange-200 text-orange-500 rounded-xl py-2.5 text-sm font-medium hover:bg-orange-50 transition">
+                Деактивировать партнёра
+              </button>
+            ) : null}
+            <button type="button" onClick={() => setConfirmDelete(true)}
+              className="w-full border border-red-200 text-red-500 rounded-xl py-2.5 text-sm font-medium hover:bg-red-50 transition">
+              Удалить партнёра
+            </button>
+          </div>
+        )}
+      </div>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-2 text-center">Удалить партнёра?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-5">
+              Аккаунт будет удалён безвозвратно. Направления останутся в системе.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmDelete(false)}
+                className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium">
+                Отмена
+              </button>
+              <button type="button" disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true)
+                  try {
+                    await apiFetch('delete', `/manager/partners/${existing.id}?hard=true`, token)
+                    onDone()
+                  } catch (e) {
+                    alert(e?.response?.data?.detail || 'Ошибка удаления')
+                    setConfirmDelete(false)
+                  } finally { setDeleting(false) }
+                }}
+                className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
+                {deleting ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PartnersSection({ token }) {
+  // ─── Таб: 'list' (список) | 'invites' (инвайты) ───
+  const [tab, setTab] = useState('list')
+  const [partners, setPartners] = useState([])
+  const [invites, setInvites] = useState([])
+  const [clinics, setClinics] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+  const [copied, setCopied] = useState(null)
+  const [creatingInvite, setCreatingInvite] = useState(false)
+  const [inviteClinic, setInviteClinic] = useState('')
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [pRes, iRes, cRes] = await Promise.all([
+        apiFetch('get', '/manager/partners/', token),
+        apiFetch('get', '/manager/invitations/', token),
+        apiFetch('get', '/manager/clinics/', token),
+      ])
+      setPartners(Array.isArray(pRes.data) ? pRes.data : [])
+      setInvites(Array.isArray(iRes.data) ? iRes.data : [])
+      setClinics(Array.isArray(cRes.data) ? cRes.data : [])
+    } catch {
+      setError('Не удалось загрузить данные')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  // ─── Создание инвайта ───
+  const handleCreateInvite = async () => {
+    setCreatingInvite(true)
+    try {
+      await apiFetch('post', '/manager/invitations/', token, {
+        clinic_id: inviteClinic || null,
+        max_uses: 100,
+      })
+      await fetchData()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Ошибка создания инвайта')
+    } finally {
+      setCreatingInvite(false)
+    }
+  }
+
+  // ─── Копирование инвайт-ссылки ───
+  const handleCopyInvite = (code) => {
+    const url = `${window.location.origin}/clinika/invite/${code}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(code)
+      setTimeout(() => setCopied(null), 2000)
+    })
+  }
+
+  // ─── Удаление инвайта ───
+  const handleDeleteInvite = async (id) => {
+    try {
+      await apiFetch('delete', `/manager/invitations/${id}`, token)
+      setInvites(inv => inv.filter(i => i.id !== id))
+    } catch {
+      setError('Ошибка удаления инвайта')
+    }
+  }
+
+  const filtered = partners.filter(p => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      (p.full_name || '').toLowerCase().includes(q) ||
+      (p.username || '').toLowerCase().includes(q) ||
+      (p.phone_number || '').toLowerCase().includes(q)
+    )
+  })
+
+  return (
+    <div>
+      {/* ─── Заголовок ─── */}
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">Партнёры и суб-агенты</h2>
+        {tab === 'list' && (
+          <button onClick={() => setShowCreate(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition">
+            + Добавить партнёра
+          </button>
+        )}
+      </div>
+
+      {/* ─── Переключатель табов ─── */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 rounded-xl p-1 mb-5">
+        <button onClick={() => setTab('list')}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+          👥 Список ({partners.length})
+        </button>
+        <button onClick={() => setTab('invites')}
+          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'invites' ? 'bg-white dark:bg-gray-700 text-blue-600 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}>
+          🔗 Инвайты ({invites.filter(i => i.is_valid).length})
+        </button>
+      </div>
+
+      <ErrorBox msg={error} />
+
+      {/* ─── Таб: Инвайт-ссылки ─── */}
+      {tab === 'invites' && (
+        <div>
+          {/* Создание нового инвайта */}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm mb-4">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">Новая инвайт-ссылка</p>
+            <div className="flex gap-2">
+              <select
+                value={inviteClinic}
+                onChange={e => setInviteClinic(e.target.value)}
+                className="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500"
+              >
+                <option value="">Все клиники / без привязки</option>
+                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button
+                onClick={handleCreateInvite}
+                disabled={creatingInvite}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50 transition whitespace-nowrap"
+              >
+                {creatingInvite ? '...' : '+ Создать'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+              Партнёр откроет ссылку, зарегистрируется и сразу получит доступ к системе.
+            </p>
+          </div>
+
+          {/* Список инвайтов */}
+          {invites.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 dark:text-gray-500 text-sm">Нет созданных инвайтов</div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              {invites.map((inv, i) => {
+                const url = `${window.location.origin}/clinika/invite/${inv.code}`
+                return (
+                  <div key={inv.id}
+                    className={`flex items-center gap-3 p-4 ${i < invites.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${inv.is_valid ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
+                          {inv.is_valid ? 'Активна' : 'Исчерпана'}
+                        </span>
+                        {inv.clinic_name && (
+                          <span className="text-xs text-blue-600 dark:text-blue-400">{inv.clinic_name}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{url}</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                        Использований: {inv.uses_count}/{inv.max_uses}
+                        {inv.expires_at && ` · до ${new Date(inv.expires_at).toLocaleDateString('ru-RU')}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button onClick={() => handleCopyInvite(inv.code)}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition ${copied === inv.code ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'}`}>
+                        {copied === inv.code ? '✓ Скопировано' : 'Копировать'}
+                      </button>
+                      <button onClick={() => handleDeleteInvite(inv.id)}
+                        className="text-gray-300 dark:text-gray-600 hover:text-red-400 dark:hover:text-red-500 transition p-1">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Таб: Список партнёров ─── */}
+      {tab === 'list' && <>
+      <div className="mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Поиск по имени, логину, телефону..."
+          className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-800 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+
+      {loading ? (
+        <Spinner />
+      ) : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm">
+          {/* Desktop table */}
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">ФИО</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Логин / TG</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Телефон</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Статус</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
+                      {search.trim() ? 'Ничего не найдено' : 'Партнёров нет'}
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((p, i) => (
+                    <tr
+                      key={p.id}
+                      className={`border-b border-gray-50 dark:border-gray-700 ${i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-900/50'}`}
+                    >
+                      <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{p.full_name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+                        {p.username && <div className="text-xs">{p.username}</div>}
+                        {p.telegram_id && <div className="text-xs text-blue-500">TG: {p.telegram_id}</div>}
+                        {!p.username && !p.telegram_id && '—'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{p.phone_number || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+                        <span className="inline-block bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-semibold px-2 py-0.5 rounded-full">
+                          {p.referrals_count ?? 0}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {p.is_active !== false ? (
+                          <span className="inline-block bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-semibold px-2 py-0.5 rounded-full">
+                            Активен
+                          </span>
+                        ) : (
+                          <span className="inline-block bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-xs font-semibold px-2 py-0.5 rounded-full">
+                            Неактивен
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          onClick={() => setEditTarget(p)}
+                          className="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg px-2.5 py-1.5 font-medium transition"
+                        >
+                          Изменить
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+            {filtered.length === 0 ? (
+              <div className="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
+                {search.trim() ? 'Ничего не найдено' : 'Партнёров нет'}
+              </div>
+            ) : filtered.map(p => (
+              <div key={p.id} className="p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-semibold text-gray-800 dark:text-white">{p.full_name}</p>
+                    {p.username && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{p.username}</p>}
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${p.is_active !== false ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'}`}>
+                      {p.is_active !== false ? 'Активен' : 'Неактивен'}
+                    </span>
+                    <span className="text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full">
+                      {p.referrals_count ?? 0} напр.
+                    </span>
+                  </div>
+                </div>
+                {p.phone_number && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{p.phone_number}</p>}
+                {p.telegram_id && <p className="text-xs text-blue-500 mb-2">TG: {p.telegram_id}</p>}
+                <div className="flex justify-end">
+                  <button onClick={() => setEditTarget(p)}
+                    className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 font-medium">
+                    Изменить
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Закрываем таб списка партнёров */}
+      </>}
+
+      {/* Модалы (вне табов — рендерятся поверх) */}
+      {showCreate && (
+        <PartnerModal
+          token={token}
+          existing={null}
+          onClose={() => setShowCreate(false)}
+          onDone={() => { setShowCreate(false); fetchData() }}
+        />
+      )}
+      {editTarget && (
+        <PartnerModal
+          token={token}
+          existing={editTarget}
+          onClose={() => setEditTarget(null)}
+          onDone={() => { setEditTarget(null); fetchData() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ===========================================================================
+// БЛОК: Скидки (DiscountsSection)
+// ===========================================================================
+// Управление скидками на услуги. НЕ влияют на бонусы партнёров/сотрудников.
+// Инфраструктура готова — привязка к пациентам/направлениям добавляется позже.
+//
+// Расширение: добавить промо-коды, автоприменение, привязку к дате/времени
+// ===========================================================================
+
+const DISCOUNT_TYPE_LABELS = { percent: '%', fixed: 'Б' }
+const APPLIES_TO_LABELS = { all: 'Все услуги', service: 'Конкретная услуга', clinic: 'Клиника' }
+
+const EMPTY_DISCOUNT = {
+  name: '',
+  description: '',
+  discount_type: 'percent',
+  discount_value: '',
+  applies_to: 'all',
+  service_id: '',
+  clinic_id: '',
+  is_active: true,
+  valid_from: '',
+  valid_until: '',
+}
+
+function DiscountModal({ token, existing, services, clinics, onClose, onDone }) {
+  const isEdit = !!existing
+  const [form, setForm] = useState(isEdit ? {
+    name: existing.name || '',
+    description: existing.description || '',
+    discount_type: existing.discount_type || 'percent',
+    discount_value: String(existing.discount_value ?? ''),
+    applies_to: existing.applies_to || 'all',
+    service_id: existing.service_id || '',
+    clinic_id: existing.clinic_id || '',
+    is_active: existing.is_active !== false,
+    valid_from: existing.valid_from ? existing.valid_from.slice(0, 10) : '',
+    valid_until: existing.valid_until ? existing.valid_until.slice(0, 10) : '',
+  } : { ...EMPTY_DISCOUNT })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim()) { setError('Введите название скидки'); return }
+    if (!form.discount_value || isNaN(Number(form.discount_value))) { setError('Введите корректное значение скидки'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const payload = {
+        name: form.name.trim(),
+        description: form.description || null,
+        discount_type: form.discount_type,
+        discount_value: Number(form.discount_value),
+        applies_to: form.applies_to,
+        service_id: form.service_id || null,
+        clinic_id: form.clinic_id || null,
+        is_active: form.is_active,
+        valid_from: form.valid_from || null,
+        valid_until: form.valid_until || null,
+      }
+      if (isEdit) {
+        await apiFetch('patch', `/manager/discounts/${existing.id}`, token, payload)
+      } else {
+        await apiFetch('post', '/manager/discounts/', token, payload)
+      }
+      onDone()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
+          {isEdit ? 'Редактировать скидку' : 'Новая скидка'}
+        </h2>
+        <ErrorBox msg={error} />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+
+          {/* Название */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Название *</label>
+            <input type="text" value={form.name} onChange={e => set('name', e.target.value)}
+              placeholder="Скидка для пенсионеров"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+          </div>
+
+          {/* Тип и значение */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Тип скидки</label>
+              <select value={form.discount_type} onChange={e => set('discount_type', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500">
+                <option value="percent">Процент (%)</option>
+                <option value="fixed">Сумма (Б)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                Значение {form.discount_type === 'percent' ? '(1–100)' : '(Б)'}
+              </label>
+              <input type="number" min="1" max={form.discount_type === 'percent' ? 100 : undefined}
+                value={form.discount_value} onChange={e => set('discount_value', e.target.value)}
+                placeholder={form.discount_type === 'percent' ? '10' : '500'}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+
+          {/* Применяется к */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Применяется к</label>
+            <select value={form.applies_to} onChange={e => set('applies_to', e.target.value)}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500">
+              <option value="all">Все услуги</option>
+              <option value="service">Конкретная услуга</option>
+              <option value="clinic">Клиника</option>
+            </select>
+          </div>
+
+          {/* Конкретная услуга */}
+          {form.applies_to === 'service' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Услуга</label>
+              <select value={form.service_id} onChange={e => set('service_id', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500">
+                <option value="">Выберите услугу</option>
+                {services.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Клиника */}
+          {form.applies_to === 'clinic' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Клиника</label>
+              <select value={form.clinic_id} onChange={e => set('clinic_id', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-white focus:outline-none focus:border-blue-500">
+                <option value="">Выберите клинику</option>
+                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Срок действия */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Действует с</label>
+              <input type="date" value={form.valid_from} onChange={e => set('valid_from', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Действует по</label>
+              <input type="date" value={form.valid_until} onChange={e => set('valid_until', e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+
+          {/* Описание */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Описание (необязательно)</label>
+            <textarea value={form.description} onChange={e => set('description', e.target.value)}
+              placeholder="Дополнительная информация о скидке..."
+              rows={2}
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500 resize-none" />
+          </div>
+
+          {/* Активность */}
+          <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              {form.is_active ? 'Скидка активна' : 'Скидка отключена'}
+            </span>
+            <button type="button" onClick={() => set('is_active', !form.is_active)}
+              className={`relative inline-flex w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+            </button>
+          </div>
+
+          {/* Кнопки */}
+          <div className="flex gap-3 mt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium">
+              Отмена
+            </button>
+            <button type="submit" disabled={loading}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50">
+              {loading ? 'Сохранение...' : (isEdit ? 'Сохранить' : 'Создать скидку')}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function DiscountsSection({ token }) {
+  const [discounts, setDiscounts] = useState([])
+  const [services, setServices] = useState([])
+  const [clinics, setClinics] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+  const [filter, setFilter] = useState('all')  // 'all' | 'active' | 'inactive'
+
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [dRes, sRes, cRes] = await Promise.all([
+        apiFetch('get', '/manager/discounts/', token),
+        apiFetch('get', '/manager/services/', token),
+        apiFetch('get', '/manager/clinics/', token),
+      ])
+      setDiscounts(Array.isArray(dRes.data) ? dRes.data : [])
+      setServices(Array.isArray(sRes.data) ? sRes.data : [])
+      setClinics(Array.isArray(cRes.data) ? cRes.data : [])
+    } catch {
+      setError('Не удалось загрузить скидки')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => { fetchData() }, [fetchData])
+
+  const handleToggleActive = async (d) => {
+    try {
+      await apiFetch('patch', `/manager/discounts/${d.id}`, token, { is_active: !d.is_active })
+      setDiscounts(prev => prev.map(x => x.id === d.id ? { ...x, is_active: !x.is_active } : x))
+    } catch {
+      setError('Ошибка обновления скидки')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Удалить скидку?')) return
+    try {
+      await apiFetch('delete', `/manager/discounts/${id}`, token)
+      setDiscounts(prev => prev.filter(x => x.id !== id))
+    } catch {
+      setError('Ошибка удаления скидки')
+    }
+  }
+
+  const filtered = discounts.filter(d => {
+    if (filter === 'active') return d.is_active
+    if (filter === 'inactive') return !d.is_active
+    return true
+  })
+
+  const formatDiscount = (d) =>
+    d.discount_type === 'percent' ? `${d.discount_value}%` : `${d.discount_value} Б`
+
+  const formatAppliesTo = (d) => {
+    if (d.applies_to === 'service' && d.service_name) return `Услуга: ${d.service_name}`
+    if (d.applies_to === 'clinic' && d.clinic_name) return `Клиника: ${d.clinic_name}`
+    return APPLIES_TO_LABELS[d.applies_to] || d.applies_to
+  }
+
+  return (
+    <div>
+      {/* ─── Заголовок ─── */}
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">Скидки</h2>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+            Скидки на стоимость услуг. Бонусы партнёров не затрагиваются.
+          </p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition">
+          + Добавить скидку
+        </button>
+      </div>
+
+      {/* ─── Инфо-баннер (пока нет привязки) ─── */}
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-3 mb-4">
+        <p className="text-amber-800 dark:text-amber-300 text-xs font-medium">
+          ⚙️ Инфраструктура готова. Привязка скидок к направлениям и пациентам добавляется в следующем этапе.
+        </p>
+      </div>
+
+      {/* ─── Фильтр ─── */}
+      <div className="flex gap-2 mb-4">
+        {[['all', 'Все'], ['active', 'Активные'], ['inactive', 'Отключённые']].map(([val, label]) => (
+          <button key={val} onClick={() => setFilter(val)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === val ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <ErrorBox msg={error} />
+
+      {loading ? <Spinner /> : (
+        <>
+          {filtered.length === 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm p-10 text-center">
+              <div className="text-4xl mb-3">🏷️</div>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
+                {discounts.length === 0 ? 'Скидок пока нет. Создайте первую.' : 'Ничего не найдено'}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              {/* Desktop */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Название</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Скидка</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Применение</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Срок</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Статус</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((d, i) => (
+                      <tr key={d.id}
+                        className={`border-b border-gray-50 dark:border-gray-700 ${i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-900/50'}`}>
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-800 dark:text-white">{d.name}</p>
+                          {d.description && <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate max-w-xs">{d.description}</p>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="inline-block bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm font-bold px-2.5 py-1 rounded-lg">
+                            −{formatDiscount(d)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{formatAppliesTo(d)}</td>
+                        <td className="px-4 py-3 text-gray-400 dark:text-gray-500 text-xs">
+                          {d.valid_from || d.valid_until ? (
+                            <span>
+                              {d.valid_from ? new Date(d.valid_from).toLocaleDateString('ru-RU') : '∞'}
+                              {' — '}
+                              {d.valid_until ? new Date(d.valid_until).toLocaleDateString('ru-RU') : '∞'}
+                            </span>
+                          ) : 'Бессрочно'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => handleToggleActive(d)}
+                            className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${d.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button onClick={() => setEditTarget(d)}
+                              className="text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg px-2.5 py-1.5 font-medium transition">
+                              Изменить
+                            </button>
+                            <button onClick={() => handleDelete(d.id)}
+                              className="text-xs bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-500 dark:text-red-400 rounded-lg px-2.5 py-1.5 font-medium transition">
+                              Удалить
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile */}
+              <div className="md:hidden divide-y divide-gray-100 dark:divide-gray-700">
+                {filtered.map(d => (
+                  <div key={d.id} className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-800 dark:text-white">{d.name}</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatAppliesTo(d)}</p>
+                      </div>
+                      <span className="ml-2 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 text-sm font-bold px-2 py-0.5 rounded-lg flex-shrink-0">
+                        −{formatDiscount(d)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <button onClick={() => handleToggleActive(d)}
+                        className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${d.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setEditTarget(d)}
+                          className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg px-3 py-1.5 font-medium">
+                          Изменить
+                        </button>
+                        <button onClick={() => handleDelete(d.id)}
+                          className="text-xs bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-lg px-3 py-1.5 font-medium">
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Модалы */}
+      {showCreate && (
+        <DiscountModal token={token} existing={null} services={services} clinics={clinics}
+          onClose={() => setShowCreate(false)}
+          onDone={() => { setShowCreate(false); fetchData() }} />
+      )}
+      {editTarget && (
+        <DiscountModal token={token} existing={editTarget} services={services} clinics={clinics}
+          onClose={() => setEditTarget(null)}
+          onDone={() => { setEditTarget(null); fetchData() }} />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main AdminLayout
+// ---------------------------------------------------------------------------
+
+export default function AdminLayout({ adminToken, user, onLogout }) {
+  const [activeSection, setActiveSection] = useState('home')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
+  const [helpOpen, setHelpOpen] = useState(false)
+  const [badges, setBadges] = useState({ cancel_requests: 0, pending_bonus_staff: 0 })
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('adminTheme', dark ? 'dark' : 'light')
+  }, [dark])
+
+  // Загружаем счётчики бейджей при монтировании и каждые 60 сек
+  useEffect(() => {
+    const load = () => {
+      apiFetch('get', '/manager/badge-counts', adminToken)
+        .then(r => setBadges(r.data))
+        .catch(() => {})
+    }
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [adminToken])
+
+  // Бейдж-конфиг: раздел → значение счётчика
+  const navBadge = {
+    bonuses: badges.pending_bonus_staff,
+    reports: badges.cancel_requests,
+  }
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'home':     return <HomeDashboard token={adminToken} />
+      case 'staff':    return <StaffSection token={adminToken} />
+      case 'clinics':  return <ClinicsSection token={adminToken} />
+      case 'services': return <ServicesSection token={adminToken} />
+      case 'reports':  return <ReportsSection token={adminToken} />
+      case 'bonuses':    return <BonusesSection token={adminToken} />
+      case 'commission': return <CommissionSection token={adminToken} />
+      case 'partners':  return <PartnersSection token={adminToken} />
+      case 'discounts': return <DiscountsSection token={adminToken} />
+      case 'settings':  return <SettingsSection token={adminToken} />
+      case 'support':   return <SupportAdminWrapper token={adminToken} />
+      case 'monitoring': return <MonitoringSection token={adminToken} />
+      default:          return null
+    }
+  }
+
+  const handleNav = (key) => {
+    setActiveSection(key)
+    setSidebarOpen(false)
+  }
+
+  return (
+    <div className="flex min-h-screen bg-[#f7f9fb] dark:bg-gray-950 font-sans">
+      {/* Sidebar overlay (мобильный) */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* ─── Sidebar (Stitch "Clinika Slate & Cobalt" style) ─── */}
+      <aside className={`
+        fixed top-0 left-0 h-full w-64 bg-[#1a2232] text-white z-30 flex flex-col
+        transition-transform duration-200 shadow-2xl
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0 md:static md:flex
+      `}>
+        {/* Логотип */}
+        <div className="px-6 py-6 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+            <span className="material-symbols-outlined text-white text-xl"
+              style={{ fontVariationSettings: "'FILL' 1" }}>health_and_safety</span>
+          </div>
+          <div>
+            <div className="text-lg font-bold leading-tight font-headline tracking-tight">КлиникаСеть</div>
+            <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Medical Fintech</div>
+          </div>
+        </div>
+
+        {/* Навигация */}
+        <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
+          {NAV.map(item => {
+            const badge = navBadge[item.key] || 0
+            const isActive = activeSection === item.key
+            return (
+              <button
+                key={item.key}
+                onClick={() => handleNav(item.key)}
+                className={`
+                  w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-left transition-all duration-150 mx-0
+                  ${isActive
+                    ? 'bg-[#1565c0]/20 text-white font-bold border-l-4 border-[#1565c0]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5 font-medium'}
+                `}
+              >
+                <span className="material-symbols-outlined text-[20px] flex-shrink-0"
+                  style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}>
+                  {item.icon}
+                </span>
+                <span className="flex-1 leading-none">{item.label}</span>
+                {badge > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Пользователь + выход */}
+        <div className="px-2 py-4 mt-auto border-t border-[#ffffff10]">
+          <div className="flex items-center gap-2.5 px-4 py-3 mb-1">
+            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold flex-shrink-0 text-white">
+              {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-white truncate leading-tight">
+                {user?.full_name || user?.username || 'Администратор'}
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">Системный администратор</div>
+            </div>
+          </div>
+          <button onClick={() => setHelpOpen(true)}
+            className="w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-3">
+            <span className="material-symbols-outlined text-[18px]">help</span>
+            Справка
+          </button>
+          <button onClick={onLogout}
+            className="w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-3">
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+            Выйти
+          </button>
+          <div className="px-4 py-2 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px] text-slate-600">info</span>
+            <span className="text-xs text-slate-600">v1.0.0</span>
+          </div>
+        </div>
+      </aside>
+
+      {/* ─── Основной контент ─── */}
+      <div className="flex-1 flex flex-col min-w-0 md:ml-0">
+        {/* Шапка мобильная */}
+        <header className="md:hidden bg-[#1a2232] text-white flex items-center gap-3 px-4 py-3 sticky top-0 z-10">
+          <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-white transition" aria-label="Меню">
+            <span className="material-symbols-outlined">menu</span>
+          </button>
+          <span className="font-headline font-bold text-sm tracking-tight">КлиникаСеть</span>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setDark(d => !d)} className="text-slate-400 hover:text-white transition">
+              <span className="material-symbols-outlined text-lg">{dark ? 'light_mode' : 'dark_mode'}</span>
+            </button>
+            <button onClick={() => setHelpOpen(true)} className="text-slate-400 hover:text-white transition" title="Справка">
+              <span className="material-symbols-outlined text-lg">help</span>
+            </button>
+            <button onClick={onLogout} className="text-slate-400 hover:text-white transition" title="Выйти">
+              <span className="material-symbols-outlined text-lg">logout</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Шапка десктоп — frosted glass */}
+        <header className="hidden md:flex items-center justify-between px-8 py-0 h-16
+          bg-white dark:bg-gray-900 border-b border-[#eceef0] dark:border-gray-800 sticky top-0 z-10">
+          <div className="flex items-center gap-2 text-ms-on-surface dark:text-white">
+            <span className="material-symbols-outlined text-ms-primary text-lg"
+              style={{ fontVariationSettings: "'FILL' 1" }}>
+              {NAV.find(n => n.key === activeSection)?.icon || 'dashboard'}
+            </span>
+            <h1 className="font-headline font-bold text-base tracking-tight">
+              {NAV.find(n => n.key === activeSection)?.label || 'Панель управления'}
+            </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setDark(d => !d)}
+              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              title={dark ? 'Светлая тема' : 'Тёмная тема'}>
+              <span className="material-symbols-outlined text-xl">{dark ? 'light_mode' : 'dark_mode'}</span>
+            </button>
+            <div className="h-6 w-px bg-ms-outline-variant/50" />
+            <div className="flex items-center gap-2.5">
+              <div className="text-right hidden lg:block">
+                <div className="text-sm font-semibold text-ms-on-surface dark:text-white leading-tight">
+                  {user?.full_name || user?.username || 'Администратор'}
+                </div>
+                <div className="text-[10px] text-ms-on-surface-variant dark:text-gray-400 uppercase tracking-wider">Системный администратор</div>
+              </div>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #006173 0%, #007c92 100%)' }}>
+                {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
+              </div>
+            </div>
+            <div className="h-6 w-px bg-ms-outline-variant/50" />
+            <button onClick={() => setHelpOpen(true)}
+              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              title="Справка">
+              <span className="material-symbols-outlined text-xl">help</span>
+            </button>
+            <button onClick={onLogout}
+              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+              title="Выйти">
+              <span className="material-symbols-outlined text-xl">logout</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Контент страницы */}
+        <main className="flex-1 p-5 lg:p-8 max-w-6xl w-full mx-auto">
+          {renderSection()}
+        </main>
+      </div>
+
+      {/* Модал справки */}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
+    </div>
+  )
+}

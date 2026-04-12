@@ -1,0 +1,69 @@
+# ===== БЛОК: Модели Multi-tenant =====
+# Tenant — город/дилер. License — ограничения плана. Branding — визуальный стиль.
+# Все основные таблицы содержат tenant_id для строгой изоляции данных.
+
+import uuid
+from datetime import datetime, date
+from sqlalchemy import String, Boolean, DateTime, Date, Integer, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.database import Base
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    domain: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    license: Mapped["TenantLicense | None"] = relationship(
+        "TenantLicense", back_populates="tenant", uselist=False, cascade="all, delete-orphan"
+    )
+    branding: Mapped["TenantBranding | None"] = relationship(
+        "TenantBranding", back_populates="tenant", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class TenantLicense(Base):
+    __tablename__ = "tenant_licenses"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True
+    )
+    # Планы: basic | professional | enterprise
+    plan: Mapped[str] = mapped_column(String(50), default="professional", nullable=False)
+    max_clinics: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    max_users: Mapped[int] = mapped_column(Integer, default=100, nullable=False)
+    # JSON-словарь включённых фич: {"scheduling": true, "billing": false, ...}
+    features: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    valid_from: Mapped[date] = mapped_column(Date, default=date.today, nullable=False)
+    valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)  # NULL = бессрочно
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="license")
+
+
+class TenantBranding(Base):
+    __tablename__ = "tenant_branding"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False, unique=True, index=True
+    )
+    brand_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    primary_color: Mapped[str] = mapped_column(String(20), default="#0097A7", nullable=False)
+    sidebar_color: Mapped[str] = mapped_column(String(20), default="#004D5F", nullable=False)
+    bg_color: Mapped[str] = mapped_column(String(20), default="#F0F5F6", nullable=False)
+    font_family: Mapped[str] = mapped_column(String(100), default="Inter", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="branding")
