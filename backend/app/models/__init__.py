@@ -16,6 +16,7 @@ from app.models.city import City
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
 from app.models.ledger import LedgerEntry
 from app.models.audit import AuditEntry
+from app.models.billing import Subscription, Invoice, Payment
 
 __all__ = [
     "User", "UserRole", "Clinic", "ClinicSchedule", "Service",
@@ -25,5 +26,5 @@ __all__ = [
     "Bonus", "BonusStatus", "BonusType", "SystemSettings",
     "KpiTarget", "ActivityLog", "Invitation", "Discount", "DiscountType",
     "SupportMessage", "Tenant", "TenantLicense", "TenantBranding",
-    "LedgerEntry", "AuditEntry",
+    "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
 ]

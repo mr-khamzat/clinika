@@ -16,6 +16,7 @@ from app.routers.scheduling import router as scheduling_router
 from app.routers.ledger import router as ledger_router
 from app.routers.analytics import router as analytics_router
 from app.routers.audit import router as audit_router
+from app.routers.billing import router as billing_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
@@ -259,6 +260,7 @@ app.include_router(scheduling_router)
 app.include_router(ledger_router)
 app.include_router(analytics_router)
 app.include_router(audit_router)
+app.include_router(billing_router)
 
 
 @app.get("/health")
