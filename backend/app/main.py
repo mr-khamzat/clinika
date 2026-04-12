@@ -13,6 +13,7 @@ from app.routers.plugins import router as plugins_router
 from app.routers.modules import router as modules_router
 from app.routers.geo import router as geo_router
 from app.routers.scheduling import router as scheduling_router
+from app.routers.ledger import router as ledger_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
@@ -253,6 +254,7 @@ app.include_router(plugins_router)
 app.include_router(modules_router)
 app.include_router(geo_router)
 app.include_router(scheduling_router)
+app.include_router(ledger_router)
 
 
 @app.get("/health")

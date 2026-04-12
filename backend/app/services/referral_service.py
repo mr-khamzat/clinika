@@ -126,6 +126,28 @@ async def _apply_confirmation(
                 amount=full_amount,
             ))
 
+    # Записываем начисление в финансовый реестр
+    await db.flush()  # чтобы бонусы получили id
+    try:
+        from app.services.ledger_service import add_entry, OpType
+        bonuses_result = await db.execute(
+            __import__('sqlalchemy', fromlist=['select']).select(Bonus)
+            .where(Bonus.referral_id == referral.id)
+        )
+        new_bonuses = bonuses_result.scalars().all()
+        for b in new_bonuses:
+            await add_entry(
+                db=db,
+                user_id=b.admin_id,
+                amount=float(b.amount),
+                operation_type=OpType.BONUS_ACCRUED,
+                reference_id=referral.id,
+                reference_type='referral',
+                description=f'Начисление по направлению #{str(referral.id)[:8]}',
+            )
+    except Exception:
+        pass
+
     await db.commit()
     await db.refresh(referral)
     return referral
