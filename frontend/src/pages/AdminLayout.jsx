@@ -61,6 +61,10 @@ const NAV = [
   { key: 'partners',   label: 'Партнёры',   icon: 'handshake' },
   { key: 'discounts',  label: 'Скидки',     icon: 'sell' },
   { key: 'settings',   label: 'Настройки',  icon: 'settings' },
+  { key: 'ledger',     label: 'Реестр',     icon: 'account_balance' },
+  { key: 'analytics', label: 'Аналитика',  icon: 'bar_chart' },
+  { key: 'audit',     label: 'Аудит',      icon: 'manage_search' },
+  { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long' },
   { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart' },
   { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
 ]
@@ -3665,6 +3669,866 @@ function DiscountsSection({ token }) {
 }
 
 // ---------------------------------------------------------------------------
+// LedgerSection — финансовый реестр
+// ---------------------------------------------------------------------------
+function LedgerSection({ token }) {
+  const [balance, setBalance] = useState(null)
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(0)
+  const LIMIT = 30
+  const [showAdj, setShowAdj] = useState(false)
+  const [adjForm, setAdjForm] = useState({ user_id: '', amount: '', operation_type: 'manual_credit', description: '' })
+  const [adjErr, setAdjErr] = useState('')
+  const [adjOk, setAdjOk] = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [bRes, hRes] = await Promise.all([
+        apiFetch('get', '/ledger/balance', token),
+        apiFetch('get', `/ledger/history?limit=${LIMIT}&offset=${page * LIMIT}`, token),
+      ])
+      setBalance(bRes.data)
+      setHistory(hRes.data)
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [token, page])
+
+  const submitAdj = async () => {
+    setAdjErr(''); setAdjOk('')
+    try {
+      await apiFetch('post', '/ledger/adjust', token, {
+        user_id: parseInt(adjForm.user_id),
+        amount: parseFloat(adjForm.amount),
+        operation_type: adjForm.operation_type,
+        description: adjForm.description || null,
+      })
+      setAdjOk('Операция выполнена')
+      setShowAdj(false)
+      setAdjForm({ user_id: '', amount: '', operation_type: 'manual_credit', description: '' })
+      load()
+    } catch (e) { setAdjErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const OP_LABELS = {
+    bonus_accrued: { label: 'Начислено', color: 'text-green-600' },
+    bonus_paid: { label: 'Выплачено', color: 'text-blue-600' },
+    bonus_cancelled: { label: 'Отменено', color: 'text-red-500' },
+    manual_credit: { label: 'Ручное пополнение', color: 'text-emerald-600' },
+    manual_debit: { label: 'Ручное списание', color: 'text-orange-500' },
+  }
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Финансовый реестр</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Append-only журнал всех операций с бонусами</p>
+        </div>
+        <button onClick={() => setShowAdj(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+          <span className="material-symbols-outlined text-lg">tune</span>
+          Корректировка
+        </button>
+      </div>
+
+      {/* Баланс-карточки */}
+      {balance && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Текущий баланс', value: balance.balance, icon: 'account_balance_wallet', color: '#0097A7', bg: 'bg-[#e0f7fa]' },
+            { label: 'Ожидает выплаты', value: balance.pending_balance, icon: 'hourglass_empty', color: '#F59E0B', bg: 'bg-amber-50' },
+            { label: 'Всего начислено', value: balance.total_accrued, icon: 'trending_up', color: '#10B981', bg: 'bg-emerald-50' },
+            { label: 'Всего выплачено', value: balance.total_paid, icon: 'payments', color: '#3B82F6', bg: 'bg-blue-50' },
+          ].map(c => (
+            <div key={c.label} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm">
+              <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
+                <span className="material-symbols-outlined text-lg" style={{ color: c.color, fontVariationSettings: "'FILL' 1" }}>{c.icon}</span>
+              </div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+              <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                {(c.value ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Модал корректировки */}
+      {showAdj && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Ручная корректировка</h3>
+            <ErrorBox msg={adjErr} />
+            {adjOk && <p className="text-green-600 text-sm mb-3">{adjOk}</p>}
+            <div className="space-y-3">
+              <input type="number" placeholder="ID сотрудника" value={adjForm.user_id}
+                onChange={e => setAdjForm(f => ({ ...f, user_id: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <input type="number" placeholder="Сумма (₽)" value={adjForm.amount}
+                onChange={e => setAdjForm(f => ({ ...f, amount: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <select value={adjForm.operation_type}
+                onChange={e => setAdjForm(f => ({ ...f, operation_type: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+                <option value="manual_credit">Пополнение</option>
+                <option value="manual_debit">Списание</option>
+              </select>
+              <input type="text" placeholder="Описание (необязательно)" value={adjForm.description}
+                onChange={e => setAdjForm(f => ({ ...f, description: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={submitAdj}
+                className="flex-1 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                Применить
+              </button>
+              <button onClick={() => setShowAdj(false)}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* История операций */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+          <h3 className="font-semibold text-gray-900 dark:text-white">История операций</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left">Дата</th>
+                <th className="px-4 py-3 text-left">Тип</th>
+                <th className="px-4 py-3 text-right">Сумма</th>
+                <th className="px-4 py-3 text-left">Описание</th>
+                <th className="px-4 py-3 text-left">Создал</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {history.length === 0 && (
+                <tr><td colSpan={5} className="text-center py-8 text-gray-400">Нет операций</td></tr>
+              )}
+              {history.map(e => {
+                const op = OP_LABELS[e.operation_type] || { label: e.operation_type, color: 'text-gray-600' }
+                const isDebit = e.operation_type === 'manual_debit' || e.operation_type === 'bonus_cancelled'
+                return (
+                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className={`px-4 py-3 font-medium ${op.color}`}>{op.label}</td>
+                    <td className={`px-4 py-3 text-right font-bold ${isDebit ? 'text-red-500' : 'text-emerald-600'}`}>
+                      {isDebit ? '-' : '+'}{e.amount.toLocaleString('ru-RU')} ₽
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{e.description || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">ID {e.created_by_id || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-700">
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+            className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">← Назад</button>
+          <span className="text-xs text-gray-400">Страница {page + 1}</span>
+          <button disabled={history.length < LIMIT} onClick={() => setPage(p => p + 1)}
+            className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">Вперёд →</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// AnalyticsDrillSection — аналитика drill-down
+// ---------------------------------------------------------------------------
+function AnalyticsDrillSection({ token }) {
+  const [days, setDays] = useState(30)
+  const [overview, setOverview] = useState(null)
+  const [funnel, setFunnel] = useState(null)
+  const [topServices, setTopServices] = useState([])
+  const [topStaff, setTopStaff] = useState([])
+  const [clinicsData, setClinicsData] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('overview')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [ov, fn, ts, tst, cl] = await Promise.all([
+        apiFetch('get', `/analytics/overview?days=${days}`, token),
+        apiFetch('get', `/analytics/funnel?days=${days}`, token),
+        apiFetch('get', `/analytics/top-services?days=${days}&limit=10`, token),
+        apiFetch('get', `/analytics/top-staff?days=${days}&limit=10`, token),
+        apiFetch('get', `/analytics/clinics?days=${days}`, token),
+      ])
+      setOverview(ov.data)
+      setFunnel(fn.data)
+      setTopServices(ts.data?.services || [])
+      setTopStaff(tst.data?.staff || [])
+      setClinicsData(cl.data?.clinics || [])
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [days])
+
+  const TABS = [
+    { key: 'overview', label: 'Обзор', icon: 'bar_chart' },
+    { key: 'funnel', label: 'Воронка', icon: 'filter_alt' },
+    { key: 'services', label: 'Услуги', icon: 'medical_services' },
+    { key: 'staff', label: 'Сотрудники', icon: 'group' },
+    { key: 'clinics', label: 'Клиники', icon: 'local_hospital' },
+  ]
+
+  const fmtN = v => (v ?? 0).toLocaleString('ru-RU')
+  const fmtP = v => `${((v ?? 0) * 100).toFixed(1)}%`
+  const deltaColor = d => d > 0 ? 'text-emerald-600' : d < 0 ? 'text-red-500' : 'text-gray-400'
+  const deltaSign = d => d > 0 ? '+' : ''
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Аналитика</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Детальные срезы по всем метрикам платформы</p>
+        </div>
+        <div className="flex gap-2">
+          {[7, 14, 30, 90].map(d => (
+            <button key={d} onClick={() => setDays(d)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${days === d ? 'bg-[#0097A7] text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:border-[#0097A7]'}`}>
+              {d}д
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit flex-wrap">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            <span className="material-symbols-outlined text-base">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? <Spinner /> : (
+        <>
+          {/* Overview */}
+          {activeTab === 'overview' && overview && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'Направлений', val: overview.referrals, delta: overview.referrals_delta, icon: 'share', color: '#0097A7', bg: 'bg-[#e0f7fa]' },
+                  { label: 'Подтверждено', val: overview.confirmed, delta: overview.confirmed_delta, icon: 'check_circle', color: '#10B981', bg: 'bg-emerald-50' },
+                  { label: 'Бонусов начислено', val: overview.bonuses_accrued, delta: overview.bonuses_accrued_delta, icon: 'savings', color: '#F59E0B', bg: 'bg-amber-50', rub: true },
+                  { label: 'Выплачено', val: overview.bonuses_paid, delta: overview.bonuses_paid_delta, icon: 'payments', color: '#3B82F6', bg: 'bg-blue-50', rub: true },
+                ].map(c => (
+                  <div key={c.label} className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm">
+                    <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
+                      <span className="material-symbols-outlined text-lg" style={{ color: c.color, fontVariationSettings: "'FILL' 1" }}>{c.icon}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+                    <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
+                      {fmtN(c.val)}{c.rub ? ' ₽' : ''}
+                    </p>
+                    {c.delta != null && (
+                      <p className={`text-xs font-semibold ${deltaColor(c.delta)}`}>
+                        {deltaSign(c.delta)}{c.delta}% к прошлому периоду
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {overview.conversion_rate != null && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Общая конверсия</p>
+                  <div className="flex items-center gap-4">
+                    <p className="text-3xl font-extrabold text-[#0097A7]">{fmtP(overview.conversion_rate)}</p>
+                    <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full h-3">
+                      <div className="h-3 rounded-full bg-[#0097A7] transition-all" style={{ width: `${Math.min(100, (overview.conversion_rate ?? 0) * 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Funnel */}
+          {activeTab === 'funnel' && funnel && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-5">Воронка конверсии</h3>
+              <div className="space-y-3">
+                {(funnel.steps || []).map((step, i) => {
+                  const maxVal = funnel.steps[0]?.count || 1
+                  const pct = Math.round((step.count / maxVal) * 100)
+                  const colors = ['bg-[#0097A7]', 'bg-blue-500', 'bg-amber-500', 'bg-emerald-500']
+                  return (
+                    <div key={i}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-700 dark:text-gray-300">{step.label}</span>
+                        <span className="text-gray-500">{fmtN(step.count)} {step.rate != null ? `(${fmtP(step.rate)})` : ''}</span>
+                      </div>
+                      <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-5 overflow-hidden">
+                        <div className={`h-5 rounded-full ${colors[i % colors.length]} transition-all duration-500`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Top Services */}
+          {activeTab === 'services' && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Топ услуг</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left">#</th>
+                      <th className="px-4 py-3 text-left">Услуга</th>
+                      <th className="px-4 py-3 text-right">Направлений</th>
+                      <th className="px-4 py-3 text-right">Конверсия</th>
+                      <th className="px-4 py-3 text-right">Ср. бонус</th>
+                      <th className="px-4 py-3 text-right">Выплачено</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {topServices.map((s, i) => (
+                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                        <td className="px-4 py-3 text-gray-400 font-bold">{i + 1}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{s.service_name}</td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{fmtN(s.referral_count)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`font-semibold ${s.conversion_rate > 0.5 ? 'text-emerald-600' : 'text-amber-500'}`}>{fmtP(s.conversion_rate)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{fmtN(s.avg_bonus)} ₽</td>
+                        <td className="px-4 py-3 text-right font-semibold text-blue-600">{fmtN(s.bonus_paid)} ₽</td>
+                      </tr>
+                    ))}
+                    {topServices.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gray-400">Нет данных</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Top Staff */}
+          {activeTab === 'staff' && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Рейтинг сотрудников</h3>
+              </div>
+              <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                {topStaff.map((s, i) => (
+                  <div key={i} className="flex items-center gap-4 px-5 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                    <span className="text-lg font-extrabold text-gray-300 w-7 text-center">{i + 1}</span>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#006173] to-[#0097A7] flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      {(s.full_name || 'U')[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-800 dark:text-gray-200 truncate">{s.full_name || `ID ${s.user_id}`}</p>
+                      <p className="text-xs text-gray-400">{s.clinic_name || 'Клиника'}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-[#0097A7]">{fmtN(s.confirmed)} подтв.</p>
+                      <p className="text-xs text-emerald-600">{fmtN(s.earned)} ₽</p>
+                    </div>
+                  </div>
+                ))}
+                {topStaff.length === 0 && <p className="text-center py-8 text-gray-400">Нет данных</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Clinics */}
+          {activeTab === 'clinics' && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Сравнение клиник</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                      <th className="px-4 py-3 text-left">Клиника</th>
+                      <th className="px-4 py-3 text-right">Направлений</th>
+                      <th className="px-4 py-3 text-right">Подтверждено</th>
+                      <th className="px-4 py-3 text-right">Конверсия</th>
+                      <th className="px-4 py-3 text-right">Начислено</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {clinicsData.map((c, i) => (
+                      <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-gray-200">{c.clinic_name}</td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{fmtN(c.referrals)}</td>
+                        <td className="px-4 py-3 text-right text-gray-600 dark:text-gray-400">{fmtN(c.confirmed)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-[#0097A7]">{fmtP(c.conversion_rate)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-emerald-600">{fmtN(c.bonuses_accrued)} ₽</td>
+                      </tr>
+                    ))}
+                    {clinicsData.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-gray-400">Нет данных</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// AuditSection — журнал аудита
+// ---------------------------------------------------------------------------
+function AuditSection({ token }) {
+  const [log, setLog] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [actions, setActions] = useState([])
+  const [filter, setFilter] = useState({ action: '', entity_type: '', days: 30 })
+  const [page, setPage] = useState(0)
+  const LIMIT = 30
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (filter.action) params.set('action', filter.action)
+      if (filter.entity_type) params.set('entity_type', filter.entity_type)
+      if (filter.days) params.set('days', filter.days)
+      params.set('limit', LIMIT)
+      params.set('offset', page * LIMIT)
+      const [logRes, actRes] = await Promise.all([
+        apiFetch('get', `/audit/log?${params}`, token),
+        actions.length ? Promise.resolve(null) : apiFetch('get', '/audit/actions', token),
+      ])
+      setLog(logRes.data?.log || [])
+      if (actRes) setActions(actRes.data?.actions || [])
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [filter, page])
+
+  const ENTITY_TYPES = ['user', 'bonus', 'ledger', 'settings', 'referral']
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Журнал аудита</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Полная история действий в системе с до/после изменений</p>
+      </div>
+
+      {/* Фильтры */}
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm flex flex-wrap gap-3">
+        <select value={filter.action} onChange={e => { setFilter(f => ({ ...f, action: e.target.value })); setPage(0) }}
+          className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+          <option value="">Все действия</option>
+          {actions.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={filter.entity_type} onChange={e => { setFilter(f => ({ ...f, entity_type: e.target.value })); setPage(0) }}
+          className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+          <option value="">Все сущности</option>
+          {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={filter.days} onChange={e => { setFilter(f => ({ ...f, days: e.target.value })); setPage(0) }}
+          className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+          <option value={7}>7 дней</option>
+          <option value={30}>30 дней</option>
+          <option value={90}>90 дней</option>
+          <option value={365}>1 год</option>
+        </select>
+      </div>
+
+      {loading ? <Spinner /> : (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left">Дата</th>
+                  <th className="px-4 py-3 text-left">Действие</th>
+                  <th className="px-4 py-3 text-left">Сущность</th>
+                  <th className="px-4 py-3 text-left">Актор</th>
+                  <th className="px-4 py-3 text-left">IP</th>
+                  <th className="px-4 py-3 text-left">Изменения</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {log.length === 0 && (
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">Нет записей</td></tr>
+                )}
+                {log.map(e => (
+                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition align-top">
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
+                        {e.action}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+                      <span className="font-medium">{e.entity_type}</span>
+                      {e.entity_id && <span className="text-gray-400"> #{e.entity_id}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-xs">{e.actor_name || `ID ${e.actor_id}`}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">{e.ip || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
+                      {e.after && <pre className="bg-gray-50 dark:bg-gray-900 rounded p-1 text-xs overflow-x-auto max-h-20 max-w-xs">{JSON.stringify(e.after, null, 1)}</pre>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-700">
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+              className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">← Назад</button>
+            <span className="text-xs text-gray-400">Страница {page + 1}</span>
+            <button disabled={log.length < LIMIT} onClick={() => setPage(p => p + 1)}
+              className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">Вперёд →</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// BillingSection — биллинг и подписки
+// ---------------------------------------------------------------------------
+function BillingSection({ token }) {
+  const [summary, setSummary] = useState(null)
+  const [plans, setPlans] = useState([])
+  const [invoices, setInvoices] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('summary')
+  const [changingPlan, setChangingPlan] = useState(false)
+  const [genInvoiceModal, setGenInvoiceModal] = useState(false)
+  const [invoiceMonths, setInvoiceMonths] = useState(1)
+  const [payModal, setPayModal] = useState(null)
+  const [payAmount, setPayAmount] = useState('')
+  const [actionErr, setActionErr] = useState('')
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [smRes, plRes, invRes] = await Promise.all([
+        apiFetch('get', '/billing/summary', token),
+        apiFetch('get', '/billing/plans', token),
+        apiFetch('get', '/billing/invoices?limit=20', token),
+      ])
+      setSummary(smRes.data)
+      setPlans(plRes.data?.plans || [])
+      setInvoices(invRes.data?.invoices || [])
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [token])
+
+  const changePlan = async (planName) => {
+    setActionErr('')
+    try {
+      await apiFetch('post', '/billing/change-plan', token, { plan_name: planName })
+      setChangingPlan(false)
+      load()
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const generateInvoice = async () => {
+    setActionErr('')
+    try {
+      await apiFetch('post', '/billing/generate', token, { months: invoiceMonths })
+      setGenInvoiceModal(false)
+      load()
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const payInvoice = async (invoiceId) => {
+    setActionErr('')
+    try {
+      await apiFetch('post', '/billing/pay', token, { invoice_id: invoiceId, amount: parseFloat(payAmount), payment_method: 'manual' })
+      setPayModal(null)
+      setPayAmount('')
+      load()
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const STATUS_COLORS = {
+    trial: 'bg-amber-50 text-amber-700',
+    active: 'bg-emerald-50 text-emerald-700',
+    past_due: 'bg-red-50 text-red-700',
+    cancelled: 'bg-gray-100 text-gray-600',
+    paused: 'bg-blue-50 text-blue-700',
+  }
+
+  const INV_COLORS = {
+    draft: 'bg-gray-100 text-gray-600',
+    sent: 'bg-blue-50 text-blue-700',
+    paid: 'bg-emerald-50 text-emerald-700',
+    overdue: 'bg-red-50 text-red-700',
+    void: 'bg-gray-100 text-gray-400',
+  }
+
+  const PLAN_COLORS = { basic: '#64748b', professional: '#0097A7', enterprise: '#7C3AED' }
+
+  const sub = summary?.subscription
+  const TABS = [
+    { key: 'summary', label: 'Подписка', icon: 'card_membership' },
+    { key: 'invoices', label: 'Счета', icon: 'receipt_long' },
+    { key: 'plans', label: 'Тарифы', icon: 'workspace_premium' },
+  ]
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Биллинг</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Управление подпиской и счетами</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setGenInvoiceModal(true)}
+            className="flex items-center gap-1.5 px-4 py-2 border border-[#0097A7] text-[#0097A7] rounded-xl text-sm font-semibold hover:bg-[#e0f7fa] transition">
+            <span className="material-symbols-outlined text-lg">add</span>
+            Выставить счёт
+          </button>
+        </div>
+      </div>
+
+      {actionErr && <ErrorBox msg={actionErr} />}
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            <span className="material-symbols-outlined text-base">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Summary */}
+      {activeTab === 'summary' && (
+        <div className="space-y-4">
+          {sub && (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wider mb-1">Текущий тариф</p>
+                  <h3 className="text-2xl font-extrabold font-headline" style={{ color: PLAN_COLORS[sub.plan_name] || '#0097A7' }}>
+                    {sub.plan_name?.charAt(0).toUpperCase() + sub.plan_name?.slice(1)}
+                  </h3>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[sub.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {sub.status}
+                  </span>
+                  <button onClick={() => setChangingPlan(true)}
+                    className="px-4 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                    Сменить тариф
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                {[
+                  { label: 'Начало', val: sub.start_date ? new Date(sub.start_date).toLocaleDateString('ru-RU') : '—' },
+                  { label: 'Следующий платёж', val: sub.next_billing_date ? new Date(sub.next_billing_date).toLocaleDateString('ru-RU') : '—' },
+                  { label: 'Оплачено', val: `${(summary.total_paid || 0).toLocaleString('ru-RU')} ₽` },
+                  { label: 'К оплате', val: `${(summary.total_due || 0).toLocaleString('ru-RU')} ₽`, highlight: summary.total_due > 0 },
+                ].map(c => (
+                  <div key={c.label}>
+                    <p className="text-xs text-gray-400">{c.label}</p>
+                    <p className={`font-bold ${c.highlight ? 'text-red-600' : 'text-gray-800 dark:text-gray-200'}`}>{c.val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!sub && (
+            <div className="bg-amber-50 dark:bg-amber-900/30 rounded-2xl p-6 text-center">
+              <p className="text-amber-700 dark:text-amber-300 font-medium">Подписка не активна. Выберите тариф.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invoices */}
+      {activeTab === 'invoices' && (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 py-3 text-left">Номер</th>
+                  <th className="px-4 py-3 text-left">Период</th>
+                  <th className="px-4 py-3 text-right">Сумма</th>
+                  <th className="px-4 py-3 text-left">Статус</th>
+                  <th className="px-4 py-3 text-left">Срок</th>
+                  <th className="px-4 py-3 text-right">Действие</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {invoices.length === 0 && <tr><td colSpan={6} className="text-center py-8 text-gray-400">Нет счетов</td></tr>}
+                {invoices.map(inv => (
+                  <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">{inv.invoice_number}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {new Date(inv.period_start).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })} — {new Date(inv.period_end).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-gray-800 dark:text-gray-200">{(inv.amount).toLocaleString('ru-RU')} ₽</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${INV_COLORS[inv.status] || 'bg-gray-100 text-gray-600'}`}>{inv.status}</span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">{inv.due_date ? new Date(inv.due_date).toLocaleDateString('ru-RU') : '—'}</td>
+                    <td className="px-4 py-3 text-right">
+                      {(inv.status === 'sent' || inv.status === 'overdue') && (
+                        <button onClick={() => { setPayModal(inv); setPayAmount(inv.amount) }}
+                          className="text-xs px-3 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+                          Оплатить
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Plans */}
+      {activeTab === 'plans' && (
+        <div className="grid md:grid-cols-3 gap-4">
+          {plans.map(p => (
+            <div key={p.name} className={`bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border-2 ${sub?.plan_name === p.name ? 'border-[#0097A7]' : 'border-transparent'}`}>
+              <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: PLAN_COLORS[p.name] || '#0097A7' }}>{p.name}</p>
+              <p className="text-3xl font-extrabold font-headline text-gray-900 dark:text-white">{(p.price_monthly).toLocaleString('ru-RU')} <span className="text-base font-normal text-gray-400">₽/мес</span></p>
+              <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                {(p.features || []).map((f, i) => (
+                  <li key={i} className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {sub?.plan_name !== p.name && (
+                <button onClick={() => changePlan(p.name)}
+                  className="mt-5 w-full py-2 rounded-xl text-sm font-semibold bg-[#0097A7] text-white hover:bg-[#00838f] transition">
+                  Перейти на {p.name}
+                </button>
+              )}
+              {sub?.plan_name === p.name && (
+                <div className="mt-5 w-full py-2 rounded-xl text-sm font-semibold text-center text-[#0097A7] border border-[#0097A7]">Текущий тариф</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Модал смены тарифа */}
+      {changingPlan && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Сменить тариф</h3>
+            <div className="space-y-3">
+              {plans.map(p => (
+                <button key={p.name} onClick={() => changePlan(p.name)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition ${sub?.plan_name === p.name ? 'border-[#0097A7] bg-[#e0f7fa] text-[#0097A7]' : 'border-gray-200 dark:border-gray-600 hover:border-[#0097A7] text-gray-700 dark:text-gray-200'}`}>
+                  <span>{p.name?.charAt(0).toUpperCase() + p.name?.slice(1)}</span>
+                  <span className="text-gray-500">{(p.price_monthly).toLocaleString('ru-RU')} ₽/мес</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setChangingPlan(false)}
+              className="mt-4 w-full py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Модал выставления счёта */}
+      {genInvoiceModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Выставить счёт</h3>
+            <div className="space-y-3">
+              <label className="text-sm text-gray-600 dark:text-gray-400">Количество месяцев</label>
+              <div className="flex gap-2">
+                {[1, 3, 6, 12].map(m => (
+                  <button key={m} onClick={() => setInvoiceMonths(m)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition ${invoiceMonths === m ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-[#0097A7]'}`}>
+                    {m}м
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={generateInvoice}
+                className="flex-1 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                Создать
+              </button>
+              <button onClick={() => setGenInvoiceModal(false)}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модал оплаты счёта */}
+      {payModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">Оплата счёта</h3>
+            <p className="text-sm text-gray-500 mb-4">{payModal.invoice_number}</p>
+            <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)}
+              placeholder="Сумма оплаты"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => payInvoice(payModal.id)}
+                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition">
+                Подтвердить оплату
+              </button>
+              <button onClick={() => setPayModal(null)}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
 // Main AdminLayout
 // ---------------------------------------------------------------------------
 
@@ -3711,6 +4575,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'discounts': return <DiscountsSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} />
       case 'support':   return <SupportAdminWrapper token={adminToken} />
+      case 'ledger':     return <LedgerSection token={adminToken} />
+      case 'analytics': return <AnalyticsDrillSection token={adminToken} />
+      case 'audit':     return <AuditSection token={adminToken} />
+      case 'billing':   return <BillingSection token={adminToken} />
       case 'monitoring': return <MonitoringSection token={adminToken} />
       default:          return null
     }
