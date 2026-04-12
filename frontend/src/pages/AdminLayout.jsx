@@ -55,6 +55,7 @@ const NAV = [
   { key: 'staff',      label: 'Сотрудники', icon: 'group' },
   { key: 'clinics',    label: 'Клиники',    icon: 'local_hospital' },
   { key: 'services',   label: 'Услуги',     icon: 'medical_services' },
+  { key: 'scheduling', label: 'Расписание', icon: 'calendar_month' },
   { key: 'reports',    label: 'Отчёты',     icon: 'analytics' },
   { key: 'bonuses',    label: 'Бонусы',     icon: 'payments' },
   { key: 'commission', label: 'Комиссия',   icon: 'percent' },
@@ -346,6 +347,8 @@ function HomeDashboard({ token }) {
   const [loading, setLoading] = useState(true)
   const [chartData, setChartData] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
+  const [systemHealth, setSystemHealth] = useState(null)
+  const [sysMetrics, setSysMetrics] = useState(null)
 
   useEffect(() => {
     setLoading(true)
@@ -355,8 +358,10 @@ function HomeDashboard({ token }) {
       apiFetch('get', '/manager/cancel-requests/', token),
       apiFetch('get', '/manager/mis/status', token),
       apiFetch('get', '/manager/reports/chart', token),
-      apiFetch('get', '/manager/activity/', token),
-    ]).then(([todayR, adminsR, cancelR, misR, chartR, activityR]) => {
+      apiFetch("get", "/manager/activity/", token),
+      apiFetch("get", "/monitoring/health", token),
+      apiFetch("get", "/monitoring/metrics?window=5", token),
+    ]).then(([todayR, adminsR, cancelR, misR, chartR, activityR, healthR, metricsR]) => {
       if (todayR.status === 'fulfilled') setTodayStats(todayR.value.data)
       if (adminsR.status === 'fulfilled') {
         const sorted = (Array.isArray(adminsR.value.data) ? adminsR.value.data : [])
@@ -367,7 +372,9 @@ function HomeDashboard({ token }) {
       if (cancelR.status === 'fulfilled') setCancelCount(Array.isArray(cancelR.value.data) ? cancelR.value.data.length : 0)
       if (misR.status === 'fulfilled') setMisStatus(misR.value.data)
       if (chartR.status === 'fulfilled' && Array.isArray(chartR.value.data)) setChartData(chartR.value.data)
-      if (activityR.status === 'fulfilled' && Array.isArray(activityR.value.data)) setRecentActivity(activityR.value.data.slice(0, 5))
+      if (activityR.status === "fulfilled" && Array.isArray(activityR.value.data)) setRecentActivity(activityR.value.data.slice(0, 5))
+      if (healthR && healthR.status === "fulfilled") setSystemHealth(healthR.value.data)
+      if (metricsR && metricsR.status === "fulfilled") setSysMetrics(metricsR.value.data)
       setLoading(false)
     })
   }, [token])
@@ -417,6 +424,28 @@ function HomeDashboard({ token }) {
         )}
       </div>
 
+      {/* Системное здоровье */}
+      {systemHealth && (
+        <div className="flex flex-wrap gap-2 mb-4">
+          {[
+            { label: "API", ok: true, icon: "api", val: sysMetrics && sysMetrics.p50 ? sysMetrics.p50.toFixed(0)+"ms" : "ok" },
+            { label: "DB", ok: systemHealth.db === "ok", icon: "storage", val: systemHealth.db === "ok" ? "ok" : systemHealth.db },
+            { label: "Redis", ok: systemHealth.redis === "ok", icon: "memory", val: systemHealth.redis === "ok" ? "ok" : systemHealth.redis },
+            { label: "МИС", ok: systemHealth.mis !== "error", icon: "cloud", val: systemHealth.mis || "ok" },
+          ].map(s => (
+            <div key={s.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${s.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
+              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>{s.ok ? 'check_circle' : 'error'}</span>
+              <span>{s.label}: {s.val}</span>
+            </div>
+          ))}
+          {sysMetrics?.error_rate != null && (
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${sysMetrics.error_rate > 0.05 ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
+              <span className="material-symbols-outlined text-sm">error_outline</span>
+              <span>Ошибки: {(sysMetrics.error_rate * 100).toFixed(1)}%</span>
+            </div>
+          )}
+        </div>
+      )}
       {/* Bento-grid статкарты */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {statCards.map(card => (
@@ -4529,6 +4558,598 @@ function BillingSection({ token }) {
 
 
 // ---------------------------------------------------------------------------
+// SchedulingSection — управление расписанием врачей и записями
+// ---------------------------------------------------------------------------
+function SchedulingSection({ token }) {
+  const [activeTab, setActiveTab] = useState('doctors')
+  const [doctors, setDoctors] = useState([])
+  const [clinics, setClinics] = useState([])
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [apptFilter, setApptFilter] = useState('all')
+
+  // Календарь
+  const [calDoctor, setCalDoctor] = useState(null)
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [slotsCache, setSlotsCache] = useState({}) // date → slots[]
+  const [calLoading, setCalLoading] = useState(false)
+
+  // Модалы
+  const [doctorModal, setDoctorModal] = useState(null)  // null | 'new' | doctorObj
+  const [scheduleModal, setScheduleModal] = useState(null) // null | doctorObj
+  const [bookModal, setBookModal] = useState(null) // null | {doctor, date, start_time}
+  const [scheduleData, setScheduleData] = useState([])
+  const [actionErr, setActionErr] = useState('')
+
+  // Форма врача
+  const EMPTY_DOC = { clinic_id: '', full_name: '', specialty: '', bio: '', slot_duration: 30 }
+  const [docForm, setDocForm] = useState(EMPTY_DOC)
+
+  // Форма записи
+  const EMPTY_BOOK = { patient_name: '', patient_phone: '', notes: '' }
+  const [bookForm, setBookForm] = useState(EMPTY_BOOK)
+
+  // Загрузка базовых данных
+  const loadBase = async () => {
+    setLoading(true)
+    try {
+      const [dRes, cRes, aRes] = await Promise.all([
+        apiFetch('get', '/doctors', token),
+        apiFetch('get', '/clinics', token),
+        apiFetch('get', '/appointments', token),
+      ])
+      setDoctors(dRes.data || [])
+      setClinics(cRes.data || [])
+      setAppointments(aRes.data || [])
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadBase() }, [token])
+
+  // Получение дат недели
+  const getWeekDates = () => {
+    const now = new Date()
+    const day = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + weekOffset * 7)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday)
+      d.setDate(monday.getDate() + i)
+      return d
+    })
+  }
+
+  const fmtDate = d => {
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${dd}`
+  }
+
+  const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+  const weekDates = getWeekDates()
+
+  // Загрузка слотов для недели
+  const loadWeekSlots = async (doctor) => {
+    if (!doctor) return
+    setCalLoading(true)
+    const newCache = { ...slotsCache }
+    await Promise.all(
+      weekDates.map(async d => {
+        const key = `${doctor.id}_${fmtDate(d)}`
+        if (!newCache[key]) {
+          try {
+            const res = await apiFetch('get', `/doctors/${doctor.id}/slots?target_date=${fmtDate(d)}`, token)
+            newCache[key] = res.data || []
+          } catch { newCache[key] = [] }
+        }
+      })
+    )
+    setSlotsCache(newCache)
+    setCalLoading(false)
+  }
+
+  useEffect(() => {
+    if (activeTab === 'calendar' && calDoctor) loadWeekSlots(calDoctor)
+  }, [activeTab, calDoctor, weekOffset])
+
+  // Загрузка расписания врача для редактора
+  const loadSchedule = async (doctor) => {
+    try {
+      const res = await apiFetch('get', `/doctors/${doctor.id}/schedule`, token)
+      const days = Array.from({ length: 7 }, (_, i) => {
+        const existing = (res.data || []).find(d => d.day_of_week === i)
+        return existing || { day_of_week: i, start_time: '09:00', end_time: '18:00', is_active: false }
+      })
+      setScheduleData(days)
+    } catch {}
+  }
+
+  const saveSchedule = async () => {
+    setActionErr('')
+    try {
+      await apiFetch('put', `/doctors/${scheduleModal.id}/schedule`, token, scheduleData)
+      setScheduleModal(null)
+      if (calDoctor?.id === scheduleModal.id) {
+        setSlotsCache({})
+        loadWeekSlots(scheduleModal)
+      }
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const saveDoctor = async () => {
+    setActionErr('')
+    try {
+      if (doctorModal === 'new') {
+        await apiFetch('post', '/doctors', token, { ...docForm, slot_duration: parseInt(docForm.slot_duration) })
+      } else {
+        await apiFetch('patch', `/doctors/${doctorModal.id}`, token, { ...docForm, slot_duration: parseInt(docForm.slot_duration) })
+      }
+      setDoctorModal(null)
+      loadBase()
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const bookAppointment = async () => {
+    setActionErr('')
+    try {
+      await apiFetch('post', '/appointments', token, {
+        doctor_id: bookModal.doctor.id,
+        appointment_date: bookModal.date,
+        start_time: bookModal.start_time,
+        patient_phone: bookForm.patient_phone,
+        patient_name: bookForm.patient_name || null,
+        notes: bookForm.notes || null,
+      })
+      setBookModal(null)
+      setBookForm(EMPTY_BOOK)
+      setSlotsCache({})
+      loadWeekSlots(calDoctor)
+      loadBase()
+    } catch (e) { setActionErr(e?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const updateApptStatus = async (id, status) => {
+    try {
+      await apiFetch('patch', `/appointments/${id}/status`, token, { status })
+      setAppointments(a => a.map(x => x.id === id ? { ...x, status } : x))
+    } catch {}
+  }
+
+  const APPT_STATUS_COLORS = {
+    pending: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    confirmed: 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    cancelled: 'bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-300',
+    completed: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    no_show: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+  }
+  const APPT_STATUS_LABELS = {
+    pending: 'Ожидает', confirmed: 'Подтверждено', cancelled: 'Отменено',
+    completed: 'Завершено', no_show: 'Не явился',
+  }
+
+  const filteredAppts = appointments.filter(a => apptFilter === 'all' || a.status === apptFilter)
+
+  const TABS = [
+    { key: 'doctors', label: 'Врачи', icon: 'person_search' },
+    { key: 'calendar', label: 'Календарь', icon: 'calendar_month' },
+    { key: 'appointments', label: 'Записи', icon: 'event_note' },
+  ]
+
+  if (loading) return <Spinner />
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Расписание</h2>
+          <p className="text-sm text-gray-500 mt-0.5">Управление врачами, расписанием и записями пациентов</p>
+        </div>
+        {activeTab === 'doctors' && (
+          <button onClick={() => { setDocForm(EMPTY_DOC); setDoctorModal('new') }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+            <span className="material-symbols-outlined text-lg">add</span>
+            Добавить врача
+          </button>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit flex-wrap">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            <span className="material-symbols-outlined text-base">{t.icon}</span>
+            {t.label}
+            {t.key === 'appointments' && appointments.filter(a => a.status === 'pending').length > 0 && (
+              <span className="ml-1 bg-amber-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full">
+                {appointments.filter(a => a.status === 'pending').length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── TAB: Врачи ─── */}
+      {activeTab === 'doctors' && (
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {doctors.length === 0 && (
+            <div className="col-span-3 text-center py-12 text-gray-400">
+              <span className="material-symbols-outlined text-4xl mb-2 block">person_search</span>
+              <p>Нет врачей. Добавьте первого.</p>
+            </div>
+          )}
+          {doctors.map(doc => {
+            const clinic = clinics.find(c => c.id === doc.clinic_id)
+            return (
+              <div key={doc.id} className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+                <div className="flex items-start gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#006173] to-[#0097A7] flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                    {doc.full_name[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{doc.full_name}</p>
+                    <p className="text-xs text-gray-400">{doc.specialty || 'Специальность не указана'}</p>
+                    {clinic && <p className="text-xs text-[#0097A7] mt-0.5">{clinic.name}</p>}
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${doc.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {doc.is_active ? 'Активен' : 'Неактивен'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
+                  <span className="material-symbols-outlined text-sm">schedule</span>
+                  <span>Слот: {doc.slot_duration} мин</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setCalDoctor(doc); setSlotsCache({}); setActiveTab('calendar') }}
+                    className="flex-1 py-1.5 text-xs font-medium text-[#0097A7] border border-[#0097A7] rounded-lg hover:bg-[#e0f7fa] transition">
+                    Календарь
+                  </button>
+                  <button
+                    onClick={() => { setScheduleModal(doc); loadSchedule(doc) }}
+                    className="flex-1 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    Расписание
+                  </button>
+                  <button
+                    onClick={() => { setDocForm({ clinic_id: doc.clinic_id, full_name: doc.full_name, specialty: doc.specialty || '', bio: doc.bio || '', slot_duration: doc.slot_duration }); setDoctorModal(doc) }}
+                    className="p-1.5 text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    <span className="material-symbols-outlined text-sm">edit</span>
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ─── TAB: Календарь ─── */}
+      {activeTab === 'calendar' && (
+        <div className="space-y-4">
+          {/* Выбор врача */}
+          <div className="flex flex-wrap gap-3 items-center">
+            <select value={calDoctor?.id || ''} onChange={e => {
+              const d = doctors.find(x => x.id === e.target.value)
+              setCalDoctor(d || null)
+              setSlotsCache({})
+            }}
+              className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white min-w-[220px]">
+              <option value="">— Выберите врача —</option>
+              {doctors.filter(d => d.is_active).map(d => (
+                <option key={d.id} value={d.id}>{d.full_name} · {d.specialty}</option>
+              ))}
+            </select>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setWeekOffset(w => w - 1)}
+                className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                <span className="material-symbols-outlined text-lg text-gray-600 dark:text-gray-300">chevron_left</span>
+              </button>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                {weekDates[0].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — {weekDates[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
+              </span>
+              <button onClick={() => setWeekOffset(w => w + 1)}
+                className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                <span className="material-symbols-outlined text-lg text-gray-600 dark:text-gray-300">chevron_right</span>
+              </button>
+              {weekOffset !== 0 && (
+                <button onClick={() => setWeekOffset(0)}
+                  className="text-sm text-[#0097A7] font-medium hover:underline">
+                  Сегодня
+                </button>
+              )}
+            </div>
+          </div>
+
+          {!calDoctor ? (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center text-gray-400 shadow-sm">
+              <span className="material-symbols-outlined text-5xl mb-3 block">calendar_month</span>
+              <p>Выберите врача для просмотра расписания</p>
+            </div>
+          ) : calLoading ? <Spinner /> : (
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+              {/* Заголовки дней */}
+              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700">
+                {weekDates.map((d, i) => {
+                  const isToday = fmtDate(d) === fmtDate(new Date())
+                  return (
+                    <div key={i} className={`p-3 text-center border-r last:border-r-0 border-gray-100 dark:border-gray-700 ${isToday ? 'bg-[#e0f7fa] dark:bg-[#004D5F]/40' : ''}`}>
+                      <p className={`text-xs font-medium ${isToday ? 'text-[#0097A7]' : 'text-gray-400'}`}>{DAY_NAMES[i]}</p>
+                      <p className={`text-lg font-bold ${isToday ? 'text-[#0097A7]' : 'text-gray-700 dark:text-gray-300'}`}>{d.getDate()}</p>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Слоты */}
+              <div className="grid grid-cols-7 min-h-[300px]">
+                {weekDates.map((d, i) => {
+                  const dateStr = fmtDate(d)
+                  const daySlots = slotsCache[`${calDoctor.id}_${dateStr}`] || []
+                  const isToday = dateStr === fmtDate(new Date())
+                  const isPast = d < new Date(new Date().setHours(0,0,0,0))
+
+                  return (
+                    <div key={i} className={`border-r last:border-r-0 border-gray-100 dark:border-gray-700 p-2 ${isToday ? 'bg-[#f0fbfc] dark:bg-[#004D5F]/20' : ''}`}>
+                      {daySlots.length === 0 && (
+                        <p className="text-xs text-gray-300 dark:text-gray-600 text-center pt-4">—</p>
+                      )}
+                      <div className="space-y-1">
+                        {daySlots.map((slot, si) => {
+                          const isBooked = !slot.available
+                          const slotTime = slot.start_time
+                          return (
+                            <button
+                              key={si}
+                              disabled={isBooked || isPast}
+                              onClick={() => { if (!isBooked && !isPast) { setBookModal({ doctor: calDoctor, date: dateStr, start_time: slotTime }); setBookForm(EMPTY_BOOK); setActionErr('') } }}
+                              className={`w-full text-xs px-1.5 py-1 rounded-lg font-medium transition text-center ${
+                                isBooked
+                                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 cursor-default'
+                                  : isPast
+                                    ? 'bg-gray-50 text-gray-300 dark:bg-gray-800 dark:text-gray-600 cursor-default'
+                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer'
+                              }`}>
+                              {slotTime}
+                              {isBooked && <span className="block text-[10px] opacity-70">занят</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Легенда */}
+              <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 flex gap-4 text-xs text-gray-500">
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-900/40 inline-block"/><span>Свободно</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-900/40 inline-block"/><span>Занято</span></div>
+                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-50 dark:bg-gray-700 inline-block"/><span>Прошедшее</span></div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── TAB: Записи ─── */}
+      {activeTab === 'appointments' && (
+        <div className="space-y-4">
+          {/* Фильтр по статусу */}
+          <div className="flex gap-2 flex-wrap">
+            {[['all', 'Все'], ['pending', 'Ожидают'], ['confirmed', 'Подтверждено'], ['completed', 'Завершено'], ['cancelled', 'Отменено']].map(([val, label]) => (
+              <button key={val} onClick={() => setApptFilter(val)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${apptFilter === val ? 'bg-[#0097A7] text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-gray-600 hover:border-[#0097A7]'}`}>
+                {label}
+                {val !== 'all' && appointments.filter(a => a.status === val).length > 0 && (
+                  <span className="ml-1 text-xs">({appointments.filter(a => a.status === val).length})</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                    <th className="px-4 py-3 text-left">Пациент</th>
+                    <th className="px-4 py-3 text-left">Врач</th>
+                    <th className="px-4 py-3 text-left">Дата и время</th>
+                    <th className="px-4 py-3 text-left">Статус</th>
+                    <th className="px-4 py-3 text-right">Действие</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredAppts.length === 0 && (
+                    <tr><td colSpan={5} className="text-center py-8 text-gray-400">Нет записей</td></tr>
+                  )}
+                  {filteredAppts.map(a => {
+                    const doc = doctors.find(d => d.id === a.doctor_id)
+                    return (
+                      <tr key={a.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-800 dark:text-gray-200">{a.patient_name || 'Имя не указано'}</p>
+                          <p className="text-xs text-gray-400">{a.patient_phone}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                          {doc?.full_name || 'Врач'}
+                          {doc?.specialty && <span className="text-xs text-gray-400 block">{doc.specialty}</span>}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                          <span>{a.appointment_date}</span>
+                          <span className="ml-2 font-medium text-gray-800 dark:text-gray-200">{a.start_time}</span>
+                          {a.end_time && <span className="text-xs text-gray-400"> – {a.end_time}</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${APPT_STATUS_COLORS[a.status] || ''}`}>
+                            {APPT_STATUS_LABELS[a.status] || a.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex gap-1 justify-end">
+                            {a.status === 'pending' && (
+                              <>
+                                <button onClick={() => updateApptStatus(a.id, 'confirmed')}
+                                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                                  Подтвердить
+                                </button>
+                                <button onClick={() => updateApptStatus(a.id, 'cancelled')}
+                                  className="text-xs px-2 py-1 bg-red-500 text-white rounded-lg hover:bg-red-600 transition">
+                                  Отменить
+                                </button>
+                              </>
+                            )}
+                            {a.status === 'confirmed' && (
+                              <button onClick={() => updateApptStatus(a.id, 'completed')}
+                                className="text-xs px-2 py-1 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition">
+                                Завершить
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── МОДАЛ: Добавить/редактировать врача ─── */}
+      {doctorModal !== null && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">
+              {doctorModal === 'new' ? 'Добавить врача' : 'Редактировать врача'}
+            </h3>
+            <ErrorBox msg={actionErr} />
+            <div className="space-y-3">
+              <input type="text" placeholder="ФИО врача" value={docForm.full_name}
+                onChange={e => setDocForm(f => ({ ...f, full_name: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <input type="text" placeholder="Специальность" value={docForm.specialty}
+                onChange={e => setDocForm(f => ({ ...f, specialty: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <select value={docForm.clinic_id}
+                onChange={e => setDocForm(f => ({ ...f, clinic_id: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+                <option value="">— Выберите клинику —</option>
+                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-gray-600 dark:text-gray-400 flex-shrink-0">Длина слота (мин):</label>
+                <select value={docForm.slot_duration}
+                  onChange={e => setDocForm(f => ({ ...f, slot_duration: e.target.value }))}
+                  className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+                  {[15, 20, 30, 45, 60].map(v => <option key={v} value={v}>{v} мин</option>)}
+                </select>
+              </div>
+              <textarea placeholder="О враче (необязательно)" value={docForm.bio}
+                onChange={e => setDocForm(f => ({ ...f, bio: e.target.value }))} rows={3}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white resize-none" />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={saveDoctor}
+                className="flex-1 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                Сохранить
+              </button>
+              <button onClick={() => { setDoctorModal(null); setActionErr('') }}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── МОДАЛ: Редактор расписания ─── */}
+      {scheduleModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-lg shadow-2xl">
+            <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">
+              Расписание — {scheduleModal.full_name}
+            </h3>
+            <ErrorBox msg={actionErr} />
+            <div className="space-y-2">
+              {scheduleData.map((day, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-8 text-center">
+                    <button
+                      onClick={() => setScheduleData(d => d.map((x, j) => j === i ? { ...x, is_active: !x.is_active } : x))}
+                      className={`w-8 h-8 rounded-lg text-xs font-bold transition ${day.is_active ? 'bg-[#0097A7] text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-400'}`}>
+                      {DAY_NAMES[i]}
+                    </button>
+                  </div>
+                  <div className={`flex-1 flex gap-2 transition ${!day.is_active ? 'opacity-30' : ''}`}>
+                    <input type="time" value={day.start_time} disabled={!day.is_active}
+                      onChange={e => setScheduleData(d => d.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))}
+                      className="flex-1 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm dark:bg-gray-700 dark:text-white" />
+                    <span className="text-gray-400 self-center">—</span>
+                    <input type="time" value={day.end_time} disabled={!day.is_active}
+                      onChange={e => setScheduleData(d => d.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))}
+                      className="flex-1 border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm dark:bg-gray-700 dark:text-white" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3">Нажмите на день недели чтобы включить/выключить</p>
+            <div className="flex gap-3 mt-5">
+              <button onClick={saveSchedule}
+                className="flex-1 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                Сохранить расписание
+              </button>
+              <button onClick={() => { setScheduleModal(null); setActionErr('') }}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── МОДАЛ: Записать пациента ─── */}
+      {bookModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 className="text-lg font-bold mb-1 text-gray-900 dark:text-white">Записать пациента</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              {bookModal.doctor.full_name} · {bookModal.date} · <strong>{bookModal.start_time}</strong>
+            </p>
+            <ErrorBox msg={actionErr} />
+            <div className="space-y-3">
+              <input type="text" placeholder="Имя пациента" value={bookForm.patient_name}
+                onChange={e => setBookForm(f => ({ ...f, patient_name: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <input type="tel" placeholder="Телефон (+7...)" value={bookForm.patient_phone}
+                onChange={e => setBookForm(f => ({ ...f, patient_phone: e.target.value }))}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+              <textarea placeholder="Примечание (необязательно)" value={bookForm.notes}
+                onChange={e => setBookForm(f => ({ ...f, notes: e.target.value }))} rows={2}
+                className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white resize-none" />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={bookAppointment}
+                className="flex-1 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
+                Записать
+              </button>
+              <button onClick={() => { setBookModal(null); setActionErr('') }}
+                className="flex-1 py-2 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
 // Main AdminLayout
 // ---------------------------------------------------------------------------
 
@@ -4568,6 +5189,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'staff':    return <StaffSection token={adminToken} />
       case 'clinics':  return <ClinicsSection token={adminToken} />
       case 'services': return <ServicesSection token={adminToken} />
+      case 'scheduling': return <SchedulingSection token={adminToken} />
       case 'reports':  return <ReportsSection token={adminToken} />
       case 'bonuses':    return <BonusesSection token={adminToken} />
       case 'commission': return <CommissionSection token={adminToken} />

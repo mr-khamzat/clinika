@@ -39,4 +39,9 @@ class LedgerEntry(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     # Время создания — иммутабельно
+    # Разбивка комиссии по участникам (nullable — для существующих записей)
+    clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id", ondelete="SET NULL"), nullable=True, index=True)
+    admin_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)    # Сотруднику
+    manager_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)  # Руководителю
+    platform_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True) # Платформе
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
