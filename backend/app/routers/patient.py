@@ -1,7 +1,6 @@
 """
-Публичный роутер — личный кабинет пациента.
-Не требует токена сотрудника. Защищён patient_token (JWT, 90 дней).
-Rate limiting: fastapi-limiter через Redis.
+Public router for patient cabinet.
+Protected by patient_token (JWT, 90 days).
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +17,6 @@ router = APIRouter(prefix="/patient", tags=["patient"])
 
 
 def _get_limiter(times: int, seconds: int):
-    """Возвращает зависимость rate limiter. Если limiter не инициализирован — пропускает."""
     try:
         from fastapi_limiter.depends import RateLimiter
         return Depends(RateLimiter(times=times, seconds=seconds))
@@ -26,13 +24,8 @@ def _get_limiter(times: int, seconds: int):
         return None
 
 
-# 30 запросов / 60 сек — просмотр кабинета
-_limit_view = _get_limiter(30, 60)
-# 5 попыток / 15 мин — поиск по коду (брутфорс-защита)
+_limit_view = _get_limiter(60, 60)
 _limit_code = _get_limiter(5, 900)
-# 10 попыток / 10 мин — для login-подобных действий
-_limit_auth = _get_limiter(10, 600)
-
 _view_deps = [_limit_view] if _limit_view else []
 _code_deps = [_limit_code] if _limit_code else []
 
@@ -46,11 +39,11 @@ async def _referral_or_404(referral_id: str, db: AsyncSession) -> Referral:
     try:
         rid = uuid.UUID(referral_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail="Направление не найдено")
+        raise HTTPException(status_code=404, detail="Referral not found")
     result = await db.execute(select(Referral).where(Referral.id == rid))
     ref = result.scalar_one_or_none()
     if not ref:
-        raise HTTPException(status_code=404, detail="Направление не найдено")
+        raise HTTPException(status_code=404, detail="Referral not found")
     return ref
 
 
@@ -69,7 +62,6 @@ def _format_referral(ref: Referral, include_qr: bool = True) -> dict:
         "created_at": ref.created_at.isoformat(),
         "expires_at": ref.expires_at.isoformat(),
         "confirmed_at": ref.confirmed_at.isoformat() if ref.confirmed_at else None,
-        # QR для предъявления администратору — только для активных направлений
         "qr_code": ref.qr_code if (include_qr and ref.status == ReferralStatus.CREATED) else None,
     }
 
@@ -77,17 +69,13 @@ def _format_referral(ref: Referral, include_qr: bool = True) -> dict:
 @router.get("/{referral_id}", dependencies=_view_deps)
 async def get_patient_referral(
     referral_id: str,
-    t: str = Query(..., description="JWT токен пациента"),
+    t: str = Query(..., description="Patient JWT token"),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Основная точка входа: пациент открывает QR-ссылку.
-    Возвращает данные направления + все остальные направления этого пациента.
-    """
     ref = await _referral_or_404(referral_id, db)
 
     if not verify_patient_token(str(ref.id), ref.patient_phone, t):
-        raise HTTPException(status_code=403, detail="Токен недействителен или истёк")
+        raise HTTPException(status_code=403, detail="Token invalid or expired")
 
     from app.models.clinic import Clinic
     from app.models.service import Service
@@ -99,7 +87,7 @@ async def get_patient_referral(
     )
     service = (await db.execute(select(Service).where(Service.id == ref.service_id))).scalar_one_or_none()
 
-    # Все направления этого пациента (по телефону)
+    # All referrals for this patient (by phone)
     all_refs_result = await db.execute(
         select(Referral)
         .where(Referral.patient_phone == ref.patient_phone)
@@ -120,22 +108,31 @@ async def get_patient_referral(
             "to_clinic_name": r_clinic.name if r_clinic else "—",
         })
 
-    # МИС данные (если есть mis_patient_id)
+    # MIS patient data
     mis_info = None
-    if ref.mis_patient_id:
-        try:
-            from app.services.mis_client import find_patient_by_phone
-            patient = await find_patient_by_phone(ref.patient_phone)
-            if patient:
-                mis_info = {
-                    "patient_id": patient.get("patient_id"),
-                    "card_number": patient.get("number"),
-                    "birth_date": patient.get("birth_date"),
-                    "gender": "М" if patient.get("gender") == 1 else "Ж" if patient.get("gender") == 2 else None,
-                    "has_account": patient.get("has_account", False),
-                }
-        except Exception:
-            pass
+    mis_visits = []
+    mis_analyses = []
+    mis_patient_id = None
+
+    try:
+        from app.services.mis_client import find_patient_by_phone, get_patient_visits, get_patient_analyses
+        patient = await find_patient_by_phone(ref.patient_phone)
+        if patient:
+            mis_patient_id = patient.get("patient_id") or patient.get("id")
+            mis_info = {
+                "patient_id": mis_patient_id,
+                "card_number": patient.get("number"),
+                "birth_date": patient.get("birth_date"),
+                "gender": "М" if patient.get("gender") == 1 else ("Ж" if patient.get("gender") == 2 else None),
+                "has_account": patient.get("has_account", False),
+                "full_name": patient.get("full_name") or f"{patient.get('last_name', '')} {patient.get('first_name', '')}".strip(),
+                "email": patient.get("email"),
+            }
+            if mis_patient_id:
+                mis_visits = await get_patient_visits(int(mis_patient_id))
+                mis_analyses = await get_patient_analyses(int(mis_patient_id))
+    except Exception:
+        pass
 
     return {
         "current": {
@@ -146,6 +143,8 @@ async def get_patient_referral(
         },
         "other_referrals": other_refs,
         "mis_info": mis_info,
+        "mis_visits": mis_visits[:20],
+        "mis_analyses": mis_analyses[:20],
         "patient_token": t,
         "patient_phone": ref.patient_phone,
         "patient_name": ref.patient_name,
@@ -157,17 +156,13 @@ async def get_by_short_code(
     body: CodeSearchRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Найти направление по 5-значному коду + телефону (POST — телефон не в URL).
-    Rate limit: 5 попыток / 15 минут с одного IP.
-    """
     result = await db.execute(select(Referral).where(Referral.short_code == body.code))
     ref = result.scalar_one_or_none()
     if not ref:
-        raise HTTPException(status_code=404, detail="Направление не найдено")
+        raise HTTPException(status_code=404, detail="Referral not found")
 
     if normalize_phone(body.phone) != normalize_phone(ref.patient_phone):
-        raise HTTPException(status_code=403, detail="Неверный номер телефона")
+        raise HTTPException(status_code=403, detail="Phone number does not match")
 
     from app.core.security import make_patient_token
     token = make_patient_token(str(ref.id), ref.patient_phone)

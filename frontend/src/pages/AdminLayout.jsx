@@ -64,11 +64,14 @@ const NAV = [
   { key: 'settings',   label: 'Настройки',  icon: 'settings' },
   { key: 'ledger',     label: 'Реестр',     icon: 'account_balance' },
   { key: 'analytics', label: 'Аналитика',  icon: 'bar_chart' },
-  { key: 'audit',     label: 'Аудит',      icon: 'manage_search' },
-  { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long' },
-  { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart' },
-  { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
-  { key: 'plugins',   label: 'Плагины',    icon: 'extension' },
+  { key: 'audit',     label: 'Аудит',      icon: 'manage_search', superAdminOnly: true },
+  { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
+  { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart', superAdminOnly: true },
+  { key: 'support',    label: 'Поддержка',  icon: 'support_agent', superAdminOnly: true },
+  { key: 'plugins',   label: 'Плагины',    icon: 'extension', superAdminOnly: true },
+  { key: 'mis_sync',  label: 'МИС Sync',   icon: 'sync_alt', superAdminOnly: true },
+  { key: 'calls_cfg', label: 'Звонки/SMS',  icon: 'settings_phone', superAdminOnly: true },
+  { key: 'push_notify', label: 'Push',        icon: 'notifications', superAdminOnly: true },
   { key: 'super_admin', label: 'Платформа',  icon: 'admin_panel_settings', superAdminOnly: true },
 ]
 
@@ -274,6 +277,30 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
             </div>
           </div>
 
+          {isEdit && (
+            <div className="flex items-center justify-between py-3 border-t border-gray-100 dark:border-gray-700">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Статус клиники</p>
+                <p className="text-xs text-gray-400">Неактивная клиника скрыта во всех кабинетах</p>
+              </div>
+              <button type="button" onClick={() => set('is_active', !form.is_active)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
+              </button>
+            </div>
+          )}
+          {isEdit && (
+            <div className="flex items-center justify-between py-3 border-t border-gray-100 dark:border-gray-700">
+              <div>
+                <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Статус клиники</p>
+                <p className="text-xs text-gray-400">Неактивная клиника скрыта во всех кабинетах</p>
+              </div>
+              <button type="button" onClick={() => set('is_active', !form.is_active)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
+              </button>
+            </div>
+          )}
           <div className="flex gap-3 mt-3">
             <button
               type="button"
@@ -341,7 +368,105 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
 // HomeDashboard — главная панель системного администратора
 // ---------------------------------------------------------------------------
 
-function HomeDashboard({ token }) {
+function PushSection({ token }) {
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [phone, setPhone] = useState('')
+  const [sendAll, setSendAll] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [stats, setStats] = useState(null)
+  const [result, setResult] = useState(null)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    apiFetch('get', '/manager/push/stats', token)
+      .then(r => setStats(r.data))
+      .catch(() => {})
+  }, [token])
+
+  const handleSend = async (e) => {
+    e.preventDefault()
+    if (!title || !body) { setErr('Заполните заголовок и текст'); return }
+    if (!sendAll && !phone) { setErr('Укажите телефон или выберите Всем'); return }
+    setLoading(true); setErr(''); setResult(null)
+    try {
+      const payload = { title, body, ...(sendAll ? {} : { phone }) }
+      const r = await apiFetch('post', '/manager/push/send', token, payload)
+      setResult({ sent: r.data.sent })
+      setTitle(''); setBody(''); setPhone('')
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Ошибка отправки')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Push-уведомления</h2>
+      <div className="grid md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm text-center">
+          <p className="text-3xl font-extrabold text-blue-600">{stats?.total_subscriptions ?? '—'}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Активных подписок</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <p className="text-sm font-medium text-emerald-600">Web Push активен</p>
+          </div>
+          <p className="text-xs text-gray-400">VAPID протокол</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm flex items-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Push рассылка в реальном времени. Уведомления доходят даже когда браузер закрыт.</p>
+        </div>
+      </div>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm max-w-lg">
+        <h3 className="text-base font-semibold text-gray-700 dark:text-gray-200 mb-4">Отправить уведомление</h3>
+        <form onSubmit={handleSend} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Заголовок</label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Напр. Напоминание о приёме"
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Текст уведомления</label>
+            <textarea value={body} onChange={e => setBody(e.target.value)} rows={3} placeholder="Текст сообщения..."
+              className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500 resize-none" />
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <button type="button" onClick={() => setSendAll(!sendAll)}
+              className={"relative w-10 h-5 rounded-full transition-colors " + (sendAll ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600')}>
+              <span className={"absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform " + (sendAll ? 'translate-x-5' : '')} />
+            </button>
+            <span className="text-sm text-gray-600 dark:text-gray-300">Отправить всем пациентам</span>
+          </div>
+          {!sendAll && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Телефон пациента</label>
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7 900 000-00-00" type="tel"
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500" />
+            </div>
+          )}
+          {err && <p className="text-red-500 text-sm">{err}</p>}
+          {result && (
+            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl p-3">
+              <p className="text-emerald-700 dark:text-emerald-300 text-sm font-medium">
+                Отправлено: {result.sent} устройств{result.sent === 0 ? ' — нет активных подписок' : ''}
+              </p>
+            </div>
+          )}
+          <button type="submit" disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined text-base">send</span>
+            {loading ? 'Отправка...' : sendAll ? 'Отправить всем' : 'Отправить'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function HomeDashboard({ token, onNavigate }) {
   const [todayStats, setTodayStats] = useState(null)
   const [topAdmins, setTopAdmins] = useState([])
   const [cancelCount, setCancelCount] = useState(0)
@@ -426,26 +551,31 @@ function HomeDashboard({ token }) {
         )}
       </div>
 
-      {/* Системное здоровье */}
+      {/* Системное здоровье — плитки-переходы в Мониторинг */}
       {systemHealth && (
-        <div className="flex flex-wrap gap-2 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           {[
-            { label: "API", ok: true, icon: "api", val: sysMetrics && sysMetrics.p50 ? sysMetrics.p50.toFixed(0)+"ms" : "ok" },
-            { label: "DB", ok: systemHealth.db === "ok", icon: "storage", val: systemHealth.db === "ok" ? "ok" : systemHealth.db },
-            { label: "Redis", ok: systemHealth.redis === "ok", icon: "memory", val: systemHealth.redis === "ok" ? "ok" : systemHealth.redis },
-            { label: "МИС", ok: systemHealth.mis !== "error", icon: "cloud", val: systemHealth.mis || "ok" },
+            { label: 'API', icon: 'api', ok: true, val: sysMetrics?.p50 ? `${sysMetrics.p50.toFixed(0)} ms` : 'онлайн', sub: 'Время ответа' },
+            { label: 'База данных', icon: 'database', ok: systemHealth.db === 'ok', val: systemHealth.db === 'ok' ? 'онлайн' : 'ошибка', sub: 'PostgreSQL' },
+            { label: 'Redis', icon: 'memory', ok: systemHealth.redis === 'ok', val: systemHealth.redis === 'ok' ? 'онлайн' : 'ошибка', sub: 'Кеш' },
+            { label: 'МИС', icon: 'cloud', ok: systemHealth.mis !== 'error', val: systemHealth.mis !== 'error' ? 'онлайн' : 'недоступна', sub: 'Интеграция' },
           ].map(s => (
-            <div key={s.label} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${s.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'}`}>
-              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>{s.ok ? 'check_circle' : 'error'}</span>
-              <span>{s.label}: {s.val}</span>
-            </div>
+            <button key={s.label} onClick={() => onNavigate?.('monitoring')}
+              className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-left hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 w-full"
+              style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              <div className="flex items-center justify-between mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${s.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                  <span className="material-symbols-outlined text-base" style={{ color: s.ok ? '#166534' : '#ba1a1a', fontVariationSettings: "'FILL' 1" }}>{s.icon}</span>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {s.ok ? '● OK' : '● ERR'}
+                </span>
+              </div>
+              <p className="text-base font-extrabold font-headline dark:text-white" style={{color: s.ok ? '#166534' : '#ba1a1a'}}>{s.val}</p>
+              <p className="text-[11px] font-semibold text-[#424752] dark:text-gray-300 mt-0.5">{s.label}</p>
+              <p className="text-[10px] text-[#a0a5b0]">{s.sub}</p>
+            </button>
           ))}
-          {sysMetrics?.error_rate != null && (
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${sysMetrics.error_rate > 0.05 ? 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-              <span className="material-symbols-outlined text-sm">error_outline</span>
-              <span>Ошибки: {(sysMetrics.error_rate * 100).toFixed(1)}%</span>
-            </div>
-          )}
         </div>
       )}
       {/* Bento-grid статкарты */}
@@ -847,8 +977,8 @@ function ClinicModal({ token, existing, onClose, onDone }) {
   const isEdit = !!existing
   const [form, setForm] = useState(
     isEdit
-      ? { name: existing.name || '', address: existing.address || '', phone: existing.phone || '' }
-      : { ...EMPTY_CLINIC_FORM }
+      ? { name: existing.name || '', address: existing.address || '', phone: existing.phone || '', is_active: existing.is_active !== false }
+      : { ...EMPTY_CLINIC_FORM, is_active: true }
   )
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -861,7 +991,7 @@ function ClinicModal({ token, existing, onClose, onDone }) {
     setLoading(true)
     setError('')
     try {
-      const payload = { name: form.name.trim() }
+      const payload = { name: form.name.trim(), is_active: form.is_active }
       if (form.address.trim()) payload.address = form.address.trim()
       if (form.phone.trim()) payload.phone = form.phone.trim()
 
@@ -1021,11 +1151,16 @@ function ClinicsSection({ token }) {
                 <button onClick={() => toggleClinic(c)}
                   className="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
-                      <span className="text-lg">🏥</span>
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${c.is_active !== false ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                      <span className="text-lg">{c.is_active !== false ? '🏥' : '🔒'}</span>
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800 dark:text-white">{c.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className={`font-semibold ${c.is_active !== false ? 'text-gray-800 dark:text-white' : 'text-gray-400 dark:text-gray-500 line-through'}`}>{c.name}</p>
+                        {c.is_active === false && (
+                          <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">ОТКЛ</span>
+                        )}
+                      </div>
                       {c.address && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.address}</p>}
                       {c.phone && <p className="text-xs text-gray-400 dark:text-gray-500">{c.phone}</p>}
                     </div>
@@ -2401,6 +2536,7 @@ function MonitoringSection({ token }) {
   const [logsLoading, setLogsLoading] = useState(false)
   const [dbAnalysis, setDbAnalysis] = useState(null)
   const [dbLoading, setDbLoading] = useState(false)
+  const [logsFilter, setLogsFilter] = useState('all')  // all | errors | warnings
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -2523,26 +2659,55 @@ function MonitoringSection({ token }) {
                 {c}
               </button>
             ))}
-            <button onClick={() => loadLogs(logsContainer)} disabled={logsLoading}
-              className="ml-auto text-xs px-3 py-1.5 rounded-xl font-semibold bg-[#f2f4f6] text-[#424752] hover:bg-[#eceef0] transition flex items-center gap-1">
-              <span className={`material-symbols-outlined text-sm ${logsLoading ? 'animate-spin' : ''}`}>refresh</span>
-              Обновить
-            </button>
+            <div className="ml-auto flex gap-2">
+              {['all','errors','warnings'].map(f => (
+                <button key={f} onClick={() => setLogsFilter(f)}
+                  className={"text-xs px-2.5 py-1.5 rounded-xl font-semibold transition " + (logsFilter === f ? 'bg-[#1565c0] text-white' : 'bg-[#f2f4f6] text-[#424752] hover:bg-[#eceef0]')}>
+                  {f === 'all' ? 'Все' : f === 'errors' ? '🔴 Ошибки' : '🟡 Варнинги'}
+                </button>
+              ))}
+              <button onClick={() => loadLogs(logsContainer)} disabled={logsLoading}
+                className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-[#f2f4f6] text-[#424752] hover:bg-[#eceef0] transition flex items-center gap-1">
+                <span className={"material-symbols-outlined text-sm " + (logsLoading ? 'animate-spin' : '')}>refresh</span>
+                Обновить
+              </button>
+              {logs && (
+                <button onClick={() => {
+                  const text = logs.lines.join('\n')
+                  const blob = new Blob([text], {type: 'text/plain'})
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = logsContainer + '-logs.txt'
+                  document.body.appendChild(a); a.click(); a.remove()
+                  URL.revokeObjectURL(url)
+                }}
+                  className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition flex items-center gap-1">
+                  <span className="material-symbols-outlined text-sm">download</span>
+                  Скачать
+                </button>
+              )}
+            </div>
           </div>
           {logsLoading ? (
             <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
           ) : logs ? (
             <div className="bg-[#191c1e] rounded-3xl p-5 overflow-x-auto" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
               <div className="space-y-0.5 font-mono text-xs">
-                {logs.lines.slice().reverse().map((line, i) => {
-                  const isErr = /error|exception|traceback|critical|fatal/i.test(line)
-                  const isWarn = /warn|warning/i.test(line)
-                  return (
-                    <div key={i} className={`leading-relaxed ${isErr ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-[#c2c6d4]'}`}>
-                      {line || ' '}
-                    </div>
-                  )
-                })}
+                {logs.lines.slice().reverse()
+                  .filter(line => {
+                    if (logsFilter === 'errors') return /error|exception|traceback|critical|fatal/i.test(line)
+                    if (logsFilter === 'warnings') return /warn|warning/i.test(line)
+                    return true
+                  })
+                  .map((line, i) => {
+                    const isErr = /error|exception|traceback|critical|fatal/i.test(line)
+                    const isWarn = /warn|warning/i.test(line)
+                    return (
+                      <div key={i} className={`leading-relaxed ${isErr ? 'text-red-400' : isWarn ? 'text-yellow-400' : 'text-[#c2c6d4]'}`}>
+                        {line || ' '}
+                      </div>
+                    )
+                  })}
               </div>
             </div>
           ) : (
@@ -4143,18 +4308,23 @@ function AuditSection({ token }) {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (filter.action) params.set('action', filter.action)
-      if (filter.entity_type) params.set('entity_type', filter.entity_type)
-      if (filter.days) params.set('days', filter.days)
+      params.set('days', filter.days || 30)
       params.set('limit', LIMIT)
-      params.set('offset', page * LIMIT)
-      const [logRes, actRes] = await Promise.all([
-        apiFetch('get', `/audit/log?${params}`, token),
-        actions.length ? Promise.resolve(null) : apiFetch('get', '/audit/actions', token),
-      ])
-      setLog(logRes.data?.log || [])
-      if (actRes) setActions(actRes.data?.actions || [])
-    } catch {}
+      // /audit/feed — объединённый журнал (audit_log + activity_log)
+      const feedRes = await apiFetch('get', `/audit/feed?${params}`, token)
+      let items = feedRes.data?.items || []
+      // фильтрация на клиенте если нужно
+      if (filter.action) items = items.filter(e => e.action?.includes(filter.action))
+      if (filter.entity_type) items = items.filter(e => e.entity_type === filter.entity_type)
+      setLog(items)
+    } catch(e) {
+      // fallback to audit/log
+      try {
+        const params2 = new URLSearchParams({ days: filter.days || 30, limit: LIMIT })
+        const r = await apiFetch('get', `/audit/log?${params2}`, token)
+        setLog(r.data?.items || r.data?.log || [])
+      } catch {}
+    }
     finally { setLoading(false) }
   }
 
@@ -4214,16 +4384,21 @@ function AuditSection({ token }) {
                       {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
-                        {e.action}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
+                          {e.action}
+                        </span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-fit ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
+                          {e.source === 'audit' ? '📋 аудит' : '📝 активность'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
                       <span className="font-medium">{e.entity_type}</span>
                       {e.entity_id && <span className="text-gray-400"> #{e.entity_id}</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-xs">{e.actor_name || `ID ${e.actor_id}`}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">{e.ip || '—'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">{e.ip_address || e.ip || '—'}</td>
                     <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
                       {e.after && <pre className="bg-gray-50 dark:bg-gray-900 rounded p-1 text-xs overflow-x-auto max-h-20 max-w-xs">{JSON.stringify(e.after, null, 1)}</pre>}
                     </td>
@@ -4260,6 +4435,7 @@ function BillingSection({ token }) {
   const [payModal, setPayModal] = useState(null)
   const [payAmount, setPayAmount] = useState('')
   const [actionErr, setActionErr] = useState('')
+  const [billingCycle, setBillingCycle] = useState('monthly')
 
   const load = async () => {
     setLoading(true)
@@ -4452,33 +4628,86 @@ function BillingSection({ token }) {
       )}
 
       {/* Plans */}
-      {activeTab === 'plans' && (
-        <div className="grid md:grid-cols-3 gap-4">
-          {plans.map(p => (
-            <div key={p.name} className={`bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border-2 ${sub?.plan_name === p.name ? 'border-[#0097A7]' : 'border-transparent'}`}>
-              <p className="text-xs uppercase tracking-widest font-bold mb-1" style={{ color: PLAN_COLORS[p.name] || '#0097A7' }}>{p.name}</p>
-              <p className="text-3xl font-extrabold font-headline text-gray-900 dark:text-white">{(p.price_monthly).toLocaleString('ru-RU')} <span className="text-base font-normal text-gray-400">₽/мес</span></p>
-              <ul className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                {(p.features || []).map((f, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              {sub?.plan_name !== p.name && (
-                <button onClick={() => changePlan(p.name)}
-                  className="mt-5 w-full py-2 rounded-xl text-sm font-semibold bg-[#0097A7] text-white hover:bg-[#00838f] transition">
-                  Перейти на {p.name}
-                </button>
-              )}
-              {sub?.plan_name === p.name && (
-                <div className="mt-5 w-full py-2 rounded-xl text-sm font-semibold text-center text-[#0097A7] border border-[#0097A7]">Текущий тариф</div>
-              )}
+      {activeTab === 'plans' && (() => {
+        const PLAN_META = {
+          basic:        { label: 'Базовый',        gradient: 'from-slate-600 to-slate-800',    badge: null,       desc: 'Для небольших клиник — старт без лишнего' },
+          professional: { label: 'Профессиональный', gradient: 'from-[#0097A7] to-[#004D5F]', badge: 'Популярный', desc: 'Полный функционал для растущей сети клиник' },
+          enterprise:   { label: 'Корпоративный',  gradient: 'from-violet-600 to-violet-900',  badge: 'Максимум',  desc: 'Мульти-тенант, white-label, P2P звонки' },
+        }
+        const price = (p) => billingCycle === 'annual' ? p.price_annual / 12 : p.price_monthly
+        const isCurrent = (p) => sub?.plan_name === p.plan
+        return (
+          <div className="space-y-5">
+            {/* Переключатель цикла */}
+            <div className="flex items-center justify-center gap-3">
+              <span className={`text-sm font-semibold transition ${billingCycle === 'monthly' ? 'text-[#191c1e] dark:text-white' : 'text-[#727783]'}`}>Ежемесячно</span>
+              <button onClick={() => setBillingCycle(c => c === 'monthly' ? 'annual' : 'monthly')}
+                className={`relative w-12 h-6 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-[#0097A7]' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-6' : ''}`} />
+              </button>
+              <span className={`text-sm font-semibold transition ${billingCycle === 'annual' ? 'text-[#191c1e] dark:text-white' : 'text-[#727783]'}`}>Годовой</span>
+              {billingCycle === 'annual' && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Экономия до 17%</span>}
             </div>
-          ))}
-        </div>
-      )}
+            {/* Карточки */}
+            <div className="grid md:grid-cols-3 gap-5">
+              {plans.map(p => {
+                const meta = PLAN_META[p.plan] || { label: p.plan, gradient: 'from-gray-500 to-gray-700', badge: null, desc: '' }
+                const monthly = Math.round(price(p))
+                const current = isCurrent(p)
+                return (
+                  <div key={p.plan} className={`relative bg-white dark:bg-gray-800 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ${current ? 'ring-2 ring-[#0097A7] scale-[1.02]' : 'hover:scale-[1.01]'}`}
+                    style={{boxShadow: current ? '0 8px 32px rgba(0,151,167,0.18)' : '0 4px 24px rgba(25,28,30,0.08)'}}>
+                    {/* Шапка с градиентом */}
+                    <div className={`bg-gradient-to-br ${meta.gradient} p-6 text-white relative`}>
+                      {meta.badge && (
+                        <span className="absolute top-3 right-3 text-[10px] font-bold bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                          {meta.badge}
+                        </span>
+                      )}
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">{meta.label}</p>
+                      <div className="flex items-end gap-1">
+                        <span className="text-4xl font-extrabold font-headline">{monthly.toLocaleString('ru-RU')}</span>
+                        <span className="text-sm opacity-70 mb-1">₽/мес</span>
+                      </div>
+                      {billingCycle === 'annual' && (
+                        <p className="text-[11px] opacity-60 mt-0.5">{p.price_annual?.toLocaleString('ru-RU')} ₽/год · скидка {p.discount_annual_pct}%</p>
+                      )}
+                      <p className="text-xs opacity-70 mt-2">{meta.desc}</p>
+                    </div>
+                    {/* Функционал */}
+                    <div className="p-5 flex-1 flex flex-col">
+                      <ul className="space-y-2 flex-1">
+                        {(p.features || []).slice(0, 10).map((f, i) => (
+                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                            <span className="material-symbols-outlined text-emerald-500 text-base flex-shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                            <span>{f.label || f}</span>
+                          </li>
+                        ))}
+                        {(p.features || []).length > 10 && (
+                          <li className="text-xs text-[#727783] pl-6">+{p.features.length - 10} функций</li>
+                        )}
+                      </ul>
+                      <div className="mt-5">
+                        {current ? (
+                          <div className="w-full py-2.5 rounded-2xl text-sm font-bold text-center border-2 border-[#0097A7] text-[#0097A7] flex items-center justify-center gap-1.5">
+                            <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>verified</span>
+                            Текущий тариф
+                          </div>
+                        ) : (
+                          <button onClick={() => changePlan(p.plan)}
+                            className={`w-full py-2.5 rounded-2xl text-sm font-bold bg-gradient-to-br ${meta.gradient} text-white hover:opacity-90 transition`}>
+                            Перейти на {meta.label}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Модал смены тарифа */}
       {changingPlan && (
@@ -4487,9 +4716,9 @@ function BillingSection({ token }) {
             <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Сменить тариф</h3>
             <div className="space-y-3">
               {plans.map(p => (
-                <button key={p.name} onClick={() => changePlan(p.name)}
-                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition ${sub?.plan_name === p.name ? 'border-[#0097A7] bg-[#e0f7fa] text-[#0097A7]' : 'border-gray-200 dark:border-gray-600 hover:border-[#0097A7] text-gray-700 dark:text-gray-200'}`}>
-                  <span>{p.name?.charAt(0).toUpperCase() + p.name?.slice(1)}</span>
+                <button key={p.plan} onClick={() => changePlan(p.plan)}
+                  className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition ${sub?.plan_name === p.plan ? 'border-[#0097A7] bg-[#e0f7fa] text-[#0097A7]' : 'border-gray-200 dark:border-gray-600 hover:border-[#0097A7] text-gray-700 dark:text-gray-200'}`}>
+                  <span>{p.plan?.charAt(0).toUpperCase() + p.plan?.slice(1)}</span>
                   <span className="text-gray-500">{(p.price_monthly).toLocaleString('ru-RU')} ₽/мес</span>
                 </button>
               ))}
@@ -5173,6 +5402,9 @@ function SuperAdminSection({ token }) {
   const [createErr, setCreateErr] = useState('')
   const [selectedTenant, setSelectedTenant] = useState(null)
   const [modules, setModules] = useState([])
+  const [manageBilling, setManageBilling] = useState(null)
+  const [billingForm, setBillingForm] = useState({ plan: 'professional', billing_cycle: 'monthly', trial_days: 14 })
+  const [billingMsg, setBillingMsg] = useState('')
 
   const ALL_MODULES = [
     'referrals','bonuses','clinics','qr_scan','analytics','support','invitations',
@@ -5342,11 +5574,13 @@ function SuperAdminSection({ token }) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => loadTenantModules(t)}
-                          className="text-xs text-blue-600 hover:underline">Модули</button>
+                          className="text-xs text-blue-600 hover:underline font-medium">Модули</button>
+                        <button onClick={() => setManageBilling(t)}
+                          className="text-xs text-violet-600 hover:underline font-medium">Подписка</button>
                         <button onClick={() => toggleTenant(t)}
-                          className={`text-xs ${t.is_active ? 'text-red-500 hover:underline' : 'text-green-600 hover:underline'}`}>
+                          className={`text-xs font-medium ${t.is_active ? 'text-red-500 hover:underline' : 'text-green-600 hover:underline'}`}>
                           {t.is_active ? 'Откл.' : 'Вкл.'}
                         </button>
                       </div>
@@ -5355,6 +5589,77 @@ function SuperAdminSection({ token }) {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+
+      {/* Модал управления подпиской тенанта */}
+      {manageBilling && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Подписка тенанта</h3>
+                <p className="text-sm text-gray-500">{manageBilling.name}</p>
+              </div>
+              <button onClick={() => { setManageBilling(null); setBillingMsg('') }}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+                <span className="material-symbols-outlined text-gray-400">close</span>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Тарифный план</label>
+                <select value={billingForm.plan} onChange={e => setBillingForm(f => ({...f, plan: e.target.value}))}
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm dark:bg-gray-800 dark:text-white">
+                  <option value="basic">Basic — 4 990 ₽/мес</option>
+                  <option value="professional">Professional — 9 990 ₽/мес</option>
+                  <option value="enterprise">Enterprise — 24 990 ₽/мес</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Цикл оплаты</label>
+                <div className="flex gap-2">
+                  {[{v:'monthly',l:'Ежемесячно'},{v:'annual',l:'Годовой (-17%)'}].map(c => (
+                    <button key={c.v} onClick={() => setBillingForm(f => ({...f, billing_cycle: c.v}))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition ${billingForm.billing_cycle === c.v ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                      {c.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Пробный период (дней, 0 = без trial)</label>
+                <div className="flex gap-2">
+                  {[0, 7, 14, 30].map(d => (
+                    <button key={d} onClick={() => setBillingForm(f => ({...f, trial_days: d}))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition ${billingForm.trial_days === d ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
+                      {d === 0 ? 'Нет' : `${d}д`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {billingMsg && (
+                <div className={`rounded-xl p-3 text-sm font-medium ${billingMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                  {billingMsg.text || billingMsg}
+                </div>
+              )}
+              <button
+                onClick={async () => {
+                  setBillingMsg('')
+                  try {
+                    await apiFetch('post', `/admin/tenants/${manageBilling.id}/subscription`, token, billingForm)
+                    setBillingMsg({ ok: true, text: 'Подписка активирована!' })
+                    load()
+                  } catch(e) {
+                    setBillingMsg({ ok: false, text: e.response?.data?.detail || 'Ошибка' })
+                  }
+                }}
+                className="w-full py-3 bg-[#0097A7] text-white rounded-xl text-sm font-bold hover:bg-[#00838f] transition">
+                Активировать / Обновить подписку
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -5504,9 +5809,752 @@ function SuperAdminSection({ token }) {
 
 
 
+
 // ---------------------------------------------------------------------------
-// PluginsSection — Система плагинов (4 вкладки)
+// MisSyncSection — синхронизация с МИС Renovatio
 // ---------------------------------------------------------------------------
+function MisSyncSection({ token }) {
+  const [misClinics, setMisClinics] = useState(null)
+  const [misDoctors, setMisDoctors] = useState(null)
+  const [misServices, setMisServices] = useState(null)
+  const [ourClinics, setOurClinics] = useState([])
+  const [tab, setTab] = useState('clinics')
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [selectedClinics, setSelectedClinics] = useState([])
+  const [selectedDoctors, setSelectedDoctors] = useState([])
+  const [doctorAccounts, setDoctorAccounts] = useState(null)
+  const [createAccForm, setCreateAccForm] = useState(null) // {doctor_id, full_name, username, password}
+  const [createAccLoading, setCreateAccLoading] = useState(false)
+  const [sourceClinicId, setSourceClinicId] = useState(1)
+  const [targetClinicIds, setTargetClinicIds] = useState([])
+  const [selectedCategories, setSelectedCategories] = useState([])
+  const [selectedServices, setSelectedServices] = useState([])
+
+  const showMsg = (t) => { setMsg(t); setTimeout(() => setMsg(''), 4000) }
+
+  const loadMisClinics = async () => {
+    try {
+      const r = await apiFetch('get', '/mis/clinics', token)
+      setMisClinics(r.data.clinics || [])
+    } catch {}
+  }
+
+  const loadMisDoctors = async () => {
+    try {
+      const r = await apiFetch('get', '/mis/doctors', token)
+      setMisDoctors(r.data.doctors || [])
+    } catch {}
+  }
+
+  const loadMisServices = async () => {
+    try {
+      const r = await apiFetch('get', `/mis/services?clinic_mis_id=${sourceClinicId}`, token)
+      setMisServices(r.data || null)
+    } catch {}
+  }
+
+  const loadOurClinics = async () => {
+    try {
+      const r = await apiFetch('get', '/clinics', token)
+      setOurClinics(r.data.clinics || r.data || [])
+    } catch {}
+  }
+
+  useEffect(() => {
+    loadOurClinics()
+    if (tab === 'clinics' && !misClinics) loadMisClinics()
+    if (tab === 'doctors' && !misDoctors) loadMisDoctors()
+    if (tab === 'doctors' && !doctorAccounts) loadDoctorAccounts()
+    if (tab === 'services' && !misServices) loadMisServices()
+  }, [tab])
+
+  const syncClinics = async () => {
+    if (!selectedClinics.length) return showMsg('Выберите клиники для импорта')
+    setLoading(true)
+    try {
+      const r = await apiFetch('post', '/mis/clinics/sync', token, { mis_ids: selectedClinics })
+      showMsg(`Готово: создано ${r.data.created}, обновлено ${r.data.updated}`)
+      loadOurClinics()
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+    setLoading(false)
+  }
+
+  const loadDoctorAccounts = async () => {
+    try {
+      const r = await apiFetch('get', '/mis/doctors/accounts', token)
+      setDoctorAccounts(r.data)
+    } catch {}
+  }
+
+  const createDoctorAccount = async () => {
+    if (!createAccForm) return
+    setCreateAccLoading(true)
+    try {
+      await apiFetch('post', '/mis/doctors/create-account', token, {
+        doctor_id: createAccForm.doctor_id,
+        username: createAccForm.username,
+        password: createAccForm.password,
+        full_name: createAccForm.full_name,
+      })
+      showMsg('Кабинет врача создан: @' + createAccForm.username)
+      setCreateAccForm(null)
+      setDoctorAccounts(null) // refresh
+      loadDoctorAccounts()
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+    setCreateAccLoading(false)
+  }
+
+  const syncDoctors = async () => {
+    setLoading(true)
+    try {
+      const r = await apiFetch('post', '/mis/doctors/sync', token, {
+        mis_ids: selectedDoctors.length ? selectedDoctors : null
+      })
+      showMsg(`Готово: создано ${r.data.created}, обновлено ${r.data.updated}, пропущено ${r.data.skipped}`)
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+    setLoading(false)
+  }
+
+  const syncServices = async () => {
+    if (!targetClinicIds.length) return showMsg('Выберите клиники назначения')
+    setLoading(true)
+    try {
+      const r = await apiFetch('post', '/mis/services/sync', token, {
+        source_clinic_mis_id: sourceClinicId,
+        target_clinic_ids: targetClinicIds,
+        category_filter: selectedCategories.length ? selectedCategories : null,
+        service_mis_ids: selectedServices.length ? selectedServices : null,
+      })
+      showMsg(`Готово: создано ${r.data.created}, обновлено ${r.data.updated} из ${r.data.total_source} услуг`)
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+    setLoading(false)
+  }
+
+  const pollReferrals = async () => {
+    setLoading(true)
+    try {
+      const r = await apiFetch('post', '/mis/poll-referrals', token, {})
+      showMsg(`Поллинг завершён: подтверждено ${r.data.confirmed} направлений, ошибок ${r.data.errors}`)
+    } catch {}
+    setLoading(false)
+  }
+
+  const TABS = [
+    { key: 'clinics', label: 'Клиники', icon: 'local_hospital' },
+    { key: 'doctors', label: 'Врачи', icon: 'person' },
+    { key: 'services', label: 'Услуги', icon: 'medical_services' },
+    { key: 'tools', label: 'Инструменты', icon: 'build' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">МИС Renovatio</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Синхронизация данных из МИС в систему</p>
+        </div>
+        {msg && <div className="bg-blue-600 text-white text-sm px-4 py-2 rounded-xl shadow">{msg}</div>}
+      </div>
+
+      <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-xl p-1 shadow-sm border border-gray-100 dark:border-gray-800 w-fit">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${tab === t.key ? 'bg-[#0097A7] text-white shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'}`}>
+            <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* КЛИНИКИ */}
+      {tab === 'clinics' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-900 dark:text-white">Клиники в МИС ({misClinics?.length || 0})</h3>
+              <div className="flex gap-2">
+                <button onClick={() => { setSelectedClinics(misClinics?.map(c => c.mis_id) || []) }}
+                  className="text-xs text-[#0097A7] hover:underline">Выбрать все</button>
+                <button onClick={syncClinics} disabled={loading || !selectedClinics.length}
+                  className="bg-[#0097A7] text-white text-sm px-4 py-2 rounded-xl hover:bg-[#00838f] transition disabled:opacity-50">
+                  {loading ? '...' : `Импорт (${selectedClinics.length})`}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {(misClinics || []).map(c => {
+                const isSelected = selectedClinics.includes(c.mis_id)
+                const inOur = ourClinics.some(oc => oc.mis_id === c.mis_id)
+                return (
+                  <div key={c.mis_id} onClick={() => setSelectedClinics(s => isSelected ? s.filter(x => x !== c.mis_id) : [...s, c.mis_id])}
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]/5' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300'}`}>
+                      {isSelected && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
+                    </div>
+                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: c.color || '#999' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{c.name}</p>
+                      <p className="text-xs text-gray-400">{c.city} · {c.address?.substring(0,50)}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {inOur && <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">В системе</span>}
+                      <span className="text-xs text-gray-400">mis_id={c.mis_id}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          {/* Наши клиники */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-3">В нашей системе ({ourClinics.length})</h3>
+            <div className="divide-y divide-gray-50 dark:divide-gray-800">
+              {ourClinics.map(c => (
+                <div key={c.id} className="flex items-center gap-3 py-2">
+                  <span className="material-symbols-outlined text-[#0097A7] text-[18px]" style={{fontVariationSettings:"'FILL' 1"}}>local_hospital</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{c.name}</p>
+                    <p className="text-xs text-gray-400">{c.address || '—'}</p>
+                  </div>
+                  {c.mis_id && <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">mis={c.mis_id}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ВРАЧИ */}
+      {tab === 'doctors' && (
+        <div className="space-y-4">
+          {/* Синхронизация из МИС */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-gray-900 dark:text-white">Врачи в МИС ({misDoctors?.length || 0})</h3>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedDoctors([])} className="text-xs text-gray-400 hover:underline">Сброс</button>
+                <button onClick={syncDoctors} disabled={loading}
+                  className="bg-[#0097A7] text-white text-sm px-4 py-2 rounded-xl hover:bg-[#00838f] transition disabled:opacity-50">
+                  {loading ? '...' : `Синхронизировать${selectedDoctors.length ? ` (${selectedDoctors.length})` : ' всех'}`}
+                </button>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">Врачи импортируются из МИС в нашу базу. Клиника должна быть импортирована сначала.</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(misDoctors || []).map(d => {
+                const isSelected = selectedDoctors.includes(d.mis_id)
+                return (
+                  <div key={d.mis_id} onClick={() => setSelectedDoctors(s => isSelected ? s.filter(x => x !== d.mis_id) : [...s, d.mis_id])}
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]/5' : 'border-gray-100 dark:border-gray-700 hover:border-gray-200'}`}>
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition flex-shrink-0
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300'}`}>
+                      {isSelected && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{d.name}</p>
+                      <p className="text-xs text-gray-400">{d.specialty || '—'} · {d.clinic_name}</p>
+                    </div>
+                    <span className="text-xs text-gray-400">mis={d.mis_id}</span>
+                  </div>
+                )
+              })}
+              {misDoctors === null && <p className="text-xs text-gray-400 py-2 text-center">Загрузка...</p>}
+              {misDoctors?.length === 0 && <p className="text-xs text-gray-400 py-2 text-center">Нет врачей в МИС</p>}
+            </div>
+          </div>
+
+          {/* Личные кабинеты врачей */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white">Личные кабинеты врачей</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Врачи с кабинетами могут входить в систему</p>
+              </div>
+              <button onClick={loadDoctorAccounts} className="text-xs text-[#0097A7] border border-[#0097A7] px-3 py-1.5 rounded-xl hover:bg-[#0097A7]/5 transition">
+                Обновить
+              </button>
+            </div>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {(doctorAccounts || []).map(d => (
+                <div key={d.doctor_id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${d.has_account ? 'bg-emerald-50' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                    <span className="material-symbols-outlined text-sm" style={{ color: d.has_account ? '#166534' : '#9ca3af', fontVariationSettings: "'FILL' 1" }}>
+                      {d.has_account ? 'verified_user' : 'person_off'}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{d.full_name}</p>
+                    <p className="text-xs text-gray-400">{d.specialty || '—'}</p>
+                    {d.has_account && <p className="text-xs text-emerald-600 font-medium">@{d.username} · {d.is_active ? 'активен' : 'деактивирован'}</p>}
+                  </div>
+                  {!d.has_account && (
+                    <button
+                      onClick={() => setCreateAccForm({ doctor_id: d.doctor_id, full_name: d.full_name, username: '', password: '' })}
+                      className="text-xs bg-[#0097A7] text-white px-3 py-1.5 rounded-xl hover:bg-[#00838f] transition flex-shrink-0">
+                      Создать кабинет
+                    </button>
+                  )}
+                  {d.has_account && (
+                    <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded-xl flex-shrink-0 font-semibold">Есть</span>
+                  )}
+                </div>
+              ))}
+              {doctorAccounts === null && <p className="text-xs text-gray-400 py-2 text-center">Загрузка...</p>}
+              {doctorAccounts?.length === 0 && <p className="text-xs text-gray-400 py-2 text-center">Нет синхронизированных врачей</p>}
+            </div>
+          </div>
+
+          {/* Модальная форма создания кабинета */}
+          {createAccForm && (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setCreateAccForm(null)}>
+              <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                <h3 className="font-bold text-gray-900 dark:text-white mb-1">Создать кабинет врача</h3>
+                <p className="text-sm text-gray-500 mb-4">{createAccForm.full_name}</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Логин</label>
+                    <input value={createAccForm.username}
+                      onChange={e => setCreateAccForm(f => ({...f, username: e.target.value}))}
+                      placeholder="doctor_ivanov"
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0097A7]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Пароль</label>
+                    <input type="password" value={createAccForm.password}
+                      onChange={e => setCreateAccForm(f => ({...f, password: e.target.value}))}
+                      placeholder="Минимум 6 символов"
+                      className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0097A7]" />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-5">
+                  <button onClick={() => setCreateAccForm(null)}
+                    className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    Отмена
+                  </button>
+                  <button onClick={createDoctorAccount} disabled={createAccLoading || !createAccForm.username || !createAccForm.password}
+                    className="flex-1 bg-[#0097A7] text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-50 hover:bg-[#00838f] transition">
+                    {createAccLoading ? 'Создание...' : 'Создать'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* УСЛУГИ */}
+      {tab === 'services' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-4">Источник и назначение</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Клиника МИС (источник)</label>
+                <select value={sourceClinicId} onChange={e => { setSourceClinicId(+e.target.value); setMisServices(null) }}
+                  className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-800 dark:text-white">
+                  {(misClinics || [{mis_id:1,name:'КС-1'},{mis_id:4,name:'КС-4'},{mis_id:3,name:'КС-3'},{mis_id:24,name:'КС-24'},{mis_id:26,name:'КС-26'}]).map(c => (
+                    <option key={c.mis_id} value={c.mis_id}>{c.name} (id={c.mis_id})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Наши клиники (назначение)</label>
+                <div className="space-y-1 max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-xl p-2">
+                  {ourClinics.map(c => (
+                    <label key={c.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                      <input type="checkbox" checked={targetClinicIds.includes(c.id)}
+                        onChange={e => setTargetClinicIds(s => e.target.checked ? [...s, c.id] : s.filter(x => x !== c.id))}
+                        className="rounded" />
+                      {c.name}
+                    </label>
+                  ))}
+                  {!ourClinics.length && <p className="text-xs text-gray-400">Сначала импортируйте клиники</p>}
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={loadMisServices} className="text-sm text-[#0097A7] border border-[#0097A7] px-4 py-2 rounded-xl hover:bg-[#0097A7]/5 transition">
+                Загрузить услуги
+              </button>
+              <button onClick={syncServices} disabled={loading || !targetClinicIds.length}
+                className="bg-[#0097A7] text-white text-sm px-4 py-2 rounded-xl hover:bg-[#00838f] transition disabled:opacity-50">
+                {loading ? '...' : `Импортировать${selectedCategories.length ? ` (${selectedCategories.length} кат.)` : ' все'}`}
+              </button>
+            </div>
+          </div>
+
+          {misServices && (
+            <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-gray-900 dark:text-white">Категории услуг ({misServices.categories?.length || 0})</h3>
+                <span className="text-xs text-gray-400">{misServices.total} услуг</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(misServices.categories || []).slice(0, 30).map(cat => {
+                  const isSelected = selectedCategories.includes(cat.name)
+                  return (
+                    <button key={cat.name}
+                      onClick={() => setSelectedCategories(s => isSelected ? s.filter(x => x !== cat.name) : [...s, cat.name])}
+                      className={`text-xs px-3 py-1.5 rounded-full border transition
+                        ${isSelected ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'bg-white dark:bg-gray-800 text-gray-600 border-gray-200 hover:border-[#0097A7]'}`}>
+                      {cat.name} ({cat.count})
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Выберите категории для импорта или оставьте пустым для всех</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ИНСТРУМЕНТЫ */}
+      {tab === 'tools' && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
+            <h3 className="font-bold text-gray-900 dark:text-white mb-1">Авто-подтверждение направлений</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Поллинг МИС: ищем приёмы со статусом "выполнено" за последние 2 часа и автоматически подтверждаем совпадающие направления.
+            </p>
+            <button onClick={pollReferrals} disabled={loading}
+              className="bg-[#0097A7] text-white text-sm px-5 py-2.5 rounded-xl hover:bg-[#00838f] transition disabled:opacity-50">
+              {loading ? 'Обработка...' : 'Запустить поллинг МИС'}
+            </button>
+          </div>
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 text-xs text-blue-700 dark:text-blue-300">
+            <p className="font-semibold mb-1">Доступные методы МИС:</p>
+            <p>✅ getClinics, getServices, getAppointments, getPatient, getUsers</p>
+            <p>✅ createAppointment — создание записи в МИС</p>
+            <p>❌ getSchedule, getPatientResults — нет доступа (запросить у МИС)</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CallsConfigSection — настройки звонков, уведомлений, SMS/Telegram
+// ---------------------------------------------------------------------------
+function CallsConfigSection({ token }) {
+  const [tab, setTab] = useState('calls')
+  const [permissions, setPermissions] = useState([])
+  const [notifSettings, setNotifSettings] = useState([])
+  const [availableEvents, setAvailableEvents] = useState({})
+  const [myStatus, setMyStatus] = useState('offline')
+  const [statusText, setStatusText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const showMsg = (t, ok=true) => { setMsg({text:t, ok}); setTimeout(() => setMsg(''), 3000) }
+
+  const ROLES = ['admin', 'manager', 'partner', 'doctor']
+  const ROLE_LABELS = { admin: 'Администратор', manager: 'Руководитель', partner: 'Партнёр', doctor: 'Врач' }
+  const ROLE_ICONS  = { admin: 'manage_accounts', manager: 'supervisor_account', partner: 'handshake', doctor: 'medical_services' }
+
+  const loadPermissions = async () => {
+    try {
+      const r = await apiFetch('get', '/presence/call-permissions', token)
+      setPermissions(r.data.permissions || [])
+    } catch {}
+  }
+  const loadNotifSettings = async () => {
+    try {
+      const r = await apiFetch('get', '/presence/notification-settings', token)
+      setNotifSettings(r.data.settings || [])
+      setAvailableEvents(r.data.available_events || {})
+    } catch {}
+  }
+  const loadMyStatus = async () => {
+    try {
+      const r = await apiFetch('get', '/presence/status', token)
+      setMyStatus(r.data.status || 'offline')
+      setStatusText(r.data.status_text || '')
+    } catch {}
+  }
+
+  useEffect(() => {
+    loadMyStatus()
+    if (tab === 'calls') loadPermissions()
+    if (tab === 'notifications') loadNotifSettings()
+  }, [tab])
+
+  const getPerm = (fromRole, toRole) =>
+    permissions.find(p => p.from_role === fromRole && p.to_role === toRole) || { can_call: false, can_video: false, same_clinic_only: false }
+
+  const togglePerm = async (fromRole, toRole, field) => {
+    const ex = getPerm(fromRole, toRole)
+    const updated = { ...ex, from_role: fromRole, to_role: toRole, [field]: !ex[field] }
+    try {
+      await apiFetch('post', '/presence/call-permissions', token, updated)
+      loadPermissions()
+    } catch(e) { showMsg('Ошибка сохранения', false) }
+  }
+
+  const updateStatus = async (status) => {
+    setSaving(true)
+    setMyStatus(status)
+    try {
+      await apiFetch('put', '/presence/status', token, { status, status_text: statusText })
+      showMsg('Статус обновлён')
+    } catch { showMsg('Ошибка', false) }
+    setSaving(false)
+  }
+
+  const updateStatusText = async () => {
+    try {
+      await apiFetch('put', '/presence/status', token, { status: myStatus, status_text: statusText })
+      showMsg('Статус-текст сохранён')
+    } catch { showMsg('Ошибка', false) }
+  }
+
+  const STATUS_OPTIONS = [
+    { value: 'online', label: 'На месте',     color: '#22c55e', bg: 'bg-emerald-50 border-emerald-200', icon: 'circle' },
+    { value: 'away',   label: 'Не на месте',  color: '#f59e0b', bg: 'bg-amber-50 border-amber-200',    icon: 'schedule' },
+    { value: 'busy',   label: 'Занят',        color: '#ef4444', bg: 'bg-red-50 border-red-200',         icon: 'do_not_disturb_on' },
+    { value: 'offline',label: 'Не в системе', color: '#94a3b8', bg: 'bg-gray-50 border-gray-200',       icon: 'radio_button_unchecked' },
+  ]
+
+  const TABS = [
+    { key: 'calls',         label: 'Разрешения звонков',  icon: 'call' },
+    { key: 'presence',      label: 'Мой статус',          icon: 'online_prediction' },
+    { key: 'notifications', label: 'Уведомления',          icon: 'notifications' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Звонки и уведомления</h1>
+          <p className="text-sm text-gray-500 mt-0.5">P2P звонки по ролям, статусы присутствия, SMS и Telegram уведомления</p>
+        </div>
+        {msg && (
+          <div className={`px-4 py-2 rounded-xl text-sm font-semibold shadow ${msg.ok !== false ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+            {msg.text}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-[#e0f7fa] dark:bg-blue-900/20 border border-[#b2ebf2] dark:border-blue-700/30 rounded-2xl p-4 text-sm text-[#00696f] dark:text-blue-300">
+        <div className="flex gap-2 mb-2">
+          <span className="material-symbols-outlined text-base">info</span>
+          <strong>Как работают звонки:</strong>
+        </div>
+        <ul className="list-disc ml-6 space-y-1 text-xs">
+          <li>Каждый пользователь подключается к WebSocket при открытии системы</li>
+          <li>В колонке сотрудников видны индикаторы онлайн (зелёный кружок)</li>
+          <li>Кнопка 📞 появляется рядом с именем если у вас есть разрешение звонить этой роли</li>
+          <li>Статус "Занят" автоматически выставляется на время активного звонка</li>
+          <li>Статус "Не на месте" блокирует входящие — звонящий получает сигнал занято</li>
+        </ul>
+      </div>
+
+      <div className="flex gap-1 bg-white dark:bg-gray-900 rounded-xl p-1 shadow-sm border border-gray-100 dark:border-gray-800 w-fit">
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all
+              ${tab === t.key ? 'bg-[#0097A7] text-white shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'}`}>
+            <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ─── Разрешения звонков ─── */}
+      {tab === 'calls' && (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 font-medium">
+            Матрица показывает: кто (строки) кому (столбцы) может звонить.
+            Чекбокс «Звонок» = разрешить аудио, «Видео» = разрешить видео, «Своя клиника» = только в пределах одной клиники.
+          </p>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-800/50">
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">Кто звонит ↓ / Кому →</th>
+                  {ROLES.map(r => (
+                    <th key={r} className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wide">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="material-symbols-outlined text-base text-[#0097A7]">{ROLE_ICONS[r]}</span>
+                        {ROLE_LABELS[r]}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                {ROLES.map(fromRole => (
+                  <tr key={fromRole} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-base text-[#0097A7]">{ROLE_ICONS[fromRole]}</span>
+                        <span className="font-semibold text-gray-800 dark:text-gray-200">{ROLE_LABELS[fromRole]}</span>
+                      </div>
+                    </td>
+                    {ROLES.map(toRole => {
+                      const perm = getPerm(fromRole, toRole)
+                      return (
+                        <td key={toRole} className="px-3 py-3">
+                          <div className="flex flex-col gap-2 items-center">
+                            <label className="flex items-center gap-1 cursor-pointer text-xs text-gray-600 dark:text-gray-400">
+                              <input type="checkbox" checked={!!perm.can_call}
+                                onChange={() => togglePerm(fromRole, toRole, 'can_call')}
+                                className="w-3.5 h-3.5 rounded accent-emerald-500 cursor-pointer" />
+                              <span>Звонок</span>
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer text-xs text-gray-600 dark:text-gray-400">
+                              <input type="checkbox" checked={!!perm.can_video}
+                                onChange={() => togglePerm(fromRole, toRole, 'can_video')}
+                                className="w-3.5 h-3.5 rounded accent-blue-500 cursor-pointer"
+                                disabled={!perm.can_call} />
+                              <span>Видео</span>
+                            </label>
+                            <label className="flex items-center gap-1 cursor-pointer text-xs text-gray-600 dark:text-gray-400">
+                              <input type="checkbox" checked={!!perm.same_clinic_only}
+                                onChange={() => togglePerm(fromRole, toRole, 'same_clinic_only')}
+                                className="w-3.5 h-3.5 rounded accent-amber-500 cursor-pointer"
+                                disabled={!perm.can_call} />
+                              <span>Своя</span>
+                            </label>
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 text-xs text-gray-500 space-y-1">
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-emerald-500 flex-shrink-0"/><span><strong>Звонок</strong> — разрешить аудио звонок от этой роли к другой</span></div>
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-blue-500 flex-shrink-0"/><span><strong>Видео</strong> — разрешить видео звонок (требует аудио)</span></div>
+            <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-amber-500 flex-shrink-0"/><span><strong>Своя клиника</strong> — звонить можно только сотрудникам одной клиники</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Мой статус ─── */}
+      {tab === 'presence' && (
+        <div className="space-y-4 max-w-md">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
+            <h3 className="font-bold text-gray-900 dark:text-white">Статус присутствия</h3>
+            <p className="text-xs text-gray-500">Видят все сотрудники вашего тенанта. Влияет на доступность для звонков.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {STATUS_OPTIONS.map(s => (
+                <button key={s.value} onClick={() => updateStatus(s.value)}
+                  className={`flex items-center gap-2 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
+                    myStatus === s.value ? `${s.bg} border-current` : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'
+                  }`} style={myStatus === s.value ? {color: s.color} : {}}>
+                  <span className="material-symbols-outlined text-base" style={{color: s.color, fontVariationSettings:"'FILL' 1"}}>{s.icon}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1 block">
+                Текст статуса <span className="text-gray-400 font-normal">(необязательно, видит коллеги)</span>
+              </label>
+              <div className="flex gap-2">
+                <input value={statusText} onChange={e => setStatusText(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && updateStatusText()}
+                  placeholder="Например: На обеде, вернусь в 14:00"
+                  maxLength={100}
+                  className="flex-1 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-[#0097A7] outline-none" />
+                <button onClick={updateStatusText} disabled={saving}
+                  className="px-4 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition disabled:opacity-50">
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/30 rounded-2xl p-4 text-xs text-amber-800 dark:text-amber-300">
+            <strong>Автоматические переходы:</strong>
+            <ul className="list-disc ml-4 mt-1 space-y-0.5">
+              <li>Принял звонок → <strong>Занят</strong> на время разговора</li>
+              <li>Статус "Не на месте" или "Занят" → входящие звонки отклоняются автоматически</li>
+              <li>Нет активности 30 мин → переход в <strong>Не в системе</strong></li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Уведомления ─── */}
+      {tab === 'notifications' && (
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 font-medium">Настройте какие события и по каким каналам получает каждая роль.</p>
+          {['admin', 'manager', 'partner'].map(role => {
+            const setting = notifSettings.find(s => s.role === role) || { events: {}, channels: {} }
+            const events = setting.events || {}
+            const channels = setting.channels || {}
+            const EVENT_LIST = Object.entries(availableEvents)
+
+            const saveEvents = async (newEvents, newChannels) => {
+              try {
+                await apiFetch('post', '/presence/notification-settings', token, {
+                  role, events: newEvents, channels: newChannels
+                })
+                loadNotifSettings()
+                showMsg('Сохранено')
+              } catch { showMsg('Ошибка', false) }
+            }
+
+            return (
+              <div key={role} className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="material-symbols-outlined text-base text-[#0097A7]">{ROLE_ICONS[role]}</span>
+                  <h3 className="font-bold text-gray-900 dark:text-white">{ROLE_LABELS[role]}</h3>
+                </div>
+                {/* Каналы */}
+                <div className="mb-4">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Каналы доставки</p>
+                  <div className="flex gap-3 flex-wrap">
+                    {[
+                      { key: 'sms', label: 'SMS', icon: 'sms' },
+                      { key: 'telegram', label: 'Telegram', icon: 'telegram' },
+                      { key: 'push', label: 'Push', icon: 'notifications' },
+                      { key: 'email', label: 'Email', icon: 'email' },
+                    ].map(ch => (
+                      <label key={ch.key} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700">
+                        <input type="checkbox" checked={!!channels[ch.key]}
+                          onChange={e => saveEvents(events, { ...channels, [ch.key]: e.target.checked })}
+                          className="w-4 h-4 rounded accent-[#0097A7]" />
+                        <span className="material-symbols-outlined text-base text-[#0097A7]">{ch.icon}</span>
+                        {ch.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {/* События */}
+                {EVENT_LIST.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Уведомлять о событиях</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {EVENT_LIST.map(([key, label]) => (
+                        <label key={key} className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 dark:text-gray-400">
+                          <input type="checkbox" checked={!!events[key]}
+                            onChange={e => saveEvents({ ...events, [key]: e.target.checked }, channels)}
+                            className="w-3.5 h-3.5 rounded accent-[#0097A7]" />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function PluginsSection({ token }) {
   const [tab, setTab] = useState('manage')
@@ -6023,7 +7071,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'home':     return <HomeDashboard token={adminToken} />
+      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
       case 'staff':    return <StaffSection token={adminToken} />
       case 'clinics':  return <ClinicsSection token={adminToken} />
       case 'services': return <ServicesSection token={adminToken} />
@@ -6041,6 +7089,9 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'billing':   return <BillingSection token={adminToken} />
       case 'monitoring': return <MonitoringSection token={adminToken} />
       case 'plugins':   return <PluginsSection token={adminToken} />
+      case 'mis_sync':  return <MisSyncSection token={adminToken} />
+      case 'calls_cfg': return <CallsConfigSection token={adminToken} />
+      case 'push_notify': return <PushSection token={adminToken} />
       default:          return null
     }
   }

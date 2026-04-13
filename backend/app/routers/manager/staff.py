@@ -38,13 +38,14 @@ async def assign_clinic(
         clinic_result = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
         if not clinic_result.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Клиника не найдена")
+    _before_clinic = str(admin.clinic_id) if admin.clinic_id else None
     admin.clinic_id = body.clinic_id
     await audit_service.write_safe(
         db, AuditAction.USER_UPDATED,
         actor_id=current_user.id, actor_name=current_user.full_name,
-        entity_type=user, entity_id=admin.id,
-        before=_before,
-        after={full_name: admin.full_name, role: str(admin.role), is_active: admin.is_active},
+        entity_type="user", entity_id=admin.id,
+        before={"clinic_id": _before_clinic},
+        after={"clinic_id": str(body.clinic_id) if body.clinic_id else None},
     )
     await db.commit()
     await db.refresh(admin)
@@ -77,19 +78,21 @@ async def create_admin(
         full_name=body.full_name, phone_number=body.phone_number,
         date_of_birth=body.date_of_birth, clinic_id=body.clinic_id,
         role=body.role, is_active=True, category=body.category,
+        tenant_id=current_user.tenant_id,
     )
-    if current_user.clinic_id is not None:
+    if current_user.clinic_id is not None and body.clinic_id is None:
         new_user.clinic_id = current_user.clinic_id
     db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
+    await db.flush()
     await audit_service.write_safe(
         db, AuditAction.USER_CREATED,
         actor_id=current_user.id, actor_name=current_user.full_name,
-        entity_type=user, entity_id=new_user.id,
-        after={username: new_user.username, full_name: new_user.full_name, role: str(new_user.role)},
+        entity_type="user", entity_id=new_user.id,
+        after={"username": new_user.username, "full_name": new_user.full_name, "role": str(new_user.role)},
+        tenant_id=current_user.tenant_id,
     )
     await db.commit()
+    await db.refresh(new_user)
     return UserResponse.model_validate(new_user)
 
 
@@ -108,11 +111,16 @@ async def update_admin(
     if current_user.clinic_id is not None and admin.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому сотруднику")
 
-    _before = {full_name: admin.full_name, role: str(admin.role), is_active: admin.is_active, clinic_id: str(admin.clinic_id) if admin.clinic_id else None}
+    _before = {
+        "full_name": admin.full_name,
+        "role": str(admin.role),
+        "is_active": admin.is_active,
+        "clinic_id": str(admin.clinic_id) if admin.clinic_id else None,
+    }
     if body.full_name is not None: admin.full_name = body.full_name
     if body.username is not None: admin.username = body.username
     if body.password: admin.password_hash = hash_password(body.password)
-    if 'phone_number' in body.model_fields_set: admin.phone_number = body.phone_number
+    if "phone_number" in body.model_fields_set: admin.phone_number = body.phone_number
     if body.date_of_birth is not None: admin.date_of_birth = body.date_of_birth
     if body.role is not None: admin.role = body.role
     if body.is_active is not None: admin.is_active = body.is_active
@@ -125,6 +133,19 @@ async def update_admin(
         admin.clinic_id = body.clinic_id
     if body.category is not None: admin.category = body.category
 
+    await audit_service.write_safe(
+        db, AuditAction.USER_UPDATED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type="user", entity_id=admin.id,
+        before=_before,
+        after={
+            "full_name": admin.full_name,
+            "role": str(admin.role),
+            "is_active": admin.is_active,
+            "clinic_id": str(admin.clinic_id) if admin.clinic_id else None,
+        },
+        tenant_id=current_user.tenant_id,
+    )
     await db.commit()
     await db.refresh(admin)
     return UserResponse.model_validate(admin)
@@ -148,12 +169,29 @@ async def deactivate_admin(
 
     if hard:
         admin.is_active = False
-        admin.username = None; admin.telegram_id = None; admin.phone_number = None
-        admin.password_hash = None; admin.full_name = "[Удалён]"; admin.clinic_id = None
+        admin.username = None
+        admin.telegram_id = None
+        admin.phone_number = None
+        admin.password_hash = None
+        admin.full_name = "[Удалён]"
+        admin.clinic_id = None
+        await audit_service.write_safe(
+            db, AuditAction.USER_DELETED,
+            actor_id=current_user.id, actor_name=current_user.full_name,
+            entity_type="user", entity_id=admin.id,
+            tenant_id=current_user.tenant_id,
+        )
         await db.commit()
         return {"status": "deleted"}
 
     admin.is_active = False
+    await audit_service.write_safe(
+        db, AuditAction.USER_UPDATED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type="user", entity_id=admin.id,
+        after={"is_active": False, "comment": "деактивирован"},
+        tenant_id=current_user.tenant_id,
+    )
     await db.commit()
     return {"status": "deactivated"}
 
@@ -163,5 +201,7 @@ async def list_managers(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.role == UserRole.MANAGER, User.is_active == True))
+    result = await db.execute(
+        select(User).where(User.role == UserRole.MANAGER, User.is_active == True)
+    )
     return [{"id": str(u.id), "full_name": u.full_name, "username": u.username} for u in result.scalars().all()]

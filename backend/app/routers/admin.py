@@ -385,3 +385,101 @@ async def platform_billing(
         "subscriptions_count": len(subscriptions),
         "subscriptions": subscriptions,
     }
+
+# ── Управление подпиской тенанта (super_admin) ───────────────────────────────
+
+class TenantSubscriptionRequest(BaseModel):
+    plan: str = Field(..., pattern="^(basic|professional|enterprise)$")
+    billing_cycle: str = Field("monthly", pattern="^(monthly|annual)$")
+    trial_days: int = Field(0, ge=0, le=90)
+
+
+@router.post("/tenants/{tenant_id}/subscription")
+async def set_tenant_subscription(
+    tenant_id: uuid.UUID,
+    body: TenantSubscriptionRequest,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Активировать или обновить подписку тенанта. Доступно только super_admin."""
+    from app.models.billing import Subscription, PLAN_PRICES, SubStatus
+    from decimal import Decimal
+    from datetime import timedelta
+
+    # Проверяем что тенант существует
+    tenant_r = await db.execute(select(Tenant).where(Tenant.id == tenant_id))
+    tenant = tenant_r.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    prices = PLAN_PRICES.get(body.plan, {})
+    amount = prices.get("annual" if body.billing_cycle == "annual" else "monthly", Decimal("0"))
+
+    now = datetime.utcnow()
+    if body.billing_cycle == "annual":
+        period_end = now.replace(year=now.year + 1)
+    else:
+        import calendar
+        month = now.month + 1 if now.month < 12 else 1
+        year = now.year if now.month < 12 else now.year + 1
+        day = min(now.day, calendar.monthrange(year, month)[1])
+        period_end = now.replace(year=year, month=month, day=day)
+
+    trial_end = (now + timedelta(days=body.trial_days)) if body.trial_days > 0 else None
+    sub_status = SubStatus.TRIAL if body.trial_days > 0 else SubStatus.ACTIVE
+
+    # Ищем существующую подписку
+    existing_r = await db.execute(
+        select(Subscription).where(Subscription.tenant_id == tenant_id)
+        .order_by(Subscription.created_at.desc()).limit(1)
+    )
+    existing = existing_r.scalar_one_or_none()
+
+    if existing:
+        existing.plan = body.plan
+        existing.billing_cycle = body.billing_cycle
+        existing.amount_per_period = amount
+        existing.status = sub_status
+        existing.trial_ends_at = trial_end
+        existing.current_period_start = now
+        existing.current_period_end = period_end
+        existing.next_invoice_date = period_end
+        existing.auto_renew = True
+        existing.cancelled_at = None
+        sub = existing
+    else:
+        sub = Subscription(
+            tenant_id=tenant_id,
+            plan=body.plan,
+            billing_cycle=body.billing_cycle,
+            status=sub_status,
+            amount_per_period=amount,
+            trial_ends_at=trial_end,
+            current_period_start=now,
+            current_period_end=period_end,
+            next_invoice_date=period_end,
+            auto_renew=True,
+        )
+        db.add(sub)
+
+    # Обновляем план в tenant_licenses тоже
+    tl_r = await db.execute(select(TenantLicense).where(TenantLicense.tenant_id == tenant_id))
+    tl = tl_r.scalar_one_or_none()
+    if tl:
+        tl.plan = body.plan
+    else:
+        db.add(TenantLicense(tenant_id=tenant_id, plan=body.plan))
+
+    await db.commit()
+    await db.refresh(sub)
+
+    return {
+        "status": "ok",
+        "subscription_id": str(sub.id),
+        "plan": sub.plan,
+        "billing_status": sub.status,
+        "trial_ends_at": sub.trial_ends_at.isoformat() if sub.trial_ends_at else None,
+        "period_end": sub.current_period_end.isoformat(),
+        "amount_per_period": float(sub.amount_per_period),
+    }
+

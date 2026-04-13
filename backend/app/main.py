@@ -19,9 +19,12 @@ from app.routers.audit import router as audit_router
 from app.routers.billing import router as billing_router
 from app.routers.consent import router as consent_router
 from app.routers.admin import router as admin_router
+from app.routers.mis_sync import router as mis_router
+from app.routers.presence import router as presence_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
+from app.routers.push import router as push_router
 from app.routers.system import router as system_router, heartbeat_loop
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -289,6 +292,9 @@ app.include_router(audit_router)
 app.include_router(billing_router)
 app.include_router(consent_router)
 app.include_router(admin_router)
+app.include_router(mis_router)
+app.include_router(presence_router)
+app.include_router(push_router)
 
 
 @app.get("/health")

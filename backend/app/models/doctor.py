@@ -36,6 +36,8 @@ class Doctor(Base):
     slot_duration: Mapped[int] = mapped_column(Integer, default=30, nullable=False)  # минут
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
+    mis_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True)
 
     clinic: Mapped["Clinic"] = relationship("Clinic")
     schedules: Mapped[list["DoctorSchedule"]] = relationship(

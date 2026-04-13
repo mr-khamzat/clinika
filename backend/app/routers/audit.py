@@ -130,3 +130,75 @@ async def list_audit_actions():
     from app.services.audit_service import AuditAction
     actions = [v for k, v in vars(AuditAction).items() if not k.startswith("_")]
     return sorted(actions)
+
+@router.get("/feed", dependencies=[_mgr])
+async def get_audit_feed(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+):
+    """Объединённый журнал: audit_log + activity_log, сортировка по времени."""
+    from datetime import timedelta
+    from app.models.audit import AuditEntry
+    from app.models.activity_log import ActivityLog
+    from sqlalchemy import text
+
+    d_from = (datetime.utcnow() - timedelta(days=days)).isoformat()
+
+    # audit_log
+    aq = await db.execute(
+        select(AuditEntry)
+        .where(AuditEntry.created_at >= datetime.utcnow() - timedelta(days=days))
+        .order_by(AuditEntry.created_at.desc())
+        .limit(limit)
+    )
+    audit_entries = [
+        {
+            "source": "audit",
+            "id": str(e.id),
+            "action": e.action,
+            "actor_name": e.actor_name,
+            "entity_type": e.entity_type,
+            "entity_id": str(e.entity_id) if e.entity_id else None,
+            "before": e.before,
+            "after": e.after,
+            "ip_address": e.ip_address,
+            "comment": e.comment,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in aq.scalars().all()
+    ]
+
+    # activity_log
+    lq = await db.execute(
+        select(ActivityLog)
+        .where(ActivityLog.created_at >= datetime.utcnow() - timedelta(days=days))
+        .order_by(ActivityLog.created_at.desc())
+        .limit(limit)
+    )
+    activity_entries = [
+        {
+            "source": "activity",
+            "id": str(e.id),
+            "action": e.action,
+            "actor_name": e.user_name,
+            "entity_type": e.entity_type,
+            "entity_id": str(e.entity_id) if e.entity_id else None,
+            "before": None,
+            "after": None,
+            "ip_address": None,
+            "comment": None,
+            "created_at": e.created_at.isoformat(),
+        }
+        for e in lq.scalars().all()
+    ]
+
+    # Merge & sort
+    all_entries = sorted(
+        audit_entries + activity_entries,
+        key=lambda x: x["created_at"],
+        reverse=True
+    )[:limit]
+
+    return {"total": len(all_entries), "items": all_entries}
+

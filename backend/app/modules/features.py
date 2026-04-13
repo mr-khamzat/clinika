@@ -24,14 +24,18 @@ _PLAN_BASE: dict[str, set[str]] = {
         "partner_portal",   # Портал партнёров
         "custom_branding",  # Кастомный брендинг
         "sms_notify",       # SMS-уведомления
+        "scheduling",       # Расписание врачей + слоты
+        "audit_log",        # Полный аудит лог
+        "financial_ledger", # Финансовый реестр операций
+        "billing",          # Биллинг и счета
     },
     "enterprise": {
-        "scheduling",       # Расписание врачей + слоты
-        "billing",          # Биллинг и счета
-        "audit_log",        # Полный аудит лог
+        "billing",          # (наследуется из professional)
         "multi_tenant",     # Управление несколькими тенантами
         "api_access",       # Внешний API доступ
-        "financial_ledger", # Финансовый реестр операций
+        "white_label",      # Полный white-label (свой домен)
+        "unlimited_users",  # Безлимитные пользователи
+        "p2p_calls",        # P2P звонки
     },
 }
 
@@ -63,6 +67,9 @@ FEATURE_LABELS: dict[str, str] = {
     "multi_tenant":     "Мульти-тенант управление",
     "api_access":       "API доступ",
     "financial_ledger": "Финансовый реестр",
+    "white_label":      "Полный white-label",
+    "unlimited_users":  "Безлимитные пользователи",
+    "p2p_calls":        "P2P звонки",
 }
 
 # Минимальный план для каждой фичи (для подсказок UI)

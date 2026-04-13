@@ -11,6 +11,7 @@ class UserRole(str, enum.Enum):
     MANAGER = "manager"
     PARTNER = "partner"
     SUPER_ADMIN = "super_admin"
+    DOCTOR = "doctor"
 
 class User(Base):
     __tablename__ = "users"

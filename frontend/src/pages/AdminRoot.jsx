@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
+import DoctorLayout from './DoctorLayout'
 
 export default function AdminRoot() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token'))
@@ -51,8 +52,14 @@ export default function AdminRoot() {
     return <AdminLogin />
   }
 
-  // Панель управления доступна только системному администратору (role=manager)
-  if (!user.is_superadmin) {
+  // Врач → личный кабинет врача
+  if (user.role === 'doctor') {
+    return <DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // Менеджер, администратор, партнёр, super_admin → панель управления
+  const allowedRoles = ['super_admin', 'manager', 'admin', 'partner']
+  if (!allowedRoles.includes(user.role)) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4"
         style={{ background: 'linear-gradient(135deg, #004D5F 0%, #00A7AA 100%)' }}>
@@ -60,7 +67,7 @@ export default function AdminRoot() {
           <div className="text-5xl mb-4">🚫</div>
           <h1 className="text-xl font-bold text-gray-800 mb-2">Нет доступа</h1>
           <p className="text-gray-500 text-sm mb-6">
-            Панель управления доступна только системному администратору.
+            Панель управления недоступна для вашей роли.
           </p>
           <button
             onClick={handleLogout}

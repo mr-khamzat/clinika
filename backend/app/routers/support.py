@@ -427,3 +427,79 @@ async def bot_reply(
     await db.commit()
 
     return {"ok": True, "user_name": user.full_name}
+
+
+# ─── Patient Support (public, no auth required) ───
+
+class PatientSendRequest(BaseModel):
+    phone: str
+    text: str
+
+
+@router.get("/patient/thread")
+async def get_patient_thread(
+    phone: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get patient support messages by phone."""
+    from sqlalchemy import text as sa_text
+    from app.utils.phone import normalize_phone
+    normalized = normalize_phone(phone)
+    rows = (await db.execute(
+        sa_text("SELECT id, text, sender, staff_name, created_at FROM patient_support_messages WHERE patient_phone = :phone ORDER BY created_at ASC LIMIT 100"),
+        {"phone": normalized}
+    )).fetchall()
+    return [
+        {"id": r[0], "text": r[1], "sender": r[2], "staff_name": r[3], "created_at": r[4].isoformat() if r[4] else None}
+        for r in rows
+    ]
+
+
+@router.post("/patient/send")
+async def send_patient_message(
+    req: PatientSendRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a support message as patient."""
+    from sqlalchemy import text as sa_text
+    from app.utils.phone import normalize_phone
+    normalized = normalize_phone(req.phone)
+    if not req.text.strip():
+        raise HTTPException(400, "Empty message")
+    await db.execute(
+        sa_text("INSERT INTO patient_support_messages (patient_phone, text, sender) VALUES (:phone, :text, 'patient')"),
+        {"phone": normalized, "text": req.text.strip()}
+    )
+    await db.commit()
+    # Notify admin via Telegram
+    try:
+        tg_text = f"\U0001F4CB Patient support ({normalized}):\n{req.text.strip()[:200]}"
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"https://api.telegram.org/bot{SUPPORT_BOT_TOKEN}/sendMessage",
+                json={"chat_id": ADMIN_CHAT_ID, "text": tg_text}
+            )
+    except Exception:
+        pass
+    return {"ok": True}
+
+
+@router.post("/patient/admin-reply")
+async def admin_reply_patient(
+    body: dict,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin replies to patient support message."""
+    from sqlalchemy import text as sa_text
+    from app.utils.phone import normalize_phone
+    phone = normalize_phone(body.get("phone", ""))
+    text = body.get("text", "").strip()
+    if not phone or not text:
+        raise HTTPException(400, "phone and text required")
+    await db.execute(
+        sa_text("INSERT INTO patient_support_messages (patient_phone, text, sender, staff_name) VALUES (:phone, :text, 'staff', :name)"),
+        {"phone": phone, "text": text, "name": current_user.full_name}
+    )
+    await db.commit()
+    return {"ok": True}

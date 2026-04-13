@@ -1,0 +1,542 @@
+"""
+Роутер присутствия и звонков.
+WebSocket для real-time + REST для статусов и настроек.
+"""
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime, timedelta
+import uuid
+import json
+import asyncio
+
+from app.database import get_db
+from app.core.deps import get_current_user
+from app.models.user import User, UserRole
+from app.models.presence import UserPresence, PresenceStatus, CallPermission, NotificationSetting, CallLog
+
+router = APIRouter(prefix="/presence", tags=["presence"])
+
+
+# ── WebSocket менеджер ────────────────────────────────────────────────────────
+
+class PresenceManager:
+    """Держит активные WebSocket соединения и рассылает обновления присутствия."""
+
+    def __init__(self):
+        # {user_id: websocket}
+        self.connections: dict[str, WebSocket] = {}
+        # {tenant_id: set of user_ids}
+        self.tenant_users: dict[str, set] = {}
+
+    async def connect(self, ws: WebSocket, user_id: str, tenant_id: str | None):
+        await ws.accept()
+        self.connections[user_id] = ws
+        tid = tenant_id or "__global__"
+        self.tenant_users.setdefault(tid, set()).add(user_id)
+
+    def disconnect(self, user_id: str, tenant_id: str | None):
+        self.connections.pop(user_id, None)
+        tid = tenant_id or "__global__"
+        if tid in self.tenant_users:
+            self.tenant_users[tid].discard(user_id)
+
+    async def broadcast_to_tenant(self, tenant_id: str | None, message: dict, exclude_user: str | None = None):
+        """Разослать всем в тенанте (кроме себя)."""
+        tid = tenant_id or "__global__"
+        dead = []
+        for uid in self.tenant_users.get(tid, set()):
+            if uid == exclude_user:
+                continue
+            ws = self.connections.get(uid)
+            if ws:
+                try:
+                    await ws.send_json(message)
+                except Exception:
+                    dead.append(uid)
+        for uid in dead:
+            self.connections.pop(uid, None)
+            self.tenant_users[tid].discard(uid)
+
+    async def send_to_user(self, user_id: str, message: dict) -> bool:
+        """Отправить одному пользователю. Возвращает True если доставлено."""
+        ws = self.connections.get(user_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+                return True
+            except Exception:
+                self.connections.pop(user_id, None)
+        return False
+
+    def is_online(self, user_id: str) -> bool:
+        return user_id in self.connections
+
+
+presence_manager = PresenceManager()
+
+
+# ── REST: статус присутствия ──────────────────────────────────────────────────
+
+class UpdatePresenceRequest(BaseModel):
+    status: PresenceStatus
+    status_text: Optional[str] = None
+
+
+@router.get("/status")
+async def get_my_presence(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Мой текущий статус присутствия."""
+    p = (await db.execute(
+        select(UserPresence).where(UserPresence.user_id == current_user.id)
+    )).scalar_one_or_none()
+    if not p:
+        return {"status": "offline", "status_text": None}
+    return {
+        "status": p.status,
+        "status_text": p.status_text,
+        "last_seen_at": p.last_seen_at.isoformat(),
+    }
+
+
+@router.put("/status")
+async def update_my_presence(
+    body: UpdatePresenceRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Обновить свой статус присутствия."""
+    p = (await db.execute(
+        select(UserPresence).where(UserPresence.user_id == current_user.id)
+    )).scalar_one_or_none()
+
+    now = datetime.utcnow()
+    if p:
+        p.status = body.status
+        p.status_text = body.status_text
+        p.last_seen_at = now
+    else:
+        p = UserPresence(
+            user_id=current_user.id,
+            status=body.status,
+            status_text=body.status_text,
+            last_seen_at=now,
+        )
+        db.add(p)
+    await db.commit()
+
+    # Broadcast обновление всем в тенанте
+    tenant_id_str = str(current_user.tenant_id) if current_user.tenant_id else None
+    await presence_manager.broadcast_to_tenant(
+        tenant_id_str,
+        {
+            "type": "presence_update",
+            "user_id": str(current_user.id),
+            "status": body.status,
+            "status_text": body.status_text,
+        },
+        exclude_user=str(current_user.id),
+    )
+
+    return {"ok": True, "status": body.status}
+
+
+@router.get("/users")
+async def get_all_presence(
+    clinic_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Статус присутствия всех видимых пользователей.
+    Врач видит только свою клинику, менеджер — всех.
+    """
+    from app.models.user import User as UserModel
+    from sqlalchemy import and_
+
+    q = select(UserModel, UserPresence).outerjoin(
+        UserPresence, UserPresence.user_id == UserModel.id
+    )
+
+    # Тенант-фильтр
+    if current_user.tenant_id:
+        q = q.where(UserModel.tenant_id == current_user.tenant_id)
+
+    # Врач видит только свою клинику
+    if current_user.role == UserRole.ADMIN and current_user.clinic_id:
+        q = q.where(UserModel.clinic_id == current_user.clinic_id)
+    elif clinic_id:
+        try:
+            q = q.where(UserModel.clinic_id == uuid.UUID(clinic_id))
+        except ValueError:
+            pass
+
+    rows = (await db.execute(q)).all()
+
+    # Авто-offline если не было активности 5 мин
+    cutoff = datetime.utcnow() - timedelta(minutes=5)
+
+    result = []
+    for user, presence in rows:
+        if user.id == current_user.id:
+            continue  # себя не показываем (фронт знает)
+
+        # WebSocket онлайн?
+        ws_online = presence_manager.is_online(str(user.id))
+        status = "offline"
+        status_text = None
+        last_seen = None
+
+        if presence:
+            last_seen = presence.last_seen_at
+            if ws_online and presence.last_seen_at > cutoff:
+                status = presence.status
+                status_text = presence.status_text
+            else:
+                status = "offline"
+
+        result.append({
+            "user_id": str(user.id),
+            "full_name": user.full_name,
+            "role": user.role,
+            "clinic_id": str(user.clinic_id) if user.clinic_id else None,
+            "status": status,
+            "status_text": status_text,
+            "last_seen_at": last_seen.isoformat() if last_seen else None,
+            "ws_online": ws_online,
+        })
+
+    return {"users": result}
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+
+@router.websocket("/ws/{user_id}")
+async def presence_ws(
+    ws: WebSocket,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    WebSocket для real-time присутствия и сигнализации звонков.
+    Протокол:
+      CLIENT → SERVER: {"type": "heartbeat"} | {"type": "call_invite", "callee_id": "...", "call_type": "audio"}
+      SERVER → CLIENT: {"type": "presence_update", ...} | {"type": "call_invite", ...} | {"type": "call_response", ...}
+    """
+    # Простая авторизация по user_id
+    try:
+        uid = uuid.UUID(user_id)
+    except ValueError:
+        await ws.close(code=4001)
+        return
+
+    user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
+    if not user:
+        await ws.close(code=4004)
+        return
+
+    tenant_id_str = str(user.tenant_id) if user.tenant_id else None
+
+    # Подключаем
+    await presence_manager.connect(ws, user_id, tenant_id_str)
+
+    # Обновляем статус → online
+    p = (await db.execute(select(UserPresence).where(UserPresence.user_id == uid))).scalar_one_or_none()
+    if p:
+        if p.status == PresenceStatus.OFFLINE:
+            p.status = PresenceStatus.ONLINE
+        p.last_seen_at = datetime.utcnow()
+    else:
+        p = UserPresence(user_id=uid, status=PresenceStatus.ONLINE)
+        db.add(p)
+    await db.commit()
+
+    await presence_manager.broadcast_to_tenant(
+        tenant_id_str,
+        {"type": "presence_update", "user_id": user_id, "status": "online"},
+        exclude_user=user_id,
+    )
+
+    try:
+        while True:
+            data = await ws.receive_json()
+            msg_type = data.get("type")
+
+            if msg_type == "heartbeat":
+                # Обновляем last_seen
+                await db.execute(
+                    update(UserPresence)
+                    .where(UserPresence.user_id == uid)
+                    .values(last_seen_at=datetime.utcnow())
+                )
+                await db.commit()
+                await ws.send_json({"type": "pong"})
+
+            elif msg_type == "call_invite":
+                # Инициация звонка
+                callee_id = data.get("callee_id")
+                call_type = data.get("call_type", "audio")
+
+                if not callee_id:
+                    await ws.send_json({"type": "error", "msg": "callee_id required"})
+                    continue
+
+                # Проверяем статус вызываемого
+                callee_presence = (await db.execute(
+                    select(UserPresence).where(UserPresence.user_id == uuid.UUID(callee_id))
+                )).scalar_one_or_none()
+
+                callee_ws_online = presence_manager.is_online(callee_id)
+
+                if not callee_ws_online:
+                    await ws.send_json({
+                        "type": "call_failed",
+                        "reason": "offline",
+                        "callee_id": callee_id,
+                    })
+                    continue
+
+                if callee_presence and callee_presence.status == PresenceStatus.BUSY:
+                    await ws.send_json({
+                        "type": "call_failed",
+                        "reason": "busy",
+                        "callee_id": callee_id,
+                        "status_text": callee_presence.status_text,
+                    })
+                    continue
+
+                if callee_presence and callee_presence.status == PresenceStatus.AWAY:
+                    await ws.send_json({
+                        "type": "call_failed",
+                        "reason": "away",
+                        "callee_id": callee_id,
+                        "status_text": callee_presence.status_text or "Не на месте",
+                    })
+                    continue
+
+                # Отправляем вызов
+                delivered = await presence_manager.send_to_user(callee_id, {
+                    "type": "call_invite",
+                    "caller_id": user_id,
+                    "caller_name": user.full_name,
+                    "call_type": call_type,
+                })
+
+                if not delivered:
+                    await ws.send_json({
+                        "type": "call_failed",
+                        "reason": "offline",
+                        "callee_id": callee_id,
+                    })
+                else:
+                    await ws.send_json({
+                        "type": "call_ringing",
+                        "callee_id": callee_id,
+                    })
+
+            elif msg_type in ("call_accept", "call_reject", "call_end", "call_busy"):
+                # Ответ на звонок — пересылаем инициатору
+                target_id = data.get("caller_id") or data.get("target_id")
+                if target_id:
+                    await presence_manager.send_to_user(target_id, {
+                        **data,
+                        "from_id": user_id,
+                    })
+                # Если accepted → оба BUSY
+                if msg_type == "call_accept":
+                    await db.execute(
+                        update(UserPresence)
+                        .where(UserPresence.user_id.in_([uid, uuid.UUID(target_id)]))
+                        .values(status=PresenceStatus.BUSY)
+                    )
+                    await db.commit()
+                elif msg_type in ("call_end", "call_reject"):
+                    # Возврат в ONLINE
+                    await db.execute(
+                        update(UserPresence)
+                        .where(UserPresence.user_id.in_([uid, uuid.UUID(target_id)] if target_id else [uid]))
+                        .values(status=PresenceStatus.ONLINE)
+                    )
+                    await db.commit()
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        presence_manager.disconnect(user_id, tenant_id_str)
+        # → offline
+        await db.execute(
+            update(UserPresence)
+            .where(UserPresence.user_id == uid)
+            .values(status=PresenceStatus.OFFLINE, last_seen_at=datetime.utcnow())
+        )
+        await db.commit()
+        await presence_manager.broadcast_to_tenant(
+            tenant_id_str,
+            {"type": "presence_update", "user_id": user_id, "status": "offline"},
+        )
+
+
+# ── Настройки звонков (матрица ролей) ────────────────────────────────────────
+
+class UpsertCallPermissionRequest(BaseModel):
+    from_role: str
+    to_role: str
+    can_call: bool = True
+    can_video: bool = False
+    same_clinic_only: bool = False
+
+
+@router.get("/call-permissions")
+async def get_call_permissions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Матрица разрешений на звонки."""
+    perms = (await db.execute(
+        select(CallPermission).where(
+            CallPermission.tenant_id == current_user.tenant_id
+        )
+    )).scalars().all()
+
+    return {
+        "permissions": [
+            {
+                "id": str(p.id),
+                "from_role": p.from_role,
+                "to_role": p.to_role,
+                "can_call": p.can_call,
+                "can_video": p.can_video,
+                "same_clinic_only": p.same_clinic_only,
+            }
+            for p in perms
+        ]
+    }
+
+
+@router.post("/call-permissions")
+async def upsert_call_permission(
+    body: UpsertCallPermissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Установить/обновить разрешение на звонок."""
+    if current_user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN):
+        raise HTTPException(403, "Только менеджер")
+
+    existing = (await db.execute(
+        select(CallPermission).where(
+            CallPermission.tenant_id == current_user.tenant_id,
+            CallPermission.from_role == body.from_role,
+            CallPermission.to_role == body.to_role,
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.can_call = body.can_call
+        existing.can_video = body.can_video
+        existing.same_clinic_only = body.same_clinic_only
+    else:
+        perm = CallPermission(
+            tenant_id=current_user.tenant_id,
+            from_role=body.from_role,
+            to_role=body.to_role,
+            can_call=body.can_call,
+            can_video=body.can_video,
+            same_clinic_only=body.same_clinic_only,
+        )
+        db.add(perm)
+
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Настройки уведомлений ─────────────────────────────────────────────────────
+
+# Все события системы
+NOTIFICATION_EVENTS = {
+    "referral_created": "Новое направление создано",
+    "referral_confirmed": "Направление подтверждено",
+    "referral_paid": "Бонус выплачен",
+    "referral_cancelled": "Направление отменено",
+    "appointment_created": "Запись к врачу создана",
+    "appointment_confirmed": "Запись подтверждена клиникой",
+    "appointment_cancelled": "Запись отменена",
+    "appointment_reminder": "Напоминание о записи (за 24ч)",
+    "new_user_registered": "Новый сотрудник зарегистрирован",
+    "patient_arrived": "Пациент прибыл (МИС webhook)",
+    "ledger_adjusted": "Ручная корректировка реестра",
+    "billing_invoice": "Новый счёт выставлен",
+}
+
+
+@router.get("/notification-settings")
+async def get_notification_settings(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Настройки уведомлений per-role для тенанта."""
+    settings = (await db.execute(
+        select(NotificationSetting).where(
+            NotificationSetting.tenant_id == current_user.tenant_id
+        )
+    )).scalars().all()
+
+    by_role = {s.role: s for s in settings}
+    roles = ["admin", "manager", "partner"]
+
+    result = []
+    for role in roles:
+        s = by_role.get(role)
+        result.append({
+            "role": role,
+            "events": s.events if s else {},
+            "channels": s.channels if s else {"sms": False, "telegram": True},
+        })
+
+    return {
+        "settings": result,
+        "available_events": NOTIFICATION_EVENTS,
+    }
+
+
+class UpsertNotificationSettingRequest(BaseModel):
+    role: str
+    events: dict  # {event_key: bool}
+    channels: dict  # {channel: bool}
+
+
+@router.post("/notification-settings")
+async def upsert_notification_setting(
+    body: UpsertNotificationSettingRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сохранить настройки уведомлений для роли."""
+    if current_user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN):
+        raise HTTPException(403, "Только менеджер")
+
+    existing = (await db.execute(
+        select(NotificationSetting).where(
+            NotificationSetting.tenant_id == current_user.tenant_id,
+            NotificationSetting.role == body.role,
+        )
+    )).scalar_one_or_none()
+
+    if existing:
+        existing.events = body.events
+        existing.channels = body.channels
+    else:
+        ns = NotificationSetting(
+            tenant_id=current_user.tenant_id,
+            role=body.role,
+            events=body.events,
+            channels=body.channels,
+        )
+        db.add(ns)
+
+    await db.commit()
+    return {"ok": True}

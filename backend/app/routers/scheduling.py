@@ -287,3 +287,29 @@ async def update_appointment_status(
     appt.updated_at = datetime.utcnow()
     await db.commit()
     return {"id": str(appt.id), "status": appt.status}
+
+
+@router.get("/my-doctor")
+async def get_my_doctor(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Получить запись Doctor, привязанную к текущему пользователю (роль doctor)."""
+    from app.models.clinic import Clinic
+    result = await db.execute(select(Doctor).where(Doctor.user_id == current_user.id))
+    doctor = result.scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(404, "Профиль врача не найден")
+    clinic = None
+    if doctor.clinic_id:
+        clinic = (await db.execute(select(Clinic).where(Clinic.id == doctor.clinic_id))).scalar_one_or_none()
+    return {
+        "id": str(doctor.id),
+        "full_name": doctor.full_name,
+        "specialty": doctor.specialty,
+        "clinic_id": str(doctor.clinic_id) if doctor.clinic_id else None,
+        "clinic_name": clinic.name if clinic else None,
+        "mis_id": doctor.mis_id,
+        "user_id": str(current_user.id),
+        "username": current_user.username,
+    }

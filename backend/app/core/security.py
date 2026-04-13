@@ -120,3 +120,11 @@ def verify_telegram_init_data(init_data: str) -> bool:
         return hmac.compare_digest(computed, check_hash)
     except Exception:
         return False
+
+
+def decode_patient_token(token: str) -> dict:
+    """Декодировать patient_token и вернуть payload."""
+    try:
+        return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+    except JWTError as e:
+        raise ValueError(f'Invalid patient token: {e}')

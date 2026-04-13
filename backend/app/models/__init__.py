@@ -20,6 +20,7 @@ from app.models.billing import Subscription, Invoice, Payment
 from app.models.refresh_token import RefreshToken
 from app.models.consent import ConsentRecord
 from app.models.plugin import PluginCatalog, PluginFeature, TenantPluginFeature, BillingEvent, ClinicVisibility
+from app.models.presence import UserPresence, CallPermission, NotificationSetting, CallLog, PresenceStatus
 
 __all__ = [
     "User", "UserRole", "Clinic", "ClinicSchedule", "Service",
@@ -32,4 +33,7 @@ __all__ = [
     "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
     "RefreshToken", "ConsentRecord",
     "PluginCatalog", "PluginFeature", "TenantPluginFeature", "BillingEvent", "ClinicVisibility",
+    "UserPresence", "CallPermission", "NotificationSetting", "CallLog", "PresenceStatus",
 ]
+
+from app.models.push_subscription import PushSubscription
