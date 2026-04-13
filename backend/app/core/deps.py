@@ -30,8 +30,8 @@ async def get_current_user(
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Только Администраторы — полный доступ (создание направлений, управление персоналом)."""
-    if user.role != UserRole.ADMIN:
+    """Администраторы или super_admin."""
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для администраторов"
@@ -40,8 +40,8 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 
 async def require_manager(user: User = Depends(get_current_user)) -> User:
-    """Только Системный администратор (manager) — панель управления, настройки, отчёты."""
-    if user.role != UserRole.MANAGER:
+    """Системный администратор (manager) или super_admin."""
+    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для системного администратора"
@@ -51,7 +51,7 @@ async def require_manager(user: User = Depends(get_current_user)) -> User:
 
 async def require_reports_access(user: User = Depends(get_current_user)) -> User:
     """Отчёты: доступны и Администраторам клиники, и Системному администратору."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER):
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав"
@@ -61,7 +61,7 @@ async def require_reports_access(user: User = Depends(get_current_user)) -> User
 
 async def require_partner_or_above(user: User = Depends(get_current_user)) -> User:
     """Доступ для партнёров, администраторов и системного администратора."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.PARTNER):
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.PARTNER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав"
@@ -70,8 +70,11 @@ async def require_partner_or_above(user: User = Depends(get_current_user)) -> Us
 
 
 async def require_super_admin(user: User = Depends(get_current_user)) -> User:
-    """Только super_admin — владелец платформы."""
-    if user.role != UserRole.SUPER_ADMIN:
+    """Только super_admin — владелец платформы (по роли ИЛИ по username суперадмина)."""
+    from app.config import settings
+    is_sa = (user.role == UserRole.SUPER_ADMIN or
+             (user.username and user.username == settings.superadmin_username))
+    if not is_sa:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для super_admin"

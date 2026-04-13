@@ -47,9 +47,16 @@ def require_feature(feature_name: str):
         tenant: Tenant | None = Depends(get_current_tenant),
         license: TenantLicense | None = Depends(get_tenant_license),
         db: AsyncSession = Depends(get_db),
+        current_user: "User" = Depends(get_current_user),
     ):
         from app.modules import has_feature
+        from app.models.user import UserRole
+        from app.config import settings
         from sqlalchemy import select
+        # SUPER_ADMIN обходит все проверки фич
+        if (current_user.role == UserRole.SUPER_ADMIN or
+                (current_user.username and current_user.username == settings.superadmin_username)):
+            return
         # 1. Явный override через tenant_modules таблицу
         if tenant is not None:
             from app.models.tenant import TenantModule

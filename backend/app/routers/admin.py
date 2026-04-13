@@ -26,7 +26,10 @@ router = APIRouter(prefix="/admin", tags=["super-admin"])
 # ── Зависимость: только super_admin ──────────────────────────────────────────
 
 async def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role != UserRole.SUPER_ADMIN:
+    from app.config import settings
+    is_sa = (current_user.role == UserRole.SUPER_ADMIN or
+             (current_user.username and current_user.username == settings.superadmin_username))
+    if not is_sa:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Только для super_admin")
     return current_user
 
