@@ -1,4 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react'
+
+// ── Лениво загружаемые секции (каждая в своём файле) ──────────────────────
+// Добавляй новые секции здесь, не трогая существующий код
+const PlatformSection = lazy(() => import('../sections/PlatformSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -49,6 +53,15 @@ function SupportAdminWrapper({ token }) {
   )
 }
 
+
+// Fallback для Suspense — показывается пока секция грузится
+function SectionLoader() {
+  return (
+    <div className="flex items-center justify-center h-48">
+      <div className="w-8 h-8 border-4 border-[#0097A7] border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
 const NAV = [
   { key: 'home',       label: 'Главная',    icon: 'dashboard' },
@@ -7027,7 +7040,7 @@ function PluginsSection({ token }) {
 // ---------------------------------------------------------------------------
 
 export default function AdminLayout({ adminToken, user, onLogout }) {
-  const [activeSection, setActiveSection] = useState(user?.role === 'super_admin' ? 'super_admin' : 'home')
+  const [activeSection, setActiveSection] = useState((user?.is_superadmin || user?.role === 'super_admin') ? 'super_admin' : 'home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
   const [helpOpen, setHelpOpen] = useState(false)
@@ -7092,6 +7105,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'mis_sync':  return <MisSyncSection token={adminToken} />
       case 'calls_cfg': return <CallsConfigSection token={adminToken} />
       case 'push_notify': return <PushSection token={adminToken} />
+      case 'super_admin': return (
+        <Suspense fallback={<SectionLoader />}>
+          <PlatformSection token={adminToken} />
+        </Suspense>
+      )
       default:          return null
     }
   }
@@ -7130,8 +7148,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         {/* Навигация */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
           {NAV.filter(item => {
-            if (item.superAdminOnly) return user?.role === 'super_admin'
-            return user?.role !== 'super_admin'
+            // superAdminOnly: только платформенный суперадмин или super_admin тенант
+            if (item.superAdminOnly) return user?.is_superadmin || user?.role === 'super_admin'
+            // Обычные разделы: все кто в AdminLayout (менеджеры, администраторы, партнёры)
+            return true
           }).map(item => {
             const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key

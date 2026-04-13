@@ -13,7 +13,10 @@
     "react-router-dom": "^6.24.0",
     "axios": "^1.7.2",
     "html5-qrcode": "^2.3.8",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "material-symbols": "^0.24.0",
+    "@fontsource/inter": "^5.0.0",
+    "@fontsource/manrope": "^5.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

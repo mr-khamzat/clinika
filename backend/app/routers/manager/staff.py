@@ -19,6 +19,7 @@ from app.schemas.manager import (
     AssignClinicRequest, CreateAdminRequest, UpdateAdminRequest,
 )
 from app.schemas.user import UserResponse
+from app.core.limits import check_plan_limit
 
 router = APIRouter(tags=["manager:staff"])
 
@@ -72,6 +73,8 @@ async def create_admin(
         if not clinic_check.scalar_one_or_none():
             raise HTTPException(status_code=404, detail="Клиника не найдена")
 
+    # Проверяем лимит пользователей по тарифу
+    await check_plan_limit("users", current_user.tenant_id, db)
     new_user = User(
         telegram_id=body.telegram_id or None, username=body.username or None,
         password_hash=hash_password(body.password) if body.password else None,

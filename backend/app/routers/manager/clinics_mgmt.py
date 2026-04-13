@@ -12,6 +12,7 @@ from app.core.deps import require_manager
 from app.models.user import User
 from app.models.clinic import Clinic
 from app.schemas.manager import CreateClinicRequest, UpdateClinicRequest, ClinicResponse
+from app.core.limits import check_plan_limit
 
 router = APIRouter(tags=["manager:clinics"])
 
@@ -51,7 +52,9 @@ async def create_clinic(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    new_clinic = Clinic(name=body.name, address=body.address, phone=body.phone)
+    # Проверяем лимит клиник по тарифу
+    await check_plan_limit("clinics", current_user.tenant_id, db)
+    new_clinic = Clinic(name=body.name, address=body.address, phone=body.phone, tenant_id=current_user.tenant_id)
     db.add(new_clinic)
     await db.commit()
     await db.refresh(new_clinic)
