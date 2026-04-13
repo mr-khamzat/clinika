@@ -11,7 +11,7 @@ from app.models.activity_log import ActivityLog
 from app.models.invitation import Invitation
 from app.models.discount import Discount, DiscountType
 from app.models.support import SupportMessage
-from app.models.tenant import Tenant, TenantLicense, TenantBranding
+from app.models.tenant import Tenant, TenantLicense, TenantBranding, TenantModule, TenantPlugin
 from app.models.city import City
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
 from app.models.ledger import LedgerEntry
@@ -27,7 +27,7 @@ __all__ = [
     "Referral", "ReferralStatus", "ReferralComment",
     "Bonus", "BonusStatus", "BonusType", "SystemSettings",
     "KpiTarget", "ActivityLog", "Invitation", "Discount", "DiscountType",
-    "SupportMessage", "Tenant", "TenantLicense", "TenantBranding",
+    "SupportMessage", "Tenant", "TenantLicense", "TenantBranding", "TenantModule", "TenantPlugin",
     "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
     "RefreshToken", "ConsentRecord",
 ]

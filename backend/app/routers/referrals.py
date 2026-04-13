@@ -142,7 +142,10 @@ async def get_referral(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Referral).where(Referral.id == referral_id))
+    q = select(Referral).where(Referral.id == referral_id)
+    if current_user.tenant_id is not None:
+        q = q.where(Referral.tenant_id == current_user.tenant_id)
+    result = await db.execute(q)
     referral = result.scalar_one_or_none()
     if not referral:
         raise HTTPException(status_code=404, detail="Направление не найдено")

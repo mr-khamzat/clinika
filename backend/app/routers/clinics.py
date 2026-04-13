@@ -20,7 +20,11 @@ async def list_clinics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Clinic).where(Clinic.is_active == True))
+    # Tenant isolation: фильтруем по tenant_id текущего пользователя
+    q = select(Clinic).where(Clinic.is_active == True)
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    result = await db.execute(q)
     return result.scalars().all()
 
 

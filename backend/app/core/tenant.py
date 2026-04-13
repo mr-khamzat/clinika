@@ -41,10 +41,33 @@ async def get_tenant_license(
 def require_feature(feature_name: str):
     """
     FastAPI-зависимость: разрешает запрос только если у тенанта есть данная фича.
-    Использование: @router.get("/...", dependencies=[Depends(require_feature("analytics"))])
+    Приоритет: tenant_modules (override) > license.features JSONB > plan defaults.
     """
-    async def checker(license: TenantLicense | None = Depends(get_tenant_license)):
+    async def checker(
+        tenant: Tenant | None = Depends(get_current_tenant),
+        license: TenantLicense | None = Depends(get_tenant_license),
+        db: AsyncSession = Depends(get_db),
+    ):
         from app.modules import has_feature
+        from sqlalchemy import select
+        # 1. Явный override через tenant_modules таблицу
+        if tenant is not None:
+            from app.models.tenant import TenantModule
+            r = await db.execute(
+                select(TenantModule).where(
+                    TenantModule.tenant_id == tenant.id,
+                    TenantModule.module == feature_name,
+                )
+            )
+            mod = r.scalar_one_or_none()
+            if mod is not None:
+                if not mod.enabled:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Модуль {feature_name} отключён для вашего тенанта",
+                    )
+                return  # явно включён через override
+        # 2. Проверяем через план + license.features JSONB
         if not has_feature(license, feature_name):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

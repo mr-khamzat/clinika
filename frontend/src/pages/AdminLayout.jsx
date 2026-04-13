@@ -5150,15 +5150,379 @@ function SchedulingSection({ token }) {
 
 
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// SuperAdminSection — Панель владельца платформы (role=super_admin)
+// ---------------------------------------------------------------------------
+
+function SuperAdminSection({ token }) {
+  const [tab, setTab] = useState('metrics')
+  const [metrics, setMetrics] = useState(null)
+  const [tenants, setTenants] = useState([])
+  const [billing, setBilling] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    name: '', slug: '', plan: 'basic', admin_name: '', admin_username: '', admin_password: '',
+    primary_color: '#0097A7', sidebar_color: '#004D5F', city: ''
+  })
+  const [createResult, setCreateResult] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [createErr, setCreateErr] = useState('')
+  const [selectedTenant, setSelectedTenant] = useState(null)
+  const [modules, setModules] = useState([])
+
+  const ALL_MODULES = [
+    'referrals','bonuses','clinics','qr_scan','analytics','support','invitations',
+    'discounts','kpi','mis_sync','partner_portal','custom_branding','sms_notify',
+    'scheduling','billing','audit_log','multi_tenant','api_access','financial_ledger'
+  ]
+
+  const load = () => {
+    setLoading(true)
+    Promise.all([
+      apiFetch('get', '/admin/metrics', token),
+      apiFetch('get', '/admin/tenants', token),
+      apiFetch('get', '/admin/billing', token),
+    ]).then(([m, t, b]) => {
+      setMetrics(m.data)
+      setTenants(t.data || [])
+      setBilling(b.data)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const loadTenantModules = async (t) => {
+    setSelectedTenant(t)
+    const r = await apiFetch('get', `/admin/tenants/${t.id}`, token)
+    setModules(r.data.modules || [])
+  }
+
+  const toggleModule = async (module, enabled) => {
+    await apiFetch('put', `/admin/tenants/${selectedTenant.id}/modules`, token, { module, enabled })
+    setModules(prev => {
+      const existing = prev.find(m => m.module === module)
+      if (existing) return prev.map(m => m.module === module ? { ...m, enabled } : m)
+      return [...prev, { module, enabled }]
+    })
+  }
+
+  const getModuleState = (module) => {
+    const m = modules.find(x => x.module === module)
+    return m ? m.enabled : null // null = наследует план
+  }
+
+  const handleCreate = async () => {
+    setCreating(true)
+    setCreateErr('')
+    setCreateResult(null)
+    try {
+      const r = await apiFetch('post', '/tenant/create', token, createForm)
+      setCreateResult(r.data)
+      load()
+    } catch (e) {
+      setCreateErr(e.response?.data?.detail || 'Ошибка создания')
+    }
+    setCreating(false)
+  }
+
+  const toggleTenant = async (t) => {
+    await apiFetch('patch', `/admin/tenants/${t.id}/toggle`, token, { is_active: !t.is_active })
+    setTenants(prev => prev.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x))
+  }
+
+  const statusColors = { trial:'bg-blue-100 text-blue-700', active:'bg-green-100 text-green-700', past_due:'bg-yellow-100 text-yellow-700', cancelled:'bg-red-100 text-red-700', paused:'bg-gray-100 text-gray-600' }
+  const planColors = { basic:'bg-slate-100 text-slate-600', professional:'bg-purple-100 text-purple-700', enterprise:'bg-amber-100 text-amber-700' }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Платформа КлиникаСеть</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление тенантами и подписками</p>
+        </div>
+        <button onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition">
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Новый тенант
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 bg-white dark:bg-gray-900 rounded-xl p-1 shadow-sm border border-gray-100 dark:border-gray-800 w-fit">
+        {[['metrics','Метрики','monitoring'],['tenants','Тенанты','business'],['billing','Биллинг','receipt_long']].map(([key, label, icon]) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition ${tab === key ? 'bg-blue-600 text-white shadow' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400'}`}>
+            <span className="material-symbols-outlined text-[16px]">{icon}</span>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {loading && <div className="text-center py-16 text-gray-400">Загрузка...</div>}
+
+      {/* Tab: Метрики */}
+      {!loading && tab === 'metrics' && metrics && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Тенантов всего', val: metrics.tenants_total, sub: `${metrics.tenants_active} активных`, icon: 'business', color: 'blue' },
+              { label: 'Пользователей', val: metrics.users_total, sub: 'активных', icon: 'group', color: 'green' },
+              { label: 'Клиник', val: metrics.clinics_total, sub: 'всего', icon: 'local_hospital', color: 'purple' },
+              { label: 'Направлений', val: metrics.referrals_total, sub: 'всего', icon: 'send', color: 'orange' },
+            ].map((c, i) => (
+              <div key={i} className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+                  <span className={`material-symbols-outlined text-${c.color}-500 text-[22px]`}>{c.icon}</span>
+                </div>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{c.val}</p>
+                <p className="text-xs text-gray-400 mt-1">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Подписки по статусу */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+              <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Подписки по статусу</h3>
+              {Object.entries(metrics.subscriptions_by_status || {}).map(([s, c]) => (
+                <div key={s} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s] || 'bg-gray-100 text-gray-600'}`}>{s}</span>
+                  <span className="font-bold text-gray-900 dark:text-white">{c}</span>
+                </div>
+              ))}
+            </div>
+            {/* По планам */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+              <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Тенанты по планам</h3>
+              {Object.entries(metrics.tenants_by_plan || {}).map(([p, c]) => (
+                <div key={p} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[p] || 'bg-gray-100 text-gray-600'}`}>{p}</span>
+                  <span className="font-bold text-gray-900 dark:text-white">{c}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Тенанты */}
+      {!loading && tab === 'tenants' && (
+        <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  {['Тенант','Slug','План','Подписка','Клиники','Польз.','Статус','Действия'].map(h => (
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                {tenants.map(t => (
+                  <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white text-sm">{t.name}</td>
+                    <td className="px-4 py-3 text-xs text-gray-500 font-mono">{t.slug}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[t.plan] || 'bg-gray-100'}`}>{t.plan || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[t.subscription_status] || 'bg-gray-100'}`}>{t.subscription_status || '—'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {t.is_active ? 'Активен' : 'Откл.'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => loadTenantModules(t)}
+                          className="text-xs text-blue-600 hover:underline">Модули</button>
+                        <button onClick={() => toggleTenant(t)}
+                          className={`text-xs ${t.is_active ? 'text-red-500 hover:underline' : 'text-green-600 hover:underline'}`}>
+                          {t.is_active ? 'Откл.' : 'Вкл.'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Биллинг */}
+      {!loading && tab === 'billing' && billing && (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">MRR (Monthly Recurring Revenue)</p>
+            <p className="text-4xl font-bold text-green-600">{billing.mrr.toLocaleString('ru-RU')} ₽</p>
+            <p className="text-xs text-gray-400 mt-1">{billing.subscriptions_count} подписок</p>
+          </div>
+          <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-800">
+                  <tr>
+                    {['Тенант','План','Статус','Сумма/период','Конец периода','Trial до','Создан'].map(h => (
+                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                  {billing.subscriptions.map(s => (
+                    <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-3 py-3 font-medium text-gray-900 dark:text-white text-sm">{s.tenant_name}</td>
+                      <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[s.plan] || ''}`}>{s.plan}</span></td>
+                      <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s.status] || ''}`}>{s.status}</span></td>
+                      <td className="px-3 py-3 text-sm font-mono">{s.amount_per_period.toLocaleString('ru-RU')} ₽</td>
+                      <td className="px-3 py-3 text-sm text-gray-500">{s.current_period_end}</td>
+                      <td className="px-3 py-3 text-sm text-gray-500">{s.trial_ends_at ? s.trial_ends_at.slice(0,10) : '—'}</td>
+                      <td className="px-3 py-3 text-xs text-gray-400">{s.created_at.slice(0,10)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Управление модулями тенанта */}
+      {selectedTenant && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+              <div>
+                <h3 className="font-bold text-gray-900 dark:text-white">Модули: {selectedTenant.name}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Plan: {selectedTenant.plan} | Переопределяет план тенанта</p>
+              </div>
+              <button onClick={() => setSelectedTenant(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-5 space-y-2">
+              {ALL_MODULES.map(mod => {
+                const state = getModuleState(mod)
+                return (
+                  <div key={mod} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                    <div>
+                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{mod}</span>
+                      {state === null && <span className="ml-2 text-xs text-gray-400">(из плана)</span>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => toggleModule(mod, true)}
+                        className={`px-2 py-1 rounded text-xs font-medium transition ${state === true ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-green-100'}`}>ВКЛ</button>
+                      <button onClick={() => toggleModule(mod, false)}
+                        className={`px-2 py-1 rounded text-xs font-medium transition ${state === false ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-red-100'}`}>ВЫКЛ</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Создание тенанта */}
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="font-bold text-gray-900 dark:text-white">Новый тенант</h3>
+              <button onClick={() => { setShowCreate(false); setCreateResult(null); setCreateErr('') }}
+                className="text-gray-400 hover:text-gray-700"><span className="material-symbols-outlined">close</span></button>
+            </div>
+
+            {createResult ? (
+              <div className="p-5 space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <p className="text-green-800 font-bold text-sm mb-3">Тенант создан!</p>
+                  {[
+                    ['URL', createResult.url],
+                    ['Логин', createResult.admin_username],
+                    ['Пароль', createResult.admin_password],
+                    ['Trial до', createResult.trial_until],
+                    ['План', createResult.plan],
+                  ].map(([k, v]) => (
+                    <div key={k} className="flex items-center justify-between py-1.5 border-b border-green-100 last:border-0">
+                      <span className="text-xs text-green-600">{k}</span>
+                      <span className="text-sm font-mono font-semibold text-green-800">{v}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => { setShowCreate(false); setCreateResult(null) }}
+                  className="w-full bg-blue-600 text-white rounded-xl py-2.5 font-medium hover:bg-blue-700 transition">Закрыть</button>
+              </div>
+            ) : (
+              <div className="p-5 space-y-3">
+                {[
+                  ['Название организации', 'name', 'text', 'ООО Клиника Грозный'],
+                  ['Slug (URL)', 'slug', 'text', 'grozny'],
+                  ['Город', 'city', 'text', 'Грозный'],
+                  ['ФИО администратора', 'admin_name', 'text', 'Иван Иванов'],
+                  ['Логин администратора', 'admin_username', 'text', 'grozny_admin'],
+                  ['Пароль (авто если пусто)', 'admin_password', 'password', ''],
+                ].map(([label, key, type, ph]) => (
+                  <div key={key}>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">{label}</label>
+                    <input type={type} placeholder={ph} value={createForm[key]}
+                      onChange={e => setCreateForm(f => ({ ...f, [key]: e.target.value }))}
+                      className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                  </div>
+                ))}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Тарифный план</label>
+                  <select value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}
+                    className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
+                    <option value="basic">Basic — 4990₽/мес</option>
+                    <option value="professional">Professional — 9990₽/мес</option>
+                    <option value="enterprise">Enterprise — 24990₽/мес</option>
+                  </select>
+                </div>
+                {createErr && <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{createErr}</p>}
+                <button onClick={handleCreate} disabled={creating || !createForm.name || !createForm.slug || !createForm.admin_name || !createForm.admin_username}
+                  className="w-full bg-blue-600 text-white rounded-xl py-2.5 font-medium hover:bg-blue-700 disabled:opacity-50 transition">
+                  {creating ? 'Создание...' : 'Создать тенант'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 // Main AdminLayout
 // ---------------------------------------------------------------------------
 
 export default function AdminLayout({ adminToken, user, onLogout }) {
-  const [activeSection, setActiveSection] = useState('home')
+  const [activeSection, setActiveSection] = useState(user?.role === 'super_admin' ? 'super_admin' : 'home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
   const [helpOpen, setHelpOpen] = useState(false)
   const [badges, setBadges] = useState({ cancel_requests: 0, pending_bonus_staff: 0 })
+  const [branding, setBranding] = useState(null)
+
+  // Загружаем брендинг и применяем CSS-переменные
+  useEffect(() => {
+    apiFetch('get', '/tenant/branding', adminToken).then(r => {
+      const b = r.data
+      setBranding(b)
+      if (b.primary_color) document.documentElement.style.setProperty('--color-primary', b.primary_color)
+      if (b.sidebar_color) document.documentElement.style.setProperty('--color-sidebar', b.sidebar_color)
+      if (b.bg_color) document.documentElement.style.setProperty('--color-bg', b.bg_color)
+      if (b.font_family) document.documentElement.style.setProperty('--font-main', b.font_family)
+    }).catch(() => {})
+  }, [adminToken])
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
@@ -5232,14 +5596,17 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               style={{ fontVariationSettings: "'FILL' 1" }}>health_and_safety</span>
           </div>
           <div>
-            <div className="text-lg font-bold leading-tight font-headline tracking-tight">КлиникаСеть</div>
+            <div className="text-lg font-bold leading-tight font-headline tracking-tight">{branding?.brand_name || "КлиникаСеть"}</div>
             <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Medical Fintech</div>
           </div>
         </div>
 
         {/* Навигация */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
-          {NAV.map(item => {
+          {NAV.filter(item => {
+            if (item.superAdminOnly) return user?.role === super_admin
+            return user?.role !== super_admin
+          }).map(item => {
             const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key
             return (
@@ -5278,7 +5645,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               <div className="text-xs font-semibold text-white truncate leading-tight">
                 {user?.full_name || user?.username || 'Администратор'}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Системный администратор</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{user?.role === "super_admin" ? "Владелец платформы" : user?.role === "manager" ? "Системный администратор" : user?.role === "partner" ? "Партнёр" : "Администратор"}</div>
             </div>
           </div>
           <button onClick={() => setHelpOpen(true)}

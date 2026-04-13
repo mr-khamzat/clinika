@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # CORS — через запятую (продакшн: только ваш домен)
     allowed_origins: str = "http://localhost:5173,http://localhost:8901"
 
+    # Ключ для защиты эндпоинта /tenant/create
+    onboarding_secret: str = ""
+
     # Учётные данные суперадмина (создаются при первом запуске)
     superadmin_username: str = "khamzat"
     superadmin_password: str = "khamzat88712"

@@ -157,3 +157,53 @@ async def get_license(
     if lic is None:
         raise HTTPException(status_code=404, detail="Лицензия не найдена")
     return lic
+
+
+# ── Онбординг нового тенанта (публичный или super_admin) ─────────────────────
+
+class TenantCreateRequest(BaseModel):
+    name: str
+    slug: str
+    plan: str = "basic"
+    admin_name: str
+    admin_username: str
+    admin_password: Optional[str] = None
+    primary_color: str = "#0097A7"
+    sidebar_color: str = "#004D5F"
+    city: Optional[str] = None
+    # Секретный ключ для защиты эндпоинта (из .env)
+    secret_key: Optional[str] = None
+
+
+@router.post("/create", status_code=201)
+async def create_tenant(
+    data: TenantCreateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Создаёт нового тенанта: tenant + license (trial) + branding + admin user.
+    Защищён SECRET_ONBOARDING_KEY из конфига (если задан).
+    Возвращает логин/пароль и URL нового тенанта.
+    """
+    from app.config import settings
+    from app.services.tenant_onboarding_service import onboard_tenant as _onboard
+    # Проверяем ключ, если он задан в конфиге
+    expected = getattr(settings, "onboarding_secret", None)
+    if expected and data.secret_key != expected:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Неверный ключ доступа")
+    try:
+        result = await _onboard(
+            db,
+            name=data.name,
+            slug=data.slug,
+            city=data.city,
+            plan=data.plan,
+            admin_name=data.admin_name,
+            admin_username=data.admin_username,
+            admin_password=data.admin_password,
+            primary_color=data.primary_color,
+            sidebar_color=data.sidebar_color,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

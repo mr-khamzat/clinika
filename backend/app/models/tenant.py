@@ -67,3 +67,33 @@ class TenantBranding(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="branding")
+
+
+class TenantModule(Base):
+    """Переопределение модулей (фич) на уровне отдельного тенанта."""
+    __tablename__ = "tenant_modules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    module: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class TenantPlugin(Base):
+    """Конфигурация плагинов на уровне тенанта."""
+    __tablename__ = "tenant_plugins"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    plugin: Mapped[str] = mapped_column(String(100), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)

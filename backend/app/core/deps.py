@@ -67,3 +67,13 @@ async def require_partner_or_above(user: User = Depends(get_current_user)) -> Us
             detail="Недостаточно прав"
         )
     return user
+
+
+async def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """Только super_admin — владелец платформы."""
+    if user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ только для super_admin"
+        )
+    return user
