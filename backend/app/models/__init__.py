@@ -19,6 +19,7 @@ from app.models.audit import AuditEntry
 from app.models.billing import Subscription, Invoice, Payment
 from app.models.refresh_token import RefreshToken
 from app.models.consent import ConsentRecord
+from app.models.plugin import PluginCatalog, PluginFeature, TenantPluginFeature, BillingEvent, ClinicVisibility
 
 __all__ = [
     "User", "UserRole", "Clinic", "ClinicSchedule", "Service",
@@ -30,4 +31,5 @@ __all__ = [
     "SupportMessage", "Tenant", "TenantLicense", "TenantBranding", "TenantModule", "TenantPlugin",
     "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
     "RefreshToken", "ConsentRecord",
+    "PluginCatalog", "PluginFeature", "TenantPluginFeature", "BillingEvent", "ClinicVisibility",
 ]
