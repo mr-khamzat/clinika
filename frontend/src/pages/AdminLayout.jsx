@@ -5604,8 +5604,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         {/* Навигация */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
           {NAV.filter(item => {
-            if (item.superAdminOnly) return user?.role === super_admin
-            return user?.role !== super_admin
+            if (item.superAdminOnly) return user?.role === 'super_admin'
+            return user?.role !== 'super_admin'
           }).map(item => {
             const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key
