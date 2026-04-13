@@ -26,6 +26,15 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
             )
         except Exception:
             pass  # Реестр не мешает основной логике
+        # Вебхук bonus_paid
+        try:
+            from app.services.webhook_service import send_event
+            if hasattr(bonus, 'tenant_id') and bonus.tenant_id:
+                await send_event(db, bonus.tenant_id, 'bonus_paid',
+                    {'bonus_id': str(bonus.id), 'amount': float(bonus.amount),
+                     'admin_id': str(bonus.admin_id) if bonus.admin_id else None})
+        except Exception:
+            pass
         await db.commit()
         await db.refresh(bonus)
     return bonus

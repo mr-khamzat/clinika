@@ -8,6 +8,7 @@ from app.models.referral_comment import ReferralComment
 from app.schemas.referral import ReferralCreate, ReferralResponse, QRScanRequest, CancelRequestBody
 from app.services.referral_service import create_referral, confirm_referral, confirm_referral_by_short_code
 from app.core.deps import get_current_user
+from app.services import webhook_service
 from datetime import datetime
 from pydantic import BaseModel
 import uuid
@@ -89,6 +90,9 @@ async def create_new_referral(
         appointment_at=data.appointment_at,
     )
     await _log(db, current_user, "Создано направление", "referral", referral.id)
+    if current_user.tenant_id:
+        await webhook_service.send_event(db, current_user.tenant_id, "referral_created",
+            {"referral_id": str(referral.id), "patient_name": referral.patient_name, "status": "created"})
     await db.commit()
     return await _enrich_referral(referral, db)
 

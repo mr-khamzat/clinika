@@ -37,3 +37,5 @@ __all__ = [
 ]
 
 from app.models.push_subscription import PushSubscription
+
+from app.models.webhook import WebhookEndpoint, WebhookDelivery

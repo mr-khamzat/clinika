@@ -330,3 +330,67 @@ async def list_payments(
         .limit(limit)
     )
     return [_pay_out(p) for p in q.scalars().all()]
+
+
+@router.get("/trial-status")
+async def trial_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Статус пробного периода / подписки тенанта.
+    Не требует feature flag — всегда доступен.
+    Возвращает: status, days_remaining, plan, trial_ends_at.
+    """
+    from datetime import datetime, timezone
+    from app.models.tenant import TenantLicense
+
+    # Лицензия
+    lic = None
+    if current_user.tenant_id:
+        lic_r = await db.execute(
+            select(TenantLicense).where(
+                TenantLicense.tenant_id == current_user.tenant_id,
+                TenantLicense.is_active == True,
+            )
+        )
+        lic = lic_r.scalar_one_or_none()
+
+    # Подписка
+    sub = None
+    if current_user.tenant_id:
+        sub_r = await db.execute(
+            select(Subscription)
+            .where(Subscription.tenant_id == current_user.tenant_id)
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
+        )
+        sub = sub_r.scalar_one_or_none()
+
+    # Нет ни лицензии, ни подписки → legacy тенант, показываем "active"
+    if not lic and not sub:
+        return {"status": "active", "days_remaining": None, "plan": "professional", "trial_ends_at": None}
+
+    # Считаем days_remaining
+    days_remaining = None
+    trial_ends_at = None
+    status = sub.status if sub else "active"
+
+    if sub and sub.trial_ends_at:
+        trial_ends_at = sub.trial_ends_at.isoformat()
+        now = datetime.utcnow()
+        delta = sub.trial_ends_at - now
+        days_remaining = max(0, delta.days)
+
+    # Если trial истёк — меняем статус
+    if sub and sub.status == "trial" and days_remaining == 0:
+        status = "trial_expired"
+
+    return {
+        "status": status,
+        "days_remaining": days_remaining,
+        "plan": lic.plan if lic else (sub.plan if sub else "professional"),
+        "trial_ends_at": trial_ends_at,
+        "max_clinics": lic.max_clinics if lic else None,
+        "max_users": lic.max_users if lic else None,
+    }

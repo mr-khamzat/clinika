@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react
 // ── Лениво загружаемые секции (каждая в своём файле) ──────────────────────
 // Добавляй новые секции здесь, не трогая существующий код
 const PlatformSection = lazy(() => import('../sections/PlatformSection'))
+const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -79,6 +80,7 @@ const NAV = [
   { key: 'analytics', label: 'Аналитика',  icon: 'bar_chart' },
   { key: 'audit',     label: 'Аудит',      icon: 'manage_search', superAdminOnly: true },
   { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
+  { key: 'webhooks',  label: 'Вебхуки',    icon: 'webhook', superAdminOnly: true },
   { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart', superAdminOnly: true },
   { key: 'support',    label: 'Поддержка',  icon: 'support_agent', superAdminOnly: true },
   { key: 'plugins',   label: 'Плагины',    icon: 'extension', superAdminOnly: true },
@@ -7046,6 +7048,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const [helpOpen, setHelpOpen] = useState(false)
   const [badges, setBadges] = useState({ cancel_requests: 0, pending_bonus_staff: 0 })
   const [branding, setBranding] = useState(null)
+  const [trialStatus, setTrialStatus] = useState(null)
 
   // Загружаем брендинг и применяем CSS-переменные
   useEffect(() => {
@@ -7057,6 +7060,12 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (b.bg_color) document.documentElement.style.setProperty('--color-bg', b.bg_color)
       if (b.font_family) document.documentElement.style.setProperty('--font-main', b.font_family)
     }).catch(() => {})
+    // Загружаем статус trial/подписки для баннера
+    if (!user?.is_superadmin) {
+      apiFetch('get', '/billing/trial-status', adminToken)
+        .then(r => setTrialStatus(r.data))
+        .catch(() => {})
+    }
   }, [adminToken])
 
   useEffect(() => {
@@ -7105,6 +7114,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'mis_sync':  return <MisSyncSection token={adminToken} />
       case 'calls_cfg': return <CallsConfigSection token={adminToken} />
       case 'push_notify': return <PushSection token={adminToken} />
+      case 'webhooks': return (
+        <Suspense fallback={<SectionLoader />}>
+          <WebhooksSection token={adminToken} />
+        </Suspense>
+      )
       case 'super_admin': return (
         <Suspense fallback={<SectionLoader />}>
           <PlatformSection token={adminToken} />
@@ -7276,6 +7290,37 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             </button>
           </div>
         </header>
+
+        {/* Trial / подписка баннер */}
+        {trialStatus && (trialStatus.status === 'trial' && trialStatus.days_remaining !== null && trialStatus.days_remaining <= 7) && (
+          <div className={`px-5 py-2.5 flex items-center justify-between text-sm ${trialStatus.days_remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'} text-white`}>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>
+                {trialStatus.days_remaining <= 2 ? 'error' : 'schedule'}
+              </span>
+              <span className="font-semibold">
+                {trialStatus.days_remaining === 0 ? 'Пробный период истекает сегодня'
+                  : `Пробный период: ${trialStatus.days_remaining} ${trialStatus.days_remaining === 1 ? 'день' : trialStatus.days_remaining < 5 ? 'дня' : 'дней'} осталось`}
+              </span>
+            </div>
+            <button onClick={() => setActiveSection('billing')}
+              className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition flex-shrink-0">
+              Подробнее
+            </button>
+          </div>
+        )}
+        {trialStatus && trialStatus.status === 'trial_expired' && (
+          <div className="px-5 py-2.5 flex items-center justify-between text-sm bg-red-600 text-white">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>block</span>
+              <span className="font-semibold">Пробный период истёк — обратитесь к поставщику системы</span>
+            </div>
+            <button onClick={() => setActiveSection('billing')}
+              className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition flex-shrink-0">
+              Биллинг
+            </button>
+          </div>
+        )}
 
         {/* Контент страницы */}
         <main className="flex-1 p-5 lg:p-8 max-w-6xl w-full mx-auto">

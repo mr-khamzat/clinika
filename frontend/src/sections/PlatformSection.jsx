@@ -285,22 +285,22 @@ export default function PlatformSection({ token }) {
           {billing && (
             <>
               {/* Финансовая сводка */}
-              {billing.summary && (
-                <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                   <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-extrabold text-emerald-700">{(billing.summary.total_paid_rub || 0).toLocaleString('ru-RU')} ₽</p>
-                    <p className="text-xs text-emerald-600 font-semibold mt-1">Оплачено</p>
-                  </div>
-                  <div className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-extrabold text-amber-700">{(billing.summary.total_pending_rub || 0).toLocaleString('ru-RU')} ₽</p>
-                    <p className="text-xs text-amber-600 font-semibold mt-1">Ожидает</p>
+                    <p className="text-2xl font-extrabold text-emerald-700">{(billing.mrr || 0).toLocaleString('ru-RU')} ₽</p>
+                    <p className="text-xs text-emerald-600 font-semibold mt-1">MRR</p>
                   </div>
                   <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-4 text-center">
-                    <p className="text-2xl font-extrabold text-blue-700">{billing.summary.mrr_rub ? (billing.summary.mrr_rub).toLocaleString('ru-RU') + ' ₽' : '—'}</p>
-                    <p className="text-xs text-blue-600 font-semibold mt-1">MRR</p>
+                    <p className="text-2xl font-extrabold text-blue-700">{billing.subscriptions_count || 0}</p>
+                    <p className="text-xs text-blue-600 font-semibold mt-1">Подписок</p>
+                  </div>
+                  <div className="bg-violet-50 dark:bg-violet-900/20 rounded-2xl p-4 text-center">
+                    <p className="text-2xl font-extrabold text-violet-700">
+                      {(billing.subscriptions || []).filter(s => s.status === 'active').length}
+                    </p>
+                    <p className="text-xs text-violet-600 font-semibold mt-1">Активных</p>
                   </div>
                 </div>
-              )}
 
               {/* Список подписок */}
               <div className="space-y-2 max-h-96 overflow-y-auto">
