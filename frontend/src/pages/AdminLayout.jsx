@@ -6576,6 +6576,7 @@ function PluginsSection({ token }) {
   const [plugins, setPlugins] = useState([])
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState('')
+  const [pluginBilling, setPluginBilling] = useState({})
   const [billingEvents, setBillingEvents] = useState([])
   const [integrations, setIntegrations] = useState(null)
   const [p2pSettings, setP2pSettings] = useState(null)
@@ -6594,6 +6595,9 @@ function PluginsSection({ token }) {
   }
 
   const loadBilling = () => apiFetch('get', '/plugins/billing-events', token).then(r => setBillingEvents(r.data || []))
+  const loadPluginBilling = () => apiFetch('get', '/plugins/billing/summary', token).then(r => {
+    const map = {}; (r.data || []).forEach(p => { map[p.plugin] = p }); setPluginBilling(map)
+  }).catch(() => {})
   const loadIntegrations = () => apiFetch('get', '/plugins/integrations', token).then(r => setIntegrations(r.data))
   const loadP2p = () => apiFetch('get', '/plugins/p2p/settings', token).then(r => setP2pSettings(r.data))
   const loadVisibility = () => apiFetch('get', '/plugins/visibility', token).then(r => setVisibility(r.data))
@@ -6601,6 +6605,7 @@ function PluginsSection({ token }) {
   useEffect(() => {
     loadPlugins()
     loadBilling()
+    loadPluginBilling()
   }, [])
 
   useEffect(() => {
@@ -6725,7 +6730,23 @@ function PluginsSection({ token }) {
                   {plugin.description && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">{plugin.description}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Сводка активных фич */}
+                  {pluginBilling[plugin.key]?.status === 'trial' && (
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-lg font-medium">
+                      Trial · {pluginBilling[plugin.key].days_left}д
+                    </span>
+                  )}
+                  {pluginBilling[plugin.key]?.status === 'paid' && (
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-medium">Оплачен</span>
+                  )}
+                  {!pluginBilling[plugin.key] && (
+                    <button
+                      onClick={() => apiFetch('post', `/plugins/${plugin.key}/trial`, token, { trial_days: 14 })
+                        .then(() => { showMsg('Триал 14 дней активирован: ' + plugin.name); loadPluginBilling() })
+                        .catch(() => showMsg('Ошибка активации триала'))}
+                      className="text-xs border border-blue-200 text-blue-600 px-3 py-1 rounded-lg hover:bg-blue-50 transition">
+                      14 дней бесплатно
+                    </button>
+                  )}
                   {(plugin.features || []).filter(f => f.status === 'active').length > 0 && (
                     <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg font-medium">
                       {(plugin.features || []).filter(f => f.status === 'active').length} активно

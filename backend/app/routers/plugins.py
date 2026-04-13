@@ -3,6 +3,7 @@
 Заменяет старый plugins.py (простой health-check).
 """
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -261,3 +262,162 @@ async def plugin_health(name: str, _=Depends(require_manager)):
         return {"name": name, "ok": False, "detail": "Плагин не найден"}
     result = await plugin.health_check()
     return {"name": name, "ok": result.get("ok", False), "detail": result.get("detail", "")}
+
+
+# ── Биллинг плагинов (plugin-level trial/paid tracking) ──────────────────────
+
+class PluginTrialRequest(BaseModel):
+    trial_days: int = 14  # длина триала в днях
+    price_monthly: float | None = None  # переопределить цену
+
+
+@router.post("/{slug}/trial")
+async def start_plugin_trial(
+    slug: str,
+    req: PluginTrialRequest,
+    current_user: User = Depends(require_manager),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Начать триал плагина целиком для тенанта."""
+    from datetime import timedelta
+    from sqlalchemy import select
+    from app.models.tenant import TenantPlugin
+    from app.models.plugin import PluginCatalog, BillingEvent
+
+    tid = _tid(tenant, current_user)
+    if not tid:
+        raise HTTPException(status_code=400, detail='Тенант не определён')
+
+    # Проверяем, что плагин существует в каталоге
+    cat = await db.execute(select(PluginCatalog).where(PluginCatalog.key == slug))
+    catalog = cat.scalar_one_or_none()
+    if not catalog:
+        raise HTTPException(status_code=404, detail='Плагин не найден в каталоге')
+
+    trial_ends = datetime.utcnow() + timedelta(days=req.trial_days)
+
+    # Upsert TenantPlugin
+    existing = await db.execute(
+        select(TenantPlugin).where(TenantPlugin.tenant_id == tid, TenantPlugin.plugin == slug)
+    )
+    tp = existing.scalar_one_or_none()
+    if tp:
+        tp.enabled = True
+        tp.trial_until = trial_ends
+        tp.updated_at = datetime.utcnow()
+        if req.price_monthly is not None:
+            tp.price_monthly = req.price_monthly
+    else:
+        tp = TenantPlugin(
+            tenant_id=tid, plugin=slug, enabled=True,
+            trial_until=trial_ends,
+            price_monthly=req.price_monthly,
+        )
+        db.add(tp)
+
+    # Billing event
+    event = BillingEvent(
+        tenant_id=tid,
+        feature_key=slug,
+        event_type='trial_started',
+        amount=0,
+        meta={'trial_days': req.trial_days, 'trial_ends': trial_ends.isoformat()},
+    )
+    db.add(event)
+    await db.commit()
+    return {
+        'plugin': slug, 'status': 'trial',
+        'trial_until': trial_ends.isoformat(),
+        'trial_days': req.trial_days,
+    }
+
+
+@router.get("/{slug}/billing")
+async def get_plugin_billing(
+    slug: str,
+    current_user: User = Depends(require_manager),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статус биллинга плагина для тенанта."""
+    from sqlalchemy import select
+    from app.models.tenant import TenantPlugin
+
+    tid = _tid(tenant, current_user)
+    if not tid:
+        return {'plugin': slug, 'status': 'unknown'}
+
+    existing = await db.execute(
+        select(TenantPlugin).where(TenantPlugin.tenant_id == tid, TenantPlugin.plugin == slug)
+    )
+    tp = existing.scalar_one_or_none()
+    if not tp:
+        return {'plugin': slug, 'status': 'inactive', 'enabled': False}
+
+    now = datetime.utcnow()
+    if tp.trial_until and tp.trial_until > now:
+        status = 'trial'
+        days_left = (tp.trial_until - now).days
+    elif tp.paid_until and tp.paid_until > now:
+        status = 'paid'
+        days_left = (tp.paid_until - now).days
+    elif not tp.enabled:
+        status = 'inactive'
+        days_left = None
+    else:
+        status = 'active'
+        days_left = None
+
+    return {
+        'plugin': slug, 'status': status,
+        'enabled': tp.enabled,
+        'trial_until': tp.trial_until.isoformat() if tp.trial_until else None,
+        'paid_until': tp.paid_until.isoformat() if tp.paid_until else None,
+        'price_monthly': float(tp.price_monthly) if tp.price_monthly else None,
+        'days_left': days_left,
+    }
+
+
+@router.get("/billing/summary")
+async def plugin_billing_summary(
+    current_user: User = Depends(require_manager),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список всех плагинов с биллинговым статусом — для PlatformSection."""
+    from sqlalchemy import select
+    from app.models.tenant import TenantPlugin
+
+    tid = _tid(tenant, current_user)
+    if not tid:
+        return []
+
+    result = await db.execute(
+        select(TenantPlugin).where(TenantPlugin.tenant_id == tid)
+    )
+    plugins = result.scalars().all()
+    now = datetime.utcnow()
+    out = []
+    for tp in plugins:
+        if tp.trial_until and tp.trial_until > now:
+            status = 'trial'
+            days_left = (tp.trial_until - now).days
+        elif tp.paid_until and tp.paid_until > now:
+            status = 'paid'
+            days_left = (tp.paid_until - now).days
+        elif not tp.enabled:
+            status = 'inactive'
+            days_left = None
+        else:
+            status = 'active'
+            days_left = None
+        out.append({
+            'plugin': tp.plugin, 'status': status,
+            'enabled': tp.enabled,
+            'trial_until': tp.trial_until.isoformat() if tp.trial_until else None,
+            'paid_until': tp.paid_until.isoformat() if tp.paid_until else None,
+            'price_monthly': float(tp.price_monthly) if tp.price_monthly else None,
+            'days_left': days_left,
+        })
+    return out

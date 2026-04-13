@@ -97,3 +97,7 @@ class TenantPlugin(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     config: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    # Биллинг плагина
+    trial_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    paid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    price_monthly: Mapped[float | None] = mapped_column(nullable=True)
