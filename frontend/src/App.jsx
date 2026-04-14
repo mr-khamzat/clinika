@@ -168,14 +168,28 @@ function MiniApp() {
 // ─── Корневой компонент — определяет точку входа ───
 export default function App() {
   const path = window.location.pathname
+
+  // Корневой лендинг (/) — показываем Landing без slug-роутинга
+  if (path === '/' || path === '') {
+    return <Landing />
+  }
+
   // Панель управления — проверяем токен менеджера
-  if (path.startsWith('/' + SLUG + '/admin')) {
+  if (SLUG && path.startsWith('/' + SLUG + '/admin')) {
     return <AdminRoot />
   }
+
   // Личный кабинет пациента — публичный
-  if (path.startsWith('/' + SLUG + '/p/') || path === '/' + SLUG + '/p') {
+  if (SLUG && (path.startsWith('/' + SLUG + '/p/') || path === '/' + SLUG + '/p')) {
     return <PatientCabinet />
   }
-  // Корень сайта — показываем лендинг (если не залогинен) или приложение
+
+  // Регистрация по инвайту
+  const inviteMatch = path.match(new RegExp('/' + (SLUG || '[^/]+') + '/invite/([^/]+)'))
+  if (inviteMatch) {
+    return <InviteRegister code={inviteMatch[1]} />
+  }
+
+  // Тенантное мини-приложение
   return <MiniApp />
 }

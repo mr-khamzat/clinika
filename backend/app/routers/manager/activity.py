@@ -27,6 +27,8 @@ async def get_activity_log(
     db: AsyncSession = Depends(get_db),
 ):
     filters = []
+    if current_user.tenant_id is not None:
+        filters.append(ActivityLog.tenant_id == current_user.tenant_id)
     if date_from:
         try:
             filters.append(ActivityLog.created_at >= datetime.fromisoformat(date_from))

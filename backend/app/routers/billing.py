@@ -394,3 +394,48 @@ async def trial_status(
         "max_clinics": lic.max_clinics if lic else None,
         "max_users": lic.max_users if lic else None,
     }
+
+
+@router.post("/upgrade-request")
+async def request_plan_upgrade(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Запрос на смену тарифа."""
+    import httpx
+    wanted_plan = (body.get("plan") or "").strip()
+    comment = (body.get("comment") or "").strip()[:500]
+    if not wanted_plan:
+        raise HTTPException(status_code=400, detail="plan required")
+
+    tenant_name = "unknown"
+    tenant_slug = "unknown"
+    if current_user.tenant_id:
+        from app.models.tenant import Tenant
+        t_r = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+        t = t_r.scalar_one_or_none()
+        if t:
+            tenant_name = t.name
+            tenant_slug = t.slug
+
+    tg_text = (
+        "Zapros na smenu tarifa\n"
+        f"Tenant: {tenant_name} ({tenant_slug})\n"
+        f"User: {current_user.full_name}\n"
+        f"Plan: {wanted_plan}\n"
+    )
+    if comment:
+        tg_text += f"Comment: {comment}"
+
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            await client.post(
+                "https://api.telegram.org/bot8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU/sendMessage",
+                json={"chat_id": 293633093, "text": tg_text},
+            )
+    except Exception:
+        pass
+
+    return {"ok": True, "message": "Zapros otpravlen. My svyazhemsya s vami."}
+    

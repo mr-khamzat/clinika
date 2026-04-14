@@ -93,8 +93,15 @@ async def list_doctors(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список врачей. Фильтр по клинике."""
+    """Список врачей. Фильтр по клинике. Изолировано по тенанту."""
     q = select(Doctor).where(Doctor.is_active == True)
+    if current_user.tenant_id is not None:
+        from app.models.clinic import Clinic
+        # Врачи тенанта = врачи, чья клиника принадлежит тенанту
+        tenant_clinic_ids = (await db.execute(
+            select(Clinic.id).where(Clinic.tenant_id == current_user.tenant_id)
+        )).scalars().all()
+        q = q.where(Doctor.clinic_id.in_(tenant_clinic_ids))
     if clinic_id:
         q = q.where(Doctor.clinic_id == clinic_id)
     return (await db.execute(q.order_by(Doctor.full_name))).scalars().all()
@@ -241,8 +248,10 @@ async def list_appointments(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список записей. Фильтры: врач, клиника, дата, статус."""
+    """Список записей. Фильтры: врач, клиника, дата, статус. Изолировано по тенанту."""
     q = select(Appointment)
+    if current_user.tenant_id is not None:
+        q = q.where(Appointment.tenant_id == current_user.tenant_id)
     if doctor_id:
         q = q.where(Appointment.doctor_id == doctor_id)
     if clinic_id:

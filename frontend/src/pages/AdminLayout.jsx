@@ -83,7 +83,8 @@ const NAV = [
   { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
   { key: 'webhooks',  label: 'Вебхуки',    icon: 'webhook', superAdminOnly: true },
   { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart', superAdminOnly: true },
-  { key: 'support',    label: 'Поддержка',  icon: 'support_agent', superAdminOnly: true },
+  { key: 'my_plan',    label: 'Мой тариф',  icon: 'workspace_premium' },
+  { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
   { key: 'plugins',   label: 'Плагины',    icon: 'extension', superAdminOnly: true },
   { key: 'mis_sync',  label: 'МИС Sync',   icon: 'sync_alt', superAdminOnly: true },
   { key: 'calls_cfg', label: 'Звонки/SMS',  icon: 'settings_phone', superAdminOnly: true },
@@ -482,7 +483,7 @@ function PushSection({ token }) {
   )
 }
 
-function HomeDashboard({ token, onNavigate }) {
+function HomeDashboard({ token, onNavigate, isSuperAdmin }) {
   const [todayStats, setTodayStats] = useState(null)
   const [topAdmins, setTopAdmins] = useState([])
   const [cancelCount, setCancelCount] = useState(0)
@@ -576,7 +577,7 @@ function HomeDashboard({ token, onNavigate }) {
             { label: 'Redis', icon: 'memory', ok: systemHealth.redis === 'ok', val: systemHealth.redis === 'ok' ? 'онлайн' : 'ошибка', sub: 'Кеш' },
             { label: 'МИС', icon: 'cloud', ok: systemHealth.mis !== 'error', val: systemHealth.mis !== 'error' ? 'онлайн' : 'недоступна', sub: 'Интеграция' },
           ].map(s => (
-            <button key={s.label} onClick={() => onNavigate?.('monitoring')}
+            <button key={s.label} onClick={() => isSuperAdmin && onNavigate?.('monitoring')}
               className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-left hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 w-full"
               style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
               <div className="flex items-center justify-between mb-2">
@@ -2358,7 +2359,7 @@ function CommissionSection({ token }) {
 // ---------------------------------------------------------------------------
 
 function SettingsSection({ token }) {
-  const [form, setForm] = useState({ mis_url: '', mis_api_key: '', telegram_bot_token: '', telegram_admin_id: '' })
+  const [form, setForm] = useState({ mis_api_url: '', mis_api_key: '', telegram_bot_token: '', telegram_admin_id: '', support_bot_token: '', support_admin_chat_id: '' })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -2375,10 +2376,12 @@ function SettingsSection({ token }) {
       .then(r => {
         const d = r.data || {}
         setForm({
-          mis_url: d.mis_url || '',
+          mis_api_url: d.mis_api_url || '',
           mis_api_key: d.mis_api_key || '',
           telegram_bot_token: d.telegram_bot_token || '',
-          telegram_admin_id: d.telegram_admin_id || '',
+          telegram_admin_id: d.telegram_admin_id || d.telegram_chat_id || '',
+          support_bot_token: d.support_bot_token || '',
+          support_admin_chat_id: d.support_admin_chat_id || '',
         })
       })
       .catch(() => {})
@@ -2407,7 +2410,7 @@ function SettingsSection({ token }) {
   const handleTestMis = async () => {
     setTesting(true); setTestResult(null)
     try {
-      const res = await apiFetch('post', '/manager/settings/test-mis', token, { mis_url: form.mis_url, mis_api_key: form.mis_api_key })
+      const res = await apiFetch('post', '/manager/settings/test-mis', token, { mis_api_url: form.mis_api_url, mis_api_key: form.mis_api_key })
       setTestResult({ ok: true, msg: res.data?.message || 'Соединение успешно' })
     } catch (err) {
       setTestResult({ ok: false, msg: err?.response?.data?.detail || 'Ошибка соединения' })
@@ -2454,8 +2457,8 @@ function SettingsSection({ token }) {
           <div className="space-y-3">
             <div>
               <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">URL МИС</label>
-              <input type="url" value={form.mis_url} onChange={e => set('mis_url', e.target.value)}
-                placeholder="http://mis.example.com:3010"
+              <input type="text" value={form.mis_api_url} onChange={e => set('mis_api_url', e.target.value)}
+                placeholder="https://mis.example.com:3010"
                 className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
             </div>
             <div>
@@ -2493,8 +2496,9 @@ function SettingsSection({ token }) {
             <h3 className="font-bold text-[#191c1e] dark:text-white font-headline">Telegram Bot</h3>
           </div>
           <div className="space-y-3">
+            <p className="text-xs text-[#727783]">Бот для уведомлений об отменах, крупных бонусах, ежедневного отчёта.</p>
             <div>
-              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Bot Token</label>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Bot Token (уведомления)</label>
               <div className="relative">
                 <input type={showBotToken ? 'text' : 'password'} value={form.telegram_bot_token} onChange={e => set('telegram_bot_token', e.target.value)}
                   placeholder="123456789:AABBccdd..."
@@ -2506,10 +2510,38 @@ function SettingsSection({ token }) {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Admin Telegram ID</label>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Admin Telegram ID (для уведомлений)</label>
               <input type="text" value={form.telegram_admin_id} onChange={e => set('telegram_admin_id', e.target.value)}
                 placeholder="293633093"
                 className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+            </div>
+          </div>
+        </div>
+
+        {/* Чат Поддержки (свой Telegram бот) */}
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-10 h-10 rounded-2xl bg-[#f0fdf4] flex items-center justify-center">
+              <span className="material-symbols-outlined text-[#166534] text-xl" style={{fontVariationSettings:"'FILL' 1"}}>support_agent</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-[#191c1e] dark:text-white font-headline">Чат поддержки</h3>
+              <p className="text-xs text-[#727783]">Ваш Telegram бот, куда будут приходить сообщения из чата поддержки</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Bot Token (поддержка)</label>
+              <input type="password" value={form.support_bot_token} onChange={e => set('support_bot_token', e.target.value)}
+                placeholder="123456789:AABBccdd... (токен бота поддержки)"
+                className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#166534]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Chat ID оператора</label>
+              <input type="text" value={form.support_admin_chat_id} onChange={e => set('support_admin_chat_id', e.target.value)}
+                placeholder="Ваш Telegram ID (куда придут сообщения)"
+                className="w-full bg-[#f2f4f6] dark:bg-gray-700 dark:text-white rounded-2xl px-4 py-3 text-sm border-2 border-transparent focus:border-[#166534]/30 focus:bg-white dark:focus:bg-gray-600 outline-none transition-all" />
+              <p className="text-[11px] text-[#a0a5b0] mt-1">Узнать свой ID: откройте @userinfobot в Telegram и отправьте /start</p>
             </div>
           </div>
         </div>
@@ -2533,6 +2565,198 @@ function SettingsSection({ token }) {
       <div className="pt-2">
         <CommissionSection token={token} />
       </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// MyPlanSection — тариф и подписка тенанта
+// ---------------------------------------------------------------------------
+
+const PLAN_LABELS = { basic: 'Базовый', professional: 'Профессиональный', enterprise: 'Корпоративный' }
+const PLAN_COLORS = { basic: '#64748b', professional: '#0097A7', enterprise: '#7c3aed' }
+const PLAN_DESCRIPTIONS = {
+  basic: 'Базовый функционал для небольших клиник',
+  professional: 'Полный функционал для растущей сети',
+  enterprise: 'Максимальные возможности и интеграции',
+}
+
+function MyPlanSection({ token }) {
+  const [plan, setPlan] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [upgradeModal, setUpgradeModal] = useState(false)
+  const [upgradePlan, setUpgradePlan] = useState('')
+  const [upgradeComment, setUpgradeComment] = useState('')
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [upgradeOk, setUpgradeOk] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await apiFetch('get', '/billing/trial-status', token)
+      setPlan(r.data)
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [token])
+
+  const handleUpgradeRequest = async () => {
+    if (!upgradePlan) return
+    setUpgradeLoading(true)
+    try {
+      await apiFetch('post', '/billing/upgrade-request', token, { plan: upgradePlan, comment: upgradeComment })
+      setUpgradeOk(true)
+      setTimeout(() => { setUpgradeModal(false); setUpgradeOk(false) }, 2500)
+    } catch {}
+    finally { setUpgradeLoading(false) }
+  }
+
+  if (loading) return <Spinner />
+
+  const planKey = plan?.plan || 'professional'
+  const planLabel = PLAN_LABELS[planKey] || planKey
+  const planColor = PLAN_COLORS[planKey] || '#0097A7'
+  const status = plan?.status || 'active'
+  const daysLeft = plan?.days_remaining
+
+  const statusConfig = {
+    trial: { label: 'Пробный период', color: '#d97706', bg: 'bg-amber-50', icon: 'hourglass_top' },
+    active: { label: 'Активна', color: '#166534', bg: 'bg-emerald-50', icon: 'check_circle' },
+    trial_expired: { label: 'Пробный истёк', color: '#ba1a1a', bg: 'bg-red-50', icon: 'error' },
+    past_due: { label: 'Просрочена', color: '#ba1a1a', bg: 'bg-red-50', icon: 'error' },
+    cancelled: { label: 'Отменена', color: '#727783', bg: 'bg-gray-50', icon: 'cancel' },
+  }
+  const sc = statusConfig[status] || statusConfig.active
+
+  return (
+    <div className="max-w-xl space-y-4">
+      <h2 className="text-xl font-extrabold font-headline text-[#191c1e] dark:text-white tracking-tight">Мой тариф</h2>
+
+      {/* Основная карточка */}
+      <div className="rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 24px rgba(25,28,30,0.10)'}}>
+        <div className="p-6 text-white relative" style={{background: `linear-gradient(135deg, ${planColor}cc, ${planColor})`}}>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-75 mb-1">{PLAN_DESCRIPTIONS[planKey]}</p>
+          <h3 className="text-3xl font-extrabold font-headline">{planLabel}</h3>
+          <div className={`inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-xs font-bold ${sc.bg}`} style={{color: sc.color}}>
+            <span className="material-symbols-outlined text-sm" style={{fontVariationSettings:"'FILL' 1"}}>{sc.icon}</span>
+            {sc.label}
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-800 p-5 space-y-3">
+          {/* Дней до конца */}
+          {daysLeft !== null && daysLeft !== undefined && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-[#727783]">Осталось дней</span>
+              <span className={`text-lg font-extrabold font-headline ${daysLeft <= 7 ? 'text-red-600' : daysLeft <= 14 ? 'text-amber-600' : 'text-[#191c1e] dark:text-white'}`}>
+                {daysLeft} {daysLeft === 1 ? 'день' : daysLeft < 5 ? 'дня' : 'дней'}
+              </span>
+            </div>
+          )}
+          {plan?.trial_ends_at && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#727783]">Действует до</span>
+              <span className="font-semibold text-[#191c1e] dark:text-white">
+                {new Date(plan.trial_ends_at).toLocaleDateString('ru-RU', {day:'numeric', month:'long', year:'numeric'})}
+              </span>
+            </div>
+          )}
+          {plan?.max_clinics && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#727783]">Клиник</span>
+              <span className="font-semibold text-[#191c1e] dark:text-white">до {plan.max_clinics}</span>
+            </div>
+          )}
+          {plan?.max_users && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[#727783]">Пользователей</span>
+              <span className="font-semibold text-[#191c1e] dark:text-white">до {plan.max_users}</span>
+            </div>
+          )}
+
+          {/* Предупреждение */}
+          {daysLeft !== null && daysLeft <= 7 && (
+            <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-3 flex items-start gap-2">
+              <span className="material-symbols-outlined text-red-600 text-base flex-shrink-0 mt-0.5" style={{fontVariationSettings:"'FILL' 1"}}>warning</span>
+              <p className="text-xs text-red-700 dark:text-red-400">
+                {daysLeft === 0 ? 'Подписка истекла! Функции могут быть ограничены.' : `Осталось ${daysLeft} дн. — продлите подписку.`}
+              </p>
+            </div>
+          )}
+
+          {/* Кнопка запроса */}
+          <button onClick={() => setUpgradeModal(true)}
+            className="w-full py-3 rounded-2xl text-white text-sm font-bold mt-2 transition active:scale-[0.99]"
+            style={{background:'linear-gradient(135deg, #0097A7, #004D5F)', boxShadow:'0 4px 16px rgba(0,151,167,0.25)'}}>
+            Запросить смену тарифа
+          </button>
+        </div>
+      </div>
+
+      {/* Информация */}
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+        <h4 className="font-bold text-[#191c1e] dark:text-white mb-3">Условия оплаты</h4>
+        <div className="space-y-2 text-sm text-[#727783]">
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined text-[#0097A7] text-base flex-shrink-0" style={{fontVariationSettings:"'FILL' 1"}}>calendar_today</span>
+            <span>Оплата ежемесячно — 30 календарных дней с даты оплаты</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="material-symbols-outlined text-[#0097A7] text-base flex-shrink-0" style={{fontVariationSettings:"'FILL' 1"}}>support</span>
+            <span>По вопросам тарифа и оплаты — напишите в чат поддержки</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Модал запроса смены */}
+      {upgradeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-lg font-bold text-[#191c1e] dark:text-white">Запрос на смену тарифа</h3>
+            {upgradeOk ? (
+              <div className="bg-emerald-50 rounded-2xl p-4 text-center">
+                <span className="material-symbols-outlined text-4xl text-emerald-600" style={{fontVariationSettings:"'FILL' 1"}}>check_circle</span>
+                <p className="text-emerald-700 font-semibold mt-2">Запрос отправлен!</p>
+                <p className="text-sm text-[#727783] mt-1">Мы свяжемся с вами в ближайшее время</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Желаемый тариф</label>
+                    <div className="space-y-2">
+                      {['basic','professional','enterprise'].map(p => (
+                        <button key={p} type="button" onClick={() => setUpgradePlan(p)}
+                          className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-semibold border-2 transition ${upgradePlan === p ? 'border-[#0097A7] bg-[#e0f7fa]' : 'border-transparent bg-[#f2f4f6] dark:bg-gray-800'}`}
+                          style={{color: upgradePlan === p ? '#00838f' : undefined}}>
+                          {PLAN_LABELS[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[#727783] mb-1.5 uppercase tracking-wider">Комментарий (необязательно)</label>
+                    <textarea value={upgradeComment} onChange={e => setUpgradeComment(e.target.value)}
+                      rows={3} placeholder="Расскажите о ваших потребностях..."
+                      className="w-full bg-[#f2f4f6] dark:bg-gray-700 rounded-2xl px-4 py-3 text-sm outline-none resize-none" />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => setUpgradeModal(false)}
+                    className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+                    Отмена
+                  </button>
+                  <button onClick={handleUpgradeRequest} disabled={!upgradePlan || upgradeLoading}
+                    className="flex-1 bg-[#0097A7] text-white rounded-2xl py-2.5 text-sm font-bold disabled:opacity-50 transition">
+                    {upgradeLoading ? 'Отправка...' : 'Отправить'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -7113,9 +7337,20 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     reports: badges.cancel_requests,
   }
 
+  const isSuperAdmin = user?.is_superadmin || user?.role === 'super_admin'
   const renderSection = () => {
+    // Разделы только для суперадмина — блокировать для обычных менеджеров
+    const superOnlySections = ['monitoring','audit','billing','webhooks','super_admin','plugins','mis_sync','calls_cfg','push_notify']
+    if (superOnlySections.includes(activeSection) && !isSuperAdmin) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
+          <span className="material-symbols-outlined text-4xl text-gray-300" style={{fontVariationSettings:"'FILL' 1"}}>lock</span>
+          <p className="text-gray-400 text-sm">Этот раздел доступен только платформенному администратору</p>
+        </div>
+      )
+    }
     switch (activeSection) {
-      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
+      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} isSuperAdmin={isSuperAdmin} />
       case 'staff':    return <StaffSection token={adminToken} />
       case 'clinics':  return <ClinicsSection token={adminToken} />
       case 'services': return <ServicesSection token={adminToken} />
@@ -7125,6 +7360,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'commission': return <CommissionSection token={adminToken} />
       case 'partners':  return <PartnersSection token={adminToken} />
       case 'discounts': return <DiscountsSection token={adminToken} />
+      case 'my_plan':   return <MyPlanSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} />
       case 'support':   return <SupportAdminWrapper token={adminToken} />
       case 'ledger':     return <LedgerSection token={adminToken} />

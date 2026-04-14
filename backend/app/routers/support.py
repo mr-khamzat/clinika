@@ -21,8 +21,27 @@ import uuid
 
 router = APIRouter(prefix="/support", tags=["support"])
 
-SUPPORT_BOT_TOKEN = "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
-ADMIN_CHAT_ID = 293633093
+# Дефолтные токены (для arc тенанта / обратная совместимость)
+_DEFAULT_BOT_TOKEN = "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
+_DEFAULT_ADMIN_CHAT_ID = 293633093
+SUPPORT_BOT_TOKEN = _DEFAULT_BOT_TOKEN
+ADMIN_CHAT_ID = _DEFAULT_ADMIN_CHAT_ID
+
+
+async def _get_bot_config(db, tenant_id=None):
+    """Вернуть (bot_token, chat_id) для тенанта из DB настроек или дефолт."""
+    from app.services.settings_service import get_setting
+    token = await get_setting(db, "support_bot_token", "", tenant_id=tenant_id)
+    chat_id_str = await get_setting(db, "support_admin_chat_id", "", tenant_id=tenant_id)
+    if not token:
+        token = _DEFAULT_BOT_TOKEN
+    chat_id = _DEFAULT_ADMIN_CHAT_ID
+    if chat_id_str:
+        try:
+            chat_id = int(chat_id_str)
+        except Exception:
+            pass
+    return token, chat_id
 UPLOAD_DIR = "/app/uploads/support"
 OPERATOR_REDIS_KEY = "support:operator_online"
 OPERATOR_TTL = 300  # 5 минут
@@ -78,10 +97,11 @@ async def send_message(
         f"{req.text.strip()}"
     )
     try:
+        bot_token, chat_id = await _get_bot_config(db, getattr(current_user, "tenant_id", None))
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(
-                f"https://api.telegram.org/bot{SUPPORT_BOT_TOKEN}/sendMessage",
-                json={"chat_id": ADMIN_CHAT_ID, "text": tg_text, "parse_mode": "HTML"},
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": chat_id, "text": tg_text, "parse_mode": "HTML"},
             )
     except Exception:
         pass
@@ -139,12 +159,13 @@ async def upload_file(
     role_label = role_labels.get(current_user.role.value, current_user.role.value)
     caption = f"📎 {current_user.full_name} ({role_label}): {file.filename}"
     try:
+        bot_token, chat_id = await _get_bot_config(db, getattr(current_user, "tenant_id", None))
         async with httpx.AsyncClient(timeout=30) as client:
             tg_method = "sendPhoto" if is_image else "sendDocument"
             field_name = "photo" if is_image else "document"
             await client.post(
-                f"https://api.telegram.org/bot{SUPPORT_BOT_TOKEN}/{tg_method}",
-                data={"chat_id": str(ADMIN_CHAT_ID), "caption": caption},
+                f"https://api.telegram.org/bot{bot_token}/{tg_method}",
+                data={"chat_id": str(chat_id), "caption": caption},
                 files={field_name: (file.filename, content, ct)},
             )
     except Exception:

@@ -67,6 +67,7 @@ async def analytics_overview(
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -74,6 +75,8 @@ async def analytics_overview(
     сравнение с предыдущим аналогичным периодом.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     span = (d_to - d_from).days + 1
     prev_to   = d_from - timedelta(days=1)
     prev_from = prev_to - timedelta(days=span - 1)
@@ -95,6 +98,7 @@ async def analytics_overview(
             .outerjoin(Bonus, Bonus.referral_id == Referral.id)
             .where(
                 Referral.created_at >= _dt(pf),
+                Referral.tenant_id == _tenant_id if _tenant_id else Referral.tenant_id.isnot(None) | True,
                 Referral.created_at < _dt(pt) + timedelta(days=1),
             )
         )
@@ -139,6 +143,7 @@ async def analytics_funnel(
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -146,13 +151,16 @@ async def analytics_funnel(
       Создано → Подтверждено → Бонус начислен → Бонус выплачен
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
 
     # Шаг 1 — созданные направления
     total_q = await db.execute(
         select(func.count(Referral.id))
-        .where(Referral.created_at >= dt_from, Referral.created_at < dt_to)
+        .where(Referral.created_at >= dt_from,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
     )
     total = total_q.scalar() or 0
 
@@ -163,6 +171,7 @@ async def analytics_funnel(
             Referral.status == ReferralStatus.CONFIRMED,
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
         )
     )
     confirmed = confirmed_q.scalar() or 0
@@ -174,6 +183,7 @@ async def analytics_funnel(
         .where(
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
         )
     )
     with_bonus = bonus_accrued_q.scalar() or 0
@@ -186,6 +196,7 @@ async def analytics_funnel(
             Bonus.status == BonusStatus.PAID,
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
         )
     )
     bonus_paid = bonus_paid_q.scalar() or 0
@@ -215,6 +226,7 @@ async def analytics_dynamics(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     granularity: str = Query("day", pattern="^(day|week|month)$"),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -223,6 +235,8 @@ async def analytics_dynamics(
     Возвращает: [{date, total, confirmed, conversion_pct, bonuses}]
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
 
@@ -243,7 +257,8 @@ async def analytics_dynamics(
             func.coalesce(func.sum(Bonus.amount), 0).label("bonuses"),
         )
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-        .where(Referral.created_at >= dt_from, Referral.created_at < dt_to)
+        .where(Referral.created_at >= dt_from,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
         .group_by("period")
         .order_by("period")
     )
@@ -273,12 +288,15 @@ async def analytics_top_services(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Топ услуг: кол-во направлений, конверсия, бонусный объём, средний бонус.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
 
@@ -297,7 +315,8 @@ async def analytics_top_services(
         )
         .join(Referral, Referral.service_id == Service.id)
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-        .where(Referral.created_at >= dt_from, Referral.created_at < dt_to)
+        .where(Referral.created_at >= dt_from,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
         .group_by(Service.id, Service.name)
         .order_by(func.count(Referral.id).desc())
         .limit(limit)
@@ -328,12 +347,15 @@ async def analytics_top_staff(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Рейтинг сотрудников: кол-во направлений, конверсия, заработанные бонусы.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
 
@@ -358,6 +380,7 @@ async def analytics_top_staff(
             User.role == UserRole.ADMIN,
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
         )
         .group_by(User.id, User.full_name, Clinic.name)
         .order_by(func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).desc())
@@ -387,12 +410,15 @@ async def analytics_clinics(
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Сравнение клиник: направления, конверсия, объём бонусов.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
+    # Tenant isolation
+    _tenant_id = current_user.tenant_id
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
 
@@ -411,7 +437,8 @@ async def analytics_clinics(
         )
         .join(Referral, Referral.from_clinic_id == Clinic.id)
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-        .where(Referral.created_at >= dt_from, Referral.created_at < dt_to)
+        .where(Referral.created_at >= dt_from,
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
         .group_by(Clinic.id, Clinic.name)
         .order_by(func.count(Referral.id).desc())
     )
@@ -437,6 +464,7 @@ async def analytics_clinics(
 async def analytics_ledger_trend(
     user_id: uuid.UUID = Query(...),
     days: int = Query(30, ge=7, le=365),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """

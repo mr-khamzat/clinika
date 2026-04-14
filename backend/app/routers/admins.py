@@ -233,6 +233,9 @@ async def list_admins(
     """Список сотрудников (admin/manager). Партнёры исключены — они в /manager/partners/."""
     # Только активные сотрудники (деактивированные видит только super_admin)
     q = select(User).where(User.role != UserRole.PARTNER, User.is_active == True).order_by(User.full_name)
+    # Тенант-изоляция
+    if current_user.tenant_id is not None:
+        q = q.where(User.tenant_id == current_user.tenant_id)
     # Менеджер с clinic_id видит только свою клинику
     if current_user.clinic_id is not None:
         q = q.where(User.clinic_id == current_user.clinic_id)
