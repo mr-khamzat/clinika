@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 // ─── Хук для анимации появления при скролле ───
 function useInView(threshold = 0.1) {
@@ -53,18 +54,18 @@ function LoginModal({ onClose }) {
     setError('')
     setLoading(true)
     try {
-      const res = await axios.post('/clinika/api/auth/login', { username, password })
+      const res = await axios.post(API_BASE + '/auth/login', { username, password })
       const { access_token, role, clinic_id } = res.data
       if (role === 'manager' && !clinic_id) {
         localStorage.setItem('clinika_admin_token', access_token)
-        window.location.href = '/clinika/admin'
+        window.location.href = '/' + SLUG + '/admin'
       } else {
         setToken(access_token)
-        const me = await axios.get('/clinika/api/admins/me', {
+        const me = await axios.get(API_BASE + '/admins/me', {
           headers: { Authorization: `Bearer ${access_token}` }
         })
         setUser(me.data)
-        window.location.href = '/clinika/'
+        window.location.href = '/' + SLUG + '/'
       }
     } catch {
       setError('Неверный логин или пароль')
@@ -184,7 +185,7 @@ function ContactModal({ onClose }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await axios.post('/clinika/api/contact/', { phone, email, message })
+      await axios.post(API_BASE + '/contact/', { phone, email, message })
       setSent(true)
     } catch {
       // тихо

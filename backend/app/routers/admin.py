@@ -486,3 +486,70 @@ async def set_tenant_subscription(
         "amount_per_period": float(sub.amount_per_period),
     }
 
+
+
+@router.post("/tenants/{tenant_id}/reset-password")
+async def reset_tenant_admin_password(
+    tenant_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import secrets, string
+    from app.core.security import hash_password
+
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    r = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.role.in_([UserRole.MANAGER, UserRole.ADMIN]),
+            User.is_active == True,
+        ).order_by(User.created_at.asc()).limit(1)
+    )
+    admin = r.scalar_one_or_none()
+    if not admin:
+        raise HTTPException(status_code=404, detail="Администратор тенанта не найден")
+
+    alphabet = string.ascii_letters + string.digits + "!@#$%"
+    new_password = "".join(secrets.choice(alphabet) for _ in range(12))
+    admin.password_hash = hash_password(new_password)
+    await db.commit()
+
+    return {
+        "username": admin.username,
+        "new_password": new_password,
+        "url": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}",
+        "admin_panel": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}/admin",
+        "note": "Пароль показан единожды — сохраните его перед закрытием",
+    }
+
+
+@router.get("/tenants/{tenant_id}/credentials")
+async def get_tenant_credentials(
+    tenant_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    r = await db.execute(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.role.in_([UserRole.MANAGER, UserRole.ADMIN]),
+            User.is_active == True,
+        ).order_by(User.created_at.asc()).limit(1)
+    )
+    admin = r.scalar_one_or_none()
+
+    return {
+        "tenant_id": str(t.id),
+        "tenant_name": t.name,
+        "slug": t.slug,
+        "admin_username": admin.username if admin else None,
+        "url": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}",
+        "admin_panel": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}/admin",
+    }

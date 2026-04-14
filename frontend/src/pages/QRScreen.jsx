@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getReferral } from '../api'
 import api from '../api'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 const STATUS_STYLE = {
   created:          'bg-[#dae5ff] text-[#1565c0]',
@@ -195,9 +196,9 @@ export default function QRScreen() {
                   <p className="text-[11px] text-[#727783] mb-1.5">Ссылка для ввода кода:</p>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 text-xs bg-white rounded-xl px-3 py-2 text-[#1565c0] font-mono truncate border border-[#eceef0]">
-                      {window.location.origin}/clinika/p
+                      {`${window.location.origin}/${SLUG}/p`}
                     </code>
-                    <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/clinika/p`)}
+                    <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/${SLUG}/p`)}
                       className="w-9 h-9 bg-white rounded-xl flex items-center justify-center text-[#727783] hover:text-[#1565c0] border border-[#eceef0] transition flex-shrink-0">
                       <span className="material-symbols-outlined text-lg">content_copy</span>
                     </button>

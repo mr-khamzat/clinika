@@ -37,6 +37,7 @@ import ClinicSchedules from './pages/ClinicSchedules'
 import AdminPanel from './pages/AdminPanel'
 import AdminRoot from './pages/AdminRoot'
 import PatientCabinet from './pages/PatientCabinet'
+import { API_BASE, BASE_PATH, SLUG } from './config'
 
 // ─── Применяем тему ДО первого рендера ───
 ;(function applyThemeEarly() {
@@ -107,7 +108,7 @@ function MiniApp() {
 
   // ─── Специальный случай: регистрация по инвайту (без авторизации) ───
   const pathname = window.location.pathname
-  const inviteMatch = pathname.match(/\/clinika\/invite\/([^/]+)/)
+  const inviteMatch = pathname.match(new RegExp('/' + SLUG + '/invite/([^/]+)'))
   if (inviteMatch) {
     return <InviteRegister code={inviteMatch[1]} />
   }
@@ -122,7 +123,7 @@ function MiniApp() {
 
   // ─── Основные маршруты приложения ───
   return (
-    <BrowserRouter basename="/clinika">
+    <BrowserRouter basename={"/" + SLUG}>
       <Routes>
         <Route path="/" element={<Layout />}>
 
@@ -168,11 +169,11 @@ function MiniApp() {
 export default function App() {
   const path = window.location.pathname
   // Панель управления — проверяем токен менеджера
-  if (path.startsWith('/clinika/admin')) {
+  if (path.startsWith('/' + SLUG + '/admin')) {
     return <AdminRoot />
   }
   // Личный кабинет пациента — публичный
-  if (path.startsWith('/clinika/p/') || path === '/clinika/p') {
+  if (path.startsWith('/' + SLUG + '/p/') || path === '/' + SLUG + '/p') {
     return <PatientCabinet />
   }
   // Корень сайта — показываем лендинг (если не залогинен) или приложение

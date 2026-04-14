@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export default function SupportChat() {
   const { token } = useAuthStore()
@@ -29,7 +30,7 @@ export default function SupportChat() {
 
   const fetchMessages = useCallback(async () => {
     try {
-      const res = await axios.get('/clinika/api/support/messages', { headers })
+      const res = await axios.get(API_BASE + '/support/messages', { headers })
       setMessages(res.data)
       setUnread(0)
     } catch {}
@@ -37,14 +38,14 @@ export default function SupportChat() {
 
   const fetchUnread = useCallback(async () => {
     try {
-      const res = await axios.get('/clinika/api/support/unread', { headers })
+      const res = await axios.get(API_BASE + '/support/unread', { headers })
       setUnread(res.data.count)
     } catch {}
   }, [token])
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await axios.get('/clinika/api/support/status')
+      const res = await axios.get(API_BASE + '/support/status')
       setOperatorOnline(res.data.operator_online)
     } catch {}
   }, [])
@@ -87,7 +88,7 @@ export default function SupportChat() {
     setText('')
     setSending(true)
     try {
-      await axios.post('/clinika/api/support/send', { text: t }, { headers })
+      await axios.post(API_BASE + '/support/send', { text: t }, { headers })
       await fetchMessages()
     } catch { setText(t) }
     finally { setSending(false) }
@@ -109,7 +110,7 @@ export default function SupportChat() {
     try {
       const form = new FormData()
       form.append('file', file)
-      await axios.post('/clinika/api/support/upload', form, {
+      await axios.post(API_BASE + '/support/upload', form, {
         headers: { ...headers, 'Content-Type': 'multipart/form-data' }
       })
       await fetchMessages()

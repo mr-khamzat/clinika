@@ -5,8 +5,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = '/clinika/api'
+const API = API_BASE
 
 function authH(token) {
   return { Authorization: `Bearer ${token}` }

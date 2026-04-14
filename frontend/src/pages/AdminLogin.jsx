@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import axios from 'axios'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('')
@@ -12,9 +13,9 @@ export default function AdminLogin() {
     setError('')
     setLoading(true)
     try {
-      const res = await axios.post('/clinika/api/auth/login', { username, password })
+      const res = await axios.post(API_BASE + '/auth/login', { username, password })
       localStorage.setItem('clinika_admin_token', res.data.access_token)
-      window.location.href = '/clinika/admin'
+      window.location.href = '/' + SLUG + '/admin'
     } catch {
       setError('Неверный логин или пароль')
     } finally {

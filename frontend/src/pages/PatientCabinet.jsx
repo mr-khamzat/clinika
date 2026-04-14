@@ -7,8 +7,9 @@
  */
 import { useEffect, useState, useCallback, useRef } from 'react'
 import axios from 'axios'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = '/clinika/api'
+const API = API_BASE
 const TOKEN_KEY = 'clinika_patient_token'
 const REF_KEY = 'clinika_patient_ref'
 
@@ -82,7 +83,7 @@ async function subscribePush(phone, token) {
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return
   try {
-    await navigator.serviceWorker.register('/clinika/sw.js', { scope: '/clinika/' })
+    await navigator.serviceWorker.register('/' + SLUG + '/sw.js', { scope: '/' + SLUG + '/' })
   } catch (e) {
     console.warn('SW register failed:', e)
   }

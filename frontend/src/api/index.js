@@ -1,6 +1,7 @@
 import axios from 'axios'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API_BASE = '/clinika/api'
+// API_BASE imported from config.js
 
 const api = axios.create({ baseURL: API_BASE })
 

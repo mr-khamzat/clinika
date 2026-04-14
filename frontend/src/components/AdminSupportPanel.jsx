@@ -11,8 +11,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = '/clinika/api/support'
+const API = API_BASE + '/support'
 
 function fmt(iso) {
   if (!iso) return ''

@@ -3,8 +3,9 @@
  * Тенант регистрирует URL → система отправляет POST при событии.
  */
 import { useState, useEffect, useCallback } from 'react'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = '/clinika/api'
+const API = API_BASE
 
 function apiFetch(token, path, opts = {}) {
   return fetch(API + path, {

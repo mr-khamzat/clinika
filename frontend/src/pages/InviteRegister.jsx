@@ -12,6 +12,7 @@
 import { useState, useEffect } from 'react'
 import { getInviteInfo, registerByInvite, getMe } from '../api'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export default function InviteRegister({ code }) {
   const { setToken, setUser } = useAuthStore()
@@ -81,7 +82,7 @@ export default function InviteRegister({ code }) {
       const meRes = await getMe()
       setUser(meRes.data)
       // Перенаправляем в приложение
-      window.location.href = '/clinika/'
+      window.location.href = '/' + SLUG + '/'
     } catch (err) {
       const msg = err?.response?.data?.detail
       setError(typeof msg === 'string' ? msg : 'Ошибка регистрации')

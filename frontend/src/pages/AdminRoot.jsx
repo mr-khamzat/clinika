@@ -3,6 +3,7 @@ import axios from 'axios'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
 import DoctorLayout from './DoctorLayout'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export default function AdminRoot() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token'))
@@ -15,7 +16,7 @@ export default function AdminRoot() {
       return
     }
     axios
-      .get('/clinika/api/admins/me', {
+      .get(API_BASE + '/admins/me', {
         headers: { Authorization: `Bearer ${adminToken}` },
       })
       .then(res => {
@@ -34,7 +35,7 @@ export default function AdminRoot() {
 
   const handleLogout = () => {
     localStorage.removeItem('clinika_admin_token')
-    window.location.href = '/clinika/'
+    window.location.href = '/' + SLUG + '/'
   }
 
   if (checking) {

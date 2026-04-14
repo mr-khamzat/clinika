@@ -7,8 +7,9 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = '/clinika/api'
+const API = API_BASE
 const authH = (t) => ({ Authorization: `Bearer ${t}` })
 const apiFetch = (m, url, t, d) => axios({ method: m, url: `${API}${url}`, headers: authH(t), data: d })
 
@@ -48,6 +49,8 @@ export default function PlatformSection({ token }) {
   const [provForm, setProvForm] = useState(EMPTY_PROVISION)
   const [provLoading, setProvLoading] = useState(false)
   const [provResult, setProvResult] = useState(null)
+  const [resetCreds, setResetCreds] = useState(null)   // {username, new_password, url, admin_panel}
+  const [resetLoading, setResetLoading] = useState(null) // tenant_id being reset
 
   const showMsg = (text, type = 'ok') => {
     setMsg(text); setMsgType(type)
@@ -87,6 +90,29 @@ export default function PlatformSection({ token }) {
       setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, is_active: !currentActive } : t))
       showMsg(currentActive ? 'Тенант деактивирован' : 'Тенант активирован')
     } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err') }
+  }
+
+  const resetPassword = async (tenantId) => {
+    if (!confirm('Сгенерировать новый пароль для администратора тенанта?')) return
+    setResetLoading(tenantId)
+    try {
+      const r = await apiFetch('post', `/admin/tenants/${tenantId}/reset-password`, token)
+      setResetCreds(r.data)
+    } catch (e) {
+      showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err')
+    }
+    setResetLoading(null)
+  }
+
+  const copyCredentials = (creds) => {
+    const text = [
+      `🏥 ${creds.tenant_name || 'Доступ в систему'}`,
+      `🔗 ${creds.admin_panel || creds.url}`,
+      `👤 Логин: ${creds.admin_username || creds.username}`,
+      `🔑 Пароль: ${creds.admin_password || creds.new_password}`,
+    ].join('\n')
+    navigator.clipboard?.writeText(text)
+    showMsg('Скопировано в буфер обмена!')
   }
 
   const provision = async () => {
@@ -250,10 +276,17 @@ export default function PlatformSection({ token }) {
                       <span>{new Date(t.created_at).toLocaleDateString('ru-RU')}</span>
                     </div>
                   </div>
-                  <button onClick={() => toggleTenant(t.id, t.is_active)}
-                    className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${t.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${t.is_active ? 'translate-x-5' : ''}`} />
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={() => resetPassword(t.id)} disabled={resetLoading === t.id}
+                      title="Сбросить пароль администратора"
+                      className="p-1.5 rounded-xl border border-amber-200 text-amber-600 hover:bg-amber-50 transition disabled:opacity-40">
+                      <span className="material-symbols-outlined text-base">{resetLoading === t.id ? 'hourglass_empty' : 'key'}</span>
+                    </button>
+                    <button onClick={() => toggleTenant(t.id, t.is_active)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${t.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${t.is_active ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </div>
                 </div>
               </div>
             )
@@ -400,15 +433,57 @@ export default function PlatformSection({ token }) {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mb-4">
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mb-3">
                   Сохраните пароль — он больше не будет показан
                 </p>
+                <button onClick={() => copyCredentials(provResult)}
+                  className="w-full mb-2 border border-[#0097A7] text-[#0097A7] rounded-xl py-2.5 text-sm font-semibold hover:bg-[#0097A7]/5 transition flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined text-base">content_copy</span>
+                  Скопировать данные
+                </button>
                 <button onClick={() => { setShowProvision(false); setProvForm(EMPTY_PROVISION); setProvResult(null); loadTenants() }}
                   className="w-full bg-[#0097A7] text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-[#00838f] transition">
                   Готово
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Модал: новый пароль после сброса */}
+      {resetCreds && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setResetCreds(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl w-full max-w-sm p-6">
+            <div className="text-center mb-4">
+              <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                <span className="material-symbols-outlined text-3xl text-amber-600" style={{ fontVariationSettings: "'FILL' 1" }}>key</span>
+              </div>
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Новый пароль создан</h2>
+              <p className="text-xs text-gray-400 mt-1">Сохраните — показывается один раз</p>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 space-y-2 mb-4">
+              {[
+                { label: 'Логин', value: resetCreds.username },
+                { label: 'Пароль', value: resetCreds.new_password, mono: true, highlight: true },
+                { label: 'Панель', value: resetCreds.admin_panel },
+              ].map(r => (
+                <div key={r.label} className="flex justify-between items-center text-sm gap-2">
+                  <span className="text-gray-400 flex-shrink-0">{r.label}</span>
+                  <span className={`font-semibold text-right break-all ${r.highlight ? 'text-amber-700 font-mono bg-amber-50 px-2 py-0.5 rounded' : 'text-gray-800 dark:text-white'}`}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => copyCredentials({ admin_username: resetCreds.username, admin_password: resetCreds.new_password, admin_panel: resetCreds.admin_panel })}
+              className="w-full mb-2 border border-[#0097A7] text-[#0097A7] rounded-xl py-2.5 text-sm font-semibold hover:bg-[#0097A7]/5 transition flex items-center justify-center gap-2">
+              <span className="material-symbols-outlined text-base">content_copy</span>
+              Скопировать данные
+            </button>
+            <button onClick={() => setResetCreds(null)}
+              className="w-full bg-[#0097A7] text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-[#00838f] transition">
+              Закрыть
+            </button>
           </div>
         </div>
       )}

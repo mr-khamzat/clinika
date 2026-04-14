@@ -4,6 +4,7 @@ import BottomNav from './BottomNav'
 import HelpModal from './HelpModal'
 import SupportChat from './SupportChat'
 import useAuthStore from '../store/auth'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export const ThemeContext = createContext({ isDark: false, toggleTheme: () => {} })
 export const HelpContext = createContext({ openHelp: () => {} })
@@ -44,7 +45,7 @@ export default function Layout() {
   const handleLogout = () => {
     if (window.confirm('Выйти из аккаунта?')) {
       logout()
-      window.location.href = '/clinika/'
+      window.location.href = '/' + SLUG + '/'
     }
   }
 

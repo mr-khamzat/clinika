@@ -7,6 +7,7 @@ const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -17,7 +18,7 @@ function authHeaders(token) {
 }
 
 function apiFetch(method, url, token, data) {
-  return axios({ method, url: `/clinika/api${url}`, headers: authHeaders(token), data })
+  return axios({ method, url: `${API_BASE}${url}`, headers: authHeaders(token), data })
 }
 
 function Spinner() {
@@ -1316,7 +1317,7 @@ function ReportsSection({ token }) {
     try {
       const res = await axios({
         method: 'get',
-        url: '/clinika/api/manager/reports/export',
+        url: API_BASE + '/manager/reports/export',
         headers: authHeaders(token),
         responseType: 'blob',
       })
@@ -3188,7 +3189,7 @@ function PartnersSection({ token }) {
 
   // ─── Копирование инвайт-ссылки ───
   const handleCopyInvite = (code) => {
-    const url = `${window.location.origin}/clinika/invite/${code}`
+    const url = `${window.location.origin}${BASE_PATH}/invite/${code}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(code)
       setTimeout(() => setCopied(null), 2000)
@@ -3276,7 +3277,7 @@ function PartnersSection({ token }) {
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
               {invites.map((inv, i) => {
-                const url = `${window.location.origin}/clinika/invite/${inv.code}`
+                const url = `${window.location.origin}${BASE_PATH}/invite/${inv.code}`
                 return (
                   <div key={inv.id}
                     className={`flex items-center gap-3 p-4 ${i < invites.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>

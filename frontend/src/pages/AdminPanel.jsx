@@ -6,6 +6,7 @@ import {
   listInvitations, createInvitation, deleteInvitation,
 } from '../api'
 import api from '../api'
+import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 function getInitials(name) {
   if (!name) return '?'
@@ -622,7 +623,7 @@ function PartnersTab() {
 
   // ─── Копирование ссылки ───
   const handleCopy = (code) => {
-    const url = `${window.location.origin}/clinika/invite/${code}`
+    const url = `${window.location.origin}${BASE_PATH}/invite/${code}`
     navigator.clipboard.writeText(url).then(() => {
       setCopied(code)
       setTimeout(() => setCopied(null), 2000)
@@ -686,7 +687,7 @@ function PartnersTab() {
         ) : (
           <div className="flex flex-col gap-2">
             {activeInvites.map(inv => {
-              const url = `${window.location.origin}/clinika/invite/${inv.code}`
+              const url = `${window.location.origin}${BASE_PATH}/invite/${inv.code}`
               return (
                 <div key={inv.id} className="bg-white border border-gray-100 rounded-xl p-3 flex items-center gap-2 shadow-sm">
                   <div className="flex-1 min-w-0">
