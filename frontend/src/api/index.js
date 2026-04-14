@@ -6,7 +6,7 @@ import { API_BASE, BASE_PATH, SLUG } from '../config'
 const api = axios.create({ baseURL: API_BASE })
 
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('clinika_token')
+  const token = localStorage.getItem('clinika_token_' + SLUG)
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })

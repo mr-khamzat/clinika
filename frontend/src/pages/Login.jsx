@@ -1,3 +1,4 @@
+import { SLUG } from '../config'
 import { useState } from 'react'
 import useAuthStore from '../store/auth'
 import { loginPassword, getMe } from '../api'
@@ -22,7 +23,7 @@ export default function Login() {
       const res = await loginPassword(username.trim(), password.trim())
       const token = res.data.access_token
       setToken(token)
-      localStorage.setItem('clinika_token', token)
+      localStorage.setItem('clinika_token_' + SLUG, token)
       const me = await getMe()
       setUser(me.data)
       window.location.reload()

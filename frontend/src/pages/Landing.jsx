@@ -57,7 +57,7 @@ function LoginModal({ onClose }) {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
       const { access_token, role, clinic_id } = res.data
       if (role === 'manager' && !clinic_id) {
-        localStorage.setItem('clinika_admin_token', access_token)
+        localStorage.setItem('clinika_admin_token_' + SLUG, access_token)
         window.location.href = '/' + SLUG + '/admin'
       } else {
         setToken(access_token)

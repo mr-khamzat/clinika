@@ -6,7 +6,7 @@ import DoctorLayout from './DoctorLayout'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 export default function AdminRoot() {
-  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token'))
+  const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token_' + SLUG))
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(!!adminToken)
 
@@ -24,7 +24,7 @@ export default function AdminRoot() {
       })
       .catch(err => {
         if (err?.response?.status === 401) {
-          localStorage.removeItem('clinika_admin_token')
+          localStorage.removeItem('clinika_admin_token_' + SLUG)
           setAdminToken(null)
         }
       })
@@ -34,7 +34,7 @@ export default function AdminRoot() {
   }, [adminToken])
 
   const handleLogout = () => {
-    localStorage.removeItem('clinika_admin_token')
+    localStorage.removeItem('clinika_admin_token_' + SLUG)
     window.location.href = '/' + SLUG + '/'
   }
 

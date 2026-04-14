@@ -14,7 +14,7 @@ export default function AdminLogin() {
     setLoading(true)
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
-      localStorage.setItem('clinika_admin_token', res.data.access_token)
+      localStorage.setItem('clinika_admin_token_' + SLUG, res.data.access_token)
       window.location.href = '/' + SLUG + '/admin'
     } catch {
       setError('Неверный логин или пароль')

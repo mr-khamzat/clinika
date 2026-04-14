@@ -82,7 +82,7 @@ function MiniApp() {
           } catch (e) {
             // токен просрочен или недействителен — сбрасываем
             if (e?.response?.status === 401) {
-              localStorage.removeItem('clinika_token')
+              localStorage.removeItem('clinika_token_' + SLUG)
               useAuthStore.getState().logout()
             }
           }
