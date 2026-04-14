@@ -1,7 +1,7 @@
 """
 Clinika Telegram Bot v2
 ─────────────────────────────────────────────
-Бот 1: TELEGRAM_BOT_TOKEN — мини-приложение КлиникаСеть
+Бот 1: TELEGRAM_BOT_TOKEN — мини-приложение КлиникСеть
 Бот 2: SUPPORT_BOT_TOKEN  — поддержка (ответы admin → сайт)
 """
 import os
@@ -33,10 +33,10 @@ UUID_REGEX = re.compile(
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    keyboard = [[InlineKeyboardButton("🏥 Открыть КлиникаСеть", web_app=WebAppInfo(url=MINI_APP_URL))]]
+    keyboard = [[InlineKeyboardButton("🏥 Открыть КлиникСеть", web_app=WebAppInfo(url=MINI_APP_URL))]]
     await update.message.reply_text(
         f"Привет, {user.first_name}! 👋\n\n"
-        "🏥 *КлиникаСеть* — система направлений между клиниками.\n\n"
+        "🏥 *КлиникСеть* — система направлений между клиниками.\n\n"
         "Нажмите кнопку ниже чтобы открыть приложение:",
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown",

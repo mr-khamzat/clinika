@@ -164,6 +164,7 @@ function LoginModal({ onClose }) {
 
 // ─── Модальное окно обратной связи ───
 function ContactModal({ onClose }) {
+  const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
@@ -174,7 +175,7 @@ function ContactModal({ onClose }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await axios.post(API_BASE + '/contact/', { phone, email, message })
+      await axios.post(API_BASE + '/contact/', { name, phone, email, message })
       setSent(true)
     } catch {}
     finally { setLoading(false) }
@@ -209,6 +210,14 @@ function ContactModal({ onClose }) {
               <p className="text-gray-500 text-sm">Расскажите о вашей клинике — мы свяжемся и подберём решение</p>
             </div>
             <form onSubmit={handleSubmit} className="p-7 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">Имя *</label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xl">person</span>
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} required placeholder="Иван Иванов"
+                    className="w-full border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-2xl pl-11 pr-4 py-3 text-gray-900 placeholder-gray-400 text-sm outline-none transition" />
+                </div>
+              </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-1.5">Телефон *</label>
                 <div className="relative">
@@ -330,7 +339,7 @@ export default function Landing() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center shadow-md shadow-blue-200">
               <span className="material-symbols-outlined text-white text-lg" style={{fontVariationSettings:"'FILL' 1"}}>health_and_safety</span>
             </div>
-            <span className="font-bold text-lg">КлиникаСеть</span>
+            <span className="font-bold text-lg">КлиникСеть</span>
           </div>
           <div className="hidden md:flex items-center gap-6 text-sm text-gray-500">
             {[['features','Возможности'],['how','Как работает'],['pricing','Тарифы'],['roles','Для кого']].map(([id,label]) => (
@@ -382,7 +391,7 @@ export default function Landing() {
               </span>
             </h1>
             <p className="text-gray-500 text-xl leading-relaxed mb-10 max-w-2xl">
-              КлиникаСеть — готовая платформа для автоматизации направлений, бонусов, расписания врачей, аналитики и взаиморасчётов. Разворачивается за день. Работает для любой сети клиник.
+              КлиникСеть — готовая платформа для автоматизации направлений, бонусов, расписания врачей, аналитики и взаиморасчётов. Разворачивается за день. Работает для любой сети клиник.
             </p>
             <div className="flex flex-wrap gap-4 mb-14">
               <button onClick={() => setShowContact(true)}
@@ -476,7 +485,7 @@ export default function Landing() {
           <FadeIn>
             <div className="text-center mb-16">
               <div className="inline-flex flex-col items-center gap-2">
-                <span className="text-gray-300 text-sm font-medium uppercase tracking-widest">КлиникаСеть решает это</span>
+                <span className="text-gray-300 text-sm font-medium uppercase tracking-widest">КлиникСеть решает это</span>
                 <div className="flex flex-col items-center gap-1">
                   <div className="w-px h-8 bg-gradient-to-b from-gray-200 to-blue-400"/>
                   <div className="w-3 h-3 rounded-full bg-blue-500"/>
@@ -547,7 +556,7 @@ export default function Landing() {
           <FadeIn>
             <div className="text-center mb-16">
               <div className="inline-block bg-blue-50 text-blue-600 text-sm font-semibold px-4 py-1.5 rounded-full mb-4">Простой процесс</div>
-              <h2 className="font-bold text-4xl md:text-5xl text-gray-900 mb-4">Как работает КлиникаСеть</h2>
+              <h2 className="font-bold text-4xl md:text-5xl text-gray-900 mb-4">Как работает КлиникСеть</h2>
               <p className="text-gray-500 text-lg max-w-2xl mx-auto">От направления до выплаты бонуса — всё автоматически</p>
             </div>
           </FadeIn>
@@ -716,7 +725,7 @@ export default function Landing() {
               <div className="inline-block bg-white/10 text-white text-sm font-semibold px-4 py-1.5 rounded-full mb-4">Почему именно мы</div>
               <h2 className="font-bold text-4xl md:text-5xl mb-4">Не просто CRM.<br/>Готовая экосистема.</h2>
               <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-                КлиникаСеть — это не набор инструментов. Это единая платформа, где все части работают вместе с первого дня.
+                КлиникСеть — это не набор инструментов. Это единая платформа, где все части работают вместе с первого дня.
               </p>
             </div>
           </FadeIn>
@@ -778,7 +787,7 @@ export default function Landing() {
               <span className="material-symbols-outlined text-white text-lg" style={{fontVariationSettings:"'FILL' 1"}}>health_and_safety</span>
             </div>
             <div>
-              <div className="font-bold text-white text-sm">КлиникаСеть</div>
+              <div className="font-bold text-white text-sm">КлиникСеть</div>
               <div className="text-xs text-gray-500">SaaS-платформа для медицинских сетей</div>
             </div>
           </div>
@@ -788,7 +797,7 @@ export default function Landing() {
             ))}
             <button onClick={() => setShowContact(true)} className="hover:text-white transition">Контакты</button>
           </div>
-          <p className="text-xs text-gray-600">© 2026 КлиникаСеть. Все права защищены.</p>
+          <p className="text-xs text-gray-600">© 2026 КлиникСеть. Все права защищены.</p>
         </div>
       </footer>
 

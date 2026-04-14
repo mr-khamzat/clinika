@@ -5726,7 +5726,7 @@ function SuperAdminSection({ token }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Платформа КлиникаСеть</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Платформа КлиникСеть</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление тенантами и подписками</p>
         </div>
         <button onClick={() => setShowCreate(true)}
@@ -7424,7 +7424,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               style={{ fontVariationSettings: "'FILL' 1" }}>health_and_safety</span>
           </div>
           <div>
-            <div className="text-lg font-bold leading-tight font-headline tracking-tight">{branding?.brand_name || "КлиникаСеть"}</div>
+            <div className="text-lg font-bold leading-tight font-headline tracking-tight">{branding?.brand_name || "КлиникСеть"}</div>
             <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Medical Fintech</div>
           </div>
         </div>
@@ -7502,7 +7502,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-white transition" aria-label="Меню">
             <span className="material-symbols-outlined">menu</span>
           </button>
-          <span className="font-headline font-bold text-sm tracking-tight">КлиникаСеть</span>
+          <span className="font-headline font-bold text-sm tracking-tight">КлиникСеть</span>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => setDark(d => !d)} className="text-slate-400 hover:text-white transition">
               <span className="material-symbols-outlined text-lg">{dark ? 'light_mode' : 'dark_mode'}</span>

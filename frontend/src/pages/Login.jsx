@@ -47,7 +47,7 @@ export default function Login() {
               style={{ fontSize: 36, fontVariationSettings: "'FILL' 1" }}
             >hub</span>
           </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#191c1e] font-headline">КлиникаСеть</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-[#191c1e] font-headline">КлиникСеть</h1>
           <p className="text-[11px] font-semibold text-[#727783] uppercase tracking-widest mt-1">Медицинская сеть</p>
         </header>
 
@@ -139,7 +139,7 @@ export default function Login() {
             v2.1
           </span>
           <span className="h-1 w-1 rounded-full bg-[#c2c6d4]" />
-          <p className="text-[11px] text-[#727783]">© КлиникаСеть 2025</p>
+          <p className="text-[11px] text-[#727783]">© КлиникСеть 2025</p>
         </footer>
       </div>
     </div>

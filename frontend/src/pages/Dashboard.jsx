@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getBonusSummary } from '../api'
+import { getBonusSummary, getIncomingReferrals } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
 
@@ -32,12 +32,16 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null)
   const [kpi, setKpi] = useState(null)
   const [recentReferrals, setRecentReferrals] = useState([])
+  const [incomingCount, setIncomingCount] = useState(0)
   const nav = useNavigate()
 
   useEffect(() => {
     getBonusSummary().then(r => setSummary(r.data)).catch(() => {})
     api.get('/admins/me/stats').then(r => setStats(r.data)).catch(() => {})
     api.get('/admins/me/kpi').then(r => setKpi(r.data)).catch(() => {})
+    getIncomingReferrals().then(r => {
+      setIncomingCount((r.data || []).filter(x => x.status === 'created').length)
+    }).catch(() => {})
     api.get('/referrals?limit=5').then(r => {
       const data = r.data
       setRecentReferrals(Array.isArray(data) ? data.slice(0, 5) : [])
@@ -122,9 +126,14 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => nav('/history')}
-              className="group flex flex-col gap-3 p-5 rounded-[1.75rem] bg-white active:scale-95 transition-all"
+              className="group flex flex-col gap-3 p-5 rounded-[1.75rem] bg-white active:scale-95 transition-all relative"
               style={{ boxShadow: '0 4px 16px rgba(25,28,30,0.05)' }}
             >
+              {incomingCount > 0 && (
+                <span className="absolute top-3 right-3 min-w-[18px] h-[18px] bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow">
+                  {incomingCount}
+                </span>
+              )}
               <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600">
                 <span className="material-symbols-outlined text-2xl">list_alt</span>
               </div>
@@ -165,9 +174,14 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => nav('/history')}
-              className="group flex flex-col gap-3 p-5 rounded-[1.75rem] bg-white active:scale-95 transition-all"
+              className="group flex flex-col gap-3 p-5 rounded-[1.75rem] bg-white active:scale-95 transition-all relative"
               style={{ boxShadow: '0 4px 16px rgba(25,28,30,0.05)' }}
             >
+              {incomingCount > 0 && (
+                <span className="absolute top-3 right-3 min-w-[18px] h-[18px] bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow">
+                  {incomingCount}
+                </span>
+              )}
               <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600">
                 <span className="material-symbols-outlined text-2xl">list_alt</span>
               </div>

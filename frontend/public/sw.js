@@ -28,7 +28,7 @@ self.addEventListener('activate', event => {
 
 // Push event: show notification
 self.addEventListener('push', event => {
-  let payload = { title: 'КлиникаСеть', body: 'Новое уведомление', data: {} };
+  let payload = { title: 'КлиникСеть', body: 'Новое уведомление', data: {} };
   if (event.data) {
     try { payload = JSON.parse(event.data.text()); } catch {}
   }
@@ -47,7 +47,7 @@ self.addEventListener('push', event => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'КлиникаСеть', opts)
+    self.registration.showNotification(payload.title || 'КлиникСеть', opts)
   );
 });
 

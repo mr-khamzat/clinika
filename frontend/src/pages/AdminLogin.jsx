@@ -38,7 +38,7 @@ export default function AdminLogin() {
           <div className="w-16 h-16 bg-clinical-50 rounded-2xl flex items-center justify-center mb-4">
             <span className="text-4xl">🏥</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 text-center">КлиникаСеть</h1>
+          <h1 className="text-2xl font-bold text-gray-800 text-center">КлиникСеть</h1>
           <p className="text-gray-400 text-sm mt-1">Панель управления</p>
         </div>
 

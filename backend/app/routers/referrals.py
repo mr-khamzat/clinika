@@ -140,6 +140,37 @@ async def get_my_referrals(
     referrals = result.scalars().all()
     return [await _enrich_referral(r, db) for r in referrals]
 
+@router.get("/incoming", response_model=list[ReferralResponse])
+async def get_incoming_referrals(
+    status: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Входящие направления — направленные В клинику текущего пользователя.
+    Используется для уведомлений и просмотра ожидаемых пациентов.
+    """
+    if not current_user.clinic_id:
+        return []
+    q = (
+        select(Referral)
+        .where(
+            Referral.to_clinic_id == current_user.clinic_id,
+            Referral.created_by_admin_id != current_user.id,  # исключаем свои
+        )
+        .order_by(Referral.created_at.desc())
+        .limit(100)
+    )
+    if status:
+        from app.models.referral import ReferralStatus as RS
+        try:
+            q = q.where(Referral.status == RS(status))
+        except ValueError:
+            pass
+    result = await db.execute(q)
+    referrals = result.scalars().all()
+    return [await _enrich_referral(r, db) for r in referrals]
+
 @router.get("/{referral_id}", response_model=ReferralResponse)
 async def get_referral(
     referral_id: uuid.UUID,
