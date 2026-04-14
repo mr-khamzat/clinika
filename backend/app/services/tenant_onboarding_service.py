@@ -65,7 +65,7 @@ async def onboard_tenant(
     trial_until = date.today() + timedelta(days=14)
     plan_limits = {
         "basic":        {"max_clinics": 3,  "max_users": 20},
-        "professional": {"max_clinics": 10, "max_users": 100},
+        "professional": {"max_clinics": 5, "max_users": 100},
         "enterprise":   {"max_clinics": 50, "max_users": 500},
     }.get(plan, {"max_clinics": 3, "max_users": 20})
 

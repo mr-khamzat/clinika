@@ -107,7 +107,7 @@ async def list_tenants(
 ):
     """Список всех тенантов с агрегированной статистикой."""
     tenants_result = await db.execute(
-        select(Tenant).order_by(Tenant.created_at.desc())
+        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.created_at.desc())
     )
     tenants = tenants_result.scalars().all()
 

@@ -83,7 +83,7 @@ FEATURE_MIN_PLAN: dict[str, str] = {
 # Лимиты ресурсов по планам
 PLAN_LIMITS: dict[str, dict] = {
     "basic":        {"max_clinics": 3,  "max_users": 50,  "max_partners": 500},
-    "professional": {"max_clinics": 15, "max_users": 200, "max_partners": 5000},
+    "professional": {"max_clinics": 5, "max_users": 200, "max_partners": 5000},
     "enterprise":   {"max_clinics": 0,  "max_users": 0,   "max_partners": 0},   # 0 = безлимит
 }
 
