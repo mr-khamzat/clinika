@@ -151,6 +151,8 @@ async def get_integrations(
     from app.plugins.registry import plugin_registry
     tid = _tid(tenant, current_user)
     q = select(Clinic).where(Clinic.is_active == True)
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
     if tid:
         q = q.where(Clinic.tenant_id == tid)
     clinics_r = await db.execute(q)
@@ -216,6 +218,8 @@ async def get_visibility(
     """Матрица видимости клиник для тенанта."""
     tid = _tid(tenant, current_user)
     q = select(Clinic).where(Clinic.is_active == True)
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
     if tid:
         q = q.where(Clinic.tenant_id == tid)
     clinics_r = await db.execute(q)

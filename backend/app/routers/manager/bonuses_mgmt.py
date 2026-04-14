@@ -75,8 +75,10 @@ async def list_cancel_requests(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(Referral).where(Referral.status == ReferralStatus.CANCEL_REQUESTED)
-        .order_by(Referral.cancel_requested_at.desc())
+        select(Referral).where(
+            Referral.status == ReferralStatus.CANCEL_REQUESTED,
+            Referral.tenant_id == current_user.tenant_id if current_user.tenant_id else True
+        ).order_by(Referral.cancel_requested_at.desc())
     )
     referrals = result.scalars().all()
     items = []

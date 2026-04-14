@@ -46,6 +46,7 @@ def _get_ip(request: Request) -> str | None:
 
 async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
     """Выпускает access + refresh токены, сохраняет refresh в БД."""
+    from app.models.tenant import Tenant as TenantModel
     access = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
@@ -64,15 +65,37 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
     db.add(rt)
     await db.commit()
 
+    # Получаем slug тенанта для редиректа на правильную панель
+    tenant_slug = None
+    if user.tenant_id:
+        t_r = await db.execute(select(TenantModel).where(TenantModel.id == user.tenant_id))
+        t_obj = t_r.scalar_one_or_none()
+        tenant_slug = t_obj.slug if t_obj else None
+
+    # Определяем куда редиректить после логина
+    role = user.role.value
+    superadmin_uname = settings.superadmin_username if hasattr(settings, "superadmin_username") else "khamzat"
+    is_super = (role == "super_admin" or user.username == superadmin_uname)
+    if is_super:
+        redirect_url = "/arc/admin"
+    elif role in ("manager", "admin") and tenant_slug:
+        redirect_url = f"/{tenant_slug}/admin"
+    elif tenant_slug:
+        redirect_url = f"/{tenant_slug}/"
+    else:
+        redirect_url = "/arc/"
+
     return {
         "access_token": access,
         "refresh_token": raw_refresh,
         "token_type": "bearer",
-        "expires_in": 30 * 60,  # 30 мин в секундах
+        "expires_in": 30 * 60,
         "user_id": str(user.id),
-        "role": user.role.value,
+        "role": role,
         "clinic_id": str(user.clinic_id) if user.clinic_id else None,
         "full_name": user.full_name,
+        "tenant_slug": tenant_slug,
+        "redirect_url": redirect_url,
     }
 
 

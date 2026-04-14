@@ -36,6 +36,8 @@ async def list_partners(
     db: AsyncSession = Depends(get_db),
 ):
     q = select(User).where(User.role == UserRole.PARTNER).order_by(User.full_name)
+    if current_user.tenant_id is not None:
+        q = q.where(User.tenant_id == current_user.tenant_id)
     if current_user.clinic_id is not None:
         q = q.where(User.clinic_id == current_user.clinic_id)
     result = await db.execute(q)

@@ -20,7 +20,24 @@ export default function AdminRoot() {
         headers: { Authorization: `Bearer ${adminToken}` },
       })
       .then(res => {
-        setUser(res.data)
+        const u = res.data
+        const role = u.role
+        const slug = u.tenant_slug
+        const isSuperAdmin = u.is_superadmin || u.is_super || role === 'super_admin'
+
+        // Партнёры и доктора — не имеют доступа к /admin
+        if (role === 'partner') {
+          window.location.href = '/' + (slug || SLUG) + '/'
+          return
+        }
+
+        // Если пользователь зашёл на чужой тенант — редирект на свой
+        if (!isSuperAdmin && slug && slug !== SLUG) {
+          window.location.href = '/' + slug + '/admin'
+          return
+        }
+
+        setUser(u)
       })
       .catch(err => {
         if (err?.response?.status === 401) {

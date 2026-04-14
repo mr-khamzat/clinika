@@ -40,6 +40,9 @@ async def get_summary(
     db: AsyncSession = Depends(get_db),
 ):
     filters = []
+
+    if current_user.tenant_id is not None:
+        filters.append(Referral.tenant_id == current_user.tenant_id)
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -85,6 +88,9 @@ async def get_admin_stats(
     db: AsyncSession = Depends(get_db),
 ):
     ref_filters = []
+
+    if current_user.tenant_id is not None:
+        ref_filters.append(Referral.tenant_id == current_user.tenant_id)
     if clinic_id:
         ref_filters.append(User.clinic_id == clinic_id)
     if date_from:
@@ -178,6 +184,9 @@ async def get_clinic_flow(
     db: AsyncSession = Depends(get_db),
 ):
     filters = []
+
+    if current_user.tenant_id is not None:
+        filters.append(Referral.tenant_id == current_user.tenant_id)
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -205,7 +214,10 @@ async def get_clinic_flow(
         all_clinic_ids.add(fc)
         all_clinic_ids.add(tc)
 
-    clinic_q = await db.execute(select(Clinic.id, Clinic.name).where(Clinic.id.in_(list(all_clinic_ids))))
+    clinic_filter = [Clinic.id.in_(list(all_clinic_ids))]
+    if current_user.tenant_id is not None:
+        clinic_filter.append(Clinic.tenant_id == current_user.tenant_id)
+    clinic_q = await db.execute(select(Clinic.id, Clinic.name).where(*clinic_filter))
     clinic_names = {row.id: row.name for row in clinic_q.all()}
 
     return [
@@ -238,6 +250,9 @@ async def export_referrals(
     ToC = aliased(Clinic, name="to_c")
 
     filters = []
+
+    if current_user.tenant_id is not None:
+        filters.append(Referral.tenant_id == current_user.tenant_id)
     if clinic_id:
         filters.append(or_(Referral.from_clinic_id == clinic_id, Referral.to_clinic_id == clinic_id))
     if admin_id:
@@ -298,6 +313,9 @@ async def list_bonuses_by_admin(
     db: AsyncSession = Depends(get_db),
 ):
     ref_filters = []
+
+    if current_user.tenant_id is not None:
+        ref_filters.append(Referral.tenant_id == current_user.tenant_id)
     if date_from:
         ref_filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -372,6 +390,9 @@ async def list_all_referrals(
     Canceller = aliased(User, name="canceller")
 
     filters = []
+
+    if current_user.tenant_id is not None:
+        filters.append(Referral.tenant_id == current_user.tenant_id)
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:

@@ -55,18 +55,12 @@ function LoginModal({ onClose }) {
     setLoading(true)
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
-      const { access_token, role, clinic_id } = res.data
-      if (role === 'manager' && !clinic_id) {
-        localStorage.setItem('clinika_admin_token_' + SLUG, access_token)
-        window.location.href = '/' + SLUG + '/admin'
-      } else {
-        setToken(access_token)
-        const me = await axios.get(API_BASE + '/admins/me', {
-          headers: { Authorization: `Bearer ${access_token}` }
-        })
-        setUser(me.data)
-        window.location.href = '/' + SLUG + '/'
-      }
+      const { access_token, role, redirect_url, tenant_slug } = res.data
+      const targetSlug = tenant_slug || SLUG
+      // Сохраняем токен для правильного тенанта
+      localStorage.setItem('clinika_admin_token_' + targetSlug, access_token)
+      // Редиректим куда бэкенд сказал (определяется по роли и тенанту)
+      window.location.href = redirect_url || ('/' + targetSlug + '/')
     } catch {
       setError('Неверный логин или пароль')
     } finally {

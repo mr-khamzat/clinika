@@ -204,7 +204,8 @@ async def list_managers(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(User).where(User.role == UserRole.MANAGER, User.is_active == True)
-    )
+    q = select(User).where(User.role == UserRole.MANAGER, User.is_active == True)
+    if current_user.tenant_id is not None:
+        q = q.where(User.tenant_id == current_user.tenant_id)
+    result = await db.execute(q)
     return [{"id": str(u.id), "full_name": u.full_name, "username": u.username} for u in result.scalars().all()]

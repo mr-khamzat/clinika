@@ -22,7 +22,10 @@ async def list_clinics(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Clinic).order_by(Clinic.name))
+    q = select(Clinic).order_by(Clinic.name)
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    result = await db.execute(q)
     return [ClinicResponse.model_validate(c) for c in result.scalars().all()]
 
 
@@ -33,7 +36,10 @@ async def update_clinic(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Clinic).where(Clinic.id == clinic_id))
+    q = select(Clinic).where(Clinic.id == clinic_id)
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    result = await db.execute(q)
     clinic = result.scalar_one_or_none()
     if not clinic:
         raise HTTPException(status_code=404, detail="Клиника не найдена")

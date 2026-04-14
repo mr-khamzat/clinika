@@ -155,6 +155,8 @@ async def sync_services_from_mis(
 ):
     from app.services.mis_client import get_services
     q = select(Clinic).where(Clinic.mis_id.isnot(None))
+    if current_user.tenant_id is not None:
+        q = q.where(Clinic.tenant_id == current_user.tenant_id)
     if clinic_id: q = q.where(Clinic.id == clinic_id)
     result = await db.execute(q)
     clinics = result.scalars().all()

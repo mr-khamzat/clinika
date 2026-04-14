@@ -12,9 +12,34 @@ from app.core.deps import get_current_user, require_manager
 router = APIRouter(prefix="/admins", tags=["admins"])
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+@router.get("/me")
+async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    from app.models.tenant import Tenant as TenantModel
+    from app.config import settings
+    tenant_slug = None
+    if current_user.tenant_id:
+
+        from sqlalchemy import select as _sel
+        t_r = await db.execute(_sel(TenantModel).where(TenantModel.id == current_user.tenant_id))
+        t_obj = t_r.scalar_one_or_none()
+        tenant_slug = t_obj.slug if t_obj else None
+
+    role = current_user.role.value
+    superadmin_uname = getattr(settings, "superadmin_username", "khamzat")
+    is_super = (role == "super_admin" or current_user.username == superadmin_uname)
+
+    data = UserResponse.model_validate(current_user).model_dump()
+    data["tenant_slug"] = tenant_slug
+    data["is_super"] = is_super
+    if is_super:
+        data["redirect_url"] = "/arc/admin"
+    elif role in ("manager", "admin") and tenant_slug:
+        data["redirect_url"] = f"/{tenant_slug}/admin"
+    elif tenant_slug:
+        data["redirect_url"] = f"/{tenant_slug}/"
+    else:
+        data["redirect_url"] = "/arc/"
+    return data
 
 
 @router.patch("/me", response_model=UserResponse)
