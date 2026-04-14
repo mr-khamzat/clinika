@@ -420,7 +420,7 @@ async def request_plan_upgrade(
             tenant_slug = t.slug
 
     tg_text = (
-        "Zapros na smenu tarifa\n"
+        "Zapros na smenu tarifa (ru):\n"
         f"Tenant: {tenant_name} ({tenant_slug})\n"
         f"User: {current_user.full_name}\n"
         f"Plan: {wanted_plan}\n"
@@ -437,5 +437,5 @@ async def request_plan_upgrade(
     except Exception:
         pass
 
-    return {"ok": True, "message": "Zapros otpravlen. My svyazhemsya s vami."}
+    return {"ok": True, "message": "Заявка на смену тарифа отправлена. Ожидайте смены тарифного плана в течении 24 часов."}
     

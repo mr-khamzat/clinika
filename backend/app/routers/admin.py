@@ -230,17 +230,122 @@ async def create_tenant(
 @router.patch("/tenants/{tenant_id}/toggle")
 async def toggle_tenant(
     tenant_id: uuid.UUID,
-    data: TenantToggle,
     _: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Активировать / деактивировать тенант."""
+    """Активировать / деактивировать тенант (переключает текущее состояние)."""
     t = await db.get(Tenant, tenant_id)
     if not t:
         raise HTTPException(status_code=404, detail="Тенант не найден")
-    t.is_active = data.is_active
+    t.is_active = not t.is_active
     await db.commit()
     return {"id": str(t.id), "is_active": t.is_active}
+
+
+@router.delete("/tenants/{tenant_id}")
+async def delete_tenant(
+    tenant_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить тенант: деактивировать + пометить deleted_at (мягкое удаление)."""
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+    if t.slug in ("arc",):
+        raise HTTPException(status_code=400, detail="Нельзя удалить системный тенант")
+    t.is_active = False
+    # Отзываем все токены пользователей тенанта
+    from app.models.refresh_token import RefreshToken
+    from app.models.user import User as UserModel
+    user_ids_r = await db.execute(select(UserModel.id).where(UserModel.tenant_id == tenant_id))
+    user_ids = user_ids_r.scalars().all()
+    for uid in user_ids:
+        tokens_r = await db.execute(
+            select(RefreshToken).where(RefreshToken.user_id == uid, RefreshToken.revoked == False)
+        )
+        for tok in tokens_r.scalars().all():
+            tok.revoked = True
+    await db.commit()
+    return {"status": "deleted", "tenant_id": str(tenant_id)}
+
+
+@router.patch("/tenants/{tenant_id}/plan")
+async def change_tenant_plan(
+    tenant_id: uuid.UUID,
+    body: dict,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сменить тариф тенанта (суперадмин). Обновляет TenantLicense + Subscription."""
+    plan = (body.get("plan") or "").strip()
+    if plan not in ("basic", "professional", "enterprise"):
+        raise HTTPException(status_code=400, detail="Неверный тариф")
+    days = int(body.get("days", 30))
+
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    # Обновить TenantLicense
+    tl_r = await db.execute(select(TenantLicense).where(TenantLicense.tenant_id == tenant_id))
+    tl = tl_r.scalar_one_or_none()
+    if tl:
+        tl.plan = plan
+    else:
+        db.add(TenantLicense(tenant_id=tenant_id, plan=plan, is_active=True))
+
+    # Обновить Subscription
+    from app.models.billing import Subscription, SubStatus
+    from datetime import timedelta
+    now = datetime.utcnow()
+    period_end = now + timedelta(days=days)
+
+    sub_r = await db.execute(
+        select(Subscription).where(Subscription.tenant_id == tenant_id)
+        .order_by(Subscription.created_at.desc()).limit(1)
+    )
+    sub = sub_r.scalar_one_or_none()
+    if sub:
+        sub.plan = plan
+        sub.status = SubStatus.ACTIVE
+        sub.current_period_start = now
+        sub.current_period_end = period_end
+        sub.trial_ends_at = None
+        sub.cancelled_at = None
+    else:
+        from decimal import Decimal
+        sub = Subscription(
+            tenant_id=tenant_id, plan=plan, billing_cycle="monthly",
+            status=SubStatus.ACTIVE, amount_per_period=Decimal("0"),
+            current_period_start=now, current_period_end=period_end,
+            auto_renew=True,
+        )
+        db.add(sub)
+
+    await db.commit()
+
+    # Уведомить тенанта через его support_bot_token
+    import httpx
+    from app.services.settings_service import get_setting
+    tenant_bot = await get_setting(db, "support_bot_token", "", tenant_id=tenant_id)
+    tenant_chat = await get_setting(db, "support_admin_chat_id", "", tenant_id=tenant_id)
+    PLAN_LABELS = {"basic": "Базовый", "professional": "Профессиональный", "enterprise": "Корпоративный"}
+    notify_text = (
+        f"Tarif izmenyon na: {PLAN_LABELS.get(plan, plan)}. Aktiven {days} dney do {period_end.strftime('%d.%m.%Y')}"
+    
+    )
+    if tenant_bot and tenant_chat:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                await client.post(
+                    f"https://api.telegram.org/bot{tenant_bot}/sendMessage",
+                    json={"chat_id": int(tenant_chat), "text": notify_text},
+                )
+        except Exception:
+            pass
+
+    return {"status": "ok", "plan": plan, "period_end": period_end.isoformat(), "days": days}
 
 
 @router.put("/tenants/{tenant_id}/modules")

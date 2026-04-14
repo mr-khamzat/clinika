@@ -2605,9 +2605,10 @@ function MyPlanSection({ token }) {
     if (!upgradePlan) return
     setUpgradeLoading(true)
     try {
-      await apiFetch('post', '/billing/upgrade-request', token, { plan: upgradePlan, comment: upgradeComment })
-      setUpgradeOk(true)
-      setTimeout(() => { setUpgradeModal(false); setUpgradeOk(false) }, 2500)
+      const res = await apiFetch('post', '/billing/upgrade-request', token, { plan: upgradePlan, comment: upgradeComment })
+      const msg = res?.data?.message || 'Запрос отправлен'
+      setUpgradeOk(msg)
+      setTimeout(() => { setUpgradeModal(false); setUpgradeOk(false) }, 4000)
     } catch {}
     finally { setUpgradeLoading(false) }
   }
@@ -2718,7 +2719,7 @@ function MyPlanSection({ token }) {
               <div className="bg-emerald-50 rounded-2xl p-4 text-center">
                 <span className="material-symbols-outlined text-4xl text-emerald-600" style={{fontVariationSettings:"'FILL' 1"}}>check_circle</span>
                 <p className="text-emerald-700 font-semibold mt-2">Запрос отправлен!</p>
-                <p className="text-sm text-[#727783] mt-1">Мы свяжемся с вами в ближайшее время</p>
+                <p className="text-sm text-[#727783] mt-1">{typeof upgradeOk === "string" ? upgradeOk : "Мы свяжемся с вами в ближайшее время"}</p>
               </div>
             ) : (
               <>

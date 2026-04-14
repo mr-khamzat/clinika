@@ -51,6 +51,10 @@ export default function PlatformSection({ token }) {
   const [provResult, setProvResult] = useState(null)
   const [resetCreds, setResetCreds] = useState(null)   // {username, new_password, url, admin_panel}
   const [resetLoading, setResetLoading] = useState(null) // tenant_id being reset
+  const [planModal, setPlanModal] = useState(null) // {tenant} or null
+  const [planForm, setPlanForm] = useState({ plan: 'professional', days: 30 })
+  const [planLoading, setPlanLoading] = useState(false)
+  const [deletePending, setDeletePending] = useState(null) // tenant to delete
 
   const showMsg = (text, type = 'ok') => {
     setMsg(text); setMsgType(type)
@@ -89,6 +93,27 @@ export default function PlatformSection({ token }) {
       await apiFetch('patch', `/admin/tenants/${tenantId}/toggle`, token)
       setTenants(prev => prev.map(t => t.id === tenantId ? { ...t, is_active: !currentActive } : t))
       showMsg(currentActive ? 'Тенант деактивирован' : 'Тенант активирован')
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err') }
+  }
+
+  const changePlan = async () => {
+    if (!planModal) return
+    setPlanLoading(true)
+    try {
+      await apiFetch('patch', `/admin/tenants/${planModal.id}/plan`, token, planForm)
+      setTenants(prev => prev.map(t => t.id === planModal.id ? { ...t, plan: planForm.plan, subscription_status: 'active' } : t))
+      showMsg(`Тариф изменён на ${planForm.plan} (${planForm.days} дн.)`)
+      setPlanModal(null)
+    } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err') }
+    finally { setPlanLoading(false) }
+  }
+
+  const deleteTenant = async (tenantId) => {
+    try {
+      await apiFetch('delete', `/admin/tenants/${tenantId}`, token)
+      setTenants(prev => prev.filter(t => t.id !== tenantId))
+      showMsg('Тенант деактивирован и удалён')
+      setDeletePending(null)
     } catch (e) { showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err') }
   }
 
@@ -277,11 +302,27 @@ export default function PlatformSection({ token }) {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {/* Смена тарифа */}
+                    <button onClick={() => { setPlanModal(t); setPlanForm({ plan: t.plan || 'professional', days: 30 }) }}
+                      title="Сменить тариф"
+                      className="p-1.5 rounded-xl border border-[#0097A7]/30 text-[#0097A7] hover:bg-[#0097A7]/5 transition">
+                      <span className="material-symbols-outlined text-base">workspace_premium</span>
+                    </button>
+                    {/* Сброс пароля */}
                     <button onClick={() => resetPassword(t.id)} disabled={resetLoading === t.id}
                       title="Сбросить пароль администратора"
                       className="p-1.5 rounded-xl border border-amber-200 text-amber-600 hover:bg-amber-50 transition disabled:opacity-40">
                       <span className="material-symbols-outlined text-base">{resetLoading === t.id ? 'hourglass_empty' : 'key'}</span>
                     </button>
+                    {/* Удалить */}
+                    {t.slug !== 'arc' && (
+                      <button onClick={() => setDeletePending(t)}
+                        title="Деактивировать и удалить тенант"
+                        className="p-1.5 rounded-xl border border-red-200 text-red-500 hover:bg-red-50 transition">
+                        <span className="material-symbols-outlined text-base">delete</span>
+                      </button>
+                    )}
+                    {/* Вкл/Выкл */}
                     <button onClick={() => toggleTenant(t.id, t.is_active)}
                       className={`relative w-11 h-6 rounded-full transition-colors ${t.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${t.is_active ? 'translate-x-5' : ''}`} />
@@ -484,6 +525,79 @@ export default function PlatformSection({ token }) {
               className="w-full bg-[#0097A7] text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-[#00838f] transition">
               Закрыть
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал смены тарифа ── */}
+      {planModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && setPlanModal(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Сменить тариф</h3>
+            <p className="text-sm text-gray-500">Тенант: <b>{planModal.name}</b></p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Тариф</label>
+                <div className="space-y-2">
+                  {[
+                    { key: 'basic', label: 'Базовый' },
+                    { key: 'professional', label: 'Профессиональный' },
+                    { key: 'enterprise', label: 'Корпоративный' },
+                  ].map(p => (
+                    <button key={p.key} type="button"
+                      onClick={() => setPlanForm(f => ({ ...f, plan: p.key }))}
+                      className={`w-full text-left px-4 py-2.5 rounded-2xl text-sm font-semibold border-2 transition ${planForm.plan === p.key ? 'border-[#0097A7] bg-[#e0f7fa] text-[#00838f]' : 'border-transparent bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wider">Активен (дней)</label>
+                <input type="number" min="1" max="365" value={planForm.days}
+                  onChange={e => setPlanForm(f => ({ ...f, days: parseInt(e.target.value) || 30 }))}
+                  className="w-full bg-gray-50 dark:bg-gray-700 rounded-2xl px-4 py-2.5 text-sm outline-none border-2 border-transparent focus:border-[#0097A7]/30" />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setPlanModal(null)}
+                className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+                Отмена
+              </button>
+              <button onClick={changePlan} disabled={planLoading}
+                className="flex-1 bg-[#0097A7] text-white rounded-2xl py-2.5 text-sm font-bold disabled:opacity-50 transition">
+                {planLoading ? 'Сохранение...' : 'Применить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал подтверждения удаления ── */}
+      {deletePending && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={e => e.target === e.currentTarget && setDeletePending(null)}>
+          <div className="bg-white dark:bg-gray-900 rounded-3xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-50 flex items-center justify-center">
+                <span className="material-symbols-outlined text-red-600" style={{fontVariationSettings:"'FILL' 1"}}>warning</span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Удалить тенант?</h3>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Тенант <b>{deletePending.name}</b> будет деактивирован. Данные не удаляются, но доступ будет заблокирован для всех пользователей.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeletePending(null)}
+                className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">
+                Отмена
+              </button>
+              <button onClick={() => deleteTenant(deletePending.id)}
+                className="flex-1 bg-red-600 text-white rounded-2xl py-2.5 text-sm font-bold hover:bg-red-700 transition">
+                Деактивировать
+              </button>
+            </div>
           </div>
         </div>
       )}
