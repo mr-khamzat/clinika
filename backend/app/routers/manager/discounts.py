@@ -1,5 +1,5 @@
 # ===== БЛОК: Скидки =====
-# CRUD скидок. Независимый модуль — не влияет на бонусы.
+# CRUD скидок с изоляцией по тенанту.
 # /manager/discounts/*
 
 import uuid
@@ -52,7 +52,12 @@ async def list_discounts(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Discount).order_by(Discount.created_at.desc()))
+    # Только скидки своего тенанта
+    result = await db.execute(
+        select(Discount)
+        .where(Discount.tenant_id == current_user.tenant_id)
+        .order_by(Discount.created_at.desc())
+    )
     out = []
     for d in result.scalars().all():
         service_name = None
@@ -92,6 +97,7 @@ async def create_discount(
     if body.discount_value <= 0:
         raise HTTPException(status_code=400, detail="Значение скидки должно быть положительным")
     d = Discount(
+        tenant_id=current_user.tenant_id,
         name=body.name.strip(), description=body.description,
         discount_type=body.discount_type, discount_value=body.discount_value,
         applies_to=body.applies_to,
@@ -115,7 +121,9 @@ async def update_discount(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Discount).where(Discount.id == discount_id))
+    result = await db.execute(
+        select(Discount).where(Discount.id == discount_id, Discount.tenant_id == current_user.tenant_id)
+    )
     d = result.scalar_one_or_none()
     if not d:
         raise HTTPException(status_code=404, detail="Скидка не найдена")
@@ -140,7 +148,9 @@ async def delete_discount(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Discount).where(Discount.id == discount_id))
+    result = await db.execute(
+        select(Discount).where(Discount.id == discount_id, Discount.tenant_id == current_user.tenant_id)
+    )
     d = result.scalar_one_or_none()
     if not d:
         raise HTTPException(status_code=404, detail="Скидка не найдена")
