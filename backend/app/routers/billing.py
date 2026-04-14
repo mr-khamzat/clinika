@@ -116,15 +116,69 @@ def _pay_out(p: Payment) -> dict:
 
 @router.get("/plans")
 async def list_plans():
-    """Список тарифных планов с ценами."""
-    from app.modules.features import PLAN_FEATURES, FEATURE_LABELS
+    """Список тарифных планов с ценами и описаниями."""
+    from app.modules.features import (
+        PLAN_FEATURES, FEATURE_LABELS, PLAN_LIMITS, PLAN_DESCRIPTIONS, _PLAN_BASE
+    )
+
+    # Человекочитаемые буллеты для каждого плана (уникальные фичи + лимиты)
+    PLAN_BULLETS: dict[str, list[str]] = {
+        "basic": [
+            "До 3 клиник",
+            "До 50 сотрудников",
+            "Направления пациентов и бонусы",
+            "QR-регистрация партнёров",
+            "Базовая аналитика и воронка",
+            "Чат технической поддержки",
+            "Личный кабинет партнёра",
+            "Инвайт-ссылки для партнёров",
+        ],
+        "professional": [
+            "До 15 клиник",
+            "До 200 сотрудников",
+            "Всё из Базового плана",
+            "Интеграция с МИС (Renovatio и др.)",
+            "Расписание врачей и онлайн-запись",
+            "KPI и цели сотрудников",
+            "SMS-уведомления пациентам",
+            "Скидки и акции",
+            "Финансовый реестр",
+            "Аудит-лог всех действий",
+            "Кастомный брендинг (цвета, логотип)",
+        ],
+        "enterprise": [
+            "Неограниченное количество клиник",
+            "Неограниченное количество сотрудников",
+            "Всё из Профессионального плана",
+            "White-label: ваш домен и полный брендинг",
+            "REST API для интеграций",
+            "Вебхуки (Webhook) события",
+            "P2P видеозвонки между клиниками",
+            "Мульти-тенант управление",
+            "Приоритетная поддержка 24/7",
+        ],
+    }
+
     plans = []
     for plan, prices in PLAN_PRICES.items():
+        desc = PLAN_DESCRIPTIONS.get(plan, {})
+        limits = PLAN_LIMITS.get(plan, {})
         plans.append({
-            "plan":         plan,
-            "price_monthly": float(prices["monthly"]),
-            "price_annual":  float(prices["annual"]),
-            "discount_annual_pct": round((1 - float(prices["annual"]) / (float(prices["monthly"]) * 12)) * 100, 0),
+            "plan":               plan,
+            "name":               desc.get("label", plan),
+            "subtitle":           desc.get("subtitle", ""),
+            "gradient":           desc.get("gradient", "from-gray-500 to-gray-700"),
+            "badge":              desc.get("badge", None),
+            "color":              desc.get("color", "#666"),
+            "price_monthly":      float(prices["monthly"]),
+            "price_annual":       float(prices["annual"]),
+            "discount_annual_pct": round((1 - float(prices["annual"]) / (float(prices["monthly"]) * 12)) * 100),
+            "bullets":            PLAN_BULLETS.get(plan, []),
+            "limits": {
+                "max_clinics":  limits.get("max_clinics", 0),
+                "max_users":    limits.get("max_users", 0),
+                "max_partners": limits.get("max_partners", 0),
+            },
             "features": sorted([
                 {"key": f, "label": FEATURE_LABELS.get(f, f)}
                 for f in PLAN_FEATURES.get(plan, set())
@@ -386,13 +440,60 @@ async def trial_status(
     if sub and sub.status == "trial" and days_remaining == 0:
         status = "trial_expired"
 
+    from app.modules.features import PLAN_DESCRIPTIONS
+    plan_key = lic.plan if lic else (sub.plan if sub else "professional")
+
+    # Буллеты для текущего плана
+    PLAN_BULLETS = {
+        "basic": [
+            "До 3 клиник",
+            "До 50 сотрудников",
+            "Направления пациентов и бонусы",
+            "QR-регистрация партнёров",
+            "Базовая аналитика и воронка",
+            "Чат технической поддержки",
+            "Личный кабинет партнёра",
+            "Инвайт-ссылки для партнёров",
+        ],
+        "professional": [
+            "До 15 клиник",
+            "До 200 сотрудников",
+            "Всё из Базового плана",
+            "Интеграция с МИС (Renovatio и др.)",
+            "Расписание врачей и онлайн-запись",
+            "KPI и цели сотрудников",
+            "SMS-уведомления пациентам",
+            "Скидки и акции",
+            "Финансовый реестр",
+            "Аудит-лог всех действий",
+            "Кастомный брендинг (цвета, логотип)",
+        ],
+        "enterprise": [
+            "Неограниченное количество клиник",
+            "Неограниченное количество сотрудников",
+            "Всё из Профессионального плана",
+            "White-label: ваш домен и полный брендинг",
+            "REST API для интеграций",
+            "Вебхуки (Webhook) события",
+            "P2P видеозвонки между клиниками",
+            "Мульти-тенант управление",
+            "Приоритетная поддержка 24/7",
+        ],
+    }
+
+    desc = PLAN_DESCRIPTIONS.get(plan_key, {})
     return {
         "status": status,
         "days_remaining": days_remaining,
-        "plan": lic.plan if lic else (sub.plan if sub else "professional"),
+        "plan": plan_key,
+        "plan_label": desc.get("label", plan_key),
+        "plan_subtitle": desc.get("subtitle", ""),
+        "plan_color": desc.get("color", "#0097A7"),
+        "plan_gradient": desc.get("gradient", "from-[#0097A7] to-[#004D5F]"),
         "trial_ends_at": trial_ends_at,
         "max_clinics": lic.max_clinics if lic else None,
         "max_users": lic.max_users if lic else None,
+        "features_list": PLAN_BULLETS.get(plan_key, []),
     }
 
 

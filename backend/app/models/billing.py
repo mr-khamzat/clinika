@@ -41,9 +41,9 @@ class PaymentStatus:
 
 # ── Прайс-лист (статичный, хранится в коде) ───────────────────────────────────
 PLAN_PRICES: dict[str, dict[str, Decimal]] = {
-    "basic":        {"monthly": Decimal("4990"),  "annual": Decimal("49900")},
-    "professional": {"monthly": Decimal("9990"),  "annual": Decimal("99900")},
-    "enterprise":   {"monthly": Decimal("24990"), "annual": Decimal("249900")},
+    "basic":        {"monthly": Decimal("9900"),  "annual": Decimal("99000")},
+    "professional": {"monthly": Decimal("24900"), "annual": Decimal("249000")},
+    "enterprise":   {"monthly": Decimal("49900"), "annual": Decimal("499000")},
 }
 
 

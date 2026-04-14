@@ -2616,8 +2616,9 @@ function MyPlanSection({ token }) {
   if (loading) return <Spinner />
 
   const planKey = plan?.plan || 'professional'
-  const planLabel = PLAN_LABELS[planKey] || planKey
-  const planColor = PLAN_COLORS[planKey] || '#0097A7'
+  const planLabel = plan?.plan_label || PLAN_LABELS[planKey] || planKey
+  const planColor = plan?.plan_color || PLAN_COLORS[planKey] || '#0097A7'
+  const planGradient = plan?.plan_gradient || 'from-[#0097A7] to-[#004D5F]'
   const status = plan?.status || 'active'
   const daysLeft = plan?.days_remaining
 
@@ -2636,8 +2637,8 @@ function MyPlanSection({ token }) {
 
       {/* Основная карточка */}
       <div className="rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 24px rgba(25,28,30,0.10)'}}>
-        <div className="p-6 text-white relative" style={{background: `linear-gradient(135deg, ${planColor}cc, ${planColor})`}}>
-          <p className="text-xs font-bold uppercase tracking-widest opacity-75 mb-1">{PLAN_DESCRIPTIONS[planKey]}</p>
+        <div className={`bg-gradient-to-br ${planGradient} p-6 text-white relative`}>
+          <p className="text-xs font-bold uppercase tracking-widest opacity-75 mb-1">{plan?.plan_subtitle || PLAN_DESCRIPTIONS[planKey] || ''}</p>
           <h3 className="text-3xl font-extrabold font-headline">{planLabel}</h3>
           <div className={`inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-xs font-bold ${sc.bg}`} style={{color: sc.color}}>
             <span className="material-symbols-outlined text-sm" style={{fontVariationSettings:"'FILL' 1"}}>{sc.icon}</span>
@@ -2694,6 +2695,21 @@ function MyPlanSection({ token }) {
           </button>
         </div>
       </div>
+
+      {/* Функции тарифа */}
+      {plan?.features_list && plan.features_list.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+          <h4 className="font-bold text-[#191c1e] dark:text-white mb-3">Включено в тариф</h4>
+          <ul className="space-y-2">
+            {plan.features_list.map((f, i) => (
+              <li key={i} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <span className="material-symbols-outlined text-emerald-500 text-base flex-shrink-0" style={{fontVariationSettings:"'FILL' 1"}}>check_circle</span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Информация */}
       <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
@@ -4687,7 +4703,7 @@ function BillingSection({ token }) {
         apiFetch('get', '/billing/invoices?limit=20', token),
       ])
       setSummary(smRes.data)
-      setPlans(plRes.data?.plans || [])
+      setPlans(Array.isArray(plRes.data) ? plRes.data : (plRes.data?.plans || []))
       setInvoices(invRes.data?.invoices || [])
     } catch {}
     finally { setLoading(false) }
@@ -4870,12 +4886,7 @@ function BillingSection({ token }) {
 
       {/* Plans */}
       {activeTab === 'plans' && (() => {
-        const PLAN_META = {
-          basic:        { label: 'Базовый',        gradient: 'from-slate-600 to-slate-800',    badge: null,       desc: 'Для небольших клиник — старт без лишнего' },
-          professional: { label: 'Профессиональный', gradient: 'from-[#0097A7] to-[#004D5F]', badge: 'Популярный', desc: 'Полный функционал для растущей сети клиник' },
-          enterprise:   { label: 'Корпоративный',  gradient: 'from-violet-600 to-violet-900',  badge: 'Максимум',  desc: 'Мульти-тенант, white-label, P2P звонки' },
-        }
-        const price = (p) => billingCycle === 'annual' ? p.price_annual / 12 : p.price_monthly
+        const price = (p) => billingCycle === 'annual' ? Math.round(p.price_annual / 12) : Math.round(p.price_monthly)
         const isCurrent = (p) => sub?.plan_name === p.plan
         return (
           <div className="space-y-5">
@@ -4887,25 +4898,25 @@ function BillingSection({ token }) {
                 <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-6' : ''}`} />
               </button>
               <span className={`text-sm font-semibold transition ${billingCycle === 'annual' ? 'text-[#191c1e] dark:text-white' : 'text-[#727783]'}`}>Годовой</span>
-              {billingCycle === 'annual' && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Экономия до 17%</span>}
+              {billingCycle === 'annual' && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Скидка ~{plans[0]?.discount_annual_pct || 17}%</span>}
             </div>
             {/* Карточки */}
             <div className="grid md:grid-cols-3 gap-5">
               {plans.map(p => {
-                const meta = PLAN_META[p.plan] || { label: p.plan, gradient: 'from-gray-500 to-gray-700', badge: null, desc: '' }
-                const monthly = Math.round(price(p))
                 const current = isCurrent(p)
+                const monthly = price(p)
+                const gradient = p.gradient || 'from-gray-500 to-gray-700'
                 return (
                   <div key={p.plan} className={`relative bg-white dark:bg-gray-800 rounded-3xl overflow-hidden flex flex-col transition-all duration-300 ${current ? 'ring-2 ring-[#0097A7] scale-[1.02]' : 'hover:scale-[1.01]'}`}
                     style={{boxShadow: current ? '0 8px 32px rgba(0,151,167,0.18)' : '0 4px 24px rgba(25,28,30,0.08)'}}>
                     {/* Шапка с градиентом */}
-                    <div className={`bg-gradient-to-br ${meta.gradient} p-6 text-white relative`}>
-                      {meta.badge && (
+                    <div className={`bg-gradient-to-br ${gradient} p-6 text-white relative`}>
+                      {p.badge && (
                         <span className="absolute top-3 right-3 text-[10px] font-bold bg-white/20 backdrop-blur-sm px-2.5 py-1 rounded-full">
-                          {meta.badge}
+                          {p.badge}
                         </span>
                       )}
-                      <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">{meta.label}</p>
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-1">{p.name || p.plan}</p>
                       <div className="flex items-end gap-1">
                         <span className="text-4xl font-extrabold font-headline">{monthly.toLocaleString('ru-RU')}</span>
                         <span className="text-sm opacity-70 mb-1">₽/мес</span>
@@ -4913,20 +4924,20 @@ function BillingSection({ token }) {
                       {billingCycle === 'annual' && (
                         <p className="text-[11px] opacity-60 mt-0.5">{p.price_annual?.toLocaleString('ru-RU')} ₽/год · скидка {p.discount_annual_pct}%</p>
                       )}
-                      <p className="text-xs opacity-70 mt-2">{meta.desc}</p>
+                      <p className="text-xs opacity-70 mt-2">{p.subtitle || ''}</p>
                     </div>
-                    {/* Функционал */}
+                    {/* Функционал — буллеты */}
                     <div className="p-5 flex-1 flex flex-col">
                       <ul className="space-y-2 flex-1">
-                        {(p.features || []).slice(0, 10).map((f, i) => (
-                          <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-                            <span className="material-symbols-outlined text-emerald-500 text-base flex-shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                            <span>{f.label || f}</span>
-                          </li>
-                        ))}
-                        {(p.features || []).length > 10 && (
-                          <li className="text-xs text-[#727783] pl-6">+{p.features.length - 10} функций</li>
-                        )}
+                        {(p.bullets || p.features || []).map((item, i) => {
+                          const label = typeof item === 'string' ? item : (item.label || item.key)
+                          return (
+                            <li key={i} className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
+                              <span className="material-symbols-outlined text-emerald-500 text-base flex-shrink-0 mt-0.5" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                              <span>{label}</span>
+                            </li>
+                          )
+                        })}
                       </ul>
                       <div className="mt-5">
                         {current ? (
@@ -4936,8 +4947,8 @@ function BillingSection({ token }) {
                           </div>
                         ) : (
                           <button onClick={() => changePlan(p.plan)}
-                            className={`w-full py-2.5 rounded-2xl text-sm font-bold bg-gradient-to-br ${meta.gradient} text-white hover:opacity-90 transition`}>
-                            Перейти на {meta.label}
+                            className={`w-full py-2.5 rounded-2xl text-sm font-bold bg-gradient-to-br ${gradient} text-white hover:opacity-90 transition`}>
+                            Перейти на {p.name || p.plan}
                           </button>
                         )}
                       </div>
