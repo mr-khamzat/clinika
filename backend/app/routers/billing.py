@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from app.database import get_db
 from app.core.deps import require_manager, get_current_user
 from app.core.tenant import require_feature
+from app.config import settings
 from app.models.user import User
 from app.models.tenant import Tenant
 from sqlalchemy import select as _select_tenant
@@ -318,10 +319,14 @@ async def list_invoices(
 async def get_invoice(
     invoice_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     q = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     inv = q.scalar_one_or_none()
     if not inv:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    # IDOR: проверяем что счёт принадлежит тенанту текущего пользователя
+    if current_user.tenant_id and inv.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=404, detail="Счёт не найден")
     return _inv_out(inv)
 
@@ -344,8 +349,16 @@ async def record_payment(
     invoice_id: uuid.UUID,
     body: RecordPaymentRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Зарегистрировать платёж по счёту (ручной ввод или webhook)."""
+    # IDOR: проверяем принадлежность счёта тенанту
+    q = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
+    inv = q.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    if current_user.tenant_id and inv.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
     try:
         payment = await billing_service.record_payment(
             db, invoice_id,
@@ -532,7 +545,7 @@ async def request_plan_upgrade(
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(
-                "https://api.telegram.org/bot8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU/sendMessage",
+                f"https://api.telegram.org/bot{settings.admin_bot_token}/sendMessage",
                 json={"chat_id": 293633093, "text": tg_text},
             )
     except Exception:

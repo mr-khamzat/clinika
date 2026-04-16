@@ -51,6 +51,13 @@ ROLE_PERMISSIONS: dict[UserRole, set[str]] = {
         "scheduling:read",
         "consent:own",
     },
+    UserRole.DOCTOR: {
+        # Врач — читает своё расписание и записи, обновляет статусы приёмов
+        "scheduling:read", "scheduling:write",
+        "referrals:read",
+        "services:read",
+        "consent:own",
+    },
 }
 
 

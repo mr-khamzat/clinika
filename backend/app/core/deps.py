@@ -80,3 +80,25 @@ async def require_super_admin(user: User = Depends(get_current_user)) -> User:
             detail="Доступ только для super_admin"
         )
     return user
+
+
+
+async def get_current_tenant(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает тенант текущего пользователя. HTTP 403 если пользователь без тенанта."""
+    from app.models.tenant import Tenant
+    if not user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Пользователь не привязан к тенанту"
+        )
+    result = await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Тенант не найден"
+        )
+    return tenant

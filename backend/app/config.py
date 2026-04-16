@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_expire_hours: int = 24
     qr_secret: str
     telegram_bot_token: str = ""
+    admin_bot_token: str = ""  # Telegram admin notification bot (stclinik_addmin_bot)
     mini_app_url: str = "http://localhost:8901"
     backend_url: str = "http://localhost:8900"
     # Telegram IDs через запятую — эти пользователи автоматически получают роль manager

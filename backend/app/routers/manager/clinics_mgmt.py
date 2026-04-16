@@ -69,9 +69,11 @@ async def create_clinic(
     await db.refresh(new_clinic)
     return ClinicResponse.model_validate(new_clinic)
 
-import secrets, string
+import secrets
+import string
 
-@router.post(/clinics/{clinic_id}/onboard-manager, response_model=dict, status_code=201)
+
+@router.post("/clinics/{clinic_id}/onboard-manager", response_model=dict, status_code=201)
 async def onboard_clinic_manager(
     clinic_id: uuid.UUID,
     body: dict,
@@ -82,14 +84,14 @@ async def onboard_clinic_manager(
     from app.models.user import UserRole
     from app.core.security import hash_password
 
-    # Проверяем что клиника наша
+    # Проверяем что клиника принадлежит тенанту
     cl = (await db.execute(select(Clinic).where(
         Clinic.id == clinic_id, Clinic.tenant_id == current_user.tenant_id
     ))).scalar_one_or_none()
     if not cl:
-        raise HTTPException(status_code=404, detail=Клиника не найдена)
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
 
-    # Клиника уже имеет управляющего?
+    # Проверяем — управляющий уже назначен?
     existing = (await db.execute(select(User).where(
         User.clinic_id == clinic_id,
         User.role == UserRole.MANAGER,
@@ -97,35 +99,34 @@ async def onboard_clinic_manager(
         User.is_active == True,
     ))).scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=400, detail=У клиники уже есть управляющий)
+        raise HTTPException(status_code=400, detail="У клиники уже есть управляющий")
 
-    full_name = body.get(full_name, ).strip()
-    phone = body.get(phone_number, ).strip()
+    full_name = (body.get("full_name") or "").strip()
+    phone = (body.get("phone_number") or "").strip()
     if not full_name:
-        raise HTTPException(status_code=400, detail=Укажите ФИО)
+        raise HTTPException(status_code=400, detail="Укажите ФИО")
 
     # Генерируем логин из телефона (если есть) или из имени
     if phone:
-        base = phone.replace(+, ).replace(-, ).replace( , )[-10:]
-        username = fmgr_{base}
+        base = phone.replace("+", "").replace("-", "").replace(" ", "")[-10:]
+        username = f"fmgr_{base}"
     else:
         parts = full_name.lower().split()
-        base = parts[0][:8] if parts else manager
-        username = fmgr_{base}
+        base = parts[0][:8] if parts else "manager"
+        username = f"fmgr_{base}"
 
-    # Уникальность логина
-    suffix = 
+    # Гарантируем уникальность логина
     attempt = username
     for i in range(1, 20):
         exists = (await db.execute(select(User).where(User.username == attempt))).scalar_one_or_none()
         if not exists:
             username = attempt
             break
-        attempt = f{username}{i}
+        attempt = f"{username}{i}"
 
     # Генерируем пароль
     alphabet = string.ascii_letters + string.digits
-    password = .join(secrets.choice(alphabet) for _ in range(10))
+    password = "".join(secrets.choice(alphabet) for _ in range(10))
 
     new_user = User(
         tenant_id=current_user.tenant_id,
@@ -141,16 +142,16 @@ async def onboard_clinic_manager(
     await db.commit()
     await db.refresh(new_user)
     return {
-        user_id: str(new_user.id),
-        full_name: new_user.full_name,
-        username: username,
-        password: password,
-        clinic_id: str(clinic_id),
-        clinic_name: cl.name,
+        "user_id": str(new_user.id),
+        "full_name": new_user.full_name,
+        "username": username,
+        "password": password,
+        "clinic_id": str(clinic_id),
+        "clinic_name": cl.name,
     }
 
 
-@router.get(/clinics/{clinic_id}/manager, response_model=dict)
+@router.get("/clinics/{clinic_id}/manager", response_model=dict)
 async def get_clinic_manager(
     clinic_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -162,7 +163,7 @@ async def get_clinic_manager(
         Clinic.id == clinic_id, Clinic.tenant_id == current_user.tenant_id
     ))).scalar_one_or_none()
     if not cl:
-        raise HTTPException(status_code=404, detail=Клиника не найдена)
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
 
     mgr = (await db.execute(select(User).where(
         User.clinic_id == clinic_id,
@@ -171,18 +172,18 @@ async def get_clinic_manager(
         User.is_active == True,
     ))).scalar_one_or_none()
     if not mgr:
-        return {manager: None}
+        return {"manager": None}
     return {
-        manager: {
-            id: str(mgr.id),
-            full_name: mgr.full_name,
-            username: mgr.username,
-            phone_number: mgr.phone_number,
+        "manager": {
+            "id": str(mgr.id),
+            "full_name": mgr.full_name,
+            "username": mgr.username,
+            "phone_number": mgr.phone_number,
         }
     }
 
 
-@router.delete(/clinics/{clinic_id}/manager)
+@router.delete("/clinics/{clinic_id}/manager")
 async def remove_clinic_manager(
     clinic_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -197,7 +198,7 @@ async def remove_clinic_manager(
         User.is_active == True,
     ))).scalar_one_or_none()
     if not mgr:
-        raise HTTPException(status_code=404, detail=Управляющий не найден)
+        raise HTTPException(status_code=404, detail="Управляющий не найден")
     mgr.is_active = False
     await db.commit()
-    return {status: removed}
+    return {"status": "removed"}

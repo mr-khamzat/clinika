@@ -119,7 +119,7 @@ async def seed_initial_data():
                 username=settings.superadmin_username,
                 password_hash=hash_password(settings.superadmin_password),
                 full_name=settings.superadmin_full_name,
-                role=UserRole.MANAGER,
+                role=UserRole.SUPER_ADMIN,
                 is_active=True,
             )
             db.add(superadmin)
