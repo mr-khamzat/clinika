@@ -13,6 +13,7 @@ from app.models.user import User
 from app.models.clinic import Clinic
 from app.schemas.manager import CreateClinicRequest, UpdateClinicRequest, ClinicResponse
 from app.core.limits import check_plan_limit
+from app.core.subscription_guard import require_active_subscription
 
 router = APIRouter(tags=["manager:clinics"])
 
@@ -60,6 +61,7 @@ async def create_clinic(
     body: CreateClinicRequest,
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
+    _sub: None = Depends(require_active_subscription),
 ):
     # Проверяем лимит клиник по тарифу
     await check_plan_limit("clinics", current_user.tenant_id, db)

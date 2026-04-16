@@ -20,6 +20,7 @@ from app.schemas.manager import (
 )
 from app.schemas.user import UserResponse
 from app.core.limits import check_plan_limit
+from app.core.subscription_guard import require_active_subscription
 
 router = APIRouter(tags=["manager:staff"])
 
@@ -58,6 +59,7 @@ async def create_admin(
     body: CreateAdminRequest,
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
+    _sub: None = Depends(require_active_subscription),
 ):
     from app.core.security import hash_password
     if body.telegram_id:

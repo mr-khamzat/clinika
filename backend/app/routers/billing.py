@@ -588,4 +588,36 @@ async def request_plan_upgrade(
         pass
 
     return {"ok": True, "message": "Заявка на смену тарифа отправлена. Ожидайте смены тарифного плана в течении 24 часов."}
-    
+
+
+# ── BillingLedger сводка (Billing v2) ─────────────────────────────────────────
+
+@router.get("/ledger/summary", dependencies=[_feat, _mgr])
+async def billing_ledger_summary(
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сводка по BillingLedger за период (append-only финансовый журнал)."""
+    tenant_id = current_user.tenant_id
+    result = await billing_service.get_billing_ledger_summary(db, tenant_id=tenant_id, days=days)
+    return result
+
+
+@router.get("/ledger/plans", dependencies=[_feat, _mgr])
+async def get_pricing_rules(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ценовые правила тенанта (split %, franchise fee % и т.д.)."""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Тенант не определён")
+    rules = await billing_service.get_pricing_rules(db, current_user.tenant_id)
+    return {
+        "tenant_id": str(rules.tenant_id),
+        "plugin_split_percent": float(rules.plugin_split_percent),
+        "ad_split_percent": float(rules.ad_split_percent),
+        "franchise_fee_percent": float(rules.franchise_fee_percent),
+        "subscription_discount_percent": float(rules.subscription_discount_percent),
+    }
+
