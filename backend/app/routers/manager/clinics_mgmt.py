@@ -25,6 +25,9 @@ async def list_clinics(
     q = select(Clinic).order_by(Clinic.name)
     if current_user.tenant_id is not None:
         q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    # Управляющий клиники видит только свою клинику
+    if current_user.clinic_id is not None:
+        q = q.where(Clinic.id == current_user.clinic_id)
     result = await db.execute(q)
     return [ClinicResponse.model_validate(c) for c in result.scalars().all()]
 
@@ -65,3 +68,136 @@ async def create_clinic(
     await db.commit()
     await db.refresh(new_clinic)
     return ClinicResponse.model_validate(new_clinic)
+
+import secrets, string
+
+@router.post(/clinics/{clinic_id}/onboard-manager, response_model=dict, status_code=201)
+async def onboard_clinic_manager(
+    clinic_id: uuid.UUID,
+    body: dict,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создать управляющего для клиники. Возвращает логин+пароль единожды."""
+    from app.models.user import UserRole
+    from app.core.security import hash_password
+
+    # Проверяем что клиника наша
+    cl = (await db.execute(select(Clinic).where(
+        Clinic.id == clinic_id, Clinic.tenant_id == current_user.tenant_id
+    ))).scalar_one_or_none()
+    if not cl:
+        raise HTTPException(status_code=404, detail=Клиника не найдена)
+
+    # Клиника уже имеет управляющего?
+    existing = (await db.execute(select(User).where(
+        User.clinic_id == clinic_id,
+        User.role == UserRole.MANAGER,
+        User.tenant_id == current_user.tenant_id,
+        User.is_active == True,
+    ))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=400, detail=У клиники уже есть управляющий)
+
+    full_name = body.get(full_name, ).strip()
+    phone = body.get(phone_number, ).strip()
+    if not full_name:
+        raise HTTPException(status_code=400, detail=Укажите ФИО)
+
+    # Генерируем логин из телефона (если есть) или из имени
+    if phone:
+        base = phone.replace(+, ).replace(-, ).replace( , )[-10:]
+        username = fmgr_{base}
+    else:
+        parts = full_name.lower().split()
+        base = parts[0][:8] if parts else manager
+        username = fmgr_{base}
+
+    # Уникальность логина
+    suffix = 
+    attempt = username
+    for i in range(1, 20):
+        exists = (await db.execute(select(User).where(User.username == attempt))).scalar_one_or_none()
+        if not exists:
+            username = attempt
+            break
+        attempt = f{username}{i}
+
+    # Генерируем пароль
+    alphabet = string.ascii_letters + string.digits
+    password = .join(secrets.choice(alphabet) for _ in range(10))
+
+    new_user = User(
+        tenant_id=current_user.tenant_id,
+        clinic_id=clinic_id,
+        full_name=full_name,
+        phone_number=phone or None,
+        username=username,
+        password_hash=hash_password(password),
+        role=UserRole.MANAGER,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return {
+        user_id: str(new_user.id),
+        full_name: new_user.full_name,
+        username: username,
+        password: password,
+        clinic_id: str(clinic_id),
+        clinic_name: cl.name,
+    }
+
+
+@router.get(/clinics/{clinic_id}/manager, response_model=dict)
+async def get_clinic_manager(
+    clinic_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Получить управляющего клиники (без пароля)."""
+    from app.models.user import UserRole
+    cl = (await db.execute(select(Clinic).where(
+        Clinic.id == clinic_id, Clinic.tenant_id == current_user.tenant_id
+    ))).scalar_one_or_none()
+    if not cl:
+        raise HTTPException(status_code=404, detail=Клиника не найдена)
+
+    mgr = (await db.execute(select(User).where(
+        User.clinic_id == clinic_id,
+        User.role == UserRole.MANAGER,
+        User.tenant_id == current_user.tenant_id,
+        User.is_active == True,
+    ))).scalar_one_or_none()
+    if not mgr:
+        return {manager: None}
+    return {
+        manager: {
+            id: str(mgr.id),
+            full_name: mgr.full_name,
+            username: mgr.username,
+            phone_number: mgr.phone_number,
+        }
+    }
+
+
+@router.delete(/clinics/{clinic_id}/manager)
+async def remove_clinic_manager(
+    clinic_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Деактивировать управляющего клиники."""
+    from app.models.user import UserRole
+    mgr = (await db.execute(select(User).where(
+        User.clinic_id == clinic_id,
+        User.role == UserRole.MANAGER,
+        User.tenant_id == current_user.tenant_id,
+        User.is_active == True,
+    ))).scalar_one_or_none()
+    if not mgr:
+        raise HTTPException(status_code=404, detail=Управляющий не найден)
+    mgr.is_active = False
+    await db.commit()
+    return {status: removed}

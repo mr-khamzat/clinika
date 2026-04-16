@@ -39,3 +39,9 @@ __all__ = [
 from app.models.push_subscription import PushSubscription
 
 from app.models.webhook import WebhookEndpoint, WebhookDelivery
+
+# Биллинговая система v2
+from app.models.billing_plan import TenantPlan, TenantPricingRules
+from app.models.billing_ledger import BillingLedger
+from app.models.advertising import Ad, AdEvent
+from app.models.billing import TenantPluginSubscription, PluginSubStatus

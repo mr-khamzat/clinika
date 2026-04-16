@@ -43,6 +43,13 @@ async def get_summary(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    # Управляющий клиники видит только свою клинику
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_
+        filters.append(or_(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:

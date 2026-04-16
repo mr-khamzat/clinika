@@ -137,3 +137,56 @@ class Payment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     invoice: Mapped["Invoice"] = relationship("Invoice", back_populates="payments")
+
+
+# ── Подписки на платные плагины ────────────────────────────────────────────────
+
+class PluginSubStatus:
+    TRIAL     = "trial"      # пробный период (бесплатно)
+    ACTIVE    = "active"     # оплачен, активен
+    EXPIRED   = "expired"    # истёк, ожидает продления
+    CANCELLED = "cancelled"  # отменён тенантом
+
+
+class TenantPluginSubscription(Base):
+    """
+    Финансовый lifecycle платного плагина/фичи для тенанта.
+
+    Отличие от TenantPlugin (tenant.py):
+      TenantPlugin — конфиг и enabled флаг (технический уровень)
+      TenantPluginSubscription — финансовый lifecycle (этот класс)
+
+    UniqueConstraint(tenant_id, feature_key):
+      - Гарантирует одну активную подписку на фичу
+      - enable_plugin() проверяет before insert → идемпотентность
+
+    Связь с BillingLedger: через reference_id=self.id, reference_type='plugin_subscription'
+    """
+    __tablename__ = "tenant_plugin_subscriptions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    # Ключ фичи из plugin_features.key
+    feature_key: Mapped[str] = mapped_column(String(150), nullable=False, index=True)
+
+    status: Mapped[str] = mapped_column(String(20), default=PluginSubStatus.TRIAL, nullable=False, index=True)
+    billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly", nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0"))
+
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_charged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    from sqlalchemy import UniqueConstraint
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "feature_key", name="uq_plugin_sub_tenant_feature"),
+    )

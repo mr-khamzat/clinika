@@ -723,6 +723,9 @@ function StaffSection({ token }) {
   const [roleFilter, setRoleFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [managerByClinic, setManagerByClinic] = useState({}) // clinic_id -> manager|null
+  const [createManagerFor, setCreateManagerFor] = useState(null) // clinic object
+  const [credentials, setCredentials] = useState(null)
   const [deactivating, setDeactivating] = useState(null)
 
   const fetchData = useCallback(async () => {
@@ -1091,7 +1094,97 @@ function ClinicModal({ token, existing, onClose, onDone }) {
   )
 }
 
-function ClinicsSection({ token }) {
+
+function CreateClinicManagerModal({ token, clinic, onClose, onCreated }) {
+  const [form, setForm] = React.useState({ full_name: '', phone_number: '' })
+  const [loading, setLoading] = React.useState(false)
+  const [error, setError] = React.useState('')
+
+  const handleSubmit = async () => {
+    if (!form.full_name.trim()) { setError('Введите ФИО'); return }
+    setLoading(true); setError('')
+    try {
+      const res = await apiFetch('post', '/manager/clinics/' + clinic.id + '/onboard-manager', token, form)
+      onCreated(res.data)
+    } catch (e) {
+      setError((e && e.response && e.response.data && e.response.data.detail) || 'Ошибка создания')
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Назначить управляющего</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{clinic.name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+        <div className="px-6 py-4 space-y-4">
+          {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">ФИО</label>
+            <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
+              placeholder="Иванов Иван Иванович"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Телефон</label>
+            <input value={form.phone_number} onChange={e => setForm(f => ({ ...f, phone_number: e.target.value }))}
+              placeholder="+7 999 000 00 00"
+              className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none" />
+          </div>
+          <p className="text-xs text-gray-400">Логин и пароль сгенерируются автоматически.</p>
+        </div>
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100 dark:border-gray-700">
+          <button onClick={onClose} className="flex-1 border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition">Отмена</button>
+          <button onClick={handleSubmit} disabled={loading} className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-bold transition">{loading ? 'Создание...' : 'Создать'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ClinicCredentialsModal({ credentials, onClose }) {
+  const [copied, setCopied] = React.useState(false)
+  const copyAll = () => {
+    const t = 'Клиника: ' + credentials.clinic_name + '\n' + 'Логин: ' + credentials.username + '\n' + 'Пароль: ' + credentials.password
+    navigator.clipboard.writeText(t).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
+  }
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md">
+        <div className="px-6 pt-6 pb-2 text-center">
+          <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="material-symbols-outlined text-3xl text-green-600" style={{ fontVariationSettings: "'FILL' 1" }}>key</span>
+          </div>
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">Управляющий создан</h3>
+          <p className="text-xs text-gray-400 mt-1">Сохраните данные — пароль больше не будет показан</p>
+        </div>
+        <div className="px-6 py-4">
+          <div className="bg-gray-50 dark:bg-gray-700/60 rounded-xl p-4 space-y-2.5 font-mono text-sm">
+            <div className="flex justify-between"><span className="text-gray-400 text-xs">Клиника</span><span className="font-semibold text-gray-800 dark:text-white">{credentials.clinic_name}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400 text-xs">ФИО</span><span className="font-semibold text-gray-800 dark:text-white">{credentials.full_name}</span></div>
+            <div className="border-t border-gray-200 pt-2.5 flex justify-between"><span className="text-gray-400 text-xs">Логин</span><span className="font-bold text-blue-600">{credentials.username}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400 text-xs">Пароль</span><span className="font-bold text-purple-600 tracking-widest">{credentials.password}</span></div>
+          </div>
+          <button onClick={copyAll} className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium transition flex items-center justify-center gap-2">
+            <span className="material-symbols-outlined text-base">{copied ? 'check' : 'content_copy'}</span>
+            {copied ? 'Скопировано!' : 'Скопировать всё'}
+          </button>
+        </div>
+        <div className="px-6 pb-6">
+          <button onClick={onClose} className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-2.5 text-sm font-bold transition">Готово, сохранил</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ClinicsSection({ token, isClinicManager }) {
   const [clinics, setClinics] = useState([])
   const [staffByClinic, setStaffByClinic] = useState({}) // clinic_id -> [staff]
   const [expanded, setExpanded] = useState(null)
@@ -1125,9 +1218,11 @@ function ClinicsSection({ token }) {
     if (staffByClinic[clinic.id]) return // already loaded
     setLoadingStaff(clinic.id)
     try {
-      const res = await apiFetch('get', '/admins/', token)
-      const all = Array.isArray(res.data) ? res.data : []
-      // Group by clinic
+      const [staffRes, mgrRes] = await Promise.all([
+        apiFetch('get', '/admins/', token),
+        apiFetch('get', `/manager/clinics/${clinic.id}/manager`, token),
+      ])
+      const all = Array.isArray(staffRes.data) ? staffRes.data : []
       const byClinic = {}
       all.forEach(a => {
         const cid = a.clinic_id || 'none'
@@ -1135,6 +1230,7 @@ function ClinicsSection({ token }) {
         byClinic[cid].push(a)
       })
       setStaffByClinic(byClinic)
+      setManagerByClinic(prev => ({ ...prev, [clinic.id]: mgrRes.data?.manager || null }))
     } catch {
       // ignore
     } finally {
@@ -1146,10 +1242,12 @@ function ClinicsSection({ token }) {
     <div>
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">Клиники</h2>
-        <button onClick={() => setShowCreate(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition">
-          + Добавить клинику
-        </button>
+        {!isClinicManager && (
+          <button onClick={() => setShowCreate(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 py-2 text-sm font-medium transition">
+            + Добавить клинику
+          </button>
+        )}
       </div>
 
       <ErrorBox msg={error} />
@@ -1200,6 +1298,21 @@ function ClinicsSection({ token }) {
                 {/* Expanded staff list */}
                 {isOpen && (
                   <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3">
+                    {!isClinicManager && (
+                      <div className=\"mb-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3\">
+                        <p className=\"text-xs font-semibold text-gray-500 mb-2\">УПРАВЛЯЮЩИЙ</p>
+                        {isLoadingThis ? null : managerByClinic[c.id] ? (
+                          <div className=\"flex items-center gap-2\">
+                            <div className=\"w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0\">
+                              <span className=\"text-white text-xs font-bold\">{(managerByClinic[c.id].full_name||'?').charAt(0).toUpperCase()}</span>
+                            </div>
+                            <div><p className=\"text-sm font-medium text-gray-800 dark:text-white\">{managerByClinic[c.id].full_name}</p><p className=\"text-xs text-gray-400\">@{managerByClinic[c.id].username}</p></div>
+                          </div>
+                        ) : (
+                          <button onClick={() => setCreateManagerFor(c)} className=\"w-full text-sm text-purple-600 border border-dashed border-purple-300 rounded-xl py-2 hover:bg-purple-50 transition\">+ Назначить управляющего</button>
+                        )}
+                      </div>
+                    )}
                     {isLoadingThis ? (
                       <p className="text-sm text-gray-400 py-3 text-center">Загрузка...</p>
                     ) : staff.length === 0 ? (
@@ -1252,6 +1365,24 @@ function ClinicsSection({ token }) {
         <ClinicModal token={token} existing={editTarget}
           onClose={() => setEditTarget(null)}
           onDone={() => { setEditTarget(null); setStaffByClinic({}); fetchData() }} />
+      )}
+      {createManagerFor && !createManagerFor._edit && (
+        <CreateClinicManagerModal
+          token={token}
+          clinic={createManagerFor}
+          onClose={() => setCreateManagerFor(null)}
+          onCreated={(creds) => {
+            setManagerByClinic(prev => ({ ...prev, [createManagerFor.id]: { full_name: creds.full_name, username: creds.username, phone_number: creds.phone_number || '' } }))
+            setCreateManagerFor(null)
+            setCredentials(creds)
+          }}
+        />
+      )}
+      {credentials && (
+        <ClinicCredentialsModal
+          credentials={credentials}
+          onClose={() => setCredentials(null)}
+        />
       )}
     </div>
   )
@@ -7364,7 +7495,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     switch (activeSection) {
       case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} isSuperAdmin={isSuperAdmin} />
       case 'staff':    return <StaffSection token={adminToken} />
-      case 'clinics':  return <ClinicsSection token={adminToken} />
+      case 'clinics':  return <ClinicsSection token={adminToken} isClinicManager={isClinicManager} />
       case 'services': return <ServicesSection token={adminToken} />
       case 'scheduling': return <SchedulingSection token={adminToken} />
       case 'reports':  return <ReportsSection token={adminToken} />
