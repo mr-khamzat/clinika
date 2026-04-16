@@ -17,6 +17,7 @@ from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.clinic import Clinic
 from app.services import plugin_service
+from app.services import billing_service
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
 
@@ -87,6 +88,16 @@ async def enable_feature(
         raise HTTPException(status_code=400, detail="Тенант не определён")
     try:
         result = await plugin_service.enable_feature(tid, req.feature_key, db, req.trial_days)
+        # Дополнительно создаём TenantPluginSubscription для платных фич (Billing v2)
+        try:
+            await billing_service.enable_plugin(
+                db, tid, req.feature_key,
+                billing_cycle="monthly",
+                trial_days=req.trial_days or 0,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()  # billing_service — дополнительный слой, не блокирует
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -203,6 +214,8 @@ async def save_p2p_settings(
     if not tid:
         raise HTTPException(status_code=400, detail="Тенант не определён")
     if req.internal_calls_enabled:
+        # Проверяем что платный плагин p2p_calls активен (HTTP 402 если нет)
+        await billing_service.assert_plugin_active(db, tid, "p2p_calls")
         await plugin_service.enable_feature(tid, "internal_calls", db)
     return {"saved": True, "internal_calls_enabled": req.internal_calls_enabled}
 

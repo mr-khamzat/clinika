@@ -71,6 +71,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(heartbeat_loop())
     asyncio.create_task(auto_confirm_loop())
     asyncio.create_task(expire_old_referrals_loop())
+    asyncio.create_task(renew_plugin_subscriptions_loop())
     yield
 
 
@@ -212,6 +213,47 @@ async def expire_old_referrals_loop():
             import logging as _log
             _log.getLogger("expire_referrals").error(f"Ошибка истечения направлений: {e}")
         await asyncio.sleep(3600)  # Раз в час
+
+
+async def renew_plugin_subscriptions_loop():
+    """Фоновая задача: автопродление истёкших платных плагинов (раз в 6 часов)."""
+    import logging
+    from datetime import datetime
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.billing import TenantPluginSubscription
+    from app.services.billing_service import charge_plugin_subscription, PluginSubStatus
+
+    logger = logging.getLogger("plugin_renewal")
+    await asyncio.sleep(180)  # Ждём старта приложения
+
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                now = datetime.utcnow()
+                # Находим активные подписки с истёкшим expires_at
+                result = await db.execute(
+                    select(TenantPluginSubscription).where(
+                        TenantPluginSubscription.status == PluginSubStatus.ACTIVE,
+                        TenantPluginSubscription.auto_renew == True,
+                        TenantPluginSubscription.expires_at < now,
+                    )
+                )
+                subs = result.scalars().all()
+                renewed = 0
+                for sub in subs:
+                    try:
+                        await charge_plugin_subscription(db, sub.id)
+                        await db.commit()
+                        renewed += 1
+                    except Exception as e:
+                        await db.rollback()
+                        logger.warning(f"Не удалось продлить плагин {sub.feature_key} tenant={sub.tenant_id}: {e}")
+                if renewed:
+                    logger.info(f"Продлено плагинов: {renewed}")
+        except Exception as e:
+            logger.error(f"Ошибка цикла продления плагинов: {e}")
+        await asyncio.sleep(21600)  # Раз в 6 часов
 
 
 app = FastAPI(

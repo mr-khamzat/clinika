@@ -116,12 +116,16 @@ def _pay_out(p: Payment) -> dict:
 # ── Прайс-лист ────────────────────────────────────────────────────────────────
 
 @router.get("/plans")
-async def list_plans():
-    """Список тарифных планов с ценами и описаниями."""
+async def list_plans(db: AsyncSession = Depends(get_db)):
+    """Список тарифных планов с ценами и описаниями (из БД или fallback на константы)."""
     from app.modules.features import (
         PLAN_FEATURES, FEATURE_LABELS, PLAN_LIMITS, PLAN_DESCRIPTIONS, _PLAN_BASE
     )
-
+    # Пытаемся получить планы из БД (billing_service.list_plans)
+    try:
+        db_plans = await billing_service.list_plans(db, public_only=True)
+    except Exception:
+        db_plans = []
     # Человекочитаемые буллеты для каждого плана (уникальные фичи + лимиты)
     PLAN_BULLETS: dict[str, list[str]] = {
         "basic": [
@@ -160,6 +164,38 @@ async def list_plans():
         ],
     }
 
+    # Если в БД есть планы — строим ответ на их основе (цены из БД)
+    if db_plans:
+        plans = []
+        for p in sorted(db_plans, key=lambda x: x.sort_order):
+            desc = PLAN_DESCRIPTIONS.get(p.name, {})
+            monthly = float(p.base_price_month)
+            annual = float(p.base_price_year)
+            features_json = p.features or {}
+            plans.append({
+                "plan":               p.name,
+                "name":               p.display_name or desc.get("label", p.name),
+                "subtitle":           desc.get("subtitle", ""),
+                "gradient":           desc.get("gradient", "from-gray-500 to-gray-700"),
+                "badge":              desc.get("badge", None),
+                "color":              desc.get("color", "#666"),
+                "price_monthly":      monthly,
+                "price_annual":       annual,
+                "discount_annual_pct": round((1 - annual / (monthly * 12)) * 100) if monthly > 0 else 0,
+                "bullets":            PLAN_BULLETS.get(p.name, []),
+                "limits": {
+                    "max_clinics":  p.max_clinics or 0,
+                    "max_users":    p.max_users or 0,
+                    "max_partners": features_json.get("max_partners", 0),
+                },
+                "features": sorted([
+                    {"key": f, "label": FEATURE_LABELS.get(f, f)}
+                    for f in PLAN_FEATURES.get(p.name, set())
+                ], key=lambda x: x["key"]),
+            })
+        return plans
+
+    # Fallback: hardcoded PLAN_PRICES (до сидирования или при ошибке БД)
     plans = []
     for plan, prices in PLAN_PRICES.items():
         desc = PLAN_DESCRIPTIONS.get(plan, {})
