@@ -41,6 +41,9 @@ export default function PlatformSection({ token }) {
   const [tenants, setTenants] = useState(null)
   const [billing, setBilling] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [ledger, setLedger] = useState(null)
+  const [ledgerDays, setLedgerDays] = useState(30)
+  const [ledgerLoading, setLedgerLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [msgType, setMsgType] = useState('ok') // 'ok' | 'err'
 
@@ -82,10 +85,20 @@ export default function PlatformSection({ token }) {
     } catch { showMsg('Ошибка загрузки биллинга', 'err') }
   }, [token])
 
+  const loadLedger = async (d = ledgerDays) => {
+    setLedgerLoading(true)
+    try {
+      const r = await apiFetch('get', '/admin/billing/ledger?days=' + d, token)
+      setLedger(r.data)
+    } catch { showMsg('Ошибка загрузки финансового журнала', 'err') }
+    setLedgerLoading(false)
+  }
+
   useEffect(() => {
     loadMetrics()
     if (tab === 'tenants' && !tenants) loadTenants()
     if (tab === 'billing' && !billing) loadBilling()
+    if (tab === 'ledger' && !ledger) loadLedger()
   }, [tab])
 
   const toggleTenant = async (tenantId, currentActive) => {
@@ -157,6 +170,7 @@ export default function PlatformSection({ token }) {
     { key: 'overview', label: 'Обзор', icon: 'dashboard' },
     { key: 'tenants',  label: 'Тенанты', icon: 'corporate_fare' },
     { key: 'billing',  label: 'Биллинг', icon: 'payments' },
+    { key: 'ledger',   label: 'Доходы', icon: 'account_balance_wallet' },
   ]
 
   // ── Метрики — сводные плитки ─────────────────────────────────────────────
@@ -401,6 +415,118 @@ export default function PlatformSection({ token }) {
                   <p className="text-center text-gray-400 text-sm py-8">Подписок нет</p>
                 )}
               </div>
+            </>
+          )}
+        </div>
+      )}
+
+
+      {/* ── TAB: Доходы платформы (BillingLedger) ── */}
+      {tab === 'ledger' && (
+        <div className="space-y-4">
+          {/* Period selector + refresh */}
+          <div className="flex items-center justify-between">
+            <div className="flex gap-1">
+              {[7, 30, 90].map(d => (
+                <button key={d}
+                  onClick={() => { setLedgerDays(d); loadLedger(d) }}
+                  className={"px-3 py-1.5 text-xs rounded-xl border font-semibold transition " + (ledgerDays === d ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300')}>
+                  {d}д
+                </button>
+              ))}
+            </div>
+            <button onClick={() => loadLedger(ledgerDays)} disabled={ledgerLoading}
+              className="text-xs text-[#0097A7] border border-[#0097A7] px-3 py-1.5 rounded-xl hover:bg-[#0097A7]/5 transition disabled:opacity-40">
+              {ledgerLoading ? 'Загрузка...' : 'Обновить'}
+            </button>
+          </div>
+
+          {ledger === null ? (
+            <div className="flex items-center justify-center h-40">
+              <div className="w-8 h-8 border-4 border-[#0097A7] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              {/* Сводка платформы */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Доходы (gross)', value: ledger.summary.total_credit, icon: 'trending_up', bg: 'bg-emerald-50', tc: 'text-emerald-700' },
+                  { label: 'Доля платформы', value: ledger.summary.platform_income, icon: 'corporate_fare', bg: 'bg-[#e0f7fa]', tc: 'text-[#0097A7]' },
+                  { label: 'Расходы', value: ledger.summary.total_debit, icon: 'trending_down', bg: 'bg-red-50', tc: 'text-red-600' },
+                  { label: 'Чистый баланс', value: ledger.summary.net, icon: 'account_balance', bg: 'bg-violet-50', tc: 'text-violet-700' },
+                ].map(s => (
+                  <div key={s.label} className={"rounded-2xl p-4 " + s.bg}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={"material-symbols-outlined text-base " + s.tc} style={{fontVariationSettings:"'FILL' 1"}}>{s.icon}</span>
+                      <p className={"text-xs font-semibold " + s.tc}>{s.label}</p>
+                    </div>
+                    <p className={"text-2xl font-extrabold " + s.tc}>
+                      {(Number(s.value) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0})} ₽
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Разбивка платформенного дохода по типам */}
+              {ledger.summary.breakdown && Object.keys(ledger.summary.breakdown).length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <h3 className="font-bold text-sm text-gray-700 dark:text-white">По типу операций</h3>
+                  </div>
+                  <div className="divide-y divide-gray-50 dark:divide-gray-700">
+                    {Object.entries(ledger.summary.breakdown).map(([key, data]) => (
+                      <div key={key} className="px-4 py-3 flex justify-between items-center text-sm">
+                        <span className="text-gray-500 dark:text-gray-400">{key.replace(/_/g, ' ')}</span>
+                        <div className="text-right">
+                          <span className="font-semibold text-gray-800 dark:text-white">
+                            {(data.amount || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0})} ₽
+                          </span>
+                          <span className="text-xs text-gray-400 ml-2">×{data.count}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* По тенантам */}
+              {ledger.tenants && ledger.tenants.length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+                    <h3 className="font-bold text-sm text-gray-700 dark:text-white">Доходы по тенантам</h3>
+                  </div>
+                  <div className="divide-y divide-gray-50 dark:divide-gray-700 max-h-80 overflow-y-auto">
+                    {ledger.tenants
+                      .slice()
+                      .sort((a, b) => b.platform_income - a.platform_income)
+                      .map(t => (
+                      <div key={t.tenant_id} className="px-4 py-3 flex items-center gap-3 text-sm">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-800 dark:text-white truncate">{t.tenant_name}</p>
+                          <p className="text-xs text-gray-400">/{t.slug}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-[#0097A7] font-bold">
+                            {(t.platform_income || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0})} ₽
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            gross: {(t.total_credit || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0})} ₽
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ledger.tenants?.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <span className="material-symbols-outlined text-4xl block mb-2" style={{fontVariationSettings:"'FILL' 1"}}>account_balance_wallet</span>
+                  <p className="text-sm">Операций в BillingLedger за {ledgerDays} дней нет</p>
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400 text-right">За {ledger.period_days} дней · append-only ledger v2</p>
             </>
           )}
         </div>

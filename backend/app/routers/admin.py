@@ -631,6 +631,104 @@ async def reset_tenant_admin_password(
     }
 
 
+
+
+@router.get("/billing/ledger")
+async def platform_ledger(
+    days: int = 30,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Доходы платформы из BillingLedger — для суперадмина."""
+    from datetime import timedelta
+    from app.services import billing_service
+    from app.models.billing_ledger import BillingLedger, EntryType, Direction
+
+    # Общая платформенная сводка
+    summary = await billing_service.get_billing_ledger_summary(db, tenant_id=None, days=days)
+
+    # Разбивка по тенантам: один запрос
+    since = datetime.utcnow() - timedelta(days=days)
+
+    per_q = (
+        select(
+            BillingLedger.tenant_id,
+            Tenant.name.label("tenant_name"),
+            Tenant.slug,
+            BillingLedger.entry_type,
+            BillingLedger.direction,
+            func.sum(BillingLedger.amount).label("total"),
+        )
+        .join(Tenant, Tenant.id == BillingLedger.tenant_id)
+        .where(BillingLedger.created_at >= since)
+        .where(BillingLedger.is_split == False)
+        .group_by(
+            BillingLedger.tenant_id, Tenant.name, Tenant.slug,
+            BillingLedger.entry_type, BillingLedger.direction,
+        )
+        .order_by(Tenant.name)
+    )
+    per_rows = (await db.execute(per_q)).all()
+
+    # platform_income per tenant (is_split=True, PLATFORM_INCOME, CREDIT)
+    plat_q = (
+        select(
+            BillingLedger.tenant_id,
+            func.sum(BillingLedger.amount).label("platform_income"),
+        )
+        .where(
+            BillingLedger.entry_type == EntryType.PLATFORM_INCOME,
+            BillingLedger.direction == Direction.CREDIT,
+            BillingLedger.created_at >= since,
+        )
+        .group_by(BillingLedger.tenant_id)
+    )
+    plat_rows = (await db.execute(plat_q)).all()
+    plat_by_tid = {str(r.tenant_id): float(r.platform_income) for r in plat_rows}
+
+    tenants_data: dict = {}
+    for row in per_rows:
+        tid = str(row.tenant_id)
+        if tid not in tenants_data:
+            tenants_data[tid] = {
+                "tenant_id": tid,
+                "tenant_name": row.tenant_name,
+                "slug": row.slug,
+                "total_credit": 0.0,
+                "total_debit": 0.0,
+                "platform_income": plat_by_tid.get(tid, 0.0),
+                "breakdown": {},
+            }
+        key = f"{row.entry_type}_{row.direction}"
+        tenants_data[tid]["breakdown"][key] = float(row.total)
+        if row.direction == Direction.CREDIT:
+            tenants_data[tid]["total_credit"] += float(row.total)
+        else:
+            tenants_data[tid]["total_debit"] += float(row.total)
+
+    # Для тенантов, у которых есть только split (платформенный) доход
+    for tid, pi in plat_by_tid.items():
+        if tid not in tenants_data:
+            r_q = await db.execute(select(Tenant.name, Tenant.slug).where(Tenant.id == uuid.UUID(tid)))
+            row = r_q.first()
+            if row:
+                tenants_data[tid] = {
+                    "tenant_id": tid,
+                    "tenant_name": row[0],
+                    "slug": row[1],
+                    "total_credit": 0.0,
+                    "total_debit": 0.0,
+                    "platform_income": pi,
+                    "breakdown": {},
+                }
+
+    return {
+        "summary": summary,
+        "tenants": list(tenants_data.values()),
+        "period_days": days,
+    }
+
+
 @router.get("/tenants/{tenant_id}/credentials")
 async def get_tenant_credentials(
     tenant_id: uuid.UUID,

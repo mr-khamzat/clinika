@@ -170,7 +170,7 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
       }
       onDone()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      const _det = err?.response?.data?.detail; const msg = _det?.message || (typeof _det === 'string' ? _det : null) || err?.message || 'Ошибка при сохранении'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
@@ -1026,7 +1026,7 @@ function ClinicModal({ token, existing, onClose, onDone }) {
       }
       onDone()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      const _det = err?.response?.data?.detail; const msg = _det?.message || (typeof _det === 'string' ? _det : null) || err?.message || 'Ошибка при сохранении'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
@@ -1760,7 +1760,7 @@ function ServiceModal({ token, clinics, existing, onClose, onDone }) {
       }
       onDone()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      const _det = err?.response?.data?.detail; const msg = _det?.message || (typeof _det === 'string' ? _det : null) || err?.message || 'Ошибка при сохранении'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
@@ -3352,7 +3352,7 @@ function PartnerModal({ token, existing, onClose, onDone }) {
       }
       onDone()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      const _det = err?.response?.data?.detail; const msg = _det?.message || (typeof _det === 'string' ? _det : null) || err?.message || 'Ошибка при сохранении'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
@@ -3902,7 +3902,7 @@ function DiscountModal({ token, existing, services, clinics, onClose, onDone }) 
       }
       onDone()
     } catch (err) {
-      const msg = err?.response?.data?.detail || 'Ошибка при сохранении'
+      const _det = err?.response?.data?.detail; const msg = _det?.message || (typeof _det === 'string' ? _det : null) || err?.message || 'Ошибка при сохранении'
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg))
     } finally {
       setLoading(false)
