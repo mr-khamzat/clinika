@@ -4893,10 +4893,21 @@ function BillingSection({ token }) {
   const PLAN_COLORS = { basic: '#64748b', professional: '#0097A7', enterprise: '#7C3AED' }
 
   const sub = summary?.subscription
+  const [ledgerSummary, setLedgerSummary] = useState(null)
+  const [ledgerDays, setLedgerDays] = useState(30)
+
+  const loadLedger = async (days) => {
+    try {
+      const r = await apiFetch('get', '/billing/ledger/summary?days=' + days, token)
+      if (r.ok !== false) setLedgerSummary(r.data)
+    } catch {}
+  }
+
   const TABS = [
     { key: 'summary', label: 'Подписка', icon: 'card_membership' },
     { key: 'invoices', label: 'Счета', icon: 'receipt_long' },
     { key: 'plans', label: 'Тарифы', icon: 'workspace_premium' },
+    { key: 'ledger', label: 'Финансы', icon: 'account_balance_wallet' },
   ]
 
   if (loading) return <Spinner />
@@ -5173,6 +5184,72 @@ function BillingSection({ token }) {
     </div>
   )
 }
+
+{activeTab === 'ledger' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 dark:text-white">Финансовый журнал (Billing v2)</h3>
+                <div className="flex gap-2">
+                  {[7, 30, 90].map(d => (
+                    <button key={d}
+                      onClick={() => { setLedgerDays(d); loadLedger(d) }}
+                      className={"px-3 py-1 text-xs rounded-full border font-semibold transition " + (ledgerDays === d ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                      {d}д
+                    </button>
+                  ))}
+                  <button onClick={() => loadLedger(ledgerDays)}
+                    className="px-3 py-1 text-xs rounded-full border border-teal-200 text-teal-700 hover:bg-teal-50 font-semibold">
+                    Обновить
+                  </button>
+                </div>
+              </div>
+              {!ledgerSummary ? (
+                <div className="text-center py-12 text-gray-400">
+                  <span className="material-icons text-5xl block mb-3">account_balance_wallet</span>
+                  <p className="text-sm mb-3">Данные финансового журнала Billing v2</p>
+                  <button onClick={() => loadLedger(ledgerDays)}
+                    className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg font-semibold hover:bg-teal-700">
+                    Загрузить
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Доходы', value: ledgerSummary.total_income || 0, icon: 'trending_up', cls: 'text-green-600 bg-green-50' },
+                      { label: 'Расходы', value: ledgerSummary.total_debit || 0, icon: 'trending_down', cls: 'text-red-600 bg-red-50' },
+                      { label: 'Платформа', value: ledgerSummary.platform_income || 0, icon: 'corporate_fare', cls: 'text-violet-600 bg-violet-50' },
+                      { label: 'Записей', value: ledgerSummary.entry_count || 0, icon: 'format_list_bulleted', cls: 'text-blue-600 bg-blue-50', noFormat: true },
+                    ].map(s => (
+                      <div key={s.label} className={"rounded-xl p-4 flex items-center gap-3 " + s.cls.split(' ')[1]}>
+                        <span className={"material-icons text-2xl " + s.cls.split(' ')[0]}>{s.icon}</span>
+                        <div>
+                          <div className={"text-xl font-bold " + s.cls.split(' ')[0]}>
+                            {s.noFormat ? s.value : (Number(s.value) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽'}
+                          </div>
+                          <div className="text-xs text-gray-500">{s.label}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {ledgerSummary.by_type && Object.keys(ledgerSummary.by_type).length > 0 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">По типу операций</div>
+                      <div className="divide-y divide-gray-50">
+                        {Object.entries(ledgerSummary.by_type).map(([type, data]) => (
+                          <div key={type} className="px-4 py-3 flex justify-between items-center text-sm">
+                            <span className="text-gray-500">{type.replace(/_/g, ' ')}</span>
+                            <span className="font-semibold">{(data.amount || data || 0).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-400 text-right">За {ledgerDays} дней · append-only ledger v2</div>
+                </div>
+              )}
+            </div>
+          )}
 
 
 // ---------------------------------------------------------------------------
