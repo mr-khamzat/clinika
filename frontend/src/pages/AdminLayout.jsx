@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react
 // Добавляй новые секции здесь, не трогая существующий код
 const PlatformSection = lazy(() => import('../sections/PlatformSection'))
 const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
+const AdsSection = lazy(() => import('../sections/AdsSection'))
+const AISection = lazy(() => import('../sections/AISection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -82,6 +84,8 @@ const NAV = [
   { key: 'audit',     label: 'Аудит',      icon: 'manage_search', superAdminOnly: true },
   { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
   { key: 'webhooks',  label: 'Вебхуки',    icon: 'webhook', superAdminOnly: true },
+  { key: 'ads',       label: 'Реклама',    icon: 'campaign', superAdminOnly: true },
+  { key: 'ai_analytics', label: 'AI-анализ',  icon: 'auto_awesome', superAdminOnly: true },
   { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart', superAdminOnly: true },
   { key: 'my_plan',    label: 'Мой тариф',  icon: 'workspace_premium' },
   { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
@@ -1299,17 +1303,17 @@ function ClinicsSection({ token, isClinicManager }) {
                 {isOpen && (
                   <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3">
                     {!isClinicManager && (
-                      <div className=\"mb-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3\">
-                        <p className=\"text-xs font-semibold text-gray-500 mb-2\">УПРАВЛЯЮЩИЙ</p>
+                      <div className="mb-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+                        <p className="text-xs font-semibold text-gray-500 mb-2">УПРАВЛЯЮЩИЙ</p>
                         {isLoadingThis ? null : managerByClinic[c.id] ? (
-                          <div className=\"flex items-center gap-2\">
-                            <div className=\"w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0\">
-                              <span className=\"text-white text-xs font-bold\">{(managerByClinic[c.id].full_name||'?').charAt(0).toUpperCase()}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+                              <span className="text-white text-xs font-bold">{(managerByClinic[c.id].full_name||'?').charAt(0).toUpperCase()}</span>
                             </div>
-                            <div><p className=\"text-sm font-medium text-gray-800 dark:text-white\">{managerByClinic[c.id].full_name}</p><p className=\"text-xs text-gray-400\">@{managerByClinic[c.id].username}</p></div>
+                            <div><p className="text-sm font-medium text-gray-800 dark:text-white">{managerByClinic[c.id].full_name}</p><p className="text-xs text-gray-400">@{managerByClinic[c.id].username}</p></div>
                           </div>
                         ) : (
-                          <button onClick={() => setCreateManagerFor(c)} className=\"w-full text-sm text-purple-600 border border-dashed border-purple-300 rounded-xl py-2 hover:bg-purple-50 transition\">+ Назначить управляющего</button>
+                          <button onClick={() => setCreateManagerFor(c)} className="w-full text-sm text-purple-600 border border-dashed border-purple-300 rounded-xl py-2 hover:bg-purple-50 transition">+ Назначить управляющего</button>
                         )}
                       </div>
                     )}
@@ -7518,6 +7522,16 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'webhooks': return (
         <Suspense fallback={<SectionLoader />}>
           <WebhooksSection token={adminToken} />
+        </Suspense>
+      )
+      case 'ads': return (
+        <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
+          <AdsSection token={adminToken} />
+        </Suspense>
+      )
+      case 'ai_analytics': return (
+        <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
+          <AISection token={adminToken} />
         </Suspense>
       )
       case 'super_admin': return (
