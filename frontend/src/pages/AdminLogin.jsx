@@ -15,11 +15,11 @@ export default function AdminLogin() {
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
       const data = res.data
-      const targetSlug = data.tenant_slug || SLUG
-      // Сохраняем токен в localStorage НУЖНОГО тенанта (не обязательно текущего)
-      localStorage.setItem('clinika_admin_token_' + targetSlug, data.access_token)
-      // Редиректим по redirect_url из ответа бэкенда
-      window.location.href = data.redirect_url || ('/' + targetSlug + '/admin')
+      const redirect = data.redirect_url || ('/' + (data.tenant_slug || SLUG) + '/admin')
+      // Для /admin (платформа) SLUG пустой, иначе tenant_slug
+      const storageSlug = redirect === '/admin' ? '' : (data.tenant_slug || SLUG)
+      localStorage.setItem('clinika_admin_token_' + storageSlug, data.access_token)
+      window.location.href = redirect
     } catch {
       setError('Неверный логин или пароль')
     } finally {

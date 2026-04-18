@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, ForeignKey, Enum as SAEnum
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
@@ -12,6 +12,9 @@ class UserRole(str, enum.Enum):
     PARTNER = "partner"
     SUPER_ADMIN = "super_admin"
     DOCTOR = "doctor"
+    NURSE = "nurse"
+    RECRUITER = "recruiter"
+    SUPERVISOR = "supervisor"
 
 class User(Base):
     __tablename__ = "users"
@@ -23,11 +26,16 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     phone_number: Mapped[str | None] = mapped_column(String(20), index=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), index=True, nullable=True)
     category: Mapped[str | None] = mapped_column(String(30), nullable=True)
     date_of_birth: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole), default=UserRole.ADMIN)
+    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, values_callable=lambda x: [e.value for e in x], create_type=False), default=UserRole.ADMIN)
     clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Рекрутер: кто привлёк этого врача (FK на users)
+    recruiter_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # Индивидуальный % рекрутера (заполняется только для роли recruiter)
+    bonus_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
     # 152-ФЗ
     consent_given: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     consent_given_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -37,7 +45,5 @@ class User(Base):
     clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="users")
     referrals_created: Mapped[list["Referral"]] = relationship("Referral", back_populates="created_by", foreign_keys="Referral.created_by_admin_id")
     bonuses: Mapped[list["Bonus"]] = relationship("Bonus", back_populates="admin")
-
-
-# 152-ФЗ поля (добавлены в Этапе 11)
-# Добавляются как nullable для совместимости с существующими записями
+    recruiter: Mapped["User | None"] = relationship("User", remote_side="User.id", foreign_keys=[recruiter_id])
+    doctor_clinic_access: Mapped[list["DoctorClinicAccess"]] = relationship("DoctorClinicAccess", back_populates="doctor", foreign_keys="DoctorClinicAccess.doctor_id")
