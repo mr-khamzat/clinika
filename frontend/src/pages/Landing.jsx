@@ -56,9 +56,16 @@ function LoginModal({ onClose }) {
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
       const { access_token, role, redirect_url, tenant_slug } = res.data
-      const targetSlug = tenant_slug || SLUG
-      localStorage.setItem('clinika_admin_token_' + targetSlug, access_token)
-      window.location.href = redirect_url || ('/' + targetSlug + '/')
+      const targetSlug = tenant_slug || SLUG || 'arc'
+      const redirect = redirect_url || ('/' + targetSlug + '/')
+      const isAdminPanel = redirect === '/admin' || redirect.endsWith('/admin')
+      if (isAdminPanel) {
+        const storageSlug = redirect === '/admin' ? '' : targetSlug
+        localStorage.setItem('clinika_admin_token_' + storageSlug, access_token)
+      } else {
+        localStorage.setItem('clinika_token_' + targetSlug, access_token)
+      }
+      window.location.href = redirect
     } catch {
       setError('Неверный логин или пароль')
     } finally {
