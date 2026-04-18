@@ -15,10 +15,17 @@ export default function AdminLogin() {
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
       const data = res.data
-      const redirect = data.redirect_url || ('/' + (data.tenant_slug || SLUG) + '/admin')
-      // Для /admin (платформа) SLUG пустой, иначе tenant_slug
-      const storageSlug = redirect === '/admin' ? '' : (data.tenant_slug || SLUG)
-      localStorage.setItem('clinika_admin_token_' + storageSlug, data.access_token)
+      const redirect = data.redirect_url || ('/' + (data.tenant_slug || SLUG) + '/')
+      const slug = data.tenant_slug || SLUG || 'arc'
+      // Панель управления (manager/supervisor/recruiter/super_admin) — admin token
+      // Рабочий кабинет (admin/nurse/doctor/partner) — MiniApp token
+      const isAdminPanel = redirect === '/admin' || redirect.endsWith('/admin')
+      if (isAdminPanel) {
+        const storageSlug = redirect === '/admin' ? '' : slug
+        localStorage.setItem('clinika_admin_token_' + storageSlug, data.access_token)
+      } else {
+        localStorage.setItem('clinika_token_' + slug, data.access_token)
+      }
       window.location.href = redirect
     } catch {
       setError('Неверный логин или пароль')

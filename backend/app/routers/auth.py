@@ -77,8 +77,8 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
     superadmin_uname = settings.superadmin_username if hasattr(settings, "superadmin_username") else "khamzat"
     is_super = (role == "super_admin" or user.username == superadmin_uname)
     if is_super:
-        redirect_url = "/arc/admin"
-    elif role in ("manager", "admin") and tenant_slug:
+        redirect_url = "/admin"
+    elif role in ("supervisor", "manager", "recruiter") and tenant_slug:
         redirect_url = f"/{tenant_slug}/admin"
     elif tenant_slug:
         redirect_url = f"/{tenant_slug}/"

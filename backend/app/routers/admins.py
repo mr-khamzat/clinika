@@ -32,8 +32,8 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
     data["tenant_slug"] = tenant_slug
     data["is_super"] = is_super
     if is_super:
-        data["redirect_url"] = "/arc/admin"
-    elif role in ("manager", "admin") and tenant_slug:
+        data["redirect_url"] = "/admin"
+    elif role in ("supervisor", "manager", "recruiter") and tenant_slug:
         data["redirect_url"] = f"/{tenant_slug}/admin"
     elif tenant_slug:
         data["redirect_url"] = f"/{tenant_slug}/"
