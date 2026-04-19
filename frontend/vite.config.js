@@ -4,7 +4,6 @@ import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
 
 // PostCSS плагин: меняет font-display: block → swap для всех @font-face
-// Иконки material-symbols теперь не блокируют отрисовку страницы
 const fontDisplaySwap = {
   postcssPlugin: 'font-display-swap',
   AtRule: {
@@ -26,20 +25,6 @@ export default defineConfig({
         autoprefixer(),
         fontDisplaySwap,
       ]
-    }
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react-dom')) return 'react'
-            if (id.includes('axios')) return 'axios'
-            if (id.includes('react')) return 'react'
-            return 'vendor'
-          }
-        }
-      }
     }
   },
   server: {
