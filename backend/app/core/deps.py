@@ -31,7 +31,7 @@ async def get_current_user(
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     """Администраторы или super_admin."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN):
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для администраторов"
@@ -41,7 +41,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 async def require_manager(user: User = Depends(get_current_user)) -> User:
     """Системный администратор (manager) или super_admin."""
-    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN):
+    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для системного администратора"
@@ -51,7 +51,7 @@ async def require_manager(user: User = Depends(get_current_user)) -> User:
 
 async def require_reports_access(user: User = Depends(get_current_user)) -> User:
     """Отчёты: доступны и Администраторам клиники, и Системному администратору."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN):
+    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав"
@@ -102,3 +102,15 @@ async def get_current_tenant(
             detail="Тенант не найден"
         )
     return tenant
+
+
+def require_role(*roles: str):
+    """Фабрика зависимостей — разрешает доступ только указанным ролям."""
+    async def _check(user: User = Depends(get_current_user)) -> None:
+        role_val = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        if role_val not in roles and role_val != 'super_admin':
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для этого раздела"
+            )
+    return _check

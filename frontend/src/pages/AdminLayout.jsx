@@ -75,7 +75,7 @@ const NAV = [
   { key: 'scheduling', label: 'Расписание', icon: 'calendar_month' },
   { key: 'reports',    label: 'Отчёты',     icon: 'analytics' },
   { key: 'bonuses',    label: 'Бонусы',     icon: 'payments' },
-  { key: 'commission', label: 'Комиссия',   icon: 'percent' },
+  { key: 'commission', label: 'Комиссия',   icon: 'percent', superAdminOnly: true },
   { key: 'partners',   label: 'Партнёры',   icon: 'handshake' },
   { key: 'discounts',  label: 'Скидки',     icon: 'sell' },
   { key: 'settings',   label: 'Настройки',  icon: 'settings' },
@@ -282,6 +282,10 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
               >
                 <option value="admin">Администратор</option>
                 <option value="manager">Руководитель</option>
+                <option value="doctor">Врач (кабинет врача)</option>
+                <option value="nurse">Медсестра</option>
+                <option value="recruiter">Менеджер (рекрутер)</option>
+                <option value="supervisor">Владелец франшизы</option>
               </select>
             </div>
             <div>
@@ -934,7 +938,7 @@ function StaffSection({ token }) {
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${a.role === 'manager' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'}`}>
-                          {a.role === 'manager' ? 'Руководитель' : 'Администратор'}
+                          {a.role === "manager" ? "Руководитель" : a.role === "doctor" ? "Врач" : a.role === "nurse" ? "Медсестра" : a.role === "recruiter" ? "Менеджер" : "Администратор"}
                         </span>
                         {a.category && (
                           <span className="text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-full">
@@ -1197,6 +1201,9 @@ function ClinicsSection({ token, isClinicManager }) {
   const [error, setError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [managerByClinic, setManagerByClinic] = useState({})
+  const [createManagerFor, setCreateManagerFor] = useState(null)
+  const [credentials, setCredentials] = useState(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -1344,7 +1351,7 @@ function ClinicsSection({ token, isClinicManager }) {
                               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                                 a.role === 'manager' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
                               }`}>
-                                {a.role === 'manager' ? 'Руководитель' : 'Администратор'}
+                                {a.role === "manager" ? "Руководитель" : a.role === "doctor" ? "Врач" : a.role === "nurse" ? "Медсестра" : a.role === "recruiter" ? "Менеджер" : "Администратор"}
                               </span>
                               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.is_active !== false ? 'bg-green-500' : 'bg-red-400'}`} />
                             </div>
@@ -4903,6 +4910,10 @@ function BillingSection({ token }) {
     } catch {}
   }
 
+  useEffect(() => {
+    if (activeTab === 'ledger' && !ledgerSummary) loadLedger(ledgerDays)
+  }, [activeTab])
+
   const TABS = [
     { key: 'summary', label: 'Подписка', icon: 'card_membership' },
     { key: 'invoices', label: 'Счета', icon: 'receipt_long' },
@@ -5160,6 +5171,73 @@ function BillingSection({ token }) {
       )}
 
       {/* Модал оплаты счёта */}
+
+          {activeTab === 'ledger' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 dark:text-white">Финансовый журнал (Billing v2)</h3>
+                <div className="flex gap-2">
+                  {[7, 30, 90].map(d => (
+                    <button key={d}
+                      onClick={() => { setLedgerDays(d); loadLedger(d) }}
+                      className={"px-3 py-1 text-xs rounded-full border font-semibold transition " + (ledgerDays === d ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                      {d}д
+                    </button>
+                  ))}
+                  <button onClick={() => loadLedger(ledgerDays)}
+                    className="px-3 py-1 text-xs rounded-full border border-teal-200 text-teal-700 hover:bg-teal-50 font-semibold">
+                    Обновить
+                  </button>
+                </div>
+              </div>
+              {!ledgerSummary ? (
+                <div className="text-center py-12 text-gray-400">
+                  <span className="material-symbols-outlined text-5xl block mb-3">account_balance_wallet</span>
+                  <p className="text-sm mb-3">Данные финансового журнала Billing v2</p>
+                  <button onClick={() => loadLedger(ledgerDays)}
+                    className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg font-semibold hover:bg-teal-700">
+                    Загрузить
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { label: 'Доходы', value: ledgerSummary.total_credit || 0, icon: 'trending_up', cls: 'text-green-600 bg-green-50' },
+                      { label: 'Расходы', value: ledgerSummary.total_debit || 0, icon: 'trending_down', cls: 'text-red-600 bg-red-50' },
+                      { label: 'Платформа', value: ledgerSummary.platform_income || 0, icon: 'corporate_fare', cls: 'text-violet-600 bg-violet-50' },
+                      { label: 'Записей', value: Object.values(ledgerSummary.breakdown || {}).reduce((s, v) => s + (v.count || 0), 0), icon: 'format_list_bulleted', cls: 'text-blue-600 bg-blue-50', noFormat: true },
+                    ].map(s => (
+                      <div key={s.label} className={"rounded-xl p-4 flex items-center gap-3 " + s.cls.split(' ')[1]}>
+                        <span className={"material-symbols-outlined text-2xl " + s.cls.split(' ')[0]}>{s.icon}</span>
+                        <div>
+                          <div className={"text-xl font-bold " + s.cls.split(' ')[0]}>
+                            {s.noFormat ? s.value : (Number(s.value) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽'}
+                          </div>
+                          <div className="text-xs text-gray-500">{s.label}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {ledgerSummary.breakdown && Object.keys(ledgerSummary.breakdown).length > 0 && (
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">По типу операций</div>
+                      <div className="divide-y divide-gray-50">
+                        {Object.entries(ledgerSummary.breakdown).map(([type, data]) => (
+                          <div key={type} className="px-4 py-3 flex justify-between items-center text-sm">
+                            <span className="text-gray-500">{type.replace(/_/g, ' ')}</span>
+                            <span className="font-semibold">{(data.amount || data || 0).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-400 text-right">За {ledgerDays} дней · append-only ledger v2</div>
+                </div>
+              )}
+            </div>
+          )}
+
       {payModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
@@ -5184,72 +5262,6 @@ function BillingSection({ token }) {
     </div>
   )
 }
-
-{activeTab === 'ledger' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-bold text-gray-800 dark:text-white">Финансовый журнал (Billing v2)</h3>
-                <div className="flex gap-2">
-                  {[7, 30, 90].map(d => (
-                    <button key={d}
-                      onClick={() => { setLedgerDays(d); loadLedger(d) }}
-                      className={"px-3 py-1 text-xs rounded-full border font-semibold transition " + (ledgerDays === d ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
-                      {d}д
-                    </button>
-                  ))}
-                  <button onClick={() => loadLedger(ledgerDays)}
-                    className="px-3 py-1 text-xs rounded-full border border-teal-200 text-teal-700 hover:bg-teal-50 font-semibold">
-                    Обновить
-                  </button>
-                </div>
-              </div>
-              {!ledgerSummary ? (
-                <div className="text-center py-12 text-gray-400">
-                  <span className="material-icons text-5xl block mb-3">account_balance_wallet</span>
-                  <p className="text-sm mb-3">Данные финансового журнала Billing v2</p>
-                  <button onClick={() => loadLedger(ledgerDays)}
-                    className="px-4 py-2 bg-teal-600 text-white text-sm rounded-lg font-semibold hover:bg-teal-700">
-                    Загрузить
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {[
-                      { label: 'Доходы', value: ledgerSummary.total_income || 0, icon: 'trending_up', cls: 'text-green-600 bg-green-50' },
-                      { label: 'Расходы', value: ledgerSummary.total_debit || 0, icon: 'trending_down', cls: 'text-red-600 bg-red-50' },
-                      { label: 'Платформа', value: ledgerSummary.platform_income || 0, icon: 'corporate_fare', cls: 'text-violet-600 bg-violet-50' },
-                      { label: 'Записей', value: ledgerSummary.entry_count || 0, icon: 'format_list_bulleted', cls: 'text-blue-600 bg-blue-50', noFormat: true },
-                    ].map(s => (
-                      <div key={s.label} className={"rounded-xl p-4 flex items-center gap-3 " + s.cls.split(' ')[1]}>
-                        <span className={"material-icons text-2xl " + s.cls.split(' ')[0]}>{s.icon}</span>
-                        <div>
-                          <div className={"text-xl font-bold " + s.cls.split(' ')[0]}>
-                            {s.noFormat ? s.value : (Number(s.value) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽'}
-                          </div>
-                          <div className="text-xs text-gray-500">{s.label}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {ledgerSummary.by_type && Object.keys(ledgerSummary.by_type).length > 0 && (
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">По типу операций</div>
-                      <div className="divide-y divide-gray-50">
-                        {Object.entries(ledgerSummary.by_type).map(([type, data]) => (
-                          <div key={type} className="px-4 py-3 flex justify-between items-center text-sm">
-                            <span className="text-gray-500">{type.replace(/_/g, ' ')}</span>
-                            <span className="font-semibold">{(data.amount || data || 0).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="text-xs text-gray-400 text-right">За {ledgerDays} дней · append-only ledger v2</div>
-                </div>
-              )}
-            </div>
-          )}
 
 
 // ---------------------------------------------------------------------------
@@ -5293,9 +5305,9 @@ function SchedulingSection({ token }) {
         apiFetch('get', '/clinics', token),
         apiFetch('get', '/appointments', token),
       ])
-      setDoctors(dRes.data || [])
-      setClinics(cRes.data || [])
-      setAppointments(aRes.data || [])
+      setDoctors(Array.isArray(dRes.data) ? dRes.data : [])
+      setClinics(Array.isArray(cRes.data) ? cRes.data : [])
+      setAppointments(Array.isArray(aRes.data) ? aRes.data : [])
     } catch {}
     finally { setLoading(false) }
   }
@@ -6321,7 +6333,7 @@ function MisSyncSection({ token }) {
   const loadOurClinics = async () => {
     try {
       const r = await apiFetch('get', '/clinics', token)
-      setOurClinics(r.data.clinics || r.data || [])
+      setOurClinics(Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.clinics) ? r.data.clinics : []))
     } catch {}
   }
 
@@ -6347,7 +6359,7 @@ function MisSyncSection({ token }) {
   const loadDoctorAccounts = async () => {
     try {
       const r = await apiFetch('get', '/mis/doctors/accounts', token)
-      setDoctorAccounts(r.data)
+      setDoctorAccounts(Array.isArray(r.data) ? r.data : [])
     } catch {}
   }
 
@@ -6477,7 +6489,7 @@ function MisSyncSection({ token }) {
           <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 border border-gray-100 dark:border-gray-800 shadow-sm">
             <h3 className="font-bold text-gray-900 dark:text-white mb-3">В нашей системе ({ourClinics.length})</h3>
             <div className="divide-y divide-gray-50 dark:divide-gray-800">
-              {ourClinics.map(c => (
+              {(Array.isArray(ourClinics) ? ourClinics : []).map(c => (
                 <div key={c.id} className="flex items-center gap-3 py-2">
                   <span className="material-symbols-outlined text-[#0097A7] text-[18px]" style={{fontVariationSettings:"'FILL' 1"}}>local_hospital</span>
                   <div className="flex-1">
@@ -6544,7 +6556,7 @@ function MisSyncSection({ token }) {
               </button>
             </div>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-              {(doctorAccounts || []).map(d => (
+              {(Array.isArray(doctorAccounts) ? doctorAccounts : []).map(d => (
                 <div key={d.doctor_id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${d.has_account ? 'bg-emerald-50' : 'bg-gray-100 dark:bg-gray-700'}`}>
                     <span className="material-symbols-outlined text-sm" style={{ color: d.has_account ? '#166534' : '#9ca3af', fontVariationSettings: "'FILL' 1" }}>
@@ -6718,7 +6730,7 @@ function CallsConfigSection({ token }) {
   const showMsg = (t, ok=true) => { setMsg({text:t, ok}); setTimeout(() => setMsg(''), 3000) }
 
   const ROLES = ['admin', 'manager', 'partner', 'doctor']
-  const ROLE_LABELS = { admin: 'Администратор', manager: 'Руководитель', partner: 'Партнёр', doctor: 'Врач' }
+  const ROLE_LABELS = { admin: 'Администратор', manager: 'Руководитель', supervisor: 'Владелец франшизы', partner: 'Партнёр', doctor: 'Врач', nurse: 'Медсестра', recruiter: 'Менеджер' }
   const ROLE_ICONS  = { admin: 'manage_accounts', manager: 'supervisor_account', partner: 'handshake', doctor: 'medical_services' }
 
   const loadPermissions = async () => {
@@ -7561,7 +7573,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     reports: badges.cancel_requests,
   }
 
-  const isSuperAdmin = user?.is_superadmin || user?.role === 'super_admin'
+  const isSuperAdmin = user?.is_superadmin || user?.role === "super_admin"
+  const isSupervisor = user?.role === "supervisor"
+  const isTenantAdmin = isSuperAdmin || isSupervisor  // полный доступ к тенанту
+  const isClinicManager = user?.role === 'manager'
   const renderSection = () => {
     // Разделы только для суперадмина — блокировать для обычных менеджеров
     const superOnlySections = ['monitoring','audit','billing','webhooks','super_admin','plugins','mis_sync','calls_cfg','push_notify']
@@ -7697,7 +7712,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               <div className="text-xs font-semibold text-white truncate leading-tight">
                 {user?.full_name || user?.username || 'Администратор'}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">{user?.role === "super_admin" ? "Владелец платформы" : user?.role === "manager" ? "Системный администратор" : user?.role === "partner" ? "Партнёр" : "Администратор"}</div>
+              <div className="text-[10px] text-slate-500 mt-0.5">{user?.role === "super_admin" ? "Владелец платформы" : user?.role === "supervisor" ? "Владелец франшизы" : user?.role === "manager" ? "Руководитель" : user?.role === "partner" ? "Партнёр" : "Администратор"}</div>
             </div>
           </div>
           <button onClick={() => setHelpOpen(true)}
@@ -7762,7 +7777,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
                 <div className="text-sm font-semibold text-ms-on-surface dark:text-white leading-tight">
                   {user?.full_name || user?.username || 'Администратор'}
                 </div>
-                <div className="text-[10px] text-ms-on-surface-variant dark:text-gray-400 uppercase tracking-wider">Системный администратор</div>
+                <div className="text-[10px] text-ms-on-surface-variant dark:text-gray-400 uppercase tracking-wider">{user?.role === "super_admin" ? "Администратор платформы" : user?.role === "supervisor" ? "Владелец франшизы" : user?.role === "manager" ? "Руководитель клиники" : "Сотрудник"}</div>
               </div>
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                 style={{ background: 'linear-gradient(135deg, #006173 0%, #007c92 100%)' }}>

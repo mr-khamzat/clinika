@@ -1,21 +1,22 @@
 {
-  "name": "КлиникаСеть — Кабинет пациента",
+  "name": "КлиникаСеть",
   "short_name": "КлиникаСеть",
-  "description": "Личный кабинет пациента — направления и визиты",
-  "start_url": "/clinika/",
+  "description": "Медицинская информационная система",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#F0F5F6",
   "theme_color": "#00A7AA",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/clinika/icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/clinika/icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

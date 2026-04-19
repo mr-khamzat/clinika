@@ -304,6 +304,8 @@ export default function PatientCabinet() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstall, setShowInstall] = useState(false)
   const [searchQ, setSearchQ] = useState('')
+  const [bannerAds, setBannerAds] = useState([])
+  const [bannerIdx, setBannerIdx] = useState(0)
 
   useEffect(() => {
     // Register SW
@@ -316,7 +318,20 @@ export default function PatientCabinet() {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
+  // Banner carousel auto-advance
   useEffect(() => {
+    if (bannerAds.length <= 1) return
+    const ms = (bannerAds[0]?.interval_seconds || 5) * 1000
+    const t = setInterval(() => setBannerIdx(i => (i + 1) % bannerAds.length), ms)
+    return () => clearInterval(t)
+  }, [bannerAds.length])
+
+  useEffect(() => {
+    // Загружаем активные баннеры для этого тенанта
+    axios.get(API + '/ads/active?ad_type=banner&slug=' + SLUG + '&limit=10')
+      .then(r => { if (r.data && r.data.length > 0) setBannerAds(r.data) })
+      .catch(() => {})
+
     const params = new URLSearchParams(window.location.search)
     const t = params.get('t')
     const referralId = window.location.pathname.split('/p/')[1]?.split('?')[0]
@@ -456,6 +471,94 @@ export default function PatientCabinet() {
           </div>
         </div>
       </header>
+
+      {/* Ad Banner Carousel */}
+      {bannerAds.length > 0 && (() => {
+        const THEMES = [
+          { bg: 'linear-gradient(135deg, #003845 0%, #005F6B 40%, #00A7AA 100%)', glow1: 'rgba(0,167,170,.3)', glow2: 'rgba(0,167,170,.6)', icon: 'rgba(0,167,170,.8)' },
+          { bg: 'linear-gradient(135deg, #1a0038 0%, #3b0764 40%, #7c3aed 100%)',  glow1: 'rgba(124,58,237,.3)', glow2: 'rgba(124,58,237,.6)', icon: 'rgba(124,58,237,.8)' },
+          { bg: 'linear-gradient(135deg, #7c1900 0%, #b93000 40%, #ff6a00 100%)',  glow1: 'rgba(255,106,0,.3)',  glow2: 'rgba(255,106,0,.6)',  icon: 'rgba(255,106,0,.8)' },
+        ]
+        const ad = bannerAds[bannerIdx]
+        const theme = THEMES[bannerIdx % THEMES.length]
+        return (
+          <div className="max-w-lg mx-auto px-4 pt-3 pb-1">
+            <style>{`
+              @keyframes adShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+              @keyframes adFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+              @keyframes adGlow0 { 0%,100%{box-shadow:0 0 20px rgba(0,167,170,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(0,167,170,.6),0 4px 24px rgba(0,0,0,.18)} }
+              @keyframes adGlow1 { 0%,100%{box-shadow:0 0 20px rgba(124,58,237,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(124,58,237,.6),0 4px 24px rgba(0,0,0,.18)} }
+              @keyframes adGlow2 { 0%,100%{box-shadow:0 0 20px rgba(255,106,0,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(255,106,0,.6),0 4px 24px rgba(0,0,0,.18)} }
+              @keyframes adFadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+            `}</style>
+            <div
+              key={bannerIdx}
+              onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
+              style={{
+                background: theme.bg,
+                borderRadius: 24,
+                padding: '16px 18px',
+                position: 'relative',
+                overflow: 'hidden',
+                cursor: ad.link ? 'pointer' : 'default',
+                animation: `adGlow${bannerIdx % 3} 3s ease-in-out infinite, adFadeIn 0.4s ease`,
+              }}>
+              {/* Shimmer */}
+              <div style={{ position:'absolute', top:0, left:0, right:0, bottom:0, overflow:'hidden', borderRadius:24, pointerEvents:'none' }}>
+                <div style={{ position:'absolute', top:0, bottom:0, width:'60%', background:'linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent)', animation:'adShimmer 3s ease-in-out infinite' }}/>
+              </div>
+              {/* Decorative circles */}
+              <div style={{ position:'absolute', top:-20, right:-20, width:100, height:100, borderRadius:'50%', background:'rgba(255,255,255,.06)' }}/>
+              <div style={{ position:'absolute', bottom:-30, right:60, width:80, height:80, borderRadius:'50%', background:'rgba(255,255,255,.04)' }}/>
+              <div style={{ display:'flex', alignItems:'center', gap:14, position:'relative' }}>
+                {/* Logo mark */}
+                <div style={{ flexShrink:0, width:52, height:52, borderRadius:16, background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', animation:'adFloat 3s ease-in-out infinite', backdropFilter:'blur(4px)', border:'1px solid rgba(255,255,255,.2)' }}>
+                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="11" y="2" width="6" height="24" rx="3" fill="white"/>
+                    <rect x="2" y="11" width="24" height="6" rx="3" fill="white"/>
+                    <circle cx="14" cy="14" r="3" fill={theme.icon}/>
+                  </svg>
+                </div>
+                {/* Text */}
+                <div style={{ flex:1 }}>
+                  <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
+                    <span style={{ color:'white', fontWeight:800, fontSize:17, lineHeight:1.1, letterSpacing:'-0.3px' }}>{ad.title}</span>
+                    <span style={{ background:'rgba(255,255,255,.2)', color:'rgba(255,255,255,.7)', fontSize:9, fontWeight:600, padding:'1px 5px', borderRadius:4, letterSpacing:.5, flexShrink:0 }}>РЕКЛАМА</span>
+                  </div>
+                  {ad.body && <p style={{ color:'rgba(255,255,255,.75)', fontSize:12.5, margin:'4px 0 0', lineHeight:1.4 }}>{ad.body}</p>}
+                  {ad.link && (
+                    <div style={{ marginTop:8, display:'inline-flex', alignItems:'center', gap:4, background:'rgba(255,255,255,.15)', borderRadius:8, padding:'4px 10px', border:'1px solid rgba(255,255,255,.2)' }}>
+                      <span style={{ color:'white', fontSize:11, fontWeight:600 }}>Подробнее</span>
+                      <span style={{ color:'white', fontSize:12 }}>→</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Image if provided */}
+              {ad.image_data && (
+                <div style={{ marginTop:12, borderRadius:12, overflow:'hidden' }}>
+                  <img src={`data:${ad.image_mime||'image/png'};base64,${ad.image_data}`}
+                    alt={ad.title}
+                    style={{ width:'100%', display:'block', maxHeight:180, objectFit:'cover' }}
+                    onLoad={() => axios.post(API+'/ads/'+ad.id+'/event',{event_type:'impression'}).catch(()=>{})}
+                  />
+                </div>
+              )}
+              {/* Dots indicator */}
+              {bannerAds.length > 1 && (
+                <div style={{ display:'flex', justifyContent:'center', gap:5, marginTop:12, position:'relative' }}>
+                  {bannerAds.map((_,i) => (
+                    <div key={i}
+                      onClick={e => { e.stopPropagation(); setBannerIdx(i) }}
+                      style={{ width: i===bannerIdx ? 18 : 6, height:6, borderRadius:3, background: i===bannerIdx ? 'white' : 'rgba(255,255,255,.4)', transition:'all .3s', cursor:'pointer' }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       <div className="max-w-lg mx-auto px-4 pt-5">
         {/* PWA banner */}

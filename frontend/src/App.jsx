@@ -2,7 +2,7 @@
  * ========================================
  * БЛОК: Корневой компонент приложения
  * ========================================
- * Маршрутизация и auth-гейт для Telegram Mini App.
+ * Маршрутизация и auth-гейт. Режимы: Standalone Web App (основной) + Telegram Mini App (опциональный).
  * Три точки входа:
  *   1. /clinika/admin  → AdminRoot (панель управления)
  *   2. /clinika/invite/:code → InviteRegister (публичная, без авторизации)
@@ -26,6 +26,7 @@ import Bonuses from './pages/Bonuses'
 import Landing from './pages/Landing'
 import ProfileSetup from './pages/ProfileSetup'
 import InviteRegister from './pages/InviteRegister'
+import InviteAccept from './pages/InviteAccept'
 import ManagerDashboard from './pages/ManagerDashboard'
 import ManagerHistory from './pages/ManagerHistory'
 import ManagerBonuses from './pages/ManagerBonuses'
@@ -36,8 +37,10 @@ import ManagerSettings from './pages/ManagerSettings'
 import ClinicSchedules from './pages/ClinicSchedules'
 import AdminPanel from './pages/AdminPanel'
 import AdminRoot from './pages/AdminRoot'
+import { PLATFORM_MODE } from './config'
 import PatientCabinet from './pages/PatientCabinet'
 import { API_BASE, BASE_PATH, SLUG } from './config'
+import { waitForTelegramSDK, initTgApp } from './lib/tg'
 
 // ─── Применяем тему ДО первого рендера ───
 ;(function applyThemeEarly() {
@@ -51,44 +54,51 @@ import { API_BASE, BASE_PATH, SLUG } from './config'
   } catch {}
 })()
 
-// ─── Telegram Mini App — главный компонент ───
+// ─── Универсальный компонент: Web App + Telegram Mini App ───
 function MiniApp() {
   const { token, setToken, setUser, user } = useAuthStore()
   const [loading, setLoading] = useState(true)
 
-  // ─── Инициализация: Telegram auth или восстановление сессии ───
+  // ─── Инициализация: веб-сессия первой, Telegram — опционально ───
+  // Порядок важен: сначала проверяем токен (веб-режим, нет задержки),
+  // потом — Telegram SDK (только если URL содержит tgWebApp в hash).
   useEffect(() => {
     const init = async () => {
       try {
-        const tg = window.Telegram?.WebApp
-        if (tg?.initDataUnsafe?.user) {
-          tg.ready()
-          tg.expand()
-          const tgUser = tg.initDataUnsafe.user
-          const res = await authTelegram({
-            id: String(tgUser.id),
-            first_name: tgUser.first_name || 'Пользователь',
-            last_name: tgUser.last_name,
-            username: tgUser.username,
-            init_data: tg.initData || '',   // для верификации подписи на бэкенде
-          })
-          setToken(res.data.access_token)
-          const meRes = await getMe()
-          setUser(meRes.data)
-        } else if (token) {
+        // 1. Восстанавливаем веб-сессию по токену (без ожидания Telegram)
+        if (token) {
           try {
             const meRes = await getMe()
             setUser(meRes.data)
+            return
           } catch (e) {
-            // токен просрочен или недействителен — сбрасываем
             if (e?.response?.status === 401) {
               localStorage.removeItem('clinika_token_' + SLUG)
               useAuthStore.getState().logout()
             }
           }
         }
+
+        // 2. Нет токена — проверяем Telegram Mini App (с таймаутом 2с)
+        // waitForTelegramSDK вернёт null немедленно если не в Telegram
+        const tg = await waitForTelegramSDK()
+        if (tg) {
+          initTgApp(tg)
+          const tgUser = tg.initDataUnsafe.user
+          const res = await authTelegram({
+            id: String(tgUser.id),
+            first_name: tgUser.first_name || 'Пользователь',
+            last_name: tgUser.last_name,
+            username: tgUser.username,
+            init_data: tg.initData || '',
+          })
+          setToken(res.data.access_token)
+          const meRes = await getMe()
+          setUser(meRes.data)
+        }
+        // 3. Ни токена, ни Telegram → покажем страницу входа
       } catch (e) {
-        console.error(e)
+        console.error('[MiniApp init]', e)
       } finally {
         setLoading(false)
       }
@@ -106,8 +116,14 @@ function MiniApp() {
     </div>
   )
 
-  // ─── Специальный случай: регистрация по инвайту (без авторизации) ───
+  // ─── Специальный случай: регистрация по инвайту ───
   const pathname = window.location.pathname
+  // Приглашение врача от рекрутера (новая система)
+  const inviteAcceptMatch = pathname.match(new RegExp('/' + SLUG + '/invite/([a-zA-Z0-9_-]{20,})'))
+  if (inviteAcceptMatch) {
+    return <InviteAccept token={inviteAcceptMatch[1]} />
+  }
+  // Старый партнёрский инвайт (короткий код)
   const inviteMatch = pathname.match(new RegExp('/' + SLUG + '/invite/([^/]+)'))
   if (inviteMatch) {
     return <InviteRegister code={inviteMatch[1]} />
@@ -174,7 +190,12 @@ export default function App() {
     return <Landing />
   }
 
-  // Панель управления — проверяем токен менеджера
+  // Глобальная платформа khamzat: /admin (без тенантного слага)
+  if (PLATFORM_MODE || path === '/admin') {
+    return <AdminRoot />
+  }
+
+  // Панель управления тенанта: /{slug}/admin
   if (SLUG && path.startsWith('/' + SLUG + '/admin')) {
     return <AdminRoot />
   }

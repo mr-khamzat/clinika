@@ -33,6 +33,7 @@ async def create_referral(
     appointment_at: datetime | None = None,
     patient_name: str | None = None,
     mis_patient_id: int | None = None,
+    tenant_id: uuid.UUID | None = None,
 ) -> Referral:
     referral = Referral(
         from_clinic_id=from_clinic_id,
@@ -44,6 +45,7 @@ async def create_referral(
         created_by_admin_id=created_by_admin_id,
         notes=notes,
         appointment_at=appointment_at,
+        tenant_id=tenant_id,
     )
     db.add(referral)
     await db.flush()
@@ -145,6 +147,47 @@ async def _apply_confirmation(
                 reference_type='referral',
                 description=f'Начисление по направлению #{str(referral.id)[:8]}',
             )
+    except Exception:
+        pass
+
+    # Начисление бонуса рекрутеру (если у автора направления есть рекрутер с %)
+    try:
+        from app.models.user import User as UserModel
+        from app.models.recruiter_bonus import RecruiterBonus
+        author_result = await db.execute(
+            select(UserModel).where(UserModel.id == referral.created_by_admin_id)
+        )
+        author = author_result.scalar_one_or_none()
+        if author and author.recruiter_id and author.bonus_percent:
+            recruiter_result = await db.execute(
+                select(UserModel).where(UserModel.id == author.recruiter_id)
+            )
+            recruiter = recruiter_result.scalar_one_or_none()
+            if recruiter and recruiter.bonus_percent:
+                # Базовый бонус автора направления
+                author_bonus_result = await db.execute(
+                    select(Bonus).where(
+                        Bonus.referral_id == referral.id,
+                        Bonus.admin_id == referral.created_by_admin_id,
+                        Bonus.bonus_type == BonusType.REGULAR,
+                    )
+                )
+                author_bonus = author_bonus_result.scalar_one_or_none()
+                if author_bonus:
+                    rec_percent = float(recruiter.bonus_percent)
+                    rec_amount = round(float(author_bonus.amount) * rec_percent / 100, 2)
+                    if rec_amount > 0:
+                        rec_bonus = RecruiterBonus(
+                            tenant_id=referral.tenant_id,
+                            recruiter_id=recruiter.id,
+                            doctor_id=author.id,
+                            referral_id=referral.id,
+                            source_bonus_id=author_bonus.id,
+                            percent_applied=rec_percent,
+                            amount=rec_amount,
+                        )
+                        db.add(rec_bonus)
+                        await db.flush()
     except Exception:
         pass
 

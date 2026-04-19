@@ -45,3 +45,7 @@ from app.models.billing_plan import TenantPlan, TenantPricingRules
 from app.models.billing_ledger import BillingLedger
 from app.models.advertising import Ad, AdEvent
 from app.models.billing import TenantPluginSubscription, PluginSubStatus
+
+# Рекрутерская система
+from app.models.doctor_clinic_access import DoctorClinicAccess
+from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus

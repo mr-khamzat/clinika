@@ -420,7 +420,7 @@ async def platform_metrics(
     """Сводные метрики всей платформы."""
     from app.models.user import User as UserModel
 
-    tenants_total = (await db.execute(select(func.count(Tenant.id)))).scalar() or 0
+    tenants_total = (await db.execute(select(func.count(Tenant.id)).where(Tenant.is_active == True))).scalar() or 0
     tenants_active = (await db.execute(select(func.count(Tenant.id)).where(Tenant.is_active == True))).scalar() or 0
     users_total = (await db.execute(select(func.count(UserModel.id)).where(UserModel.is_active == True))).scalar() or 0
     clinics_total = (await db.execute(select(func.count(Clinic.id)).where(Clinic.is_active == True))).scalar() or 0

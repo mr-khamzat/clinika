@@ -88,6 +88,7 @@ async def create_new_referral(
         created_by_admin_id=current_user.id,
         notes=data.notes,
         appointment_at=data.appointment_at,
+        tenant_id=current_user.tenant_id,
     )
     await _log(db, current_user, "Создано направление", "referral", referral.id)
     if current_user.tenant_id:
@@ -179,7 +180,10 @@ async def get_referral(
 ):
     q = select(Referral).where(Referral.id == referral_id)
     if current_user.tenant_id is not None:
-        q = q.where(Referral.tenant_id == current_user.tenant_id)
+        q = q.where(
+            (Referral.tenant_id == current_user.tenant_id) |
+            (Referral.tenant_id == None)
+        )
     result = await db.execute(q)
     referral = result.scalar_one_or_none()
     if not referral:

@@ -30,7 +30,7 @@ REFRESH_TOKEN_EXPIRE = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 def _login_limiter():
     try:
         from fastapi_limiter.depends import RateLimiter
-        return [Depends(RateLimiter(times=10, seconds=300))]
+        return [Depends(RateLimiter(times=20, seconds=60))]
     except Exception as e:
         logger.warning(f"Rate limiter недоступен: {e}")
         return []
@@ -78,7 +78,7 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
     is_super = (role == "super_admin" or user.username == superadmin_uname)
     if is_super:
         redirect_url = "/admin"
-    elif role in ("supervisor", "manager", "recruiter") and tenant_slug:
+    elif role in ("doctor", "recruiter", "manager", "supervisor") and tenant_slug:
         redirect_url = f"/{tenant_slug}/admin"
     elif tenant_slug:
         redirect_url = f"/{tenant_slug}/"

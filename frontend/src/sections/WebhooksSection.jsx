@@ -49,7 +49,11 @@ export default function WebhooksSection({ token }) {
         apiFetch(token, '/webhooks/events'),
       ])
       if (wRes.ok) setWebhooks(await wRes.json())
-      if (eRes.ok) setEvents(await eRes.json())
+      if (eRes.ok) {
+        const eData = await eRes.json()
+        // /webhooks/events returns {events: {...}} — extract keys
+        setEvents(Array.isArray(eData) ? eData : Object.keys(eData?.events || eData || {}))
+      }
     } catch (e) { setErr('Ошибка загрузки') }
     setLoading(false)
   }, [token])

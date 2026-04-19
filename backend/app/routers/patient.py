@@ -25,7 +25,7 @@ def _get_limiter(times: int, seconds: int):
 
 
 _limit_view = _get_limiter(60, 60)
-_limit_code = _get_limiter(5, 900)
+_limit_code = _get_limiter(20, 60)
 _view_deps = [_limit_view] if _limit_view else []
 _code_deps = [_limit_code] if _limit_code else []
 

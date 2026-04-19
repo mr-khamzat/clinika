@@ -2,18 +2,23 @@
  * Динамическое определение slug тенанта из URL.
  *
  * клиниксеть.рф/           → лендинг (SLUG='', API_BASE='/api')
+ * клиниксеть.рф/admin      → глобальная платформа khamzat (SLUG='', API_BASE='/api')
  * клиниксеть.рф/arc/       → тенант arc (API_BASE='/arc/api')
  * клиниксеть.рф/imed/admin → тенант imed (API_BASE='/imed/api')
- *
- * После логина на лендинге — редирект на /{tenant_slug}/admin от бэкенда.
  */
 const _parts = window.location.pathname.split('/').filter(Boolean)
 
-// Slug — первый сегмент пути. Пустой на корне сайта.
-export const SLUG = _parts[0] || ''
+// /admin без слага тенанта — глобальная платформа (super_admin)
+const IS_PLATFORM_ADMIN = _parts[0] === 'admin' && _parts.length === 1
 
-// Базовый путь для Router (пустой на лендинге)
+// Slug — первый сегмент пути, пустой на корне и в режиме платформы
+export const SLUG = IS_PLATFORM_ADMIN ? '' : (_parts[0] || '')
+
+// Базовый путь для Router
 export const BASE_PATH = SLUG ? `/${SLUG}` : ''
 
-// API base: на корне используем /api/, в тенантах /{slug}/api/
+// API base
 export const API_BASE = SLUG ? `/${SLUG}/api` : '/api'
+
+// Флаг: мы в режиме глобальной платформы (/admin без слага)
+export const PLATFORM_MODE = IS_PLATFORM_ADMIN

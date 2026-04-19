@@ -28,6 +28,7 @@ from app.routers.push import router as push_router
 from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
 from app.routers.ai import router as ai_router
+from app.routers.recruiter import router as recruiter_router
 from app.routers.system import router as system_router, heartbeat_loop
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -343,6 +344,7 @@ app.include_router(push_router)
 app.include_router(webhooks_router)
 app.include_router(ads_router)
 app.include_router(ai_router)
+app.include_router(recruiter_router)
 
 
 @app.get("/health")

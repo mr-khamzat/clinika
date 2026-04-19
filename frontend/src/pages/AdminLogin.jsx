@@ -17,8 +17,8 @@ export default function AdminLogin() {
       const data = res.data
       const redirect = data.redirect_url || ('/' + (data.tenant_slug || SLUG) + '/')
       const slug = data.tenant_slug || SLUG || 'arc'
-      // Панель управления (manager/supervisor/recruiter/super_admin) — admin token
-      // Рабочий кабинет (admin/nurse/doctor/partner) — MiniApp token
+      // Все роли кроме partner идут в /{slug}/admin → clinika_admin_token_{slug}
+      // partner идёт в /{slug}/ → clinika_token_{slug}
       const isAdminPanel = redirect === '/admin' || redirect.endsWith('/admin')
       if (isAdminPanel) {
         const storageSlug = redirect === '/admin' ? '' : slug

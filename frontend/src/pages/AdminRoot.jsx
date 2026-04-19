@@ -3,9 +3,25 @@ import axios from 'axios'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
 import DoctorLayout from './DoctorLayout'
+import OperationalCabinet from './OperationalCabinet'
+import RecruiterCabinet from './RecruiterCabinet'
+import InviteAccept from './InviteAccept'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
+// Проверяем — вдруг это страница принятия приглашения: /invite/{token}
+function getInviteToken() {
+  const m = window.location.pathname.match(/\/invite\/([a-zA-Z0-9_-]+)/)
+  return m ? m[1] : null
+}
+
 export default function AdminRoot() {
+  const inviteToken = getInviteToken()
+
+  // Страница принятия приглашения — показываем сразу, без логина
+  if (inviteToken) {
+    return <InviteAccept token={inviteToken} />
+  }
+
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token_' + SLUG))
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(!!adminToken)
@@ -21,17 +37,16 @@ export default function AdminRoot() {
       })
       .then(res => {
         const u = res.data
-        const role = u.role
+        const role = (u.role || '').toLowerCase()
+        u.role = role
         const slug = u.tenant_slug
         const isSuperAdmin = u.is_superadmin || u.is_super || role === 'super_admin'
 
-        // Партнёры и доктора — не имеют доступа к /admin
         if (role === 'partner') {
           window.location.href = '/' + (slug || SLUG) + '/'
           return
         }
 
-        // Если пользователь зашёл на чужой тенант — редирект на свой
         if (!isSuperAdmin && slug && slug !== SLUG) {
           window.location.href = '/' + slug + '/admin'
           return
@@ -70,33 +85,42 @@ export default function AdminRoot() {
     return <AdminLogin />
   }
 
-  // Врач → личный кабинет врача
-  if (user.role === 'doctor') {
+  const role = user.role
+
+  // ── Врач → личный кабинет врача
+  if (role === 'doctor') {
     return <DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  // Менеджер, администратор, партнёр, super_admin → панель управления
-  const allowedRoles = ['super_admin', 'manager', 'admin', 'partner']
-  if (!allowedRoles.includes(user.role)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4"
-        style={{ background: 'linear-gradient(135deg, #004D5F 0%, #00A7AA 100%)' }}>
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
-          <div className="text-5xl mb-4">🚫</div>
-          <h1 className="text-xl font-bold text-gray-800 mb-2">Нет доступа</h1>
-          <p className="text-gray-500 text-sm mb-6">
-            Панель управления недоступна для вашей роли.
-          </p>
-          <button
-            onClick={handleLogout}
-            className="w-full bg-primary hover:bg-primary-dark text-white font-semibold rounded-xl py-3 text-sm transition-colors"
-          >
-            Выйти
-          </button>
-        </div>
-      </div>
-    )
+  // ── Администратор / Медсестра → операционный кабинет
+  if (role === 'admin' || role === 'nurse') {
+    return <OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+  // ── Рекрутер → кабинет рекрутера
+  if (role === 'recruiter') {
+    return <RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Руководитель и Super Admin → полная панель управления
+  if (role === "manager" || role === "super_admin" || role === "supervisor") {
+    return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // Неизвестная роль
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: 'linear-gradient(135deg, #004D5F 0%, #00A7AA 100%)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+        <div className="text-5xl mb-4">🚫</div>
+        <h1 className="text-xl font-bold text-gray-800 mb-2">Нет доступа</h1>
+        <p className="text-gray-500 text-sm mb-2">Роль: <span className="font-mono">{role}</span></p>
+        <p className="text-gray-400 text-xs mb-6">Обратитесь к администратору платформы</p>
+        <button onClick={handleLogout}
+          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl py-3 text-sm transition">
+          Выйти
+        </button>
+      </div>
+    </div>
+  )
 }
