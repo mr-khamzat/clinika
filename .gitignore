@@ -1,29 +1,19 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
+```
+# Environment
 .env
-*.egg-info/
-.venv/
-venv/
+.env.local
+.env.*
 
-# Node
+# Dependencies
 node_modules/
-dist/
-.cache/
 
-# Docker volumes / data
-uploads/
-backups/
-*.bak
-
-# DB / secrets
-*.db
-*.sqlite
-
-# Logs
+# Logs and temp files
 *.log
+*.tmp
 
-# OS
-.DS_Store
-Thumbs.db
+# Editors
+.vscode/
+
+# Original rules preserved
+*.log
+```

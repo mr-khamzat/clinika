@@ -2,7 +2,9 @@
 
 > Готовая платформа для автоматизации направлений пациентов, бонусной системы, расписания врачей, МИС-интеграции, аналитики и взаиморасчётов. Мультитенантная SaaS-архитектура — каждая клиника получает изолированное пространство.
 
-**Стек**: FastAPI 0.115 · SQLAlchemy 2.0 async · PostgreSQL 16 · Redis 7 · React 18 · Vite · Tailwind CSS · Docker Compose · Alembic
+**Стек**: FastAPI 0.111 · SQLAlchemy 2.0 async · PostgreSQL 16 · Redis 7 · React 18 · Vite · Tailwind CSS · Docker Compose · Alembic
+
+**Документация API**: [OpenAPI Schema](./backend/openapi.json) (222 endpoint'а)
 
 ---
 
