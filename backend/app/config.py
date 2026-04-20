@@ -1,6 +1,37 @@
+"""Конфигурация приложения через pydantic-settings.
+
+Модуль предоставляет централизованное управление настройками приложения
+через переменные окружения и .env файл.
+"""
+from typing import List
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
+    """Настройки приложения из переменных окружения.
+    
+    Attributes:
+        database_url: PostgreSQL connection URL
+        redis_url: Redis connection URL  
+        secret_key: Secret key for JWT signing
+        jwt_algorithm: Algorithm for JWT encoding (default: HS256)
+        jwt_expire_hours: JWT token expiration time in hours
+        qr_secret: Secret for QR code generation
+        telegram_bot_token: Telegram bot token for notifications
+        admin_bot_token: Telegram admin notification bot token
+        gemini_api_key: Google Gemini AI API key
+        mini_app_url: Frontend mini app URL
+        backend_url: Backend API URL
+        manager_telegram_ids: Comma-separated Telegram IDs for auto-manager role
+        mis_api_key: MIS Renovatio API key
+        mis_ssl_verify: SSL verification for MIS connections
+        webhook_api_key: Webhook protection key
+        allowed_origins: Comma-separated CORS origins
+        onboarding_secret: Secret for /tenant/create endpoint protection
+        superadmin_username: Superadmin username
+        superadmin_password: Superadmin password
+        superadmin_full_name: Superadmin full name
+    """
     database_url: str
     redis_url: str
     secret_key: str
@@ -36,10 +67,21 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
-    def get_manager_ids(self) -> list[str]:
+    def get_manager_ids(self) -> List[str]:
+        """Возвращает список Telegram ID менеджеров.
+        
+        Returns:
+            List of Telegram user IDs as strings
+        """
         return [x.strip() for x in self.manager_telegram_ids.split(",") if x.strip()]
 
-    def get_allowed_origins(self) -> list[str]:
+    def get_allowed_origins(self) -> List[str]:
+        """Возвращает список разрешённых origin для CORS.
+        
+        Returns:
+            List of allowed CORS origins
+        """
         return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
+
 
 settings = Settings()
