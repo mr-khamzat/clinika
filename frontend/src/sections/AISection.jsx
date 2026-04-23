@@ -50,9 +50,9 @@ function ErrBanner({ msg, onClose }) {
       background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 10,
       color: '#be123c', fontSize: 13,
     }}>
-      <span className="material-icons" style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>error_outline</span>
+      <span className="material-symbols-outlined" style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>error_outline</span>
       <span style={{ flex: 1 }}>{msg}</span>
-      {onClose && <span className="material-icons" style={{ fontSize: 16, cursor: 'pointer', opacity: 0.6 }} onClick={onClose}>close</span>}
+      {onClose && <span className="material-symbols-outlined" style={{ fontSize: 16, cursor: 'pointer', opacity: 0.6 }} onClick={onClose}>close</span>}
     </div>
   )
 }
@@ -86,7 +86,7 @@ function StatBadge({ icon, label, value, color = '#7c3aed', sub }) {
         width: 40, height: 40, borderRadius: 10,
         background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
-        <span className="material-icons" style={{ color, fontSize: 22 }}>{icon}</span>
+        <span className="material-symbols-outlined" style={{ color, fontSize: 22 }}>{icon}</span>
       </div>
       <div>
         <div style={{ fontWeight: 800, fontSize: 22, color: '#0f172a', lineHeight: 1.1 }}>{value}</div>
@@ -166,7 +166,7 @@ function BalanceBar({ token, modelInfo }) {
     }}>
       {/* Провайдер + модель */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span className="material-icons" style={{ color: '#7c3aed', fontSize: 18 }}>smart_toy</span>
+        <span className="material-symbols-outlined" style={{ color: '#7c3aed', fontSize: 18 }}>smart_toy</span>
         <span style={{ fontWeight: 700, fontSize: 13, color: '#4c1d95' }}>
           {modelInfo?.provider?.toUpperCase() || 'AI'}
         </span>
@@ -185,7 +185,7 @@ function BalanceBar({ token, modelInfo }) {
       ) : balance?.available ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span className="material-icons" style={{ fontSize: 16, color: balance.balance > 5 ? '#16a34a' : '#dc2626' }}>account_balance_wallet</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: balance.balance > 5 ? '#16a34a' : '#dc2626' }}>account_balance_wallet</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: balance.balance > 5 ? '#166534' : '#dc2626' }}>
               ${fmt(balance.balance)} {balance.unit}
             </span>
@@ -195,7 +195,7 @@ function BalanceBar({ token, modelInfo }) {
             <>
               <div style={{ width: 1, height: 16, background: '#e9d5ff' }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#64748b' }}>
-                <span className="material-icons" style={{ fontSize: 14 }}>today</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>today</span>
                 сегодня: <strong style={{ color: '#374151' }}>{balance.today.requests} зап.</strong>
                 · <strong style={{ color: '#374151' }}>${fmt(balance.today.actual_cost)}</strong>
                 · <strong style={{ color: '#374151' }}>{fmtNum(balance.today.total_tokens)} tok</strong>
@@ -248,7 +248,7 @@ function AnalysisCard({ item, active, onClick, loading }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         {isLoading
           ? <div style={{ width: 20, height: 20, border: '2px solid #fff', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'aiSpin 0.7s linear infinite' }} />
-          : <span className="material-icons" style={{ fontSize: 22, color: active === item.type ? '#fff' : item.color }}>{item.icon}</span>
+          : <span className="material-symbols-outlined" style={{ fontSize: 22, color: active === item.type ? '#fff' : item.color }}>{item.icon}</span>
         }
         <span style={{ fontWeight: 700, fontSize: 13, color: active === item.type ? '#fff' : '#1e293b' }}>
           {item.label}
@@ -309,7 +309,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
       {/* Ошибки */}
       {notCfg && (
         <div style={{ background: '#faf5ff', border: '1px dashed #c4b5fd', borderRadius: 12, padding: 28, textAlign: 'center' }}>
-          <span className="material-icons" style={{ fontSize: 40, color: '#7c3aed', display: 'block', marginBottom: 8 }}>auto_awesome</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 40, color: '#7c3aed', display: 'block', marginBottom: 8 }}>auto_awesome</span>
           <div style={{ fontWeight: 700, color: '#4c1d95', marginBottom: 6 }}>AI не настроен</div>
           <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>Добавьте конфиг провайдера в разделе «Настройки»</div>
           {isSuperAdmin && (
@@ -336,7 +336,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
             background: 'linear-gradient(135deg, #faf5ff, #f3e8ff)',
             display: 'flex', alignItems: 'center', gap: 10,
           }}>
-            <span className="material-icons" style={{ color: ANALYSIS_TYPES.find(t => t.type === active)?.color, fontSize: 22 }}>
+            <span className="material-symbols-outlined" style={{ color: ANALYSIS_TYPES.find(t => t.type === active)?.color, fontSize: 22 }}>
               {ANALYSIS_TYPES.find(t => t.type === active)?.icon}
             </span>
             <div>
@@ -361,7 +361,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
               onClick={() => run(active)}
               style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#374151' }}
             >
-              <span className="material-icons" style={{ fontSize: 14 }}>refresh</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>refresh</span>
               Перезапустить
             </button>
             <button
@@ -373,7 +373,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
               }}
               style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, padding: '7px 14px', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, color: '#374151' }}
             >
-              <span className="material-icons" style={{ fontSize: 14 }}>download</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>download</span>
               Скачать
             </button>
           </div>
@@ -382,7 +382,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
 
       {!active && !notCfg && !err && (
         <div style={{ textAlign: 'center', padding: '40px 0', color: '#cbd5e1' }}>
-          <span className="material-icons" style={{ fontSize: 56, display: 'block', marginBottom: 12 }}>auto_awesome</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 56, display: 'block', marginBottom: 12 }}>auto_awesome</span>
           <div style={{ fontSize: 14 }}>Выберите сценарий выше для запуска AI-анализа</div>
         </div>
       )}
@@ -463,7 +463,7 @@ function QATab({ token, onGoToSettings, isSuperAdmin }) {
                 background: m.role === 'user' ? '#e2e8f0' : '#7c3aed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <span className="material-icons" style={{ fontSize: 16, color: m.role === 'user' ? '#64748b' : '#fff' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: m.role === 'user' ? '#64748b' : '#fff' }}>
                   {m.role === 'user' ? 'person' : 'smart_toy'}
                 </span>
               </div>
@@ -490,7 +490,7 @@ function QATab({ token, onGoToSettings, isSuperAdmin }) {
           {loading && (
             <div style={{ display: 'flex', gap: 10 }}>
               <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span className="material-icons" style={{ fontSize: 16, color: '#fff' }}>smart_toy</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: '#fff' }}>smart_toy</span>
               </div>
               <div style={{ padding: '12px 16px', background: '#fff', borderRadius: '4px 14px 14px 14px', border: '1px solid #f1f5f9' }}>
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -515,7 +515,7 @@ function QATab({ token, onGoToSettings, isSuperAdmin }) {
           alignSelf: 'flex-start', background: 'none', border: 'none',
           color: '#94a3b8', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
         }}>
-          <span className="material-icons" style={{ fontSize: 14 }}>delete_outline</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>delete_outline</span>
           Очистить чат
         </button>
       )}
@@ -562,7 +562,7 @@ function QATab({ token, onGoToSettings, isSuperAdmin }) {
               transition: 'all 0.15s',
             }}
           >
-            <span className="material-icons" style={{ fontSize: 18 }}>send</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
             {loading ? '...' : 'Спросить'}
           </button>
         </div>
@@ -656,7 +656,7 @@ function SettingsTab({ token }) {
           onBlur={e => !jsonErr && (e.target.style.borderColor = '#e2e8f0')}
         />
         {jsonErr && <div style={{ color: '#dc2626', fontSize: 12, marginTop: 5, display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span className="material-icons" style={{ fontSize: 14 }}>error</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>error</span>
           JSON: {jsonErr}
         </div>}
       </div>
@@ -710,7 +710,7 @@ function SettingsTab({ token }) {
           color: msg.ok ? '#166534' : '#be123c',
           fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6,
         }}>
-          <span className="material-icons" style={{ fontSize: 18 }}>{msg.ok ? 'check_circle' : 'error'}</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{msg.ok ? 'check_circle' : 'error'}</span>
           {msg.text}
         </div>
       )}
@@ -721,7 +721,7 @@ function SettingsTab({ token }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {models.map(m => (
               <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, background: m.id === selectedModel ? '#faf5ff' : 'transparent', border: `1px solid ${m.id === selectedModel ? '#e9d5ff' : 'transparent'}` }}>
-                <span className="material-icons" style={{ fontSize: 16, color: m.id === selectedModel ? '#7c3aed' : '#cbd5e1' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16, color: m.id === selectedModel ? '#7c3aed' : '#cbd5e1' }}>
                   {m.id === selectedModel ? 'radio_button_checked' : 'radio_button_unchecked'}
                 </span>
                 <span style={{ fontWeight: m.id === selectedModel ? 700 : 500, color: m.id === selectedModel ? '#4c1d95' : '#374151', fontSize: 13 }}>
@@ -768,7 +768,7 @@ export default function AISection({ token, isSuperAdmin }) {
       {/* Заголовок */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <span className="material-icons" style={{ color: '#7c3aed', fontSize: 30 }}>auto_awesome</span>
+          <span className="material-symbols-outlined" style={{ color: '#7c3aed', fontSize: 30 }}>auto_awesome</span>
           <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: '#0f172a' }}>AI-аналитика</h2>
         </div>
         <BalanceBar token={token} modelInfo={modelInfo} />
@@ -788,7 +788,7 @@ export default function AISection({ token, isSuperAdmin }) {
               display: 'flex', alignItems: 'center', gap: 6, transition: 'color 0.15s',
             }}
           >
-            <span className="material-icons" style={{ fontSize: 17 }}>{t.icon}</span>
+            <span className="material-symbols-outlined" style={{ fontSize: 17 }}>{t.icon}</span>
             {t.label}
           </button>
         ))}

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from 'tailwindcss'
 import autoprefixer from 'autoprefixer'
 
-// PostCSS плагин: меняет font-display: block → swap для всех @font-face
+// PostCSS: меняет font-display: block → swap для всех @font-face
 const fontDisplaySwap = {
   postcssPlugin: 'font-display-swap',
   AtRule: {
@@ -25,6 +25,19 @@ export default defineConfig({
         autoprefixer(),
         fontDisplaySwap,
       ]
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        // Даём фиксированное имя woff2 Material Symbols чтобы preload в index.html работал
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'material-symbols-outlined.woff2') {
+            return 'assets/material-symbols-outlined.woff2'
+          }
+          return 'assets/[name]-[hash][extname]'
+        }
+      }
     }
   },
   server: {
