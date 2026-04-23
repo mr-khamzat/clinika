@@ -83,6 +83,7 @@ const NAV = [
   { key: 'analytics', label: 'Аналитика',  icon: 'bar_chart' },
   { key: 'audit',     label: 'Аудит',      icon: 'manage_search', superAdminOnly: true },
   { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
+  { key: 'billing_ledger', label: 'Фин. реестр', icon: 'account_balance_wallet', superAdminOnly: true },
   { key: 'webhooks',  label: 'Вебхуки',    icon: 'webhook', superAdminOnly: true },
   { key: 'ads',       label: 'Реклама',    icon: 'campaign', superAdminOnly: true },
   { key: 'ai_analytics', label: 'AI-анализ',  icon: 'auto_awesome', superAdminOnly: true },
@@ -7623,7 +7624,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       )
       case 'ai_analytics': return (
         <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
-          <AISection token={adminToken} />
+          <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />
         </Suspense>
       )
       case 'super_admin': return (
