@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import BottomNav from './BottomNav'
 import HelpModal from './HelpModal'
 import SupportChat from './SupportChat'
+import CallWidget from './CallWidget'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
@@ -113,6 +114,7 @@ export default function Layout() {
           <BottomNav />
         </div>
         {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+        <CallWidget />
         <SupportChat />
       </HelpContext.Provider>
     </ThemeContext.Provider>
