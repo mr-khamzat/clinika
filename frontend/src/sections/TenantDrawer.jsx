@@ -416,7 +416,7 @@ function TabModules({ token, tenantId }) {
 
                   {expanded && (
                     <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-3 space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <div>
                           <label className="block text-xs text-gray-500 mb-1">Trial (дней, 0=нет)</label>
                           <input type="number" min="0" max="365"
@@ -429,8 +429,11 @@ function TabModules({ token, tenantId }) {
                           <select value={enableForm.billing_cycle}
                             onChange={e => setEnableForm(f => ({ ...f, billing_cycle: e.target.value }))}
                             className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                            <option value="monthly">Ежемесячно</option>
-                            <option value="annual">Годовой</option>
+                            <option value="monthly">1 мес (ежемесячно)</option>
+                            <option value="quarterly">3 мес (−5%)</option>
+                            <option value="semi_annual">6 мес (−10%)</option>
+                            <option value="nine_months">9 мес (−13%)</option>
+                            <option value="annual">12 мес (−17%)</option>
                             <option value="one_time">Единоразово</option>
                           </select>
                         </div>
@@ -507,7 +510,7 @@ function TabBilling({ token, tenant }) {
       <div>
         <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Цикл оплаты</p>
         <div className="grid grid-cols-2 gap-2">
-          {[['monthly','Ежемесячно'],['annual','Годовой (−17%)']].map(([v,l]) => (
+          {[['monthly','1 мес'],['quarterly','3 мес (−5%)'],['semi_annual','6 мес (−10%)'],['nine_months','9 мес (−13%)'],['annual','12 мес (−17%)']].map(([v,l]) => (
             <button key={v} onClick={() => setForm(f => ({ ...f, billing_cycle: v }))}
               className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition ${form.billing_cycle === v ? 'border-[#0097A7] bg-[#0097A7]/10 text-[#0097A7]' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300'}`}>
               {l}
@@ -518,8 +521,8 @@ function TabBilling({ token, tenant }) {
 
       <div>
         <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Пробный период</p>
-        <div className="grid grid-cols-4 gap-2">
-          {[0, 7, 14, 30].map(d => (
+        <div className="grid grid-cols-6 gap-2">
+          {[0, 7, 14, 30, 60, 90].map(d => (
             <button key={d} onClick={() => setForm(f => ({ ...f, trial_days: d }))}
               className={`py-2 rounded-xl text-sm font-semibold border-2 transition ${form.trial_days === d ? 'border-[#0097A7] bg-[#0097A7]/10 text-[#0097A7]' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'}`}>
               {d === 0 ? 'Нет' : `${d}д`}

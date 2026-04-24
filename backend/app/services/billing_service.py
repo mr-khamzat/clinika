@@ -24,14 +24,16 @@ def _next_invoice_number(db_seq_value: int) -> str:
     return f"INV-{year}-{db_seq_value:05d}"
 
 
-def _period_end(start: date, cycle: str) -> date:
-    if cycle == "annual":
-        return date(start.year + 1, start.month, start.day) - timedelta(days=1)
-    # monthly — ровно месяц
-    month = start.month + 1
+def _add_months(start: date, n: int) -> date:
+    month = start.month + n
     year  = start.year + (month - 1) // 12
     month = ((month - 1) % 12) + 1
-    return date(year, month, start.day) - timedelta(days=1)
+    return date(year, month, start.day)
+
+def _period_end(start: date, cycle: str) -> date:
+    months = {"monthly": 1, "quarterly": 3, "semi_annual": 6, "nine_months": 9, "annual": 12}
+    n = months.get(cycle, 1)
+    return _add_months(start, n) - timedelta(days=1)
 
 
 # ── Подписки ──────────────────────────────────────────────────────────────────

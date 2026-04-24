@@ -47,13 +47,13 @@ _mgr  = Depends(require_manager)
 
 class CreateSubscriptionRequest(BaseModel):
     plan: str = Field(..., pattern="^(basic|professional|enterprise)$")
-    billing_cycle: str = Field("monthly", pattern="^(monthly|annual)$")
+    billing_cycle: str = Field("monthly", pattern="^(monthly|quarterly|semi_annual|nine_months|annual)$")
     trial_days: int = Field(14, ge=0, le=90)
 
 
 class ChangePlanRequest(BaseModel):
     plan: str = Field(..., pattern="^(basic|professional|enterprise)$")
-    billing_cycle: Optional[str] = Field(None, pattern="^(monthly|annual)$")
+    billing_cycle: Optional[str] = Field(None, pattern="^(monthly|quarterly|semi_annual|nine_months|annual)$")
 
 
 class RecordPaymentRequest(BaseModel):
