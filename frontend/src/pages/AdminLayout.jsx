@@ -6,6 +6,7 @@ const PlatformSection = lazy(() => import('../sections/PlatformSection'))
 const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const AISection = lazy(() => import('../sections/AISection'))
+const BillingLedgerSection = lazy(() => import('../sections/BillingLedgerSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -68,33 +69,21 @@ function SectionLoader() {
 }
 
 const NAV = [
-  { key: 'home',       label: 'Главная',    icon: 'dashboard' },
-  { key: 'staff',      label: 'Сотрудники', icon: 'group' },
-  { key: 'clinics',    label: 'Клиники',    icon: 'local_hospital' },
-  { key: 'services',   label: 'Услуги',     icon: 'medical_services' },
-  { key: 'scheduling', label: 'Расписание', icon: 'calendar_month' },
-  { key: 'reports',    label: 'Отчёты',     icon: 'analytics' },
-  { key: 'bonuses',    label: 'Бонусы',     icon: 'payments' },
-  { key: 'commission', label: 'Комиссия',   icon: 'percent', superAdminOnly: true },
-  { key: 'partners',   label: 'Партнёры',   icon: 'handshake' },
-  { key: 'discounts',  label: 'Скидки',     icon: 'sell' },
-  { key: 'settings',   label: 'Настройки',  icon: 'settings' },
-  { key: 'ledger',     label: 'Реестр',     icon: 'account_balance' },
-  { key: 'analytics', label: 'Аналитика',  icon: 'bar_chart' },
-  { key: 'audit',     label: 'Аудит',      icon: 'manage_search', superAdminOnly: true },
-  { key: 'billing',   label: 'Биллинг',    icon: 'receipt_long', superAdminOnly: true },
-  { key: 'billing_ledger', label: 'Фин. реестр', icon: 'account_balance_wallet', superAdminOnly: true },
-  { key: 'webhooks',  label: 'Вебхуки',    icon: 'webhook', superAdminOnly: true },
-  { key: 'ads',       label: 'Реклама',    icon: 'campaign', superAdminOnly: true },
-  { key: 'ai_analytics', label: 'AI-анализ',  icon: 'auto_awesome', superAdminOnly: true },
-  { key: 'monitoring', label: 'Мониторинг', icon: 'monitor_heart', superAdminOnly: true },
-  { key: 'my_plan',    label: 'Мой тариф',  icon: 'workspace_premium' },
-  { key: 'support',    label: 'Поддержка',  icon: 'support_agent' },
-  { key: 'plugins',   label: 'Плагины',    icon: 'extension', superAdminOnly: true },
-  { key: 'mis_sync',  label: 'МИС Sync',   icon: 'sync_alt', superAdminOnly: true },
-  { key: 'calls_cfg', label: 'Звонки/SMS',  icon: 'settings_phone', superAdminOnly: true },
-  { key: 'push_notify', label: 'Push',        icon: 'notifications', superAdminOnly: true },
-  { key: 'super_admin', label: 'Платформа',  icon: 'admin_panel_settings', superAdminOnly: true },
+  { key: 'home',           label: 'Обзор',        icon: 'dashboard' },
+  { key: 'super_admin',    label: 'Франшизы',     icon: 'store' },
+  { key: 'billing',        label: 'Биллинг',      icon: 'receipt_long' },
+  { key: 'billing_ledger', label: 'Фин. реестр',  icon: 'account_balance_wallet' },
+  { key: 'analytics',      label: 'Аналитика',    icon: 'bar_chart' },
+  { key: 'ai_analytics',   label: 'AI-анализ',    icon: 'auto_awesome' },
+  { key: 'audit',          label: 'Аудит',        icon: 'manage_search' },
+  { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
+  { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
+  { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
+  { key: 'plugins',        label: 'Плагины',      icon: 'extension' },
+  { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
+  { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
+  { key: 'push_notify',    label: 'Push',         icon: 'notifications' },
+  { key: 'settings',       label: 'Настройки',    icon: 'settings' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -7525,7 +7514,7 @@ function PluginsSection({ token }) {
 // ---------------------------------------------------------------------------
 
 export default function AdminLayout({ adminToken, user, onLogout }) {
-  const [activeSection, setActiveSection] = useState((user?.is_superadmin || user?.role === 'super_admin') ? 'super_admin' : 'home')
+  const [activeSection, setActiveSection] = useState('home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
   const [helpOpen, setHelpOpen] = useState(false)
@@ -7579,16 +7568,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const isTenantAdmin = isSuperAdmin || isSupervisor  // полный доступ к тенанту
   const isClinicManager = user?.role === 'manager'
   const renderSection = () => {
-    // Разделы только для суперадмина — блокировать для обычных менеджеров
-    const superOnlySections = ['monitoring','audit','billing','webhooks','super_admin','plugins','mis_sync','calls_cfg','push_notify']
-    if (superOnlySections.includes(activeSection) && !isSuperAdmin) {
-      return (
-        <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
-          <span className="material-symbols-outlined text-4xl text-gray-300" style={{fontVariationSettings:"'FILL' 1"}}>lock</span>
-          <p className="text-gray-400 text-sm">Этот раздел доступен только платформенному администратору</p>
-        </div>
-      )
-    }
+
     switch (activeSection) {
       case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} isSuperAdmin={isSuperAdmin} />
       case 'staff':    return <StaffSection token={adminToken} />
@@ -7607,6 +7587,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'analytics': return <AnalyticsDrillSection token={adminToken} />
       case 'audit':     return <AuditSection token={adminToken} />
       case 'billing':   return <BillingSection token={adminToken} />
+      case 'billing_ledger': return (
+        <Suspense fallback={<SectionLoader />}>
+          <BillingLedgerSection token={adminToken} />
+        </Suspense>
+      )
       case 'monitoring': return <MonitoringSection token={adminToken} />
       case 'plugins':   return <PluginsSection token={adminToken} />
       case 'mis_sync':  return <MisSyncSection token={adminToken} />
@@ -7669,12 +7654,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
         {/* Навигация */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
-          {NAV.filter(item => {
-            // superAdminOnly: только платформенный суперадмин или super_admin тенант
-            if (item.superAdminOnly) return user?.is_superadmin || user?.role === 'super_admin'
-            // Обычные разделы: все кто в AdminLayout (менеджеры, администраторы, партнёры)
-            return true
-          }).map(item => {
+          {NAV.map(item => {
             const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key
             return (

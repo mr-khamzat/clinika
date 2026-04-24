@@ -108,8 +108,16 @@ export default function AdminRoot() {
     return <SupervisorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  // ── Руководитель и Super Admin → полная панель управления
-  if (role === "manager" || role === "super_admin") {
+  // ── Руководитель → кабинет управляющего (/{slug}/manager)
+  if (role === 'manager') {
+    const slug = user.tenant_slug || SLUG
+    localStorage.setItem('clinika_token_' + slug, adminToken)
+    window.location.href = '/' + slug + '/manager'
+    return null
+  }
+
+  // ── Super Admin → панель платформы
+  if (role === 'super_admin') {
     return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
