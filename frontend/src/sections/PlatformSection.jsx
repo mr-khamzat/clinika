@@ -5,8 +5,9 @@
  *
  * Импортируется лениво из AdminLayout через React.lazy.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import axios from 'axios'
+const TenantDrawer = lazy(() => import('./TenantDrawer'))
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 const API = API_BASE
@@ -58,6 +59,7 @@ export default function PlatformSection({ token }) {
   const [planForm, setPlanForm] = useState({ plan: 'professional', days: 30 })
   const [planLoading, setPlanLoading] = useState(false)
   const [deletePending, setDeletePending] = useState(null) // tenant to delete
+  const [drawerTenant, setDrawerTenant] = useState(null)
 
   const showMsg = (text, type = 'ok') => {
     setMsg(text); setMsgType(type)
@@ -340,6 +342,11 @@ export default function PlatformSection({ token }) {
                     <button onClick={() => toggleTenant(t.id, t.is_active)}
                       className={`relative w-11 h-6 rounded-full transition-colors ${t.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${t.is_active ? 'translate-x-5' : ''}`} />
+                    </button>
+                    <button onClick={() => setDrawerTenant(t)}
+                      className="flex items-center gap-0.5 text-xs text-[#0097A7] font-bold border border-[#0097A7]/30 px-2.5 py-1.5 rounded-xl hover:bg-[#0097A7]/5 transition">
+                      Управление
+                      <span className="material-symbols-outlined text-[14px]">chevron_right</span>
                     </button>
                   </div>
                 </div>
@@ -726,6 +733,20 @@ export default function PlatformSection({ token }) {
             </div>
           </div>
         </div>
+      )}
+      {/* TenantDrawer */}
+      {drawerTenant && (
+        <Suspense fallback={null}>
+          <TenantDrawer
+            token={token}
+            tenant={drawerTenant}
+            onClose={() => setDrawerTenant(null)}
+            onUpdate={(updated) => {
+              setTenants(prev => (prev || []).map(t => t.id === updated.id ? { ...t, ...updated } : t))
+              setDrawerTenant(updated)
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )
