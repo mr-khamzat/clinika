@@ -6050,9 +6050,9 @@ function SuperAdminSection({ token }) {
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Тарифный план</label>
                   <select value={createForm.plan} onChange={e => setCreateForm(f => ({ ...f, plan: e.target.value }))}
                     className="w-full border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white">
-                    <option value="basic">Basic — 4990₽/мес</option>
-                    <option value="professional">Professional — 9990₽/мес</option>
-                    <option value="enterprise">Enterprise — 24990₽/мес</option>
+                    <option value="basic">Basic — 9 900₽/мес</option>
+                    <option value="professional">Professional — 24 900₽/мес</option>
+                    <option value="enterprise">Enterprise — 49 900₽/мес</option>
                   </select>
                 </div>
                 {createErr && <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{createErr}</p>}

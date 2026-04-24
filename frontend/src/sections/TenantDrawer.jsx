@@ -476,9 +476,9 @@ function TabBilling({ token, tenant }) {
   }
 
   const PLAN_OPTS = [
-    { v: 'basic',        l: 'Basic',        sub: '4 990 ₽/мес',  color: 'bg-slate-100 text-slate-700' },
-    { v: 'professional', l: 'Professional', sub: '9 990 ₽/мес',  color: 'bg-purple-100 text-purple-700' },
-    { v: 'enterprise',   l: 'Enterprise',   sub: '24 990 ₽/мес', color: 'bg-amber-100 text-amber-700' },
+    { v: 'basic',        l: 'Basic',        sub: '9 900 ₽/мес',  color: 'bg-slate-100 text-slate-700' },
+    { v: 'professional', l: 'Professional', sub: '24 900 ₽/мес',  color: 'bg-purple-100 text-purple-700' },
+    { v: 'enterprise',   l: 'Enterprise',   sub: '49 900 ₽/мес', color: 'bg-amber-100 text-amber-700' },
   ]
 
   return (
