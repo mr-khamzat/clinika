@@ -5,6 +5,7 @@ import AdminLayout from './AdminLayout'
 import DoctorLayout from './DoctorLayout'
 import OperationalCabinet from './OperationalCabinet'
 import RecruiterCabinet from './RecruiterCabinet'
+import SupervisorCabinet from './SupervisorCabinet'
 import InviteAccept from './InviteAccept'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
@@ -102,8 +103,13 @@ export default function AdminRoot() {
     return <RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
+  // ── Супервизор → кабинет супервизора (только чтение)
+  if (role === 'supervisor') {
+    return <SupervisorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
   // ── Руководитель и Super Admin → полная панель управления
-  if (role === "manager" || role === "super_admin" || role === "supervisor") {
+  if (role === "manager" || role === "super_admin") {
     return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
