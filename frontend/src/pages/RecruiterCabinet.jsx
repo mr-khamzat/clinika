@@ -106,15 +106,15 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-30">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <div className="text-base font-bold text-gray-800">{user.full_name || 'Менеджер'}</div>
-            <div className="text-xs text-purple-600 font-medium">Кабинет рекрутера</div>
+            <div className="text-base font-bold text-gray-800 dark:text-white">{user.full_name || 'Менеджер'}</div>
+            <div className="text-xs text-purple-600 dark:text-purple-400 font-medium">Кабинет рекрутера</div>
           </div>
-          <button onClick={onLogout} className="text-xs text-gray-400 hover:text-gray-600 transition">Выйти</button>
+          <button onClick={onLogout} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition">Выйти</button>
         </div>
         <div className="max-w-2xl mx-auto px-4 flex gap-1 pb-0 overflow-x-auto no-scrollbar">
           {[
@@ -125,7 +125,9 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition ${
-                tab === id ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+                tab === id
+                  ? 'border-purple-600 text-purple-700 dark:text-purple-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
               }`}>
               {label}
             </button>
@@ -135,7 +137,7 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
 
       <div className="max-w-2xl mx-auto px-4 py-5">
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex justify-between">
+          <div className="mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-xl px-4 py-3 text-sm flex justify-between">
             {error}
             <button onClick={() => setError('')} className="ml-2 text-red-400">✕</button>
           </div>
@@ -144,34 +146,34 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {/* ─── Dashboard ─── */}
         {tab === 'dashboard' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Мой кабинет</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Мой кабинет</h2>
             {stats ? (
               <>
                 <div className="grid grid-cols-2 gap-3">
                   {[
-                    { label: 'Привлечено врачей', value: stats.doctors_count, icon: '👨‍⚕️', color: 'bg-purple-50 text-purple-700' },
-                    { label: 'Мой %', value: (stats.my_percent || 0) + '%', icon: '📊', color: 'bg-blue-50 text-blue-700' },
+                    { label: 'Привлечено врачей', value: stats.doctors_count, icon: '👨‍⚕️', color: 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' },
+                    { label: 'Мой %', value: (stats.my_percent || 0) + '%', icon: '📊', color: 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' },
                   ].map(c => (
-                    <div key={c.label} className={`rounded-xl p-4 text-center ${c.color.split(' ')[0]}`}>
+                    <div key={c.label} className={`rounded-xl p-4 text-center ${c.color.split(' ')[0]} ${c.color.split(' ')[1]}`}>
                       <div className="text-2xl mb-1">{c.icon}</div>
-                      <div className={`text-2xl font-bold ${c.color.split(' ')[1]}`}>{c.value}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{c.label}</div>
+                      <div className={`text-2xl font-bold ${c.color.split(' ')[2]} ${c.color.split(' ')[3]}`}>{c.value}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.label}</div>
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-green-50 rounded-xl p-4 text-center">
-                    <div className="text-xs text-gray-500 mb-1">Всего бонусов</div>
-                    <div className="text-xl font-bold text-green-700">{Number(stats.total_bonuses || 0).toLocaleString('ru')} ₽</div>
+                  <div className="bg-green-50 dark:bg-green-900/30 rounded-xl p-4 text-center">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Всего бонусов</div>
+                    <div className="text-xl font-bold text-green-700 dark:text-green-400">{Number(stats.total_bonuses || 0).toLocaleString('ru')} ₽</div>
                   </div>
-                  <div className="bg-amber-50 rounded-xl p-4 text-center">
-                    <div className="text-xs text-gray-500 mb-1">Ожидают выплаты</div>
-                    <div className="text-xl font-bold text-amber-700">{Number(stats.pending_bonuses || 0).toLocaleString('ru')} ₽</div>
+                  <div className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-4 text-center">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Ожидают выплаты</div>
+                    <div className="text-xl font-bold text-amber-700 dark:text-amber-400">{Number(stats.pending_bonuses || 0).toLocaleString('ru')} ₽</div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="grid grid-cols-2 gap-3">{[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              <div className="grid grid-cols-2 gap-3">{[1,2,3,4].map(i => <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}</div>
             )}
 
             <div className="grid grid-cols-2 gap-3 mt-2">
@@ -181,7 +183,7 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
                 <div className="text-sm">Пригласить врача</div>
               </button>
               <button onClick={() => setTab('doctors')}
-                className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl p-4 text-center font-semibold transition">
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl p-4 text-center font-semibold transition">
                 <div className="text-2xl mb-1">👥</div>
                 <div className="text-sm">Мои врачи</div>
               </button>
@@ -193,40 +195,40 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {tab === 'doctors' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-800">Привлечённые врачи</h2>
-              <span className="text-sm text-gray-400">{doctors.length} чел.</span>
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">Привлечённые врачи</h2>
+              <span className="text-sm text-gray-400 dark:text-gray-500">{doctors.length} чел.</span>
             </div>
             {loading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}</div>
             ) : doctors.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                 <div className="text-5xl mb-3">👨‍⚕️</div>
                 <p className="text-sm">Нет привлечённых врачей</p>
-                <button onClick={() => setTab('invite')} className="mt-3 text-purple-600 text-sm font-semibold">Пригласить первого →</button>
+                <button onClick={() => setTab('invite')} className="mt-3 text-purple-600 dark:text-purple-400 text-sm font-semibold">Пригласить первого →</button>
               </div>
             ) : (
               <div className="space-y-3">
                 {doctors.map(d => (
-                  <div key={d.id} className="bg-white rounded-xl border border-gray-100 p-4">
+                  <div key={d.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <div className="font-semibold text-gray-800">{d.full_name}</div>
-                        <div className="text-xs text-gray-400">{d.email || d.phone_number || '—'}</div>
+                        <div className="font-semibold text-gray-800 dark:text-white">{d.full_name}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">{d.email || d.phone_number || '—'}</div>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                        d.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        d.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                       }`}>{d.is_active ? 'Активен' : 'Неактивен'}</span>
                     </div>
                     {d.clinics?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-2">
                         {d.clinics.map(c => (
-                          <span key={c.id} className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{c.name}</span>
+                          <span key={c.id} className="text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded-full">{c.name}</span>
                         ))}
                       </div>
                     )}
-                    <div className="text-xs text-gray-500 flex justify-between">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 flex justify-between">
                       <span>Зарегистрирован: {new Date(d.created_at).toLocaleDateString('ru')}</span>
-                      <span className="text-green-600 font-semibold">Заработано: {Number(d.bonuses_earned).toLocaleString('ru')} ₽</span>
+                      <span className="text-green-600 dark:text-green-400 font-semibold">Заработано: {Number(d.bonuses_earned).toLocaleString('ru')} ₽</span>
                     </div>
                   </div>
                 ))}
@@ -238,60 +240,60 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {/* ─── Invite ─── */}
         {tab === 'invite' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Пригласить врача</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Пригласить врача</h2>
 
             {newInvite && (
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-4 text-center">
+              <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-4 text-center">
                 <div className="text-3xl mb-2">✅</div>
-                <div className="font-bold text-green-800 mb-1">Приглашение создано!</div>
-                <div className="text-xs text-gray-500 mb-2">Отправьте эту ссылку врачу:</div>
-                <div className="bg-white border rounded-xl px-3 py-2 text-xs font-mono break-all text-gray-700 mb-3">
+                <div className="font-bold text-green-800 dark:text-green-300 mb-1">Приглашение создано!</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Отправьте эту ссылку врачу:</div>
+                <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl px-3 py-2 text-xs font-mono break-all text-gray-700 dark:text-gray-300 mb-3">
                   {window.location.origin + newInvite.invite_link}
                 </div>
                 <button onClick={() => copyLink(newInvite.invite_link, 'new')}
                   className="w-full bg-purple-600 text-white rounded-xl py-2.5 font-semibold text-sm mb-2">
                   {copiedId === 'new' ? '✓ Скопировано!' : '📋 Скопировать ссылку'}
                 </button>
-                <button onClick={() => setNewInvite(null)} className="text-sm text-gray-400 hover:text-gray-600">
+                <button onClick={() => setNewInvite(null)} className="text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                   Создать ещё одно
                 </button>
               </div>
             )}
 
-            <form onSubmit={sendInvite} className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+            <form onSubmit={sendInvite} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 p-5 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Email врача *</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Email врача *</label>
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="doctor@example.com" required
-                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                  className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ФИО врача</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">ФИО врача</label>
                 <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
                   placeholder="Иванов Иван Иванович"
-                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                  className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Телефон</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Телефон</label>
                 <input value={form.phone_number} onChange={e => setForm(f => ({ ...f, phone_number: e.target.value }))}
                   placeholder="+7..."
-                  className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                  className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Доступ к клиникам *</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Доступ к клиникам *</label>
                 <div className="mt-2 space-y-2">
                   {clinics.map(c => (
-                    <label key={c.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-gray-50">
+                    <label key={c.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700">
                       <input type="checkbox" checked={form.clinic_ids.includes(c.id)}
                         onChange={() => toggleClinic(c.id)}
                         className="w-4 h-4 text-purple-600 rounded" />
-                      <span className="text-sm text-gray-700">{c.name}</span>
+                      <span className="text-sm text-gray-700 dark:text-gray-200">{c.name}</span>
                     </label>
                   ))}
-                  {clinics.length === 0 && <div className="text-sm text-gray-400">Нет доступных клиник</div>}
+                  {clinics.length === 0 && <div className="text-sm text-gray-400 dark:text-gray-500">Нет доступных клиник</div>}
                 </div>
               </div>
-              <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
+              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-300">
                 Врач получит ссылку для регистрации. После регистрации он сможет создавать направления в выбранные клиники.
               </div>
               <button type="submit" disabled={loading}
@@ -303,20 +305,20 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
             {/* Список отправленных приглашений */}
             {invites.length > 0 && (
               <div>
-                <h3 className="font-semibold text-gray-700 text-sm mb-2">Отправленные приглашения</h3>
+                <h3 className="font-semibold text-gray-700 dark:text-gray-200 text-sm mb-2">Отправленные приглашения</h3>
                 <div className="space-y-2">
                   {invites.map(inv => (
-                    <div key={inv.id} className="bg-white border border-gray-100 rounded-xl p-3 flex justify-between items-center">
+                    <div key={inv.id} className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl p-3 flex justify-between items-center">
                       <div>
-                        <div className="text-sm font-medium text-gray-800">{inv.email}</div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-sm font-medium text-gray-800 dark:text-white">{inv.email}</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">
                           {inv.is_used ? '✅ Принято' : '⏳ Ожидает'}
                           {inv.expires_at && !inv.is_used && ` · до ${new Date(inv.expires_at).toLocaleDateString('ru')}`}
                         </div>
                       </div>
                       {!inv.is_used && (
                         <button onClick={() => copyLink(`/invite/${inv.code}`, inv.id)}
-                          className="text-xs bg-purple-50 text-purple-700 px-2 py-1 rounded-lg font-semibold hover:bg-purple-100">
+                          className="text-xs bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-1 rounded-lg font-semibold hover:bg-purple-100 dark:hover:bg-purple-900/50">
                           {copiedId === inv.id ? '✓' : '📋'}
                         </button>
                       )}
@@ -331,11 +333,11 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {/* ─── Bonuses ─── */}
         {tab === 'bonuses' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Мои бонусы</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Мои бонусы</h2>
             {loading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}</div>
             ) : bonuses.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                 <div className="text-5xl mb-3">💰</div>
                 <p className="text-sm">Бонусов пока нет</p>
                 <p className="text-xs mt-1">Они появятся когда ваши врачи начнут создавать направления</p>
@@ -343,17 +345,17 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
             ) : (
               <div className="space-y-2">
                 {bonuses.map(b => (
-                  <div key={b.id} className="bg-white rounded-xl border border-gray-100 p-4">
+                  <div key={b.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
                     <div className="flex justify-between items-start mb-1">
                       <div>
-                        <div className="text-sm font-semibold text-gray-800">{Number(b.amount).toLocaleString('ru')} ₽</div>
-                        <div className="text-xs text-gray-400">{b.doctor_name} · {b.percent_applied}%</div>
+                        <div className="text-sm font-semibold text-gray-800 dark:text-white">{Number(b.amount).toLocaleString('ru')} ₽</div>
+                        <div className="text-xs text-gray-400 dark:text-gray-500">{b.doctor_name} · {b.percent_applied}%</div>
                       </div>
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        b.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        b.status === 'paid' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
                       }`}>{b.status === 'paid' ? 'Выплачен' : 'Начислен'}</span>
                     </div>
-                    <div className="text-xs text-gray-400">{new Date(b.created_at).toLocaleDateString('ru')}</div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500">{new Date(b.created_at).toLocaleDateString('ru')}</div>
                   </div>
                 ))}
               </div>

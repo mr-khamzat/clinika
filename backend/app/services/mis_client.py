@@ -1,23 +1,37 @@
 """
-MIS Renovatio client (mis.stoclinic.ru:3010)
+MIS Renovatio client (mis.stoclinica.ru:3010)
 POST /api/public/METHOD + api_key in form body.
-
-Поддерживает как глобальный конфиг (из env settings), так и
-per-tenant параметры (api_url, api_key из базы настроек).
 """
+import logging
 import httpx
 from app.config import settings
 
-# Дефолтные значения из конфига (для обратной совместимости)
-DEFAULT_MIS_BASE = "https://mis.stoclinic.ru:3010/api/public"
+log = logging.getLogger("mis_client")
+
+DEFAULT_MIS_BASE = "https://mis.stoclinica.ru:3010/api/public"
 MIS_CLINIC_IDS = {1, 4, 26}
 
 
+def _ssl_context(ssl_verify: bool):
+    """
+    Возвращает параметр verify для httpx.
+    Если mis_ca_cert_path задан в настройках — используем его.
+    Если ssl_verify=False — логируем предупреждение (MITM-риск).
+    """
+    ca_cert = getattr(settings, 'mis_ca_cert_path', '').strip()
+    if ca_cert:
+        return ca_cert  # httpx принимает путь к CA-файлу
+    if not ssl_verify:
+        log.warning(
+            "MIS SSL verification DISABLED (MIS_SSL_VERIFY=false). "
+            "Установите MIS_CA_CERT_PATH=/path/to/mis_ca.pem для безопасного подключения."
+        )
+    return ssl_verify
+
+
 def _get_base(api_url: str = "") -> str:
-    """Получить base URL МИС: из параметра, конфига или дефолт."""
     if api_url and api_url.strip():
         url = api_url.strip().rstrip("/")
-        # Если передан базовый URL без пути — добавляем стандартный путь
         if not url.endswith("/api/public"):
             url = url + "/api/public"
         return url
@@ -28,16 +42,18 @@ async def _post(method: str, api_url: str = "", api_key: str = "", ssl_verify: b
     key = api_key.strip() if api_key else settings.mis_api_key
     base = _get_base(api_url)
     data = {"api_key": key, **{k: v for k, v in params.items() if v is not None}}
-    async with httpx.AsyncClient(verify=ssl_verify, timeout=30) as client:
+    ssl = _ssl_context(ssl_verify)
+    async with httpx.AsyncClient(verify=ssl, timeout=30) as client:
         resp = await client.post(f"{base}/{method}", data=data)
         resp.raise_for_status()
         return resp.json()
 
 
 async def test_connection(api_url: str = "", api_key: str = "") -> dict:
-    """Проверить соединение с МИС. Возвращает {status, message, count}."""
+    """Проверить соединение с МИС."""
     try:
-        result = await _post("getClinics", api_url=api_url, api_key=api_key, show_all=1)
+        result = await _post("getClinics", api_url=api_url, api_key=api_key,
+                             ssl_verify=settings.mis_ssl_verify, show_all=1)
         if result.get("error") == 0:
             clinics = result.get("data") or []
             return {"status": "ok", "message": f"Подключено, клиник в МИС: {len(clinics)}", "count": len(clinics)}
@@ -47,7 +63,8 @@ async def test_connection(api_url: str = "", api_key: str = "") -> dict:
 
 
 async def get_services(clinic_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
-    result = await _post("getServices", api_url=api_url, api_key=api_key, clinic_id=clinic_id)
+    result = await _post("getServices", api_url=api_url, api_key=api_key,
+                         ssl_verify=settings.mis_ssl_verify, clinic_id=clinic_id)
     if result.get("error") == 0:
         return result["data"] or []
     return []
@@ -58,7 +75,8 @@ async def find_patient_by_phone(phone: str, api_url: str = "", api_key: str = ""
     digits = normalize_phone(phone)
     for fmt in [digits, "+" + digits]:
         try:
-            result = await _post("getPatient", api_url=api_url, api_key=api_key, mobile=fmt)
+            result = await _post("getPatient", api_url=api_url, api_key=api_key,
+                                 ssl_verify=settings.mis_ssl_verify, mobile=fmt)
             if result.get("error") == 0 and result.get("data"):
                 data = result["data"]
                 patients = data if isinstance(data, list) else [data]
@@ -72,9 +90,8 @@ async def find_patient_by_phone(phone: str, api_url: str = "", api_key: str = ""
 async def get_appointments(clinic_id: int, date_from: str, date_to: str, api_url: str = "", api_key: str = "") -> list[dict]:
     result = await _post(
         "getAppointments", api_url=api_url, api_key=api_key,
-        clinic_id=clinic_id,
-        date_updated_from=date_from,
-        date_updated_to=date_to,
+        ssl_verify=settings.mis_ssl_verify,
+        clinic_id=clinic_id, date_updated_from=date_from, date_updated_to=date_to,
     )
     if result.get("error") == 0:
         return result.get("data") or []
@@ -82,21 +99,21 @@ async def get_appointments(clinic_id: int, date_from: str, date_to: str, api_url
 
 
 async def get_clinics(api_url: str = "", api_key: str = "") -> list[dict]:
-    result = await _post("getClinics", api_url=api_url, api_key=api_key, show_all=1)
+    result = await _post("getClinics", api_url=api_url, api_key=api_key,
+                         ssl_verify=settings.mis_ssl_verify, show_all=1)
     if result.get("error") == 0:
         return result["data"] or []
     return []
 
 
 async def get_patient_visits(patient_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
-    """Get patient visit history from MIS by patient_id."""
     try:
-        result = await _post("getPatientAppointments", api_url=api_url, api_key=api_key, patient_id=patient_id, limit=50)
+        result = await _post("getPatientAppointments", api_url=api_url, api_key=api_key,
+                             ssl_verify=settings.mis_ssl_verify, patient_id=patient_id, limit=50)
         if result.get("error") == 0:
             return result.get("data") or []
     except Exception:
         pass
-    # Fallback: search all clinics for this patient
     try:
         from datetime import datetime, timedelta
         date_to = datetime.now().strftime("%d.%m.%Y")
@@ -116,9 +133,9 @@ async def get_patient_visits(patient_id: int, api_url: str = "", api_key: str = 
 
 
 async def get_patient_analyses(patient_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
-    """Get patient lab results from MIS by patient_id."""
     try:
-        result = await _post("getPatientAnalyses", api_url=api_url, api_key=api_key, patient_id=patient_id, limit=50)
+        result = await _post("getPatientAnalyses", api_url=api_url, api_key=api_key,
+                             ssl_verify=settings.mis_ssl_verify, patient_id=patient_id, limit=50)
         if result.get("error") == 0:
             return result.get("data") or []
     except Exception:

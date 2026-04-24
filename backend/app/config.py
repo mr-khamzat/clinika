@@ -48,7 +48,8 @@ class Settings(BaseSettings):
 
     # MIS Renovatio — вынесено из кода в конфиг
     mis_api_key: str = ""
-    mis_ssl_verify: bool = True   # False только если у МИС самоподписанный сертификат
+    mis_ssl_verify: bool = True
+    mis_ca_cert_path: str = ""  # Путь к CA-сертификату МИС (пустая строка = системные CA)   # False только если у МИС самоподписанный сертификат
 
     # Отдельный ключ для вебхука МИС (не JWT-секрет)
     webhook_api_key: str = ""

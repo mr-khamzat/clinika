@@ -1,4 +1,6 @@
 from fastapi import FastAPI, Request
+from app.core.logging import setup_logging, get_logger
+from app.core.prometheus import router as prometheus_router, metrics_middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
@@ -29,7 +31,8 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
 from app.routers.ai import router as ai_router
 from app.routers.recruiter import router as recruiter_router
-from app.routers.system import router as system_router, heartbeat_loop
+from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
+from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
 
@@ -46,8 +49,85 @@ def _register_plugins():
     plugin_registry.register(NotifyPlugin())
 
 
+
+
+# ── APScheduler job functions (без while-циклов) ──────────────────────────────
+
+async def run_auto_confirm_job():
+    """APScheduler: авто-подтверждение направлений (каждые 10 мин)."""
+    try:
+        count = await auto_confirm_loop.__wrapped__() if hasattr(auto_confirm_loop, '__wrapped__') else await _run_auto_confirm()
+    except Exception as e:
+        import logging; logging.getLogger('scheduler').error(f'auto_confirm: {e}')
+
+async def _run_auto_confirm():
+    from app.services.auto_confirm import run_auto_confirm
+    return await run_auto_confirm()
+
+async def expire_referrals_job():
+    """APScheduler: просрочка направлений (каждый час)."""
+    import logging
+    from datetime import datetime
+    from app.database import AsyncSessionLocal
+    from app.models.referral import Referral, ReferralStatus
+    from sqlalchemy import update
+    logger = logging.getLogger('expire_referrals')
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            result = await db.execute(
+                update(Referral)
+                .where(Referral.status == ReferralStatus.CREATED, Referral.expires_at < now)
+                .values(status=ReferralStatus.EXPIRED)
+                .returning(Referral.id)
+            )
+            expired = result.fetchall()
+            if expired:
+                await db.commit()
+                logger.info(f'Просрочено направлений: {len(expired)}')
+    except Exception as e:
+        logger.error(f'expire_referrals: {e}')
+
+async def renew_plugins_job():
+    """APScheduler: автопродление плагинов (каждые 6 часов)."""
+    import logging
+    from datetime import datetime
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.billing import TenantPluginSubscription
+    from app.services.billing_service import charge_plugin_subscription, PluginSubStatus
+    logger = logging.getLogger('plugin_renewal')
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            result = await db.execute(
+                select(TenantPluginSubscription).where(
+                    TenantPluginSubscription.status == PluginSubStatus.ACTIVE,
+                    TenantPluginSubscription.auto_renew == True,
+                    TenantPluginSubscription.expires_at < now,
+                )
+            )
+            subs = result.scalars().all()
+            renewed = 0
+            for sub in subs:
+                try:
+                    await charge_plugin_subscription(db, sub.id)
+                    await db.commit()
+                    renewed += 1
+                except Exception as e:
+                    await db.rollback()
+                    logger.warning(f'Не удалось продлить плагин {sub.feature_key}: {e}')
+            if renewed:
+                logger.info(f'Продлено плагинов: {renewed}')
+    except Exception as e:
+        logger.error(f'renew_plugins: {e}')
+
+log = get_logger("clinika")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging(json_logs=True)
+    log.info("clinika_starting", version="1.0.0")
     # Инициализация rate limiter (Redis)
     # Инициализация Redis-клиента для метрик (независимо от rate limiter)
     try:
@@ -71,11 +151,14 @@ async def lifespan(app: FastAPI):
         pass  # Миграции через Alembic: alembic upgrade head
     await seed_initial_data()
     _register_plugins()
-    asyncio.create_task(heartbeat_loop())
-    asyncio.create_task(auto_confirm_loop())
-    asyncio.create_task(expire_old_referrals_loop())
-    asyncio.create_task(renew_plugin_subscriptions_loop())
+    # APScheduler — задачи с персистентностью через Redis
+    scheduler.add_job(run_auto_confirm_job, 'interval', minutes=10, id='auto_confirm', replace_existing=True)
+    scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
+    scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
+    scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
+    scheduler.start()
     yield
+    scheduler.shutdown(wait=False)
 
 
 async def seed_initial_data():
@@ -315,6 +398,10 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
     return response
 
+@app.middleware("http")
+async def prometheus_middleware(request: Request, call_next):
+    return await metrics_middleware(request, call_next)
+
 app.include_router(auth.router)
 app.include_router(referrals.router)
 app.include_router(bonuses.router)
@@ -345,6 +432,7 @@ app.include_router(webhooks_router)
 app.include_router(ads_router)
 app.include_router(ai_router)
 app.include_router(recruiter_router)
+app.include_router(prometheus_router)
 
 
 @app.get("/health")

@@ -105,25 +105,27 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   }
 
   const statusBadge = (s) => {
-    const map = { confirmed: ['bg-green-100 text-green-700', 'Подтверждено'],
-                  created: ['bg-blue-100 text-blue-700', 'Создано'],
-                  expired: ['bg-gray-100 text-gray-500', 'Истекло'] }
-    const [cls, label] = map[s] || ['bg-gray-100 text-gray-500', s]
+    const map = {
+      confirmed: ['bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400', 'Подтверждено'],
+      created:   ['bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400', 'Создано'],
+      expired:   ['bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400', 'Истекло'],
+    }
+    const [cls, label] = map[s] || ['bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400', s]
     return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
   }
 
   const roleLabel = ROLE_LABELS[user.role] || user.role
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-30">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <div>
-            <div className="text-base font-bold text-gray-800">{user.full_name || 'Кабинет'}</div>
-            <div className="text-xs text-teal-600 font-medium">{roleLabel}</div>
+            <div className="text-base font-bold text-gray-800 dark:text-white">{user.full_name || 'Кабинет'}</div>
+            <div className="text-xs text-teal-600 dark:text-teal-400 font-medium">{roleLabel}</div>
           </div>
-          <button onClick={onLogout} className="text-xs text-gray-400 hover:text-gray-600 transition">Выйти</button>
+          <button onClick={onLogout} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition">Выйти</button>
         </div>
         {/* Tabs */}
         <div className="max-w-2xl mx-auto px-4 flex gap-1 pb-0 overflow-x-auto no-scrollbar">
@@ -135,7 +137,9 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition ${
-                tab === id ? 'border-teal-600 text-teal-700' : 'border-transparent text-gray-500 hover:text-gray-700'
+                tab === id
+                  ? 'border-teal-600 text-teal-700 dark:text-teal-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
               }`}>
               {label}
             </button>
@@ -145,7 +149,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
 
       <div className="max-w-2xl mx-auto px-4 py-5">
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm flex justify-between">
+          <div className="mb-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-xl px-4 py-3 text-sm flex justify-between">
             {error}
             <button onClick={() => setError('')} className="ml-2 text-red-400">✕</button>
           </div>
@@ -154,24 +158,24 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ─── Dashboard ─── */}
         {tab === 'dashboard' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Добро пожаловать</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Добро пожаловать</h2>
             {stats ? (
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { label: 'Сегодня', value: stats.today_count, icon: '📋', color: 'bg-blue-50 text-blue-700' },
-                  { label: 'Подтв.', value: stats.confirmed_today, icon: '✅', color: 'bg-green-50 text-green-700' },
-                  { label: 'Баланс', value: (stats.balance || 0).toLocaleString('ru') + ' ₽', icon: '💰', color: 'bg-amber-50 text-amber-700' },
+                  { label: 'Сегодня', value: stats.today_count, icon: '📋', bg: 'bg-blue-50 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300' },
+                  { label: 'Подтв.', value: stats.confirmed_today, icon: '✅', bg: 'bg-green-50 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300' },
+                  { label: 'Баланс', value: (stats.balance || 0).toLocaleString('ru') + ' ₽', icon: '💰', bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300' },
                 ].map(c => (
-                  <div key={c.label} className={`rounded-xl p-4 text-center ${c.color.split(' ')[0]}`}>
+                  <div key={c.label} className={`rounded-xl p-4 text-center ${c.bg}`}>
                     <div className="text-2xl mb-1">{c.icon}</div>
-                    <div className={`text-xl font-bold ${c.color.split(' ')[1]}`}>{c.value}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{c.label}</div>
+                    <div className={`text-xl font-bold ${c.text}`}>{c.value}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{c.label}</div>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3">
-                {[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
+                {[1,2,3].map(i => <div key={i} className="h-24 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}
               </div>
             )}
 
@@ -182,7 +186,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                 <div className="text-sm">Создать направление</div>
               </button>
               <button onClick={() => setTab('referrals')}
-                className="bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl p-4 text-center font-semibold transition">
+                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl p-4 text-center font-semibold transition">
                 <div className="text-2xl mb-1">📋</div>
                 <div className="text-sm">Мои направления</div>
               </button>
@@ -193,15 +197,15 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ─── Create Referral ─── */}
         {tab === 'create' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Создать направление</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Создать направление</h2>
             {createdRef ? (
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
+              <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-2xl p-5 text-center">
                 <div className="text-4xl mb-3">✅</div>
-                <div className="font-bold text-green-800 mb-1">Направление создано!</div>
-                <div className="text-sm text-gray-600 mb-4">Код: <span className="font-bold text-2xl text-teal-700">{createdRef.short_code}</span></div>
+                <div className="font-bold text-green-800 dark:text-green-300 mb-1">Направление создано!</div>
+                <div className="text-sm text-gray-600 dark:text-gray-300 mb-4">Код: <span className="font-bold text-2xl text-teal-700 dark:text-teal-400">{createdRef.short_code}</span></div>
                 {createdRef.qr_code && (
                   <img src={'data:image/png;base64,' + createdRef.qr_code} alt="QR"
-                    className="w-40 h-40 mx-auto rounded-xl border mb-3" />
+                    className="w-40 h-40 mx-auto rounded-xl border dark:border-gray-700 mb-3" />
                 )}
                 <button onClick={() => setCreatedRef(null)}
                   className="w-full mt-2 bg-teal-600 text-white rounded-xl py-2.5 font-semibold text-sm">
@@ -209,40 +213,40 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                 </button>
               </div>
             ) : (
-              <form onSubmit={createReferral} className="space-y-3 bg-white rounded-2xl p-5 border border-gray-100">
+              <form onSubmit={createReferral} className="space-y-3 bg-white dark:bg-gray-800 rounded-2xl p-5 border border-gray-100 dark:border-gray-700">
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Клиника назначения</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Клиника назначения</label>
                   <select value={form.to_clinic_id} onChange={e => setForm(f => ({ ...f, to_clinic_id: e.target.value }))}
-                    required className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    required className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">Выбрать клинику...</option>
                     {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Услуга</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Услуга</label>
                   <select value={form.service_id} onChange={e => setForm(f => ({ ...f, service_id: e.target.value }))}
-                    required className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
+                    required className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500">
                     <option value="">Выбрать услугу...</option>
                     {services.map(s => <option key={s.id} value={s.id}>{s.name} {s.bonus_amount > 0 ? `(+${s.bonus_amount} ₽)` : ''}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Телефон пациента</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Телефон пациента</label>
                   <input value={form.patient_phone} onChange={e => setForm(f => ({ ...f, patient_phone: e.target.value }))}
                     placeholder="+7..." required
-                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">ФИО пациента</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">ФИО пациента</label>
                   <input value={form.patient_name} onChange={e => setForm(f => ({ ...f, patient_name: e.target.value }))}
                     placeholder="Необязательно"
-                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+                    className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Примечание</label>
+                  <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Примечание</label>
                   <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                     rows={2} placeholder="Необязательно"
-                    className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
+                    className="mt-1 w-full border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none" />
                 </div>
                 <button type="submit" disabled={loading}
                   className="w-full bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold rounded-xl py-3 text-sm transition">
@@ -256,27 +260,27 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ─── Referrals ─── */}
         {tab === 'referrals' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Мои направления</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Мои направления</h2>
             {loading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-20 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}</div>
             ) : referrals.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                 <div className="text-5xl mb-3">📋</div>
                 <p className="text-sm">Направлений ещё нет</p>
-                <button onClick={() => setTab('create')} className="mt-3 text-teal-600 text-sm font-semibold">Создать первое →</button>
+                <button onClick={() => setTab('create')} className="mt-3 text-teal-600 dark:text-teal-400 text-sm font-semibold">Создать первое →</button>
               </div>
             ) : (
               <div className="space-y-2">
                 {referrals.map(r => (
-                  <div key={r.id} className="bg-white rounded-xl border border-gray-100 p-4">
+                  <div key={r.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4">
                     <div className="flex justify-between items-start mb-1">
-                      <div className="font-semibold text-gray-800 text-sm">{r.patient_name || r.patient_phone}</div>
+                      <div className="font-semibold text-gray-800 dark:text-white text-sm">{r.patient_name || r.patient_phone}</div>
                       {statusBadge(r.status)}
                     </div>
-                    <div className="text-xs text-gray-500">{r.service_name || 'Услуга'} → {r.to_clinic_name || 'Клиника'}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">{r.service_name || 'Услуга'} → {r.to_clinic_name || 'Клиника'}</div>
                     <div className="flex justify-between items-center mt-1">
-                      <div className="text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString('ru')}</div>
-                      {r.short_code && <div className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded">{r.short_code}</div>}
+                      <div className="text-xs text-gray-400 dark:text-gray-500">{new Date(r.created_at).toLocaleDateString('ru')}</div>
+                      {r.short_code && <div className="text-xs font-mono bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded">{r.short_code}</div>}
                     </div>
                   </div>
                 ))}
@@ -288,24 +292,24 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ─── Bonuses ─── */}
         {tab === 'bonuses' && (
           <div className="space-y-4">
-            <h2 className="text-lg font-bold text-gray-800">Мои бонусы</h2>
+            <h2 className="text-lg font-bold text-gray-800 dark:text-white">Мои бонусы</h2>
             {loading ? (
-              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}</div>
+              <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 dark:bg-gray-700 rounded-xl animate-pulse" />)}</div>
             ) : bonuses.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
+              <div className="text-center py-12 text-gray-400 dark:text-gray-500">
                 <div className="text-5xl mb-3">💰</div>
                 <p className="text-sm">Бонусов пока нет</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {bonuses.map(b => (
-                  <div key={b.id} className="bg-white rounded-xl border border-gray-100 p-4 flex justify-between items-center">
+                  <div key={b.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-4 flex justify-between items-center">
                     <div>
-                      <div className="text-sm font-semibold text-gray-800">{Number(b.amount).toLocaleString('ru')} ₽</div>
-                      <div className="text-xs text-gray-400">{new Date(b.created_at).toLocaleDateString('ru')}</div>
+                      <div className="text-sm font-semibold text-gray-800 dark:text-white">{Number(b.amount).toLocaleString('ru')} ₽</div>
+                      <div className="text-xs text-gray-400 dark:text-gray-500">{new Date(b.created_at).toLocaleDateString('ru')}</div>
                     </div>
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      b.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                      b.status === 'paid' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400'
                     }`}>{b.status === 'paid' ? 'Выплачен' : 'Начислен'}</span>
                   </div>
                 ))}

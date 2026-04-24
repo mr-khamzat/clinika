@@ -23,8 +23,24 @@ services:
     restart: always
     volumes:
       - clinika-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - clinika-net
+
+  # Sidecar: read-only доступ к Docker API без монтирования socket в backend
+  clinika-docker-proxy:
+    build: ./docker-proxy
+    container_name: clinika-docker-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - clinika-net
+    # Не пробрасываем порт наружу — только внутри clinika-net
 
   clinika-backend:
     build: ./backend
@@ -34,13 +50,15 @@ services:
     volumes:
       - ./VERSION:/app/VERSION:ro
       - /opt/clinika/uploads:/app/uploads
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # docker.sock убран — используем clinika-docker-proxy
     ports:
       - "127.0.0.1:8900:8000"
     depends_on:
       clinika-db:
         condition: service_healthy
       clinika-redis:
+        condition: service_started
+      clinika-docker-proxy:
         condition: service_started
     networks:
       - clinika-net
