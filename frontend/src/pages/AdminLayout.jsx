@@ -481,236 +481,168 @@ function PushSection({ token }) {
   )
 }
 
-function HomeDashboard({ token, onNavigate, isSuperAdmin }) {
-  const [todayStats, setTodayStats] = useState(null)
-  const [topAdmins, setTopAdmins] = useState([])
-  const [cancelCount, setCancelCount] = useState(0)
-  const [misStatus, setMisStatus] = useState(null)
+function HomeDashboard({ token, onNavigate }) {
+  const [metrics, setMetrics] = useState(null)
+  const [ledger, setLedger] = useState(null)
+  const [health, setHealth] = useState(null)
+  const [apiMetrics, setApiMetrics] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [chartData, setChartData] = useState([])
-  const [recentActivity, setRecentActivity] = useState([])
-  const [systemHealth, setSystemHealth] = useState(null)
-  const [sysMetrics, setSysMetrics] = useState(null)
 
   useEffect(() => {
-    setLoading(true)
     Promise.allSettled([
-      apiFetch('get', '/manager/reports/today', token),
-      apiFetch('get', '/manager/reports/admins', token),
-      apiFetch('get', '/manager/cancel-requests/', token),
-      apiFetch('get', '/manager/mis/status', token),
-      apiFetch('get', '/manager/reports/chart', token),
-      apiFetch("get", "/manager/activity/", token),
+      apiFetch("get", "/admin/metrics", token),
+      apiFetch("get", "/admin/billing/ledger?days=30", token),
       apiFetch("get", "/monitoring/health", token),
       apiFetch("get", "/monitoring/metrics?window=5", token),
-    ]).then(([todayR, adminsR, cancelR, misR, chartR, activityR, healthR, metricsR]) => {
-      if (todayR.status === 'fulfilled') setTodayStats(todayR.value.data)
-      if (adminsR.status === 'fulfilled') {
-        const sorted = (Array.isArray(adminsR.value.data) ? adminsR.value.data : [])
-          .sort((a, b) => (b.confirmed_referrals ?? 0) - (a.confirmed_referrals ?? 0))
-          .slice(0, 5)
-        setTopAdmins(sorted)
-      }
-      if (cancelR.status === 'fulfilled') setCancelCount(Array.isArray(cancelR.value.data) ? cancelR.value.data.length : 0)
-      if (misR.status === 'fulfilled') setMisStatus(misR.value.data)
-      if (chartR.status === 'fulfilled' && Array.isArray(chartR.value.data)) setChartData(chartR.value.data)
-      if (activityR.status === "fulfilled" && Array.isArray(activityR.value.data)) setRecentActivity(activityR.value.data.slice(0, 5))
-      if (healthR && healthR.status === "fulfilled") setSystemHealth(healthR.value.data)
-      if (metricsR && metricsR.status === "fulfilled") setSysMetrics(metricsR.value.data)
+    ]).then(([mR, lR, hR, aR]) => {
+      if (mR.status === "fulfilled") setMetrics(mR.value.data)
+      if (lR.status === "fulfilled") setLedger(lR.value.data)
+      if (hR.status === "fulfilled") setHealth(hR.value.data)
+      if (aR.status === "fulfilled") setApiMetrics(aR.value.data)
       setLoading(false)
     })
   }, [token])
 
-  const todayLabel = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
+  const fmt = (n) => n != null ? Number(n).toLocaleString("ru-RU") : "—"
+  const fmtRub = (n) => n != null ? Number(n).toLocaleString("ru-RU") + " ₽" : "—"
 
-  const statCards = [
-    {
-      icon: 'moving', label: 'Направлений сегодня',
-      value: loading ? '…' : (todayStats?.total_today ?? 0),
-      color: '#006173', bg: 'rgba(0,97,115,0.08)', badge: null,
-    },
-    {
-      icon: 'check_circle', label: 'Подтверждено сегодня',
-      value: loading ? '…' : (todayStats?.confirmed_today ?? 0),
-      color: '#16a34a', bg: 'rgba(22,163,74,0.08)', badge: null,
-    },
-    {
-      icon: 'pending_actions', label: 'Запросов на удаление',
-      value: loading ? '…' : cancelCount,
-      color: cancelCount > 0 ? '#f59e0b' : '#6e797c', bg: 'rgba(245,158,11,0.08)', badge: cancelCount > 0 ? '!' : null,
-    },
-    {
-      icon: 'account_balance_wallet', label: 'Бонусов к выплате',
-      value: loading ? '…' : (todayStats?.pending_bonuses != null ? `${todayStats.pending_bonuses} Б` : '—'),
-      color: '#824b07', bg: 'rgba(130,75,7,0.08)', badge: null,
-    },
+  const kpis = [
+    { icon: "store",         label: "Активных франшиз",  value: fmt(metrics?.tenants_active),   color: "#006173", bg: "rgba(0,97,115,0.08)",   nav: "super_admin" },
+    { icon: "group",         label: "Пользователей",      value: fmt(metrics?.users_total),      color: "#7c3aed", bg: "rgba(124,58,237,0.08)", nav: null },
+    { icon: "local_hospital",label: "Клиник",             value: fmt(metrics?.clinics_total),    color: "#0369a1", bg: "rgba(3,105,161,0.08)",  nav: null },
+    { icon: "moving",        label: "Направлений всего",  value: fmt(metrics?.referrals_total),  color: "#166534", bg: "rgba(22,163,74,0.08)",  nav: null },
+  ]
+
+  const subStatus = metrics?.subscriptions_by_status || {}
+  const subTotal = Object.values(subStatus).reduce((s, v) => s + v, 0)
+  const SUB_LABELS = { trial: "Пробный", active: "Активные", past_due: "Просрочено", cancelled: "Отменено", trial_expired: "Trial истёк" }
+  const SUB_COLORS = { trial: "#d97706", active: "#166534", past_due: "#dc2626", cancelled: "#6b7280", trial_expired: "#dc2626" }
+  const planColors = { basic: "#0369a1", professional: "#7c3aed", enterprise: "#d97706" }
+  const planLabels = { basic: "Basic", professional: "Professional", enterprise: "Enterprise" }
+
+  const sysCards = [
+    { label: "API",        icon: "api",      ok: true,                     val: apiMetrics?.p50 ? apiMetrics.p50.toFixed(0) + " ms" : "онлайн", sub: "Время ответа" },
+    { label: "PostgreSQL", icon: "database", ok: health?.db === "ok",      val: health?.db === "ok" ? "онлайн" : "ошибка",     sub: "База данных" },
+    { label: "Redis",      icon: "memory",   ok: health?.redis === "ok",   val: health?.redis === "ok" ? "онлайн" : "ошибка",  sub: "Кэш" },
+    { label: "МИС",        icon: "cloud",    ok: health?.mis !== "error",  val: health?.mis !== "error" ? "онлайн" : "недоступна", sub: "Интеграция" },
   ]
 
   return (
-    <div>
-      {/* Заголовок */}
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h2 className="text-2xl font-headline font-extrabold text-ms-on-surface dark:text-white tracking-tight">Статистика</h2>
-          <p className="text-sm text-ms-on-surface-variant dark:text-gray-400 mt-1 capitalize">{todayLabel}</p>
-        </div>
-        {misStatus && (
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${
-            misStatus.online ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
-          }`}>
-            <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>
-              {misStatus.online ? 'cloud_done' : 'cloud_off'}
-            </span>
-            МИС {misStatus.online ? 'онлайн' : 'недоступна'}
-          </div>
-        )}
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-headline font-extrabold text-ms-on-surface dark:text-white tracking-tight">Обзор платформы</h2>
+        <p className="text-sm text-ms-on-surface-variant dark:text-gray-400 mt-1">КлиникСеть — панель платформовладельца</p>
       </div>
 
-      {/* Системное здоровье — плитки-переходы в Мониторинг */}
-      {systemHealth && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-          {[
-            { label: 'API', icon: 'api', ok: true, val: sysMetrics?.p50 ? `${sysMetrics.p50.toFixed(0)} ms` : 'онлайн', sub: 'Время ответа' },
-            { label: 'База данных', icon: 'database', ok: systemHealth.db === 'ok', val: systemHealth.db === 'ok' ? 'онлайн' : 'ошибка', sub: 'PostgreSQL' },
-            { label: 'Redis', icon: 'memory', ok: systemHealth.redis === 'ok', val: systemHealth.redis === 'ok' ? 'онлайн' : 'ошибка', sub: 'Кеш' },
-            { label: 'МИС', icon: 'cloud', ok: systemHealth.mis !== 'error', val: systemHealth.mis !== 'error' ? 'онлайн' : 'недоступна', sub: 'Интеграция' },
-          ].map(s => (
-            <button key={s.label} onClick={() => isSuperAdmin && onNavigate?.('monitoring')}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-left hover:scale-[1.02] active:scale-[0.99] transition-all duration-200 w-full"
-              style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
-              <div className="flex items-center justify-between mb-2">
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${s.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                  <span className="material-symbols-outlined text-base" style={{ color: s.ok ? '#166534' : '#ba1a1a', fontVariationSettings: "'FILL' 1" }}>{s.icon}</span>
-                </div>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${s.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                  {s.ok ? '● OK' : '● ERR'}
-                </span>
-              </div>
-              <p className="text-base font-extrabold font-headline dark:text-white" style={{color: s.ok ? '#166534' : '#ba1a1a'}}>{s.val}</p>
-              <p className="text-[11px] font-semibold text-[#424752] dark:text-gray-300 mt-0.5">{s.label}</p>
-              <p className="text-[10px] text-[#a0a5b0]">{s.sub}</p>
-            </button>
-          ))}
-        </div>
-      )}
-      {/* Bento-grid статкарты */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {statCards.map(card => (
-          <div key={card.label}
-            className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm hover:scale-[1.02] transition-transform duration-200 flex flex-col justify-between min-h-[130px]"
-            style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
-            <div className="flex justify-between items-start">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: card.bg }}>
-                <span className="material-symbols-outlined" style={{ color: card.color, fontVariationSettings: "'FILL' 1" }}>{card.icon}</span>
-              </div>
-              {card.badge && (
-                <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md">{card.badge}</span>
-              )}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {kpis.map(k => (
+          <div key={k.label}
+            onClick={() => k.nav && onNavigate?.(k.nav)}
+            className={"bg-white dark:bg-gray-800 rounded-2xl p-4 transition-all duration-200" + (k.nav ? " cursor-pointer hover:scale-[1.02]" : "")}
+            style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: k.bg }}>
+              <span className="material-symbols-outlined text-lg" style={{ color: k.color, fontVariationSettings: "FILL 1" }}>{k.icon}</span>
             </div>
-            <div>
-              <p className="text-ms-on-surface-variant dark:text-gray-400 text-xs font-medium mt-2">{card.label}</p>
-              <p className="text-2xl font-headline font-extrabold mt-0.5 dark:text-white" style={{ color: loading ? '#6e797c' : card.color }}>{card.value}</p>
-            </div>
+            <p className="text-2xl font-extrabold font-headline dark:text-white" style={{ color: k.color }}>
+              {loading ? "…" : k.value}
+            </p>
+            <p className="text-xs text-ms-on-surface-variant dark:text-gray-400 mt-0.5">{k.label}</p>
           </div>
         ))}
       </div>
 
-      {/* Двухколоночная сетка: график + топ сотрудников */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
-        {/* График 7 дней */}
-        {chartData.length > 0 && (
-          <div className="lg:col-span-3 bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm" style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
-            <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">Динамика за 7 дней</p>
-            <div className="flex items-end gap-2 h-28">
-              {chartData.map((d, i) => {
-                const maxVal = Math.max(...chartData.map(x => x.total), 1)
-                const totalH = Math.round((d.total / maxVal) * 96)
-                const confH = d.total > 0 ? Math.round((d.confirmed / d.total) * totalH) : 0
-                return (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div className="w-full flex flex-col justify-end" style={{ height: 96 }}>
-                      <div className="w-full rounded-t bg-[#adecff] dark:bg-blue-900/40 relative overflow-hidden" style={{ height: totalH || 2 }}>
-                        <div className="absolute bottom-0 w-full rounded-t" style={{ height: confH, background: '#006173' }} />
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-ms-outline dark:text-gray-500 leading-none">{d.date}</span>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex items-center gap-4 mt-3">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-2.5 rounded-sm bg-[#adecff] dark:bg-blue-900/40" />
-                <span className="text-xs text-ms-on-surface-variant dark:text-gray-400">Создано</span>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+          <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">Финансы платформы (30 дней)</p>
+          {loading ? (
+            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}</div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm text-gray-500">Доход платформы</span>
+                <span className="text-sm font-bold text-emerald-600">{fmtRub(ledger?.platform_income)}</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-2.5 rounded-sm" style={{ background: '#006173' }} />
-                <span className="text-xs text-ms-on-surface-variant dark:text-gray-400">Подтверждено</span>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
+                <span className="text-sm text-gray-500">Суммарный оборот</span>
+                <span className="text-sm font-bold text-gray-800 dark:text-white">{fmtRub(ledger?.total_credit)}</span>
               </div>
+              <div className="flex justify-between items-center py-2">
+                <span className="text-sm text-gray-500">Записей в реестре</span>
+                <span className="text-sm font-bold text-gray-800 dark:text-white">
+                  {fmt(Object.values(ledger?.breakdown || {}).reduce((s, v) => s + (v.count || 0), 0))}
+                </span>
+              </div>
+              <button onClick={() => onNavigate?.("billing_ledger")}
+                className="w-full mt-2 py-2 rounded-xl text-xs font-semibold text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition">
+                Открыть Фин. реестр →
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Топ сотрудников */}
-        {topAdmins.length > 0 && (
-          <div className={`${chartData.length > 0 ? 'lg:col-span-2' : 'lg:col-span-5'} bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden`} style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
-            <div className="px-5 pt-5 pb-3 border-b border-ms-outline-variant/30 dark:border-gray-700">
-              <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm">Лучшие сотрудники</p>
-            </div>
-            <div className="divide-y divide-ms-surface-container/60 dark:divide-gray-700">
-              {topAdmins.map((a, i) => (
-                <div key={String(a.admin_id ?? i)} className="flex items-center justify-between px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                      style={{ background: i === 0 ? '#f59e0b' : i === 1 ? '#6e797c' : i === 2 ? '#824b07' : '#bec8cc' }}>
-                      {i + 1}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-ms-on-surface dark:text-white leading-tight">{a.full_name ?? '—'}</p>
-                      <p className="text-xs text-ms-on-surface-variant dark:text-gray-400">{a.clinic_name ?? '—'}</p>
-                    </div>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+          <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">{"Подписки (" + subTotal + " всего)"}</p>
+          {loading ? (
+            <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}</div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(subStatus).map(([status, count]) => (
+                <div key={status} className="flex items-center justify-between py-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: SUB_COLORS[status] || "#6b7280" }} />
+                    <span className="text-sm text-gray-600 dark:text-gray-300">{SUB_LABELS[status] || status}</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold" style={{ color: '#006173' }}>{a.confirmed_referrals ?? 0}</p>
-                    <p className="text-xs text-ms-on-surface-variant dark:text-gray-400">подтв.</p>
-                  </div>
+                  <span className="text-sm font-bold" style={{ color: SUB_COLORS[status] || "#6b7280" }}>{count}</span>
                 </div>
               ))}
+              {Object.keys(metrics?.tenants_by_plan || {}).length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                  <p className="text-xs text-gray-400 mb-2">По тарифам</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {Object.entries(metrics.tenants_by_plan).map(([plan, cnt]) => (
+                      <span key={plan} className="px-2 py-0.5 rounded-full text-xs font-semibold text-white"
+                        style={{ background: planColors[plan] || "#6b7280" }}>
+                        {(planLabels[plan] || plan) + ": " + cnt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <button onClick={() => onNavigate?.("billing")}
+                className="w-full mt-2 py-2 rounded-xl text-xs font-semibold text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition">
+                Управление биллингом →
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Последние события */}
-      {recentActivity.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden" style={{ boxShadow: '0 4px 20px -4px rgba(0,97,115,0.07)' }}>
-          <div className="px-5 pt-5 pb-3 border-b border-ms-outline-variant/30 dark:border-gray-700">
-            <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm">Последние события</p>
-          </div>
-          <div className="divide-y divide-ms-surface-container/60 dark:divide-gray-700">
-            {recentActivity.map((ev, i) => (
-              <div key={ev.id ?? i} className="px-5 py-3 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'rgba(0,97,115,0.1)' }}>
-                  <span className="material-symbols-outlined text-sm" style={{ color: '#006173' }}>history</span>
+      <div>
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Состояние системы</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {sysCards.map(s => (
+            <button key={s.label} onClick={() => onNavigate?.("monitoring")}
+              className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-left hover:scale-[1.02] transition-all duration-200 w-full"
+              style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+              <div className="flex items-center justify-between mb-2">
+                <div className={"w-8 h-8 rounded-xl flex items-center justify-center " + (s.ok ? "bg-emerald-50" : "bg-red-50")}>
+                  <span className="material-symbols-outlined text-base" style={{ color: s.ok ? "#166534" : "#ba1a1a", fontVariationSettings: "FILL 1" }}>{s.icon}</span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-ms-on-surface dark:text-white truncate">{ev.action}</p>
-                  <p className="text-xs text-ms-on-surface-variant dark:text-gray-400 mt-0.5">
-                    {ev.user_name ?? '—'} · {ev.created_at ? new Date(ev.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
-                  </p>
-                </div>
+                <span className={"text-[10px] font-bold px-2 py-0.5 rounded-full " + (s.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
+                  {s.ok ? "● OK" : "● ERR"}
+                </span>
               </div>
-            ))}
-          </div>
+              <p className="text-base font-extrabold font-headline dark:text-white" style={{ color: s.ok ? "#166534" : "#ba1a1a" }}>{loading ? "…" : s.val}</p>
+              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-300 mt-0.5">{s.label}</p>
+              <p className="text-[10px] text-gray-400 dark:text-gray-500">{s.sub}</p>
+            </button>
+          ))}
         </div>
-      )}
+      </div>
     </div>
   )
 }
 
-// ---------------------------------------------------------------------------
-// Staff section
-// ---------------------------------------------------------------------------
 
 function StaffSection({ token }) {
   const [admins, setAdmins] = useState([])
@@ -7518,9 +7450,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
   const [helpOpen, setHelpOpen] = useState(false)
-  const [badges, setBadges] = useState({ cancel_requests: 0, pending_bonus_staff: 0 })
   const [branding, setBranding] = useState(null)
-  const [trialStatus, setTrialStatus] = useState(null)
 
   // Загружаем брендинг и применяем CSS-переменные
   useEffect(() => {
@@ -7533,11 +7463,6 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (b.font_family) document.documentElement.style.setProperty('--font-main', b.font_family)
     }).catch(() => {})
     // Загружаем статус trial/подписки для баннера
-    if (!user?.is_superadmin) {
-      apiFetch('get', '/billing/trial-status', adminToken)
-        .then(r => setTrialStatus(r.data))
-        .catch(() => {})
-    }
   }, [adminToken])
 
   useEffect(() => {
@@ -7545,45 +7470,17 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     localStorage.setItem('adminTheme', dark ? 'dark' : 'light')
   }, [dark])
 
-  // Загружаем счётчики бейджей при монтировании и каждые 60 сек
-  useEffect(() => {
-    const load = () => {
-      apiFetch('get', '/manager/badge-counts', adminToken)
-        .then(r => setBadges(r.data))
-        .catch(() => {})
-    }
-    load()
-    const id = setInterval(load, 60000)
-    return () => clearInterval(id)
-  }, [adminToken])
 
   // Бейдж-конфиг: раздел → значение счётчика
-  const navBadge = {
-    bonuses: badges.pending_bonus_staff,
-    reports: badges.cancel_requests,
-  }
+  const navBadge = {}
 
   const isSuperAdmin = user?.is_superadmin || user?.role === "super_admin"
-  const isSupervisor = user?.role === "supervisor"
   const isTenantAdmin = isSuperAdmin || isSupervisor  // полный доступ к тенанту
-  const isClinicManager = user?.role === 'manager'
   const renderSection = () => {
 
     switch (activeSection) {
-      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} isSuperAdmin={isSuperAdmin} />
-      case 'staff':    return <StaffSection token={adminToken} />
-      case 'clinics':  return <ClinicsSection token={adminToken} isClinicManager={isClinicManager} />
-      case 'services': return <ServicesSection token={adminToken} />
-      case 'scheduling': return <SchedulingSection token={adminToken} />
-      case 'reports':  return <ReportsSection token={adminToken} />
-      case 'bonuses':    return <BonusesSection token={adminToken} />
-      case 'commission': return <CommissionSection token={adminToken} />
-      case 'partners':  return <PartnersSection token={adminToken} />
-      case 'discounts': return <DiscountsSection token={adminToken} />
-      case 'my_plan':   return <MyPlanSection token={adminToken} />
+      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
       case 'settings':  return <SettingsSection token={adminToken} />
-      case 'support':   return <SupportAdminWrapper token={adminToken} />
-      case 'ledger':     return <LedgerSection token={adminToken} />
       case 'analytics': return <AnalyticsDrillSection token={adminToken} />
       case 'audit':     return <AuditSection token={adminToken} />
       case 'billing':   return <BillingSection token={adminToken} />
@@ -7779,36 +7676,6 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           </div>
         </header>
 
-        {/* Trial / подписка баннер */}
-        {trialStatus && (trialStatus.status === 'trial' && trialStatus.days_remaining !== null && trialStatus.days_remaining <= 7) && (
-          <div className={`px-5 py-2.5 flex items-center justify-between text-sm ${trialStatus.days_remaining <= 2 ? 'bg-red-500' : 'bg-amber-500'} text-white`}>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>
-                {trialStatus.days_remaining <= 2 ? 'error' : 'schedule'}
-              </span>
-              <span className="font-semibold">
-                {trialStatus.days_remaining === 0 ? 'Пробный период истекает сегодня'
-                  : `Пробный период: ${trialStatus.days_remaining} ${trialStatus.days_remaining === 1 ? 'день' : trialStatus.days_remaining < 5 ? 'дня' : 'дней'} осталось`}
-              </span>
-            </div>
-            <button onClick={() => setActiveSection('billing')}
-              className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition flex-shrink-0">
-              Подробнее
-            </button>
-          </div>
-        )}
-        {trialStatus && trialStatus.status === 'trial_expired' && (
-          <div className="px-5 py-2.5 flex items-center justify-between text-sm bg-red-600 text-white">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>block</span>
-              <span className="font-semibold">Пробный период истёк — обратитесь к поставщику системы</span>
-            </div>
-            <button onClick={() => setActiveSection('billing')}
-              className="text-xs font-bold bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition flex-shrink-0">
-              Биллинг
-            </button>
-          </div>
-        )}
 
         {/* Контент страницы */}
         <main className="flex-1 p-5 lg:p-8 max-w-6xl w-full mx-auto">
