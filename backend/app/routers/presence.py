@@ -364,6 +364,7 @@ async def presence_ws(
                     "caller_id": user_id,
                     "caller_name": user.full_name,
                     "call_type": call_type,
+                    "sdp_offer": data.get("sdp_offer"),
                 })
 
                 if not delivered:
@@ -402,6 +403,16 @@ async def presence_ws(
                         .values(status=PresenceStatus.ONLINE)
                     )
                     await db.commit()
+
+            elif msg_type == "ice_candidate":
+                # WebRTC ICE candidate relay
+                target_id = data.get("target_id")
+                if target_id:
+                    await presence_manager.send_to_user(target_id, {
+                        "type": "ice_candidate",
+                        "candidate": data.get("candidate"),
+                        "from_id": user_id,
+                    })
 
     except WebSocketDisconnect:
         pass
@@ -587,15 +598,21 @@ async def can_call(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Проверяет, включён ли telephony модуль для тенанта пользователя."""
+    """Проверяет доступность аудио и видео звонков для тенанта."""
     from app.models.commercial import TenantModuleSubscription, ModuleStatus
     if not current_user.tenant_id:
-        return {"enabled": False}
-    sub = (await db.execute(
-        select(TenantModuleSubscription).where(
-            TenantModuleSubscription.tenant_id == current_user.tenant_id,
-            TenantModuleSubscription.module_key == "telephony_basic",
-            TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL]),
-        )
-    )).scalar_one_or_none()
-    return {"enabled": sub is not None}
+        return {"enabled": False, "audio": False, "video": False}
+
+    async def _has(key: str) -> bool:
+        row = (await db.execute(
+            select(TenantModuleSubscription).where(
+                TenantModuleSubscription.tenant_id == current_user.tenant_id,
+                TenantModuleSubscription.module_key == key,
+                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL]),
+            )
+        )).scalar_one_or_none()
+        return row is not None
+
+    audio = await _has("telephony_basic")
+    video = await _has("video_calls")
+    return {"enabled": audio or video, "audio": audio, "video": video}

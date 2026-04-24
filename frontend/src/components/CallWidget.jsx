@@ -1,111 +1,141 @@
 /**
- * CallWidget — плавающая кнопка звонков.
- * Появляется только если включён модуль telephony_basic.
- * Место: рядом с SupportChat, fixed bottom-right.
+ * CallWidget — аудио и видео звонки через WebRTC.
+ * Один попап: если оба модуля включены — переключатель режима.
+ * Позиция: fixed bottom-right, над SupportChat.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 
-const STATUS_COLOR = {
-  online:  'bg-emerald-400',
-  busy:    'bg-red-400',
-  away:    'bg-amber-400',
-  offline: 'bg-gray-300',
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
 }
-const STATUS_LABEL = {
-  online: 'Онлайн', busy: 'Занят', away: 'Не на месте', offline: 'Не в сети',
-}
-const ROLE_LABEL = {
-  admin: 'Администратор', doctor: 'Врач', manager: 'Руководитель',
-  nurse: 'Медсестра', recruiter: 'Рекрутер', partner: 'Партнёр',
-}
+const STATUS_COLOR = { online:'bg-emerald-400', busy:'bg-red-400', away:'bg-amber-400', offline:'bg-gray-300' }
+const STATUS_LABEL = { online:'Онлайн', busy:'Занят', away:'Не на месте', offline:'Не в сети' }
+const ROLE_LABEL   = { admin:'Администратор', doctor:'Врач', manager:'Руководитель', nurse:'Медсестра', recruiter:'Рекрутер', partner:'Партнёр' }
 
 export default function CallWidget() {
   const { token, user } = useAuthStore()
-  const [enabled, setEnabled]     = useState(false)
-  const [open, setOpen]           = useState(false)
-  const [contacts, setContacts]   = useState([])
-  const [myStatus, setMyStatus]   = useState('online')
+  const [caps, setCaps]         = useState({ enabled:false, audio:false, video:false })
+  const [mode, setMode]         = useState('audio')   // 'audio' | 'video'
+  const [open, setOpen]         = useState(false)
+  const [contacts, setContacts] = useState([])
 
-  // Входящий звонок
-  const [incoming, setIncoming]   = useState(null) // {caller_id, caller_name, call_type}
-  // Исходящий звонок
-  const [outgoing, setOutgoing]   = useState(null) // {callee_id, callee_name, status}
-  // Активный звонок
-  const [active, setActive]       = useState(null) // {peer_id, peer_name, call_type, started}
+  const [incoming, setIncoming] = useState(null)   // {caller_id, caller_name, call_type, sdp_offer}
+  const [outgoing, setOutgoing] = useState(null)   // {callee_id, callee_name, call_type, status}
+  const [active, setActive]     = useState(null)   // {peer_id, peer_name, call_type, started}
 
-  const wsRef = useRef(null)
-  const pingRef = useRef(null)
+  const [micOn, setMicOn] = useState(true)
+  const [camOn, setCamOn] = useState(true)
+
+  const wsRef          = useRef(null)
+  const pingRef        = useRef(null)
+  const pcRef          = useRef(null)
+  const localStreamRef = useRef(null)
+  const localVideoRef  = useRef(null)
+  const remoteVideoRef = useRef(null)
+  const pendingIce     = useRef([])
 
   const h = { Authorization: `Bearer ${token}` }
 
-  // Проверка модуля
+  // ── Проверка модулей ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return
     axios.get(API_BASE + '/presence/can-call', { headers: h })
-      .then(r => setEnabled(r.data.enabled))
+      .then(r => {
+        setCaps(r.data)
+        setMode(r.data.audio ? 'audio' : 'video')
+      })
       .catch(() => {})
   }, [token])
 
-  // WebSocket подключение когда модуль включён
+  // ── WebSocket ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!enabled || !user?.id || !token) return
-
+    if (!caps.enabled || !user?.id || !token) return
     const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
     ws.onopen = () => {
-      // Отправляем статус online
       axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
-      // Heartbeat каждые 30 сек
       pingRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'heartbeat' }))
       }, 30000)
     }
 
-    ws.onmessage = (e) => {
-      try {
-        const msg = JSON.parse(e.data)
-        if (msg.type === 'presence_update') {
+    ws.onmessage = async (e) => {
+      let msg
+      try { msg = JSON.parse(e.data) } catch { return }
+
+      switch (msg.type) {
+        case 'presence_update':
           setContacts(prev => prev.map(c =>
             c.user_id === msg.user_id ? { ...c, status: msg.status } : c
           ))
-        } else if (msg.type === 'call_invite') {
-          setIncoming({ caller_id: msg.caller_id, caller_name: msg.caller_name, call_type: msg.call_type || 'audio' })
-        } else if (msg.type === 'call_ringing') {
+          break
+
+        case 'call_invite':
+          setIncoming({ caller_id: msg.caller_id, caller_name: msg.caller_name,
+            call_type: msg.call_type || 'audio', sdp_offer: msg.sdp_offer || null })
+          break
+
+        case 'call_ringing':
           setOutgoing(prev => prev ? { ...prev, status: 'ringing' } : null)
-        } else if (msg.type === 'call_accept') {
-          const peer = outgoing || incoming
-          setOutgoing(null); setIncoming(null)
-          setActive({ peer_id: msg.from_id, peer_name: peer?.caller_name || peer?.callee_name || '...', call_type: 'audio', started: Date.now() })
-        } else if (msg.type === 'call_reject') {
-          setOutgoing(null)
-        } else if (msg.type === 'call_failed') {
-          setOutgoing(null)
-        } else if (msg.type === 'call_end') {
-          setActive(null)
+          break
+
+        case 'call_accept':
+          if (msg.sdp_answer && pcRef.current) {
+            try {
+              await pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp_answer))
+              for (const c of pendingIce.current)
+                await pcRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+              pendingIce.current = []
+            } catch {}
+          }
+          setOutgoing(prev => {
+            if (!prev) return null
+            setActive({ peer_id: msg.from_id, peer_name: prev.callee_name,
+              call_type: prev.call_type, started: Date.now() })
+            return null
+          })
           setIncoming(null)
+          break
+
+        case 'call_reject':
+        case 'call_failed':
+          cleanupMedia()
+          setOutgoing(null)
+          break
+
+        case 'call_end':
+          cleanupMedia()
+          setActive(null); setIncoming(null); setOutgoing(null)
           axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
-        }
-      } catch {}
+          break
+
+        case 'ice_candidate':
+          if (pcRef.current) {
+            if (pcRef.current.remoteDescription)
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(() => {})
+            else
+              pendingIce.current.push(msg.candidate)
+          }
+          break
+      }
     }
 
-    ws.onclose = () => {
-      clearInterval(pingRef.current)
-    }
-
-    // Загрузка контактов
+    ws.onclose = () => clearInterval(pingRef.current)
     loadContacts()
 
     return () => {
       clearInterval(pingRef.current)
-      ws.close()
-      wsRef.current = null
+      ws.close(); wsRef.current = null
     }
-  }, [enabled, user?.id])
+  }, [caps.enabled, user?.id])
 
   const loadContacts = useCallback(() => {
     axios.get(API_BASE + '/presence/users', { headers: h })
@@ -113,77 +143,152 @@ export default function CallWidget() {
       .catch(() => {})
   }, [token])
 
-  // Обновление контактов при открытии
-  useEffect(() => {
-    if (open && enabled) loadContacts()
-  }, [open])
+  useEffect(() => { if (open && caps.enabled) loadContacts() }, [open])
 
+  // ── WebRTC ────────────────────────────────────────────────────────────────
   const sendWs = (msg) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN)
       wsRef.current.send(JSON.stringify(msg))
+  }
+
+  const createPC = (targetId) => {
+    if (pcRef.current) pcRef.current.close()
+    pendingIce.current = []
+    const pc = new RTCPeerConnection(RTC_CONFIG)
+    pcRef.current = pc
+    pc.onicecandidate = (e) => {
+      if (e.candidate) sendWs({ type: 'ice_candidate', target_id: targetId, candidate: e.candidate.toJSON() })
     }
+    pc.ontrack = (e) => {
+      if (remoteVideoRef.current && e.streams[0]) remoteVideoRef.current.srcObject = e.streams[0]
+    }
+    pc.onconnectionstatechange = () => {
+      if (['failed','disconnected','closed'].includes(pc.connectionState)) endCall()
+    }
+    return pc
   }
 
-  const startCall = (contact) => {
-    setOutgoing({ callee_id: contact.user_id, callee_name: contact.full_name, status: 'calling' })
+  const getMedia = async (callType) => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: callType === 'video' ? { width: 1280, height: 720, facingMode: 'user' } : false,
+    })
+    localStreamRef.current = stream
+    if (localVideoRef.current) localVideoRef.current.srcObject = stream
+    return stream
+  }
+
+  const cleanupMedia = () => {
+    localStreamRef.current?.getTracks().forEach(t => t.stop())
+    localStreamRef.current = null
+    if (pcRef.current) { pcRef.current.close(); pcRef.current = null }
+    if (localVideoRef.current)  localVideoRef.current.srcObject = null
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+    pendingIce.current = []
+  }
+
+  const startCall = async (contact) => {
     setOpen(false)
-    sendWs({ type: 'call_invite', callee_id: contact.user_id, call_type: 'audio' })
+    setOutgoing({ callee_id: contact.user_id, callee_name: contact.full_name, call_type: mode, status: 'calling' })
+    setCamOn(mode === 'video'); setMicOn(true)
+
+    let stream
+    try { stream = await getMedia(mode) }
+    catch { alert('Нет доступа к камере/микрофону'); setOutgoing(null); return }
+
+    const pc = createPC(contact.user_id)
+    stream.getTracks().forEach(t => pc.addTrack(t, stream))
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    sendWs({ type: 'call_invite', callee_id: contact.user_id, call_type: mode,
+      sdp_offer: pc.localDescription.toJSON() })
   }
 
-  const acceptCall = () => {
-    sendWs({ type: 'call_accept', caller_id: incoming.caller_id })
-    setActive({ peer_id: incoming.caller_id, peer_name: incoming.caller_name, call_type: incoming.call_type, started: Date.now() })
+  const acceptCall = async () => {
+    const callType = incoming.call_type
+    setCamOn(callType === 'video'); setMicOn(true)
+
+    let stream
+    try { stream = await getMedia(callType) }
+    catch { rejectCall(); return }
+
+    const pc = createPC(incoming.caller_id)
+    stream.getTracks().forEach(t => pc.addTrack(t, stream))
+
+    if (incoming.sdp_offer) {
+      await pc.setRemoteDescription(new RTCSessionDescription(incoming.sdp_offer))
+      for (const c of pendingIce.current)
+        await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+      pendingIce.current = []
+    }
+
+    const answer = await pc.createAnswer()
+    await pc.setLocalDescription(answer)
+    sendWs({ type: 'call_accept', caller_id: incoming.caller_id, sdp_answer: pc.localDescription.toJSON() })
+
+    setActive({ peer_id: incoming.caller_id, peer_name: incoming.caller_name,
+      call_type: callType, started: Date.now() })
     setIncoming(null)
     axios.put(API_BASE + '/presence/status', { status: 'busy' }, { headers: h }).catch(() => {})
   }
 
   const rejectCall = () => {
     sendWs({ type: 'call_reject', caller_id: incoming.caller_id })
-    setIncoming(null)
+    cleanupMedia(); setIncoming(null)
   }
 
   const endCall = () => {
-    const peerId = active?.peer_id
+    const peerId = active?.peer_id || outgoing?.callee_id
     if (peerId) sendWs({ type: 'call_end', target_id: peerId })
-    setActive(null)
-    setOutgoing(null)
+    cleanupMedia()
+    setActive(null); setOutgoing(null); setIncoming(null)
     axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
   }
 
-  const cancelCall = () => {
-    if (outgoing?.callee_id) sendWs({ type: 'call_end', target_id: outgoing.callee_id })
-    setOutgoing(null)
+  const toggleMic = () => {
+    localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !micOn })
+    setMicOn(v => !v)
+  }
+  const toggleCam = () => {
+    localStreamRef.current?.getVideoTracks().forEach(t => { t.enabled = !camOn })
+    setCamOn(v => !v)
   }
 
-  if (!enabled) return null
+  if (!caps.enabled) return null
 
+  const isVideo = (active || outgoing || incoming)?.call_type === 'video'
+  const callActive = !!(active || outgoing)
   const onlineCount = contacts.filter(c => c.status !== 'offline').length
 
   return (
     <>
-      {/* ── Входящий звонок ── */}
+      {/* ── Входящий звонок ─────────────────────────────────────────────── */}
       {incoming && (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center pb-32 pointer-events-none">
+        <div className="fixed inset-0 z-[60] flex items-end justify-center pb-28 pointer-events-none">
           <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-5 w-80 pointer-events-auto border border-gray-100 dark:border-gray-700"
-            style={{animation: 'slideUp 0.3s ease'}}>
+            style={{ animation: 'slideUp .3s ease' }}>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center animate-pulse">
-                <span className="material-symbols-outlined text-emerald-600 text-2xl" style={{fontVariationSettings:"'FILL' 1"}}>call</span>
+                <span className="material-symbols-outlined text-emerald-600 text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>
+                  {incoming.call_type === 'video' ? 'videocam' : 'call'}
+                </span>
               </div>
               <div>
                 <p className="font-bold text-gray-900 dark:text-white">{incoming.caller_name}</p>
-                <p className="text-xs text-gray-500">Входящий {incoming.call_type === 'audio' ? 'аудио' : 'видео'} звонок</p>
+                <p className="text-xs text-gray-500">Входящий {incoming.call_type === 'video' ? 'видео' : 'аудио'} звонок</p>
               </div>
             </div>
             <div className="flex gap-3">
               <button onClick={rejectCall}
                 className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-red-500 text-white rounded-2xl font-bold hover:bg-red-600 transition">
-                <span className="material-symbols-outlined text-xl" style={{fontVariationSettings:"'FILL' 1"}}>call_end</span>
+                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>call_end</span>
                 Отклонить
               </button>
               <button onClick={acceptCall}
                 className="flex-1 flex items-center justify-center gap-1.5 py-3 bg-emerald-500 text-white rounded-2xl font-bold hover:bg-emerald-600 transition">
-                <span className="material-symbols-outlined text-xl" style={{fontVariationSettings:"'FILL' 1"}}>call</span>
+                <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>
+                  {incoming.call_type === 'video' ? 'videocam' : 'call'}
+                </span>
                 Ответить
               </button>
             </div>
@@ -191,13 +296,61 @@ export default function CallWidget() {
         </div>
       )}
 
-      {/* ── Исходящий / Активный звонок ── */}
-      {(outgoing || active) && (
-        <div className="fixed bottom-56 right-4 z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-4 w-64 border border-gray-100 dark:border-gray-700">
+      {/* ── Видеозвонок: полноэкранный оверлей ──────────────────────────── */}
+      {callActive && isVideo && (
+        <div className="fixed inset-0 z-50 bg-black flex flex-col">
+          <div className="relative flex-1 flex items-center justify-center overflow-hidden">
+            {/* Удалённое видео */}
+            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            {/* Заглушка */}
+            {!active && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900">
+                <div className="w-24 h-24 rounded-3xl bg-white/10 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-5xl" style={{ fontVariationSettings:"'FILL' 1" }}>videocam</span>
+                </div>
+                <p className="text-xl font-bold">{outgoing?.callee_name}</p>
+                <p className="text-sm text-white/60 animate-pulse">
+                  {outgoing?.status === 'ringing' ? 'Вызов...' : 'Соединение...'}
+                </p>
+              </div>
+            )}
+            {/* Локальное PIP */}
+            <div className="absolute bottom-4 right-4 w-36 h-24 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl bg-gray-800">
+              <video ref={localVideoRef} autoPlay playsInline muted
+                className="w-full h-full object-cover" style={{ display: camOn ? 'block' : 'none' }} />
+              {!camOn && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="material-symbols-outlined text-white/40 text-3xl">videocam_off</span>
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Управление */}
+          <div className="flex items-center justify-center gap-4 py-6 bg-black/60">
+            <button onClick={toggleMic}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition ${micOn ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white'}`}>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>{micOn ? 'mic' : 'mic_off'}</span>
+            </button>
+            <button onClick={toggleCam}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition ${camOn ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white'}`}>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>{camOn ? 'videocam' : 'videocam_off'}</span>
+            </button>
+            <button onClick={endCall}
+              className="w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition">
+              <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>call_end</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Аудиозвонок: компактная карточка ────────────────────────────── */}
+      {callActive && !isVideo && (
+        <div className="fixed bottom-56 right-4 z-50 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4">
+          <video ref={remoteVideoRef} autoPlay playsInline style={{ display:'none' }} />
+          <video ref={localVideoRef}  autoPlay playsInline muted style={{ display:'none' }} />
           <div className="flex items-center gap-3 mb-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${active ? 'bg-emerald-100' : 'bg-blue-100'}`}>
-              <span className={`material-symbols-outlined text-xl ${active ? 'text-emerald-600' : 'text-blue-600'}`}
-                style={{fontVariationSettings:"'FILL' 1"}}>
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              <span className="material-symbols-outlined text-xl text-blue-600" style={{ fontVariationSettings:"'FILL' 1" }}>
                 {active ? 'call' : 'phone_forwarded'}
               </span>
             </div>
@@ -206,34 +359,59 @@ export default function CallWidget() {
                 {active ? active.peer_name : outgoing?.callee_name}
               </p>
               <p className="text-xs text-gray-400">
-                {active ? 'Звонок активен' : outgoing?.status === 'ringing' ? 'Вызов...' : 'Соединение...'}
+                {active ? 'Разговор' : outgoing?.status === 'ringing' ? 'Вызов...' : 'Соединение...'}
               </p>
             </div>
           </div>
-          <button onClick={active ? endCall : cancelCall}
-            className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition">
-            <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>call_end</span>
-            {active ? 'Завершить' : 'Отменить'}
-          </button>
+          <div className="flex gap-2">
+            <button onClick={toggleMic}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition ${micOn ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200' : 'bg-red-100 text-red-500'}`}>
+              <span className="material-symbols-outlined text-[18px]" style={{ fontVariationSettings:"'FILL' 1" }}>{micOn ? 'mic' : 'mic_off'}</span>
+            </button>
+            <button onClick={endCall}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-red-500 text-white rounded-xl text-sm font-bold hover:bg-red-600 transition">
+              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings:"'FILL' 1" }}>call_end</span>
+              {active ? 'Завершить' : 'Отменить'}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* ── Контакты ── */}
-      {open && (
+      {/* ── Список контактов ─────────────────────────────────────────────── */}
+      {open && !callActive && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="fixed bottom-56 right-4 z-50 w-72 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-              <div>
-                <p className="font-bold text-gray-900 dark:text-white text-sm">Контакты</p>
-                <p className="text-xs text-gray-400">{onlineCount} онлайн</p>
+            {/* Заголовок + переключатель режима */}
+            <div className="px-4 pt-3 pb-2 border-b border-gray-100 dark:border-gray-800">
+              <div className="flex items-center justify-between mb-2">
+                <div>
+                  <p className="font-bold text-gray-900 dark:text-white text-sm">Контакты</p>
+                  <p className="text-xs text-gray-400">{onlineCount} онлайн</p>
+                </div>
+                <button onClick={loadContacts} className="p-1 text-gray-400 hover:text-gray-600 transition">
+                  <span className="material-symbols-outlined text-[18px]">refresh</span>
+                </button>
               </div>
-              <button onClick={loadContacts}
-                className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition">
-                <span className="material-symbols-outlined text-[18px]">refresh</span>
-              </button>
+              {/* Переключатель только если оба модуля активны */}
+              {caps.audio && caps.video && (
+                <div className="flex bg-gray-100 dark:bg-gray-800 rounded-xl p-1 gap-1">
+                  <button onClick={() => setMode('audio')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition ${mode === 'audio' ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500'}`}>
+                    <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings:"'FILL' 1" }}>call</span>
+                    Аудио
+                  </button>
+                  <button onClick={() => setMode('video')}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-semibold transition ${mode === 'video' ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500'}`}>
+                    <span className="material-symbols-outlined text-[15px]" style={{ fontVariationSettings:"'FILL' 1" }}>videocam</span>
+                    Видео
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="max-h-80 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800">
+
+            {/* Список */}
+            <div className="max-h-72 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800">
               {contacts.length === 0 && (
                 <div className="py-8 text-center text-gray-400 text-sm">Нет контактов</div>
               )}
@@ -247,22 +425,22 @@ export default function CallWidget() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.full_name}</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      {ROLE_LABEL[c.role] || c.role} · {STATUS_LABEL[c.status] || 'Не в сети'}
-                    </p>
+                    <p className="text-xs text-gray-400 truncate">{ROLE_LABEL[c.role] || c.role} · {STATUS_LABEL[c.status] || 'Не в сети'}</p>
                   </div>
                   <button
-                    onClick={() => c.status !== 'offline' && startCall(c)}
-                    disabled={c.status === 'offline' || c.status === 'busy'}
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition ${
-                      c.status === 'online' ? 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200' :
-                      c.status === 'busy'   ? 'bg-gray-100 text-gray-300 cursor-not-allowed' :
-                      c.status === 'away'   ? 'bg-amber-100 text-amber-500 hover:bg-amber-200' :
-                      'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    }`}
-                    title={c.status === 'offline' ? 'Не в сети' : c.status === 'busy' ? 'Занят' : 'Позвонить'}
-                  >
-                    <span className="material-symbols-outlined text-[16px]" style={{fontVariationSettings:"'FILL' 1"}}>call</span>
+                    onClick={() => c.status === 'online' && startCall(c)}
+                    disabled={c.status !== 'online'}
+                    title={mode === 'video' ? 'Видео звонок' : 'Аудио звонок'}
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition flex-shrink-0 ${
+                      c.status === 'online'
+                        ? mode === 'video'
+                          ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                          : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                        : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    }`}>
+                    <span className="material-symbols-outlined text-[17px]" style={{ fontVariationSettings:"'FILL' 1" }}>
+                      {mode === 'video' ? 'videocam' : 'call'}
+                    </span>
                   </button>
                 </div>
               ))}
@@ -271,25 +449,27 @@ export default function CallWidget() {
         </>
       )}
 
-      {/* ── Плавающая кнопка ── */}
+      {/* ── Плавающая кнопка ─────────────────────────────────────────────── */}
       <button
         onClick={() => setOpen(o => !o)}
         className="fixed bottom-40 right-4 z-40 w-14 h-14 text-white rounded-full flex items-center justify-center transition-all duration-150 active:scale-95"
-        style={{background:'linear-gradient(135deg,#0097A7,#006173)', boxShadow:'0 8px 24px rgba(0,151,167,0.4)'}}
-        title="Звонки"
-      >
-        {onlineCount > 0 && (
+        style={{ background:'linear-gradient(135deg,#0097A7,#006173)', boxShadow:'0 8px 24px rgba(0,151,167,0.4)' }}
+        title="Звонки">
+        {onlineCount > 0 && !callActive && (
           <span className="absolute -top-1 -right-1 w-5 h-5 bg-emerald-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white">
             {onlineCount > 9 ? '9+' : onlineCount}
           </span>
         )}
-        <span className="material-symbols-outlined text-2xl" style={{fontVariationSettings:"'FILL' 1"}}>
-          {open ? 'close' : 'call'}
+        {callActive && (
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-white animate-pulse" />
+        )}
+        <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>
+          {callActive ? 'call' : open ? 'close' : 'call'}
         </span>
       </button>
 
       <style>{`
-        @keyframes slideUp { from { transform: translateY(20px); opacity:0; } to { transform: translateY(0); opacity:1; } }
+        @keyframes slideUp { from { transform:translateY(20px);opacity:0 } to { transform:translateY(0);opacity:1 } }
       `}</style>
     </>
   )
