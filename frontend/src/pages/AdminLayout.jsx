@@ -7,6 +7,7 @@ const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const AISection = lazy(() => import('../sections/AISection'))
 const BillingLedgerSection = lazy(() => import('../sections/BillingLedgerSection'))
+const TenantDrawer = lazy(() => import('../sections/TenantDrawer'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -5798,17 +5799,7 @@ function SuperAdminSection({ token }) {
   const [createResult, setCreateResult] = useState(null)
   const [creating, setCreating] = useState(false)
   const [createErr, setCreateErr] = useState('')
-  const [selectedTenant, setSelectedTenant] = useState(null)
-  const [modules, setModules] = useState([])
-  const [manageBilling, setManageBilling] = useState(null)
-  const [billingForm, setBillingForm] = useState({ plan: 'professional', billing_cycle: 'monthly', trial_days: 14 })
-  const [billingMsg, setBillingMsg] = useState('')
-
-  const ALL_MODULES = [
-    'referrals','bonuses','clinics','qr_scan','analytics','support','invitations',
-    'discounts','kpi','mis_sync','partner_portal','custom_branding','sms_notify',
-    'scheduling','billing','audit_log','multi_tenant','api_access','financial_ledger'
-  ]
+  const [drawerTenant, setDrawerTenant] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -5826,25 +5817,7 @@ function SuperAdminSection({ token }) {
 
   useEffect(() => { load() }, [])
 
-  const loadTenantModules = async (t) => {
-    setSelectedTenant(t)
-    const r = await apiFetch('get', `/admin/tenants/${t.id}`, token)
-    setModules(r.data.modules || [])
-  }
 
-  const toggleModule = async (module, enabled) => {
-    await apiFetch('put', `/admin/tenants/${selectedTenant.id}/modules`, token, { module, enabled })
-    setModules(prev => {
-      const existing = prev.find(m => m.module === module)
-      if (existing) return prev.map(m => m.module === module ? { ...m, enabled } : m)
-      return [...prev, { module, enabled }]
-    })
-  }
-
-  const getModuleState = (module) => {
-    const m = modules.find(x => x.module === module)
-    return m ? m.enabled : null // null = наследует план
-  }
 
   const handleCreate = async () => {
     setCreating(true)
@@ -5972,16 +5945,11 @@ function SuperAdminSection({ token }) {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button onClick={() => loadTenantModules(t)}
-                          className="text-xs text-blue-600 hover:underline font-medium">Модули</button>
-                        <button onClick={() => setManageBilling(t)}
-                          className="text-xs text-violet-600 hover:underline font-medium">Подписка</button>
-                        <button onClick={() => toggleTenant(t)}
-                          className={`text-xs font-medium ${t.is_active ? 'text-red-500 hover:underline' : 'text-green-600 hover:underline'}`}>
-                          {t.is_active ? 'Откл.' : 'Вкл.'}
-                        </button>
-                      </div>
+                      <button onClick={() => setDrawerTenant(t)}
+                        className="flex items-center gap-1 text-xs text-[#0097A7] hover:text-[#00838f] font-semibold transition">
+                        Открыть
+                        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -5992,75 +5960,6 @@ function SuperAdminSection({ token }) {
       )}
 
 
-      {/* Модал управления подпиской тенанта */}
-      {manageBilling && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-white text-lg">Подписка тенанта</h3>
-                <p className="text-sm text-gray-500">{manageBilling.name}</p>
-              </div>
-              <button onClick={() => { setManageBilling(null); setBillingMsg('') }}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
-                <span className="material-symbols-outlined text-gray-400">close</span>
-              </button>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Тарифный план</label>
-                <select value={billingForm.plan} onChange={e => setBillingForm(f => ({...f, plan: e.target.value}))}
-                  className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm dark:bg-gray-800 dark:text-white">
-                  <option value="basic">Basic — 4 990 ₽/мес</option>
-                  <option value="professional">Professional — 9 990 ₽/мес</option>
-                  <option value="enterprise">Enterprise — 24 990 ₽/мес</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Цикл оплаты</label>
-                <div className="flex gap-2">
-                  {[{v:'monthly',l:'Ежемесячно'},{v:'annual',l:'Годовой (-17%)'}].map(c => (
-                    <button key={c.v} onClick={() => setBillingForm(f => ({...f, billing_cycle: c.v}))}
-                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition ${billingForm.billing_cycle === c.v ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                      {c.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider block mb-1">Пробный период (дней, 0 = без trial)</label>
-                <div className="flex gap-2">
-                  {[0, 7, 14, 30].map(d => (
-                    <button key={d} onClick={() => setBillingForm(f => ({...f, trial_days: d}))}
-                      className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition ${billingForm.trial_days === d ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
-                      {d === 0 ? 'Нет' : `${d}д`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {billingMsg && (
-                <div className={`rounded-xl p-3 text-sm font-medium ${billingMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                  {billingMsg.text || billingMsg}
-                </div>
-              )}
-              <button
-                onClick={async () => {
-                  setBillingMsg('')
-                  try {
-                    await apiFetch('post', `/admin/tenants/${manageBilling.id}/subscription`, token, billingForm)
-                    setBillingMsg({ ok: true, text: 'Подписка активирована!' })
-                    load()
-                  } catch(e) {
-                    setBillingMsg({ ok: false, text: e.response?.data?.detail || 'Ошибка' })
-                  }
-                }}
-                className="w-full py-3 bg-[#0097A7] text-white rounded-xl text-sm font-bold hover:bg-[#00838f] transition">
-                Активировать / Обновить подписку
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Tab: Биллинг */}
       {!loading && tab === 'billing' && billing && (
@@ -6099,41 +5998,6 @@ function SuperAdminSection({ token }) {
         </div>
       )}
 
-      {/* Modal: Управление модулями тенанта */}
-      {selectedTenant && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800">
-              <div>
-                <h3 className="font-bold text-gray-900 dark:text-white">Модули: {selectedTenant.name}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Plan: {selectedTenant.plan} | Переопределяет план тенанта</p>
-              </div>
-              <button onClick={() => setSelectedTenant(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-            <div className="p-5 space-y-2">
-              {ALL_MODULES.map(mod => {
-                const state = getModuleState(mod)
-                return (
-                  <div key={mod} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
-                    <div>
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{mod}</span>
-                      {state === null && <span className="ml-2 text-xs text-gray-400">(из плана)</span>}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => toggleModule(mod, true)}
-                        className={`px-2 py-1 rounded text-xs font-medium transition ${state === true ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-green-100'}`}>ВКЛ</button>
-                      <button onClick={() => toggleModule(mod, false)}
-                        className={`px-2 py-1 rounded text-xs font-medium transition ${state === false ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-red-100'}`}>ВЫКЛ</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal: Создание тенанта */}
       {showCreate && (
@@ -6207,6 +6071,21 @@ function SuperAdminSection({ token }) {
 
 
 
+
+      {/* TenantDrawer — правая sliding-панель */}
+      {drawerTenant && (
+        <Suspense fallback={null}>
+          <TenantDrawer
+            token={token}
+            tenant={drawerTenant}
+            onClose={() => setDrawerTenant(null)}
+            onUpdate={(updated) => {
+              setTenants(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t))
+              setDrawerTenant(updated)
+            }}
+          />
+        </Suspense>
+      )}
 
 // ---------------------------------------------------------------------------
 // MisSyncSection — синхронизация с МИС Renovatio
