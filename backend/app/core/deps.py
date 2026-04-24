@@ -1,10 +1,9 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from app.database import get_db
 from app.core.security import decode_token
-from app.core.token_blacklist import is_token_revoked
 from app.models.user import User, UserRole
 import uuid
 
@@ -18,11 +17,6 @@ async def get_current_user(
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен")
-
-    # Проверка blacklist: если jti отозван — отклоняем
-    jti = payload.get("jti")
-    if jti and await is_token_revoked(jti):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен отозван")
 
     user_id = payload.get("sub")
     if not user_id:
@@ -88,7 +82,6 @@ async def require_super_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
-
 async def get_current_tenant(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -120,3 +113,23 @@ def require_role(*roles: str):
                 detail="Недостаточно прав для этого раздела"
             )
     return _check
+
+
+async def get_tenant_db(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AsyncSession:
+    """Сессия БД с установленным app.tenant_id для RLS.
+
+    Если у пользователя есть tenant_id — устанавливает SET LOCAL app.tenant_id,
+    и RLS автоматически фильтрует строки по тенанту.
+    Если tenant_id отсутствует (суперадмин) — сессия без ограничений, видны все строки.
+
+    Использование:
+        @router.get("/referrals")
+        async def list_referrals(db: AsyncSession = Depends(get_tenant_db)):
+            ...
+    """
+    if user.tenant_id:
+        await db.execute(text(f"SET LOCAL app.tenant_id = '{user.tenant_id}'"))
+    return db

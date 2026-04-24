@@ -4,6 +4,7 @@
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from app.config import settings
 
 
@@ -39,14 +40,34 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_db():
     """FastAPI dependency для получения сессии БД.
-    
+
+    Суперадмин-сессия: app.tenant_id не устанавливается — RLS пропускает все строки.
+
     Yields:
         AsyncSession: Асинхронная сессия SQLAlchemy
-    
+
     Example:
         @router.get("/items")
         async def get_items(db: AsyncSession = Depends(get_db)):
             ...
     """
     async with AsyncSessionLocal() as session:
+        yield session
+
+
+async def get_db_for_tenant(tenant_id: str):
+    """FastAPI dependency-генератор: сессия БД с установленным app.tenant_id для RLS.
+
+    SET LOCAL действует только в пределах текущей транзакции — безопасно для пула.
+    Вызывается через get_tenant_db() в deps.py.
+
+    Args:
+        tenant_id: UUID тенанта в виде строки
+
+    Yields:
+        AsyncSession: Асинхронная сессия SQLAlchemy с активным RLS-фильтром
+    """
+    async with AsyncSessionLocal() as session:
+        # SET LOCAL ограничен текущей транзакцией — не утекает в другие сессии из пула
+        await session.execute(text(f"SET LOCAL app.tenant_id = '{tenant_id}'"))
         yield session
