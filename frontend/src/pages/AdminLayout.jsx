@@ -6065,13 +6065,6 @@ function SuperAdminSection({ token }) {
           </div>
         </div>
       )}
-    </div>
-  )
-}
-
-
-
-
       {/* TenantDrawer — правая sliding-панель */}
       {drawerTenant && (
         <Suspense fallback={null}>
@@ -6086,6 +6079,11 @@ function SuperAdminSection({ token }) {
           />
         </Suspense>
       )}
+    </div>
+  )
+}
+
+
 
 // ---------------------------------------------------------------------------
 // MisSyncSection — синхронизация с МИС Renovatio
