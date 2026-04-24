@@ -1,6 +1,7 @@
 import hmac
 import hashlib
 import secrets
+import uuid
 from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from app.config import settings
@@ -32,6 +33,8 @@ def create_access_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode["exp"] = expire
     to_encode["type"] = "access"
+    # jti — уникальный идентификатор токена для blacklist
+    to_encode["jti"] = str(uuid.uuid4())
     return jwt.encode(to_encode, settings.secret_key, algorithm=settings.jwt_algorithm)
 
 

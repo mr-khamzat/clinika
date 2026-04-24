@@ -6,6 +6,7 @@ import logging
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -17,14 +18,19 @@ from app.schemas.auth import TelegramAuthData, PasswordLoginData, TokenResponse
 from app.core.security import (
     create_access_token, create_refresh_token, hash_refresh_token,
     verify_password, hash_password, verify_telegram_init_data,
+    decode_token,
     REFRESH_TOKEN_EXPIRE_DAYS,
 )
+from app.core.token_blacklist import revoke_access_token
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger("auth")
 
 REFRESH_TOKEN_EXPIRE = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+
+# Опциональный bearer — не падает если заголовка нет
+_optional_bearer = HTTPBearer(auto_error=False)
 
 
 def _login_limiter():
@@ -202,11 +208,25 @@ async def refresh_access_token(body: RefreshRequest, db: AsyncSession = Depends(
     return {"access_token": access, "token_type": "bearer", "expires_in": 30 * 60}
 
 
-# ─── Выход (revoke refresh token) ───
+# ─── Выход (revoke refresh token + blacklist access token) ───
 
 @router.post("/logout")
-async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Отзывает refresh token (выход с устройства)."""
+async def logout(
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+):
+    """Отзывает refresh token и добавляет access token в blacklist."""
+    # Добавить текущий access token в blacklist (если передан в заголовке)
+    if credentials and credentials.credentials:
+        payload = decode_token(credentials.credentials)
+        if payload:
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                await revoke_access_token(jti, int(exp))
+
+    # Отозвать refresh token в БД (прежняя логика)
     token_hash = hash_refresh_token(body.refresh_token)
     result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     rt = result.scalar_one_or_none()
@@ -219,8 +239,21 @@ async def logout(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 # ─── Выход со всех устройств ───
 
 @router.post("/logout-all")
-async def logout_all(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Отзывает все refresh токены пользователя."""
+async def logout_all(
+    body: RefreshRequest,
+    db: AsyncSession = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+):
+    """Отзывает все refresh токены пользователя и blacklist текущий access token."""
+    # Добавить текущий access token в blacklist (если передан в заголовке)
+    if credentials and credentials.credentials:
+        payload = decode_token(credentials.credentials)
+        if payload:
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                await revoke_access_token(jti, int(exp))
+
     token_hash = hash_refresh_token(body.refresh_token)
     result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     rt = result.scalar_one_or_none()

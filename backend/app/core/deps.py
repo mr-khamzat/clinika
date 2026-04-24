@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
 from app.core.security import decode_token
+from app.core.token_blacklist import is_token_revoked
 from app.models.user import User, UserRole
 import uuid
 
@@ -17,6 +18,11 @@ async def get_current_user(
     payload = decode_token(token)
     if not payload:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен")
+
+    # Проверка blacklist: если jti отозван — отклоняем
+    jti = payload.get("jti")
+    if jti and await is_token_revoked(jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Токен отозван")
 
     user_id = payload.get("sub")
     if not user_id:
