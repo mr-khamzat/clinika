@@ -109,7 +109,7 @@ export default function CallWidget() {
 
   const loadContacts = useCallback(() => {
     axios.get(API_BASE + '/presence/users', { headers: h })
-      .then(r => setContacts(r.data || []))
+      .then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.users || [])))
       .catch(() => {})
   }, [token])
 
