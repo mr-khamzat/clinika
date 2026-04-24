@@ -19,3 +19,6 @@ fastapi-limiter==0.1.6
 psutil==5.9.8
 docker==7.1.0
 pywebpush==2.3.0
+apscheduler>=3.10.4
+structlog>=24.0.0
+prometheus-client>=0.20.0

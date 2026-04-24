@@ -219,12 +219,13 @@ async def _gather_clinic_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int
 
 async def _gather_bonus_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int) -> dict:
     since = datetime.utcnow() - timedelta(days=days)
+    # PostgreSQL enum bonusstatus хранит значения в верхнем регистре: PAID, PENDING
     rows = await db.execute(text("""
         SELECT
             COUNT(*) as total,
             SUM(amount) as total_amount,
-            SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END) as paid_amount,
-            SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END) as pending_amount,
+            SUM(CASE WHEN status::text = 'PAID' THEN amount ELSE 0 END) as paid_amount,
+            SUM(CASE WHEN status::text = 'PENDING' THEN amount ELSE 0 END) as pending_amount,
             AVG(amount) as avg_amount
         FROM bonuses
         WHERE tenant_id = :tid AND created_at >= :since
@@ -237,6 +238,67 @@ async def _gather_bonus_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int)
         "pending_amount": float(row.pending_amount or 0),
         "avg_amount": round(float(row.avg_amount or 0), 2),
     }
+
+
+# ── История AI (PostgreSQL) ───────────────────────────────────────────────────
+
+HISTORY_MAX = 30
+
+
+async def _save_to_history_db(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, entry: dict) -> None:
+    from app.models.ai_history import AIAnalysisHistory
+    from sqlalchemy import select, func
+    # Удаляем старые записи если превышен лимит
+    count_res = await db.execute(
+        select(func.count()).select_from(AIAnalysisHistory).where(AIAnalysisHistory.tenant_id == tenant_id)
+    )
+    count = count_res.scalar() or 0
+    if count >= HISTORY_MAX:
+        oldest = await db.execute(
+            select(AIAnalysisHistory.id)
+            .where(AIAnalysisHistory.tenant_id == tenant_id)
+            .order_by(AIAnalysisHistory.created_at.asc())
+            .limit(count - HISTORY_MAX + 1)
+        )
+        old_ids = [r[0] for r in oldest]
+        if old_ids:
+            from sqlalchemy import delete
+            await db.execute(delete(AIAnalysisHistory).where(AIAnalysisHistory.id.in_(old_ids)))
+    record = AIAnalysisHistory(
+        tenant_id=tenant_id,
+        created_by_id=user_id,
+        analysis_type=entry.get("type", ""),
+        days=entry.get("days"),
+        result_text=entry.get("result"),
+        stats=entry.get("stats"),
+        model=entry.get("model"),
+    )
+    db.add(record)
+    await db.commit()
+
+
+async def _load_history_db(db: AsyncSession, tenant_id: uuid.UUID, limit: int = 20) -> list:
+    from app.models.ai_history import AIAnalysisHistory
+    from sqlalchemy import select
+    result = await db.execute(
+        select(AIAnalysisHistory)
+        .where(AIAnalysisHistory.tenant_id == tenant_id)
+        .order_by(AIAnalysisHistory.created_at.desc())
+        .limit(limit)
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "type": r.analysis_type,
+            "title": r.analysis_type,
+            "result": r.result_text,
+            "stats": r.stats or {},
+            "model": r.model,
+            "generated_at": r.created_at.isoformat() if r.created_at else None,
+            "days": r.days,
+        }
+        for r in rows
+    ]
 
 
 # ── Конфиг-эндпоинты ──────────────────────────────────────────────────────────
@@ -282,6 +344,17 @@ async def list_ai_models(current_user: User = Depends(get_current_user)):
         for mid, mdata in models.items()
     ]
     return {"models": result, "selected": selected, "provider": prov_name}
+
+
+@router.get("/history", dependencies=[_feat, _mgr])
+async def get_ai_history(
+    limit: int = Query(20, ge=1, le=30),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.tenant_id:
+        return {"history": []}
+    return {"history": await _load_history_db(db, current_user.tenant_id, limit)}
 
 
 @router.get("/balance")
@@ -485,7 +558,7 @@ async def analyze(
 
     try:
         text_result = await _openai_call(messages, cfg, max_tokens=1800)
-        return {
+        result_data = {
             "type": type,
             "title": prompt_cfg["title"],
             "result": text_result,
@@ -493,6 +566,12 @@ async def analyze(
             "model": model_id,
             "generated_at": datetime.utcnow().isoformat(),
         }
+        if current_user.tenant_id:
+            try:
+                await _save_to_history_db(db, current_user.tenant_id, current_user.id, result_data)
+            except Exception:
+                pass
+        return result_data
     except HTTPException:
         raise
     except Exception as e:

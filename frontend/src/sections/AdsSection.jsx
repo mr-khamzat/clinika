@@ -679,7 +679,7 @@ export default function AdsSection({ token }) {
           <span className="material-symbols-outlined text-cyan-600 dark:text-cyan-400 text-lg" style={{fontVariationSettings:"'FILL' 1"}}>info</span>
           <span className="text-sm font-bold text-cyan-800 dark:text-cyan-300">Требования к изображению баннера</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
           {[['🖼️ Формат','JPG, PNG, SVG'],['📐 Ширина','480px'],['📏 Высота','96px / 160px / макс 180px'],['⬛ Соотношение','5:1 (480×96) или 3:1 (480×160)'],['💾 Размер файла','до 2 МБ'],['🎨 Цветовой режим','RGB']].map(([k,v]) => (
             <div key={k} className="bg-white dark:bg-gray-800 rounded-xl px-3 py-2 border border-cyan-100 dark:border-cyan-800">
               <div className="text-gray-500 dark:text-gray-400 mb-0.5">{k}</div>
@@ -689,7 +689,7 @@ export default function AdsSection({ token }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         <StatCard label="Активных" value={activeCount} icon="campaign" colorClass="text-green-500" />
         <StatCard label="Показов" value={totalImpressions.toLocaleString('ru')} icon="visibility" colorClass="text-cyan-500" />
         <StatCard label="Кликов" value={totalClicks.toLocaleString('ru')} icon="ads_click" colorClass="text-violet-500" />
@@ -766,7 +766,7 @@ export default function AdsSection({ token }) {
                         <span className="text-red-500 dark:text-red-400 font-semibold">CTR {adCtr}%</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-1 flex-shrink-0 flex-wrap" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setPreviewAd(ad)} title="Предпросмотр"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-cyan-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                         <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>phone_iphone</span>
@@ -804,7 +804,7 @@ export default function AdsSection({ token }) {
 
                   {isOpen && (
                     <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
-                      <div className="grid grid-cols-4 gap-3 mb-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                         {[
                           { label: 'Показы', value: ad.impressions_count||0, limit: ad.impressions_limit, cls: 'text-cyan-600 dark:text-cyan-400', bar: 'bg-cyan-500' },
                           { label: 'Клики', value: ad.clicks_count||0, limit: ad.clicks_limit, cls: 'text-violet-600 dark:text-violet-400', bar: 'bg-violet-500' },
@@ -818,7 +818,7 @@ export default function AdsSection({ token }) {
                           </div>
                         ))}
                       </div>
-                      <div className="grid grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
                           <div className="text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Карусель</div>
                           <div className="text-sm text-gray-700 dark:text-gray-300 space-y-0.5">

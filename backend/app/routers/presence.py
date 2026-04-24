@@ -23,45 +23,46 @@ router = APIRouter(prefix="/presence", tags=["presence"])
 # ── WebSocket менеджер ────────────────────────────────────────────────────────
 
 class PresenceManager:
-    """Держит активные WebSocket соединения и рассылает обновления присутствия."""
+    """WebSocket presence с Redis Pub/Sub для масштабирования."""
 
     def __init__(self):
-        # {user_id: websocket}
         self.connections: dict[str, WebSocket] = {}
-        # {tenant_id: set of user_ids}
-        self.tenant_users: dict[str, set] = {}
+        self._pubsub_tasks: dict[str, asyncio.Task] = {}
+
+    def _redis(self):
+        import redis.asyncio as aioredis
+        from app.config import settings
+        return aioredis.from_url(settings.redis_url, decode_responses=True)
 
     async def connect(self, ws: WebSocket, user_id: str, tenant_id: str | None):
         await ws.accept()
         self.connections[user_id] = ws
         tid = tenant_id or "__global__"
-        self.tenant_users.setdefault(tid, set()).add(user_id)
+        r = self._redis()
+        await r.hset(f"presence:{tid}", user_id, "online")
+        await r.expire(f"presence:{tid}", 86400)
+        await r.publish(f"pch:{tid}", json.dumps({"event": "join", "user_id": user_id}))
+        await r.aclose()
+        if tid not in self._pubsub_tasks or self._pubsub_tasks[tid].done():
+            self._pubsub_tasks[tid] = asyncio.create_task(self._listen(tid))
 
-    def disconnect(self, user_id: str, tenant_id: str | None):
+    async def disconnect(self, user_id: str, tenant_id: str | None):
         self.connections.pop(user_id, None)
         tid = tenant_id or "__global__"
-        if tid in self.tenant_users:
-            self.tenant_users[tid].discard(user_id)
+        r = self._redis()
+        await r.hdel(f"presence:{tid}", user_id)
+        await r.publish(f"pch:{tid}", json.dumps({"event": "leave", "user_id": user_id}))
+        await r.aclose()
 
     async def broadcast_to_tenant(self, tenant_id: str | None, message: dict, exclude_user: str | None = None):
-        """Разослать всем в тенанте (кроме себя)."""
+        """Публикует через Redis — достигает всех инстансов."""
         tid = tenant_id or "__global__"
-        dead = []
-        for uid in self.tenant_users.get(tid, set()):
-            if uid == exclude_user:
-                continue
-            ws = self.connections.get(uid)
-            if ws:
-                try:
-                    await ws.send_json(message)
-                except Exception:
-                    dead.append(uid)
-        for uid in dead:
-            self.connections.pop(uid, None)
-            self.tenant_users[tid].discard(uid)
+        payload = {**message, "_exclude": exclude_user}
+        r = self._redis()
+        await r.publish(f"pch:{tid}", json.dumps(payload))
+        await r.aclose()
 
     async def send_to_user(self, user_id: str, message: dict) -> bool:
-        """Отправить одному пользователю. Возвращает True если доставлено."""
         ws = self.connections.get(user_id)
         if ws:
             try:
@@ -73,6 +74,45 @@ class PresenceManager:
 
     def is_online(self, user_id: str) -> bool:
         return user_id in self.connections
+
+    async def get_online_set(self, tenant_id: str | None) -> set:
+        """Множество online user_id из Redis (для всех инстансов)."""
+        tid = tenant_id or "__global__"
+        r = self._redis()
+        keys = await r.hkeys(f"presence:{tid}")
+        await r.aclose()
+        return set(keys)
+
+    async def _listen(self, tid: str):
+        """Слушает Redis канал тенанта и доставляет сообщения локальным WS."""
+        import redis.asyncio as aioredis
+        from app.config import settings
+        r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pubsub = r.pubsub()
+        await pubsub.subscribe(f"pch:{tid}")
+        try:
+            async for msg in pubsub.listen():
+                if msg["type"] != "message":
+                    continue
+                try:
+                    data = json.loads(msg["data"])
+                    exclude = data.pop("_exclude", None)
+                    dead = []
+                    for uid, ws in list(self.connections.items()):
+                        if uid == exclude:
+                            continue
+                        try:
+                            await ws.send_json(data)
+                        except Exception:
+                            dead.append(uid)
+                    for uid in dead:
+                        self.connections.pop(uid, None)
+                except Exception:
+                    pass
+        finally:
+            await pubsub.unsubscribe(f"pch:{tid}")
+            await r.aclose()
+            self._pubsub_tasks.pop(tid, None)
 
 
 presence_manager = PresenceManager()
@@ -366,7 +406,7 @@ async def presence_ws(
     except WebSocketDisconnect:
         pass
     finally:
-        presence_manager.disconnect(user_id, tenant_id_str)
+        await presence_manager.disconnect(user_id, tenant_id_str)
         # → offline
         await db.execute(
             update(UserPresence)

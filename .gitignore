@@ -1,11 +1,22 @@
-```
 # Environment
 .env
 .env.local
 .env.*
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
 # Dependencies
 node_modules/
+
+# Build output
+dist/
+build/
 
 # Logs and temp files
 *.log
@@ -13,7 +24,20 @@ node_modules/
 
 # Editors
 .vscode/
+.DS_Store
 
-# Original rules preserved
-*.log
-```
+# Backups
+/opt/backups/
+backups/
+
+# Uploads с историями AI
+uploads/ai_histories/
+
+# Uploads (user files, не в репо)
+uploads/
+
+# Backup файлы редактора
+*.bak
+
+# package-lock (большой, генерируется автоматически)
+frontend/package-lock.json
