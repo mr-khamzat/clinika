@@ -31,6 +31,7 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
 from app.routers.ai import router as ai_router
 from app.routers.recruiter import router as recruiter_router
+from app.routers.supervisor import router as supervisor_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
@@ -122,6 +123,16 @@ async def renew_plugins_job():
     except Exception as e:
         logger.error(f'renew_plugins: {e}')
 
+async def process_webhook_queue_job():
+    """APScheduler: обработка очереди вебхуков (каждую минуту)."""
+    from redis.asyncio import Redis
+    from app.services.webhook_queue import process_webhook_queue
+    r = Redis.from_url(settings.redis_url)
+    try:
+        await process_webhook_queue(r)
+    finally:
+        await r.aclose()
+
 log = get_logger("clinika")
 
 @asynccontextmanager
@@ -156,6 +167,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
+    scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
@@ -432,6 +444,7 @@ app.include_router(webhooks_router)
 app.include_router(ads_router)
 app.include_router(ai_router)
 app.include_router(recruiter_router)
+app.include_router(supervisor_router)
 app.include_router(prometheus_router)
 
 
