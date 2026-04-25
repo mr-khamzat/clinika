@@ -1,298 +1,298 @@
-/**
- * Личный кабинет пациента v2
- * - Табы: Главная / Направления / История МИС / Анализы / Поддержка
- * - Web Push подписка
- * - MIS история приёмов и анализов
- * - PWA установка
- */
 import { useEffect, useState, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 const API = API_BASE
 const TOKEN_KEY = 'clinika_patient_token'
-const REF_KEY = 'clinika_patient_ref'
+const REF_KEY   = 'clinika_patient_ref'
 
-// ─── Helpers ───
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(iso) {
   if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
-function fmtDateTime(iso) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-}
-
-const STATUS_CONFIG = {
-  created:          { label: 'Активно',      bg: 'bg-blue-100 text-blue-700', icon: 'radio_button_checked' },
-  confirmed:        { label: 'Подтверждено', bg: 'bg-emerald-100 text-emerald-700', icon: 'check_circle' },
-  expired:          { label: 'Истекло',      bg: 'bg-gray-100 text-gray-500', icon: 'schedule' },
-  cancel_requested: { label: 'На отмене',    bg: 'bg-yellow-100 text-yellow-700', icon: 'pending' },
-  cancelled:        { label: 'Отменено',     bg: 'bg-red-100 text-red-600', icon: 'cancel' },
+function fmtMis(str) {
+  if (!str) return '—'
+  const m = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+  const [dp, tp] = str.split(' ')
+  if (!dp) return str
+  const [d, mo, y] = dp.split('.')
+  return tp ? `${+d} ${m[+mo-1]} ${y}, ${tp}` : `${+d} ${m[+mo-1]} ${y}`
 }
 
-const COLORS = [
-  'from-blue-500 to-blue-700',
-  'from-violet-500 to-violet-700',
-  'from-emerald-500 to-teal-700',
-  'from-orange-500 to-red-500',
-  'from-pink-500 to-rose-600',
+const STATUS_CFG = {
+  created:          { label: 'Активно',      dot: '#3B82F6', bg: 'rgba(59,130,246,.1)',  text: '#1D4ED8' },
+  confirmed:        { label: 'Подтверждено', dot: '#10B981', bg: 'rgba(16,185,129,.1)',  text: '#065F46' },
+  expired:          { label: 'Истекло',      dot: '#9CA3AF', bg: 'rgba(156,163,175,.1)', text: '#6B7280' },
+  cancel_requested: { label: 'На отмене',    dot: '#F59E0B', bg: 'rgba(245,158,11,.1)',  text: '#92400E' },
+  cancelled:        { label: 'Отменено',     dot: '#EF4444', bg: 'rgba(239,68,68,.1)',   text: '#991B1B' },
+}
+const VISIT_STATUS = {
+  completed: { label: 'Завершён',  color: '#10B981' },
+  upcoming:  { label: 'Предстоит', color: '#3B82F6' },
+  refused:   { label: 'Отменён',   color: '#EF4444' },
+}
+const CARD_GRADS = [
+  ['#1565C0','#0D47A1'],
+  ['#00695C','#004D40'],
+  ['#6A1B9A','#4A148C'],
+  ['#E65100','#BF360C'],
+  ['#1B5E20','#33691E'],
 ]
 
-function StatusPill({ status }) {
-  const c = STATUS_CONFIG[status] || { label: status, bg: 'bg-gray-100 text-gray-500', icon: 'info' }
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${c.bg}`}>
-      <span className="material-symbols-outlined text-sm leading-none" style={{ fontVariationSettings: "'FILL' 1" }}>{c.icon}</span>
-      {c.label}
-    </span>
-  )
-}
-
-// ─── Push Notifications ───
+// ── Push helpers ──────────────────────────────────────────────────────────────
 async function subscribePush(phone, token) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
   try {
     const sw = await navigator.serviceWorker.ready
-    // Get VAPID key
     const keyRes = await axios.get(`${API}/push/vapid-key`)
-    const vapidKey = keyRes.data.public_key
-    // Convert to Uint8Array
-    const b64 = vapidKey.replace(/-/g, '+').replace(/_/g, '/')
+    const b64 = keyRes.data.public_key.replace(/-/g,'+').replace(/_/g,'/')
     const raw = atob(b64)
-    const key = new Uint8Array(raw.split('').map(c => c.charCodeAt(0)))
-
+    const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)))
     const sub = await sw.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key })
-    const subJson = sub.toJSON()
-    await axios.post(`${API}/push/subscribe`, {
-      endpoint: subJson.endpoint,
-      p256dh: subJson.keys.p256dh,
-      auth: subJson.keys.auth,
-      patient_phone: phone,
-      patient_token: token,
-    })
+    const s = sub.toJSON()
+    await axios.post(`${API}/push/subscribe`, { endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth, patient_phone: phone, patient_token: token })
     return true
-  } catch (e) {
-    console.warn('Push subscribe failed:', e)
-    return false
-  }
+  } catch { return false }
 }
-
 async function registerSW() {
   if (!('serviceWorker' in navigator)) return
-  try {
-    await navigator.serviceWorker.register('/' + SLUG + '/sw.js', { scope: '/' + SLUG + '/' })
-  } catch (e) {
-    console.warn('SW register failed:', e)
-  }
+  try { await navigator.serviceWorker.register('/' + SLUG + '/sw.js', { scope: '/' + SLUG + '/' }) } catch {}
 }
 
-// ─── QR Fullscreen ───
+// ── QR Fullscreen ─────────────────────────────────────────────────────────────
 function QrFullscreen({ qr, onClose }) {
   return (
-    <div className="fixed inset-0 bg-white flex flex-col items-center justify-center z-50 px-8" onClick={onClose}>
-      <div className="flex items-center gap-2 mb-6">
-        <div className="w-10 h-10 rounded-2xl bg-blue-600 flex items-center justify-center">
-          <span className="material-symbols-outlined text-white text-xl">medical_services</span>
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center" style={{ background: 'linear-gradient(160deg,#0A2342 0%,#1565C0 100%)' }} onClick={onClose}>
+      <div className="flex items-center gap-3 mb-8">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.15)' }}>
+          <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
         </div>
-        <span className="text-blue-600 text-xl font-bold">Clinika</span>
+        <span className="text-white text-2xl font-extrabold tracking-tight">Clinika</span>
       </div>
-      <p className="text-sm text-gray-500 mb-5 text-center">Покажите этот QR администратору клиники</p>
-      <div className="bg-white p-4 rounded-3xl shadow-2xl border border-gray-100">
-        <img src={`data:image/png;base64,${qr}`} alt="QR" className="w-64 h-64 rounded-2xl" />
+      <p className="text-blue-200 text-sm mb-6 text-center px-8">Покажите этот QR-код администратору клиники</p>
+      <div className="bg-white rounded-3xl p-5 shadow-2xl" style={{ boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
+        <img src={`data:image/png;base64,${qr}`} alt="QR" className="w-64 h-64 rounded-2xl block" />
       </div>
-      <p className="text-xs text-gray-400 mt-6">Нажмите чтобы закрыть</p>
+      <p className="text-blue-300 text-xs mt-8">Нажмите в любом месте, чтобы закрыть</p>
     </div>
   )
 }
 
-// ─── Login screen ───
+// ── Login Screen ──────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin, errorMsg }) {
   const [code, setCode] = useState('')
   const [phone, setPhone] = useState('+7')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(errorMsg || '')
 
-  const handleSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (!code || !phone) { setErr('Введите код и телефон'); return }
     setLoading(true); setErr('')
     try {
-      const res = await axios.post(`${API}/patient/by-code`, { code: parseInt(code), phone })
-      onLogin(res.data.referral_id, res.data.patient_token)
-    } catch (e) {
-      setErr(e.response?.data?.detail || 'Направление не найдено')
-    } finally {
-      setLoading(false)
-    }
+      const r = await axios.post(`${API}/patient/by-code`, { code: parseInt(code), phone })
+      onLogin(r.data.referral_id, r.data.patient_token)
+    } catch (e) { setErr(e.response?.data?.detail || 'Направление не найдено') }
+    finally { setLoading(false) }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex flex-col items-center justify-center px-5">
-      <div className="mb-8 text-center">
-        <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-blue-500/30">
-          <span className="material-symbols-outlined text-white text-4xl" style={{ fontVariationSettings: "'FILL' 1" }}>medical_services</span>
+    <div className="min-h-screen flex flex-col items-center justify-center px-5" style={{ background: 'linear-gradient(160deg,#0A2342 0%,#1565C0 60%,#0097A7 100%)' }}>
+      <style>{`
+        @keyframes floatIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+        .login-card { animation: floatIn .5s cubic-bezier(.22,1,.36,1) }
+      `}</style>
+      {/* Logo */}
+      <div className="mb-10 text-center login-card">
+        <div className="w-24 h-24 rounded-3xl mx-auto mb-5 flex items-center justify-center" style={{ background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,.2)', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+          <span className="material-symbols-outlined text-white text-5xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
         </div>
-        <h1 className="text-3xl font-extrabold text-white">Clinika</h1>
-        <p className="text-slate-400 text-sm mt-1">Личный кабинет пациента</p>
+        <h1 className="text-4xl font-black text-white tracking-tight">Clinika</h1>
+        <p className="text-blue-200 mt-2">Личный кабинет пациента</p>
       </div>
 
-      <div className="w-full max-w-sm bg-white/10 backdrop-blur-lg rounded-3xl p-6 border border-white/10">
-        <h2 className="text-xl font-bold text-white mb-1 text-center">Войти в кабинет</h2>
-        <p className="text-slate-400 text-sm text-center mb-5">Введите код из направления и номер телефона</p>
-
-        <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Card */}
+      <div className="w-full max-w-sm login-card" style={{ animationDelay: '.1s', background: 'rgba(255,255,255,.07)', backdropFilter: 'blur(24px)', borderRadius: 28, border: '1px solid rgba(255,255,255,.12)', padding: 28 }}>
+        <h2 className="text-xl font-bold text-white mb-1">Войти в кабинет</h2>
+        <p className="text-blue-200 text-sm mb-6">Введите код из направления и ваш телефон</p>
+        <form onSubmit={submit} className="space-y-3">
           <div className="relative">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">tag</span>
-            <input type="number" placeholder="Код направления" value={code} onChange={e => setCode(e.target.value)}
-              className="w-full h-14 pl-12 pr-4 bg-white/10 text-white rounded-2xl text-base focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-slate-500" />
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 text-xl pointer-events-none">tag</span>
+            <input type="number" inputMode="numeric" placeholder="Код направления" value={code} onChange={e => setCode(e.target.value)}
+              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none focus:ring-2 focus:ring-white/30"
+              style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)' }} />
           </div>
           <div className="relative">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl pointer-events-none">phone</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 text-xl pointer-events-none">phone</span>
             <input type="tel" placeholder="+7 900 000-00-00" value={phone} onChange={e => setPhone(e.target.value)}
-              className="w-full h-14 pl-12 pr-4 bg-white/10 text-white rounded-2xl text-base focus:outline-none focus:ring-2 focus:ring-blue-400 placeholder-slate-500" />
+              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none focus:ring-2 focus:ring-white/30"
+              style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)' }} />
           </div>
-          {err && <p className="text-red-400 text-sm text-center">{err}</p>}
+          {err && <div className="flex items-center gap-2 bg-red-500/20 text-red-200 rounded-xl px-3 py-2 text-sm"><span className="material-symbols-outlined text-base">error</span>{err}</div>}
           <button type="submit" disabled={loading}
-            className="w-full h-14 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold text-base transition disabled:opacity-50 shadow-lg shadow-blue-600/30">
-            {loading ? 'Поиск...' : 'Найти направление'}
+            className="w-full h-14 rounded-2xl font-bold text-base text-white disabled:opacity-50 transition-all active:scale-[.98]"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', boxShadow: '0 8px 32px rgba(0,151,167,.4)' }}>
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Поиск...
+              </span>
+            ) : 'Найти направление'}
           </button>
         </form>
       </div>
+      <p className="text-blue-300/60 text-xs mt-8">КлиникаСеть — современная медицина</p>
     </div>
   )
 }
 
-// ─── Referral Card ───
+// ── Status Badge ──────────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const c = STATUS_CFG[status] || { label: status, dot: '#9CA3AF', bg: 'rgba(156,163,175,.1)', text: '#6B7280' }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: c.bg, color: c.text }}>
+      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.dot }} />
+      {c.label}
+    </span>
+  )
+}
+
+// ── Referral Card ─────────────────────────────────────────────────────────────
 function ReferralCard({ referral, index, onQr }) {
-  const grad = COLORS[index % COLORS.length]
-  const dateStr = fmtDateTime(referral.appointment_at || referral.created_at)
+  const [g1, g2] = CARD_GRADS[index % CARD_GRADS.length]
+  const isActive = referral.status === 'created' || referral.status === 'confirmed'
 
   return (
-    <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-100">
+    <div className="rounded-3xl overflow-hidden" style={{ boxShadow: '0 4px 24px rgba(0,0,0,.08)', border: '1px solid rgba(0,0,0,.06)' }}>
       {/* Gradient header */}
-      <div className={`bg-gradient-to-br ${grad} p-5 text-white`}>
-        <div className="flex items-start justify-between mb-3">
-          <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center">
-            <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>local_hospital</span>
+      <div className="p-5 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
+        {/* Decorative circles */}
+        <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.07)' }} />
+        <div className="absolute -bottom-10 -left-4 w-24 h-24 rounded-full" style={{ background: 'rgba(255,255,255,.05)' }} />
+        <div className="relative">
+          <div className="flex items-start justify-between mb-4">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.2)' }}>
+              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
+            </div>
+            <StatusBadge status={referral.status} />
           </div>
-          <StatusPill status={referral.status} />
+          <h3 className="text-xl font-extrabold text-white leading-tight">{referral.to_clinic_name || 'Клиника'}</h3>
+          <p className="text-white/70 text-sm mt-1 truncate">{referral.service_name}</p>
         </div>
-        <h3 className="text-xl font-extrabold leading-tight">{referral.to_clinic_name || 'Клиника'}</h3>
-        <p className="text-white/80 text-sm mt-0.5">{referral.service_name}</p>
       </div>
       {/* Body */}
-      <div className="p-4 space-y-2">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <span className="material-symbols-outlined text-base">calendar_today</span>
-          <span>{dateStr}</span>
+      <div className="bg-white p-4 space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Дата</p>
+            <p className="text-sm font-semibold text-gray-800 mt-0.5">
+              {referral.appointment_at ? fmt(referral.appointment_at) : fmt(referral.created_at)}
+            </p>
+          </div>
+          {referral.short_code && (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Код</p>
+              <p className="text-sm font-bold text-gray-800 mt-0.5 tracking-widest">{referral.short_code}</p>
+            </div>
+          )}
         </div>
-        {referral.short_code && (
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="material-symbols-outlined text-base">tag</span>
-            <span>Код: <span className="font-bold text-gray-800 tracking-widest">{referral.short_code}</span></span>
-          </div>
-        )}
         {referral.from_clinic_name && (
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="material-symbols-outlined text-base">arrow_forward</span>
-            <span>Направил: {referral.from_clinic_name}</span>
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            <span>Направлен из: <span className="font-semibold text-gray-700">{referral.from_clinic_name}</span></span>
           </div>
         )}
-        {(referral.status === 'created' || referral.status === 'confirmed') && referral.qr_code && (
+        {referral.notes && (
+          <div className="bg-gray-50 rounded-xl px-3 py-2 text-xs text-gray-600 italic">"{referral.notes}"</div>
+        )}
+        {/* Actions */}
+        {isActive && referral.qr_code && (
           <button onClick={() => onQr(referral.qr_code)}
-            className="mt-1 w-full h-11 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center gap-2 font-semibold text-sm border border-blue-100">
-            <span className="material-symbols-outlined text-base">qr_code_2</span>
-            Показать QR для клиники
+            className="w-full h-12 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-[.98]"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', color: 'white', boxShadow: '0 4px 16px rgba(0,151,167,.3)' }}>
+            <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+            Показать QR-код
           </button>
+        )}
+        {referral.status === 'confirmed' && (
+          <div className="flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2">
+            <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+            <span className="text-emerald-700 text-xs font-semibold">Посещение подтверждено {referral.confirmed_at ? fmt(referral.confirmed_at) : ''}</span>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-// ─── MIS Visit Card ───
-const VISIT_STATUS = {
-  completed: { label: 'Завершён',    bg: 'bg-emerald-50 text-emerald-600' },
-  upcoming:  { label: 'Предстоит',   bg: 'bg-blue-50 text-blue-600' },
-  refused:   { label: 'Отменён',     bg: 'bg-red-50 text-red-500' },
-}
-
+// ── Visit Card ─────────────────────────────────────────────────────────────────
 function fmtMisDate(str) {
   if (!str) return '—'
-  // "25.04.2026 10:00" → "25 апр 2026, 10:00"
-  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
-  const [datePart, timePart] = str.split(' ')
-  if (!datePart) return str
-  const [d, m, y] = datePart.split('.')
-  const mon = months[parseInt(m, 10) - 1] || m
-  return timePart ? `${parseInt(d, 10)} ${mon} ${y}, ${timePart}` : `${parseInt(d, 10)} ${mon} ${y}`
+  const m = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+  const [dp, tp] = str.split(' ')
+  if (!dp) return str
+  const [d, mo, y] = dp.split('.')
+  return tp ? `${+d} ${m[+mo-1]} ${y}, ${tp}` : `${+d} ${m[+mo-1]} ${y}`
 }
+const VISIT_COLORS = { completed: '#10B981', upcoming: '#3B82F6', refused: '#EF4444' }
 
 function VisitCard({ visit }) {
-  const [expanded, setExpanded] = useState(false)
-  // getAppointments structure
-  const dateStr = visit.time_start || visit.date || visit.appointment_date || visit.created_at
-  const doctor = visit.doctor || visit.doctor_name || '—'
-  const clinic = visit.clinic || visit.clinic_name || '—'
+  const [open, setOpen] = useState(false)
   const services = Array.isArray(visit.services) ? visit.services : []
-  const firstService = services[0]?.title || visit.service_name || visit.service || visit.specialty || '—'
-  const status = visit.status || visit.visit_status || ''
-  const sc = VISIT_STATUS[status] || { label: status, bg: 'bg-gray-100 text-gray-500' }
+  const first = services[0]?.title || '—'
+  const doctor = visit.doctor || '—'
+  const clinic = visit.clinic || '—'
+  const status = visit.status || ''
+  const vc = VISIT_STATUS[status] || { label: status, color: '#9CA3AF' }
   const total = visit.sum_value || 0
   const isFirst = visit.is_first_clinic || visit.is_first
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="p-4">
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div className="w-9 h-9 bg-teal-50 rounded-xl flex-shrink-0 flex items-center justify-center">
-              <span className="material-symbols-outlined text-teal-600 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
+    <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
+      <div className="flex items-stretch">
+        {/* Left color bar */}
+        <div className="w-1 flex-shrink-0 rounded-l-2xl" style={{ background: vc.color }} />
+        <div className="flex-1 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 text-sm leading-snug truncate">{first}</p>
+              <p className="text-xs text-gray-400 mt-0.5 truncate">{doctor}</p>
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-gray-800 truncate">{firstService}</p>
-              <p className="text-xs text-gray-400 truncate">{doctor}</p>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {isFirst && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,.1)', color: '#7C3AED' }}>1-й</span>}
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${vc.color}18`, color: vc.color }}>{vc.label}</span>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-            {isFirst && <span className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded-full font-semibold">1-й визит</span>}
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sc.bg}`}>{sc.label}</span>
+          <div className="flex items-center gap-3 mt-2">
+            <span className="flex items-center gap-1 text-xs text-gray-400">
+              <span className="material-symbols-outlined text-sm">schedule</span>
+              {fmtMisDate(visit.time_start)}
+            </span>
+            <span className="flex items-center gap-1 text-xs text-gray-400 truncate">
+              <span className="material-symbols-outlined text-sm">location_on</span>
+              <span className="truncate">{clinic}</span>
+            </span>
           </div>
+          {(total > 0 || services.length > 1) && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
+              {total > 0 && <span className="text-sm font-extrabold" style={{ color: '#0097A7' }}>{total.toLocaleString('ru-RU')} ₽</span>}
+              {services.length > 1 && (
+                <button onClick={() => setOpen(v => !v)} className="flex items-center gap-0.5 text-xs font-semibold ml-auto" style={{ color: '#1565C0' }}>
+                  {open ? 'Скрыть' : `${services.length} услуг`}
+                  <span className="material-symbols-outlined text-sm">{open ? 'expand_less' : 'expand_more'}</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-          <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-sm">schedule</span>
-            {fmtMisDate(dateStr)}
-          </span>
-          <span className="flex items-center gap-1 truncate">
-            <span className="material-symbols-outlined text-sm">location_on</span>
-            <span className="truncate">{clinic}</span>
-          </span>
-        </div>
-        {(services.length > 1 || total > 0) && (
-          <div className="flex items-center justify-between mt-2">
-            {total > 0 && (
-              <span className="text-xs font-bold text-teal-700">{total.toLocaleString('ru-RU')} ₽</span>
-            )}
-            {services.length > 1 && (
-              <button onClick={() => setExpanded(e => !e)}
-                className="text-xs text-[#0097A7] font-semibold ml-auto flex items-center gap-0.5">
-                {expanded ? 'Скрыть' : `+${services.length - 1} услуг`}
-                <span className="material-symbols-outlined text-sm">{expanded ? 'expand_less' : 'expand_more'}</span>
-              </button>
-            )}
-          </div>
-        )}
       </div>
-      {expanded && services.length > 0 && (
-        <div className="border-t border-gray-50 px-4 pb-3 pt-2 space-y-1">
+      {open && services.length > 0 && (
+        <div className="px-4 pb-4 space-y-1.5">
           {services.map((s, i) => (
-            <div key={i} className="flex items-center justify-between text-xs">
-              <span className="text-gray-600 truncate flex-1 mr-2">{s.title || s.service_name || '—'}</span>
-              <span className="text-gray-800 font-semibold flex-shrink-0">{s.value || s.price ? `${parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽` : ''}</span>
+            <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+              <span className="text-xs text-gray-600 flex-1 mr-3 truncate">{s.title || '—'}</span>
+              {(s.value || s.price) && <span className="text-xs font-bold text-gray-800 flex-shrink-0">{parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽</span>}
             </div>
           ))}
         </div>
@@ -301,54 +301,113 @@ function VisitCard({ visit }) {
   )
 }
 
-// ─── Analysis Card ───
-function AnalysisCard({ analysis }) {
-  const name = analysis.name || analysis.analysis_name || analysis.test_name || '—'
-  const date = analysis.date || analysis.created_at || analysis.result_date
-  const result = analysis.result || analysis.value || analysis.result_value
-  const norm = analysis.norm || analysis.reference || analysis.reference_range
-  const status = analysis.status || (result && norm ? 'Готов' : 'В обработке')
+// ── Support Tab ───────────────────────────────────────────────────────────────
+function SupportTab({ phone }) {
+  const [msgs, setMsgs] = useState([])
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const bottomRef = useRef(null)
+
+  const load = useCallback(async () => {
+    if (!phone) return
+    try {
+      const r = await axios.get(`${API}/support/patient/thread`, { params: { phone } })
+      setMsgs(Array.isArray(r.data) ? r.data : [])
+    } catch {}
+    setLoading(false)
+  }, [phone])
+
+  useEffect(() => { load(); const id = setInterval(load, 6000); return () => clearInterval(id) }, [load])
+  useEffect(() => { setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50) }, [msgs])
+
+  const send = async (e) => {
+    e.preventDefault()
+    if (!text.trim() || sending) return
+    const t = text.trim(); setText(''); setSending(true)
+    try { await axios.post(`${API}/support/patient/send`, { phone, text: t }); await load() }
+    catch { setText(t) }
+    setSending(false)
+  }
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-violet-600 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>biotech</span>
-          </div>
-          <p className="text-sm font-semibold text-gray-800 leading-tight">{name}</p>
+    <div className="flex flex-col" style={{ height: 'calc(100svh - 180px)' }}>
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-4 p-4 rounded-2xl" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.2)' }}>
+          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
         </div>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${status === 'Готов' || result ? 'bg-emerald-50 text-emerald-600' : 'bg-yellow-50 text-yellow-600'}`}>
-          {status}
-        </span>
+        <div>
+          <p className="font-bold text-white text-sm">Служба поддержки</p>
+          <p className="text-blue-100 text-xs">Отвечаем в рабочее время</p>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5">
+          <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+          <span className="text-emerald-300 text-xs font-semibold">Онлайн</span>
+        </div>
       </div>
-      {result && (
-        <div className="bg-gray-50 rounded-xl p-2 mt-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-500">Результат</span>
-            <span className="text-sm font-bold text-gray-800">{result}</span>
-          </div>
-          {norm && (
-            <div className="flex items-center justify-between mt-0.5">
-              <span className="text-xs text-gray-400">Норма</span>
-              <span className="text-xs text-gray-500">{norm}</span>
+
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto space-y-2 pb-2">
+          {msgs.length === 0 && (
+            <div className="flex flex-col items-center py-12 text-center">
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
+                <span className="material-symbols-outlined text-blue-400 text-3xl">chat_bubble</span>
+              </div>
+              <p className="text-gray-500 font-semibold text-sm">Начните диалог</p>
+              <p className="text-gray-400 text-xs mt-1">Мы ответим на ваши вопросы</p>
             </div>
           )}
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex ${m.sender === 'patient' ? 'justify-end' : 'justify-start'}`}>
+              {m.sender !== 'patient' && (
+                <div className="w-7 h-7 rounded-full flex items-center justify-center mr-2 mt-1 flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+                  <span className="material-symbols-outlined text-white text-xs" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
+                </div>
+              )}
+              <div style={{
+                maxWidth: '78%',
+                padding: '10px 14px',
+                borderRadius: m.sender === 'patient' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                background: m.sender === 'patient' ? 'linear-gradient(135deg,#1565C0,#0097A7)' : 'white',
+                boxShadow: '0 2px 8px rgba(0,0,0,.08)',
+                border: m.sender !== 'patient' ? '1px solid rgba(0,0,0,.06)' : 'none',
+              }}>
+                <p className="text-sm" style={{ color: m.sender === 'patient' ? 'white' : '#1F2937' }}>{m.text || m.content}</p>
+                <p className="text-[10px] mt-1" style={{ color: m.sender === 'patient' ? 'rgba(255,255,255,.6)' : '#9CA3AF' }}>{fmt(m.created_at)}</p>
+              </div>
+            </div>
+          ))}
+          <div ref={bottomRef} />
         </div>
       )}
-      <p className="text-xs text-gray-400 mt-1.5">{fmt(date)}</p>
+
+      <form onSubmit={send} className="flex gap-2 pt-2">
+        <input value={text} onChange={e => setText(e.target.value)} placeholder="Сообщение..."
+          className="flex-1 h-12 px-4 rounded-2xl text-sm focus:outline-none"
+          style={{ background: 'white', border: '1.5px solid rgba(0,0,0,.08)', boxShadow: '0 2px 8px rgba(0,0,0,.04)' }} />
+        <button type="submit" disabled={!text.trim() || sending}
+          className="w-12 h-12 rounded-2xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
+          style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>send</span>
+        </button>
+      </form>
     </div>
   )
 }
 
-// ─── Main PatientCabinet ───
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function PatientCabinet() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showLogin, setShowLogin] = useState(false)
-  const [fullscreenQr, setFullscreenQr] = useState(null)
   const [tab, setTab] = useState('home')
+  const [fullscreenQr, setFullscreenQr] = useState(null)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
@@ -358,83 +417,53 @@ export default function PatientCabinet() {
   const [bannerIdx, setBannerIdx] = useState(0)
 
   useEffect(() => {
-    // Register SW
     registerSW()
-    // PWA install prompt
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
     window.addEventListener('beforeinstallprompt', handler)
-    // Check push permission
-    if ('Notification' in window && Notification.permission === 'granted') setPushEnabled(true)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
-  // Banner carousel auto-advance
   useEffect(() => {
-    if (bannerAds.length <= 1) return
-    const ms = (bannerAds[0]?.interval_seconds || 5) * 1000
-    const t = setInterval(() => setBannerIdx(i => (i + 1) % bannerAds.length), ms)
-    return () => clearInterval(t)
+    if (bannerAds.length > 1) {
+      const id = setInterval(() => setBannerIdx(i => (i+1) % bannerAds.length), 5000)
+      return () => clearInterval(id)
+    }
   }, [bannerAds.length])
 
   useEffect(() => {
-    // Загружаем активные баннеры для этого тенанта
-    axios.get(API + '/ads/active?ad_type=banner&slug=' + SLUG + '&limit=10')
-      .then(r => { if (r.data && r.data.length > 0) setBannerAds(r.data) })
-      .catch(() => {})
-
-    const params = new URLSearchParams(window.location.search)
-    const t = params.get('t')
-    const referralId = window.location.pathname.split('/p/')[1]?.split('?')[0]
-
-    if (t && referralId) {
-      localStorage.setItem(TOKEN_KEY, t)
-      localStorage.setItem(REF_KEY, referralId)
-      loadData(referralId, t)
+    const token = localStorage.getItem(TOKEN_KEY)
+    const refId = localStorage.getItem(REF_KEY)
+    if (token && refId) {
+      loadData(refId, token)
+      axios.get(`${API}/ads/banners`).then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     } else {
-      const savedToken = localStorage.getItem(TOKEN_KEY)
-      const savedRef = localStorage.getItem(REF_KEY)
-      if (savedToken && savedRef) {
-        loadData(savedRef, savedToken)
-      } else {
-        setLoading(false)
-        setShowLogin(true)
-      }
+      setLoading(false); setShowLogin(true)
     }
   }, [])
 
-  const loadData = async (referralId, token) => {
+  const loadData = async (refId, token) => {
     setLoading(true); setError('')
     try {
-      const res = await axios.get(`${API}/patient/${referralId}?t=${token}`)
-      setData(res.data)
+      const r = await axios.get(`${API}/patient/${refId}?t=${token}`)
+      setData(r.data)
     } catch (e) {
       const msg = e.response?.data?.detail || 'Ошибка загрузки'
       setError(msg)
-      if (e.response?.status === 403) {
-        localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REF_KEY)
-        setShowLogin(true)
-      }
-    } finally {
-      setLoading(false)
-    }
+      if (e.response?.status === 403) { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REF_KEY); setShowLogin(true) }
+    } finally { setLoading(false) }
   }
 
-  const handleLogin = (referralId, token) => {
-    localStorage.setItem(TOKEN_KEY, token)
-    localStorage.setItem(REF_KEY, referralId)
-    setShowLogin(false)
-    loadData(referralId, token)
+  const handleLogin = (refId, token) => {
+    localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(REF_KEY, refId)
+    setShowLogin(false); loadData(refId, token)
   }
 
   const handlePushToggle = async () => {
     if (pushEnabled) return
     setPushLoading(true)
     try {
-      const perm = await Notification.requestPermission()
-      if (perm === 'granted') {
-        const phone = data?.patient_phone
-        const token = localStorage.getItem(TOKEN_KEY)
-        const ok = await subscribePush(phone, token)
+      if ((await Notification.requestPermission()) === 'granted') {
+        const ok = await subscribePush(data?.patient_phone, localStorage.getItem(TOKEN_KEY))
         setPushEnabled(ok)
       }
     } catch {}
@@ -443,8 +472,7 @@ export default function PatientCabinet() {
 
   const handleInstall = async () => {
     if (!deferredPrompt) return
-    deferredPrompt.prompt()
-    await deferredPrompt.userChoice
+    deferredPrompt.prompt(); await deferredPrompt.userChoice
     setDeferredPrompt(null); setShowInstall(false)
   }
 
@@ -453,155 +481,153 @@ export default function PatientCabinet() {
     setData(null); setShowLogin(true)
   }
 
-  // ─── Screens ───
+  // ── Loading ──
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-500/30">
-          <span className="material-symbols-outlined text-white text-3xl animate-pulse">medical_services</span>
-        </div>
-        <div className="w-8 h-8 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-        <p className="text-sm text-gray-400">Загрузка...</p>
+    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(160deg,#0A2342 0%,#1565C0 60%,#0097A7 100%)' }}>
+      <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-6" style={{ background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(12px)' }}>
+        <span className="material-symbols-outlined text-white text-4xl animate-pulse" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
       </div>
+      <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
+      <p className="text-blue-200 text-sm">Загрузка кабинета...</p>
     </div>
   )
 
   if (fullscreenQr) return <QrFullscreen qr={fullscreenQr} onClose={() => setFullscreenQr(null)} />
-
   if (showLogin) return <LoginScreen onLogin={handleLogin} errorMsg={error} />
-
   if (!data) return null
 
-  const { current, other_referrals = [], mis_info, mis_visits = [], mis_analyses = [], patient_name, patient_phone } = data
-  const allReferrals = [current, ...other_referrals]
-  const activeReferrals = allReferrals.filter(r => r.status === 'created' || r.status === 'confirmed')
-  const filteredReferrals = searchQ
-    ? allReferrals.filter(r => (r.to_clinic_name + r.service_name + r.short_code).toLowerCase().includes(searchQ.toLowerCase()))
-    : allReferrals
+  const { current, other_referrals = [], mis_info, mis_visits = [], patient_name, patient_phone } = data
+  const allRefs = [current, ...other_referrals]
+  const activeRefs = allRefs.filter(r => r.status === 'created' || r.status === 'confirmed')
+  const searchedRefs = searchQ ? allRefs.filter(r => (r.to_clinic_name + r.service_name + (r.short_code||'')).toLowerCase().includes(searchQ.toLowerCase())) : allRefs
 
   const TABS = [
-    { key: 'home', icon: 'home', label: 'Главная' },
-    { key: 'referrals', icon: 'assignment', label: 'Направления' },
-    ...(mis_visits.length ? [{ key: 'history', icon: 'history', label: 'История' }] : []),
-    ...(mis_analyses.length ? [{ key: 'analyses', icon: 'biotech', label: 'Анализы' }] : []),
-    { key: 'support', icon: 'chat', label: 'Поддержка' },
+    { key: 'home',      icon: 'home',       label: 'Главная'     },
+    { key: 'referrals', icon: 'assignment',  label: 'Направления' },
+    { key: 'history',   icon: 'history',     label: 'История'     },
+    { key: 'support',   icon: 'chat_bubble', label: 'Чат'         },
   ]
 
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-20">
-      {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-xl border-b border-gray-100 px-5 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>medical_services</span>
-            </div>
-            <div>
-              <span className="text-blue-700 font-bold text-base leading-none block">Clinika</span>
-              <span className="text-gray-400 text-[10px]">{patient_name || patient_phone}</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {!pushEnabled && 'Notification' in window && (
-              <button onClick={handlePushToggle} disabled={pushLoading}
-                className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center"
-                title="Включить уведомления">
-                <span className="material-symbols-outlined text-blue-600 text-xl">notifications</span>
-              </button>
-            )}
-            {pushEnabled && (
-              <div className="w-9 h-9 rounded-full bg-emerald-50 flex items-center justify-center" title="Уведомления включены">
-                <span className="material-symbols-outlined text-emerald-600 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>notifications_active</span>
-              </div>
-            )}
-            <button onClick={handleLogout}
-              className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
-              <span className="material-symbols-outlined text-gray-500 text-xl">logout</span>
-            </button>
-          </div>
-        </div>
-      </header>
+  const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
 
-      {/* Ad Banner Carousel */}
-      {bannerAds.length > 0 && (() => {
-        const THEMES = [
-          { bg: 'linear-gradient(135deg, #003845 0%, #005F6B 40%, #00A7AA 100%)', glow1: 'rgba(0,167,170,.3)', glow2: 'rgba(0,167,170,.6)', icon: 'rgba(0,167,170,.8)' },
-          { bg: 'linear-gradient(135deg, #1a0038 0%, #3b0764 40%, #7c3aed 100%)',  glow1: 'rgba(124,58,237,.3)', glow2: 'rgba(124,58,237,.6)', icon: 'rgba(124,58,237,.8)' },
-          { bg: 'linear-gradient(135deg, #7c1900 0%, #b93000 40%, #ff6a00 100%)',  glow1: 'rgba(255,106,0,.3)',  glow2: 'rgba(255,106,0,.6)',  icon: 'rgba(255,106,0,.8)' },
-        ]
-        const ad = bannerAds[bannerIdx]
-        const theme = THEMES[bannerIdx % THEMES.length]
-        return (
-          <div className="max-w-lg mx-auto px-4 pt-3 pb-1">
-            <style>{`
-              @keyframes adShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
-              @keyframes adFloat { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
-              @keyframes adGlow0 { 0%,100%{box-shadow:0 0 20px rgba(0,167,170,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(0,167,170,.6),0 4px 24px rgba(0,0,0,.18)} }
-              @keyframes adGlow1 { 0%,100%{box-shadow:0 0 20px rgba(124,58,237,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(124,58,237,.6),0 4px 24px rgba(0,0,0,.18)} }
-              @keyframes adGlow2 { 0%,100%{box-shadow:0 0 20px rgba(255,106,0,.3),0 4px 24px rgba(0,0,0,.18)} 50%{box-shadow:0 0 40px rgba(255,106,0,.6),0 4px 24px rgba(0,0,0,.18)} }
-              @keyframes adFadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-            `}</style>
-            <div
-              key={bannerIdx}
-              onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
-              style={{
-                background: theme.bg,
-                borderRadius: 24,
-                padding: '16px 18px',
-                position: 'relative',
-                overflow: 'hidden',
-                cursor: ad.link ? 'pointer' : 'default',
-                animation: `adGlow${bannerIdx % 3} 3s ease-in-out infinite, adFadeIn 0.4s ease`,
-              }}>
-              {/* Shimmer */}
-              <div style={{ position:'absolute', top:0, left:0, right:0, bottom:0, overflow:'hidden', borderRadius:24, pointerEvents:'none' }}>
-                <div style={{ position:'absolute', top:0, bottom:0, width:'60%', background:'linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent)', animation:'adShimmer 3s ease-in-out infinite' }}/>
-              </div>
-              {/* Decorative circles */}
-              <div style={{ position:'absolute', top:-20, right:-20, width:100, height:100, borderRadius:'50%', background:'rgba(255,255,255,.06)' }}/>
-              <div style={{ position:'absolute', bottom:-30, right:60, width:80, height:80, borderRadius:'50%', background:'rgba(255,255,255,.04)' }}/>
-              <div style={{ display:'flex', alignItems:'center', gap:14, position:'relative' }}>
-                {/* Logo mark */}
-                <div style={{ flexShrink:0, width:52, height:52, borderRadius:16, background:'rgba(255,255,255,.15)', display:'flex', alignItems:'center', justifyContent:'center', animation:'adFloat 3s ease-in-out infinite', backdropFilter:'blur(4px)', border:'1px solid rgba(255,255,255,.2)' }}>
-                  <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="11" y="2" width="6" height="24" rx="3" fill="white"/>
-                    <rect x="2" y="11" width="24" height="6" rx="3" fill="white"/>
-                    <circle cx="14" cy="14" r="3" fill={theme.icon}/>
-                  </svg>
-                </div>
-                {/* Text */}
-                <div style={{ flex:1 }}>
-                  <div style={{ display:'flex', alignItems:'baseline', gap:6 }}>
-                    <span style={{ color:'white', fontWeight:800, fontSize:17, lineHeight:1.1, letterSpacing:'-0.3px' }}>{ad.title}</span>
-                    <span style={{ background:'rgba(255,255,255,.2)', color:'rgba(255,255,255,.7)', fontSize:9, fontWeight:600, padding:'1px 5px', borderRadius:4, letterSpacing:.5, flexShrink:0 }}>РЕКЛАМА</span>
-                  </div>
-                  {ad.body && <p style={{ color:'rgba(255,255,255,.75)', fontSize:12.5, margin:'4px 0 0', lineHeight:1.4 }}>{ad.body}</p>}
-                  {ad.link && (
-                    <div style={{ marginTop:8, display:'inline-flex', alignItems:'center', gap:4, background:'rgba(255,255,255,.15)', borderRadius:8, padding:'4px 10px', border:'1px solid rgba(255,255,255,.2)' }}>
-                      <span style={{ color:'white', fontSize:11, fontWeight:600 }}>Подробнее</span>
-                      <span style={{ color:'white', fontSize:12 }}>→</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              {/* Image if provided */}
-              {ad.image_data && (
-                <div style={{ marginTop:12, borderRadius:12, overflow:'hidden' }}>
-                  <img src={`data:${ad.image_mime||'image/png'};base64,${ad.image_data}`}
-                    alt={ad.title}
-                    style={{ width:'100%', display:'block', maxHeight:180, objectFit:'cover' }}
-                    onLoad={() => axios.post(API+'/ads/'+ad.id+'/event',{event_type:'impression'}).catch(()=>{})}
-                  />
+  return (
+    <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
+      <style>{`
+        @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
+        .tab-enter { animation: tabSlide .25s cubic-bezier(.22,1,.36,1) }
+        .card-in { animation: slideUp .35s cubic-bezier(.22,1,.36,1) both }
+        @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+        @keyframes adGlow { 0%,100%{opacity:.7} 50%{opacity:1} }
+      `}</style>
+
+      {/* ── Hero Header ── */}
+      <div className="relative" style={{ background: 'linear-gradient(145deg,#0A2342 0%,#1565C0 70%,#0097A7 100%)', paddingBottom: 32 }}>
+        {/* Decorative blobs */}
+        <div className="absolute top-0 right-0 w-40 h-40 rounded-full" style={{ background: 'rgba(0,151,167,.2)', filter: 'blur(40px)', transform: 'translate(30%,-30%)' }} />
+        <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.05)', filter: 'blur(30px)', transform: 'translate(-30%,30%)' }} />
+
+        <div className="relative max-w-lg mx-auto px-5 pt-12 pb-2">
+          {/* Top bar */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <p className="text-blue-200 text-xs font-medium">Добро пожаловать</p>
+              <h1 className="text-white font-extrabold text-xl leading-tight mt-0.5 truncate max-w-[220px]">{patient_name || patient_phone}</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              {!pushEnabled && 'Notification' in window && (
+                <button onClick={handlePushToggle} disabled={pushLoading}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
+                  style={{ background: 'rgba(255,255,255,.15)' }}>
+                  <span className="material-symbols-outlined text-white text-xl">notifications</span>
+                </button>
+              )}
+              {pushEnabled && (
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,.25)' }}>
+                  <span className="material-symbols-outlined text-emerald-300 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>
                 </div>
               )}
-              {/* Dots indicator */}
+              <button onClick={handleLogout}
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
+                style={{ background: 'rgba(255,255,255,.15)' }}>
+                <span className="material-symbols-outlined text-white/80 text-xl">logout</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Patient hero card */}
+          <div className="rounded-3xl p-5 flex items-center gap-4" style={{ background: 'rgba(255,255,255,.1)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,.15)' }}>
+            {/* Avatar */}
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 font-black text-xl text-white" style={{ background: 'linear-gradient(135deg,#0097A7,#0A2342)', boxShadow: '0 4px 16px rgba(0,0,0,.3)' }}>
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold truncate">{patient_name || '—'}</p>
+              <p className="text-blue-200 text-sm truncate">{patient_phone}</p>
+              {mis_info?.card_number && (
+                <p className="text-blue-300 text-xs mt-0.5">Карта МИС: №{mis_info.card_number}</p>
+              )}
+            </div>
+            {mis_info?.birth_date && (
+              <div className="text-right flex-shrink-0">
+                <p className="text-blue-200 text-[10px]">Возраст</p>
+                <p className="text-white font-bold text-sm">{mis_info.age || mis_info.birth_date}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            {[
+              { val: allRefs.length,    label: 'Направлений', tab: 'referrals', icon: 'assignment',  color: '#93C5FD' },
+              { val: mis_visits.length, label: 'Визитов',     tab: 'history',   icon: 'history',     color: '#6EE7B7' },
+              { val: activeRefs.length, label: 'Активных',    tab: 'referrals', icon: 'radio_button_checked', color: '#FCA5A5' },
+            ].map(s => (
+              <button key={s.tab + s.label} onClick={() => setTab(s.tab)}
+                className="rounded-2xl py-3 px-2 text-center transition-all active:scale-95"
+                style={{ background: 'rgba(255,255,255,.12)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,.12)' }}>
+                <span className="material-symbols-outlined text-sm mb-1 block" style={{ color: s.color, fontVariationSettings:"'FILL' 1" }}>{s.icon}</span>
+                <p className="text-xl font-black text-white leading-none">{s.val}</p>
+                <p className="text-[10px] font-medium mt-1" style={{ color: 'rgba(255,255,255,.6)' }}>{s.label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Ad Banner ── */}
+      {bannerAds.length > 0 && (() => {
+        const THEMES = [
+          { bg: 'linear-gradient(135deg,#003845,#0097A7)', glow: 'rgba(0,151,167,.4)' },
+          { bg: 'linear-gradient(135deg,#1a0038,#7c3aed)', glow: 'rgba(124,58,237,.4)' },
+          { bg: 'linear-gradient(135deg,#7c1900,#ff6a00)', glow: 'rgba(255,106,0,.4)'  },
+        ]
+        const ad = bannerAds[bannerIdx]
+        const th = THEMES[bannerIdx % THEMES.length]
+        return (
+          <div className="max-w-lg mx-auto px-4 -mt-4 mb-0 relative z-10">
+            <div key={bannerIdx}
+              onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
+              className="rounded-2xl p-4 relative overflow-hidden cursor-pointer"
+              style={{ background: th.bg, boxShadow: `0 4px 24px ${th.glow}` }}>
+              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                <div className="absolute inset-0 w-1/2" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)', animation: 'shimmer 3s ease-in-out infinite' }} />
+              </div>
+              <div className="flex items-center gap-3 relative">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
+                  <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>campaign</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-bold text-sm truncate">{ad.title}</p>
+                  {ad.body && <p className="text-white/70 text-xs mt-0.5 truncate">{ad.body}</p>}
+                </div>
+                <span className="text-white/60 text-xs bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0">РЕКЛАМА</span>
+              </div>
               {bannerAds.length > 1 && (
-                <div style={{ display:'flex', justifyContent:'center', gap:5, marginTop:12, position:'relative' }}>
+                <div className="flex justify-center gap-1.5 mt-3">
                   {bannerAds.map((_,i) => (
-                    <div key={i}
-                      onClick={e => { e.stopPropagation(); setBannerIdx(i) }}
-                      style={{ width: i===bannerIdx ? 18 : 6, height:6, borderRadius:3, background: i===bannerIdx ? 'white' : 'rgba(255,255,255,.4)', transition:'all .3s', cursor:'pointer' }}
-                    />
+                    <div key={i} onClick={e=>{e.stopPropagation();setBannerIdx(i)}}
+                      style={{ width: i===bannerIdx ? 16 : 5, height: 5, borderRadius: 3, background: i===bannerIdx ? 'white' : 'rgba(255,255,255,.4)', transition: 'all .3s', cursor: 'pointer' }} />
                   ))}
                 </div>
               )}
@@ -610,310 +636,180 @@ export default function PatientCabinet() {
         )
       })()}
 
+      {/* ── Content ── */}
       <div className="max-w-lg mx-auto px-4 pt-5">
-        {/* PWA banner */}
+        {/* PWA install */}
         {showInstall && (
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-3xl p-4 mb-4 flex items-center gap-3 text-white">
-            <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-xl">download</span>
-            </div>
+          <div className="rounded-2xl p-4 mb-4 flex items-center gap-3" style={{ background: 'linear-gradient(135deg,#1565C0,#0097A7)', boxShadow: '0 4px 20px rgba(21,101,192,.3)' }}>
+            <span className="material-symbols-outlined text-white text-2xl flex-shrink-0">download</span>
             <div className="flex-1">
-              <p className="text-sm font-bold">Добавить на экран</p>
-              <p className="text-xs text-blue-200">Быстрый доступ к кабинету</p>
+              <p className="text-white font-bold text-sm">Установить приложение</p>
+              <p className="text-blue-100 text-xs">Быстрый доступ к кабинету</p>
             </div>
-            <button onClick={handleInstall}
-              className="bg-white text-blue-700 rounded-xl px-3 py-1.5 text-xs font-bold flex-shrink-0">
-              Добавить
-            </button>
-            <button onClick={() => setShowInstall(false)} className="text-white/70 text-xl flex-shrink-0">×</button>
+            <button onClick={handleInstall} className="bg-white text-blue-700 rounded-xl px-3 py-1.5 text-xs font-bold flex-shrink-0">Добавить</button>
+            <button onClick={() => setShowInstall(false)} className="text-white/60 text-xl leading-none flex-shrink-0">×</button>
           </div>
         )}
 
-        {/* ─── HOME TAB ─── */}
+        {/* ── HOME ── */}
         {tab === 'home' && (
-          <div className="space-y-4">
-            {/* Patient card */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-5 text-white">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 rounded-full bg-white/15 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>person</span>
+          <div className="space-y-5 tab-enter">
+            {/* Active QR — show current referral's QR prominently */}
+            {current?.status === 'created' && current?.qr_code && (
+              <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#0097A7 0%,#1565C0 100%)', boxShadow: '0 8px 32px rgba(0,151,167,.3)' }}>
+                <div className="p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                    <p className="text-emerald-300 text-xs font-bold uppercase tracking-wide">Активное направление</p>
+                  </div>
+                  <h3 className="text-white font-extrabold text-lg leading-tight">{current.to_clinic_name}</h3>
+                  <p className="text-blue-200 text-sm mt-0.5">{current.service_name}</p>
                 </div>
-                <div>
-                  <p className="font-bold text-lg leading-tight">{patient_name || 'Пациент'}</p>
-                  <p className="text-slate-400 text-sm">{patient_phone}</p>
-                </div>
+                <button onClick={() => setFullscreenQr(current.qr_code)}
+                  className="w-full py-4 flex items-center justify-center gap-3 transition-all active:opacity-80"
+                  style={{ background: 'rgba(0,0,0,.25)', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+                  <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+                  <div className="text-left">
+                    <p className="text-white font-bold text-base">Показать QR-код</p>
+                    <p className="text-blue-200 text-xs">Для предъявления на стойке</p>
+                  </div>
+                  <span className="material-symbols-outlined text-white/60 text-xl ml-auto">chevron_right</span>
+                </button>
               </div>
-              {mis_info && (
-                <div className="grid grid-cols-2 gap-2">
-                  {mis_info.card_number && (
-                    <div className="bg-white/10 rounded-2xl p-2.5">
-                      <p className="text-xs text-slate-400">Карта МИС</p>
-                      <p className="font-bold text-sm mt-0.5">№ {mis_info.card_number}</p>
-                    </div>
-                  )}
-                  {mis_info.birth_date && (
-                    <div className="bg-white/10 rounded-2xl p-2.5">
-                      <p className="text-xs text-slate-400">Дата рождения</p>
-                      <p className="font-bold text-sm mt-0.5">{mis_info.birth_date}</p>
-                    </div>
-                  )}
-                  {mis_info.gender && (
-                    <div className="bg-white/10 rounded-2xl p-2.5">
-                      <p className="text-xs text-slate-400">Пол</p>
-                      <p className="font-bold text-sm mt-0.5">{mis_info.gender}</p>
-                    </div>
-                  )}
-                  {mis_info.has_account && (
-                    <div className="bg-emerald-500/20 rounded-2xl p-2.5 flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-emerald-400 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
-                      <p className="text-emerald-300 text-xs font-semibold">В реестре МИС</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
 
-            {/* Active referrals summary */}
-            {activeReferrals.length > 0 && (
+            {/* Recent active referrals */}
+            {activeRefs.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-bold text-gray-800">Активные направления</h2>
-                  <button onClick={() => setTab('referrals')}
-                    className="text-sm text-blue-600 font-semibold flex items-center gap-0.5">
+                  <h2 className="font-bold text-gray-800">Активные направления</h2>
+                  <button onClick={() => setTab('referrals')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
                     Все <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
                 </div>
-                <div className="space-y-3">
-                  {activeReferrals.slice(0, 2).map((r, i) => (
-                    <div key={r.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${COLORS[i % COLORS.length]} flex items-center justify-center flex-shrink-0`}>
-                        <span className="material-symbols-outlined text-white text-base" style={{ fontVariationSettings: "'FILL' 1" }}>local_hospital</span>
+                <div className="space-y-2">
+                  {activeRefs.slice(0,2).map((r,i) => (
+                    <div key={r.id} className="bg-white rounded-2xl p-3.5 flex items-center gap-3 card-in" style={{ border: '1px solid rgba(0,0,0,.05)', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg,${CARD_GRADS[i%CARD_GRADS.length][0]},${CARD_GRADS[i%CARD_GRADS.length][1]})` }}>
+                        <span className="material-symbols-outlined text-white text-base" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{r.to_clinic_name}</p>
+                        <p className="text-sm font-bold text-gray-800 truncate">{r.to_clinic_name}</p>
                         <p className="text-xs text-gray-400 truncate">{r.service_name}</p>
                       </div>
-                      <StatusPill status={r.status} />
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {r.short_code && <span className="text-xs font-bold text-gray-500 tracking-wider">{r.short_code}</span>}
+                        <StatusBadge status={r.status} />
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Quick stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => setTab('referrals')}
-                className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
-                <p className="text-2xl font-extrabold text-blue-600">{allReferrals.length}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Направлений</p>
-              </button>
-              {mis_visits.length > 0 ? (
-                <button onClick={() => setTab('history')}
-                  className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
-                  <p className="text-2xl font-extrabold text-teal-600">{mis_visits.length}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Приёмов</p>
-                </button>
-              ) : (
-                <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
-                  <p className="text-2xl font-extrabold text-gray-300">—</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Приёмов</p>
-                </div>
-              )}
-              {mis_analyses.length > 0 ? (
-                <button onClick={() => setTab('analyses')}
-                  className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
-                  <p className="text-2xl font-extrabold text-violet-600">{mis_analyses.length}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Анализов</p>
-                </button>
-              ) : (
-                <div className="bg-white rounded-2xl p-4 text-center border border-gray-100 shadow-sm">
-                  <p className="text-2xl font-extrabold text-gray-300">—</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Анализов</p>
-                </div>
-              )}
-            </div>
-
             {/* Recent visit */}
-            {mis_visits[0] && (
+            {mis_visits.length > 0 && (
               <div>
-                <h2 className="text-base font-bold text-gray-800 mb-3">Последний приём</h2>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-bold text-gray-800">Последний визит</h2>
+                  <button onClick={() => setTab('history')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
+                    История <span className="material-symbols-outlined text-sm">chevron_right</span>
+                  </button>
+                </div>
                 <VisitCard visit={mis_visits[0]} />
               </div>
             )}
 
-            {/* Recent analysis */}
-            {mis_analyses[0] && (
-              <div>
-                <h2 className="text-base font-bold text-gray-800 mb-3">Последний анализ</h2>
-                <AnalysisCard analysis={mis_analyses[0]} />
+            {/* Empty state */}
+            {allRefs.length === 0 && mis_visits.length === 0 && (
+              <div className="bg-white rounded-3xl p-8 text-center" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+                <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
+                  <span className="material-symbols-outlined text-blue-400 text-3xl">medical_services</span>
+                </div>
+                <p className="text-gray-700 font-bold">Добро пожаловать!</p>
+                <p className="text-gray-400 text-sm mt-1">Здесь появятся ваши направления и история визитов</p>
               </div>
             )}
           </div>
         )}
 
-        {/* ─── REFERRALS TAB ─── */}
+        {/* ── REFERRALS ── */}
         {tab === 'referrals' && (
-          <div>
+          <div className="tab-enter">
             <div className="relative mb-4">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl pointer-events-none">search</span>
-              <input type="text" placeholder="Поиск по клинике, услуге..." value={searchQ}
-                onChange={e => setSearchQ(e.target.value)}
-                className="w-full h-12 pl-12 pr-4 bg-white border border-gray-100 text-gray-800 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+              <input type="text" placeholder="Поиск по клинике, услуге..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
+                className="w-full h-12 pl-12 pr-4 rounded-2xl text-sm focus:outline-none focus:ring-2"
+                style={{ background: 'white', border: '1.5px solid rgba(0,0,0,.08)', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }} />
             </div>
-            {filteredReferrals.length === 0 ? (
+            {searchedRefs.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-3xl flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-4xl text-gray-300">inbox</span>
+                <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={{ background: '#E5E7EB' }}>
+                  <span className="material-symbols-outlined text-3xl text-gray-400">inbox</span>
                 </div>
-                <p className="text-gray-400 font-medium">Направлений нет</p>
+                <p className="text-gray-500 font-semibold">Направлений нет</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {filteredReferrals.map((r, i) => (
-                  <ReferralCard key={r.id} referral={r} index={i} onQr={setFullscreenQr} />
-                ))}
+                {searchedRefs.map((r, i) => <ReferralCard key={r.id} referral={r} index={i} onQr={setFullscreenQr} />)}
               </div>
             )}
           </div>
         )}
 
-        {/* ─── HISTORY TAB ─── */}
+        {/* ── HISTORY ── */}
         {tab === 'history' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-800 mb-4">История приёмов</h2>
+          <div className="tab-enter">
             {mis_visits.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-3xl flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-4xl text-gray-300">history</span>
+              <div className="flex flex-col items-center py-20 text-center">
+                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: 'linear-gradient(135deg,#D1FAE5,#A7F3D0)' }}>
+                  <span className="material-symbols-outlined text-4xl text-emerald-500">history</span>
                 </div>
-                <p className="text-gray-400 font-medium">История приёмов из МИС</p>
-                <p className="text-gray-300 text-sm mt-1">Данные появятся после синхронизации</p>
+                <p className="text-gray-700 font-bold text-base">История пуста</p>
+                <p className="text-gray-400 text-sm mt-2 max-w-[240px]">После первого визита в клинику ваша история появится здесь</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {mis_visits.map((v, i) => <VisitCard key={i} visit={v} />)}
-              </div>
+              <>
+                <div className="flex items-center gap-2 mb-4 p-3 rounded-2xl" style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.15)' }}>
+                  <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>verified</span>
+                  <p className="text-emerald-700 text-xs font-semibold">Данные из медицинской системы клиники</p>
+                </div>
+                <div className="space-y-3">
+                  {mis_visits.map((v, i) => <VisitCard key={i} visit={v} />)}
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {/* ─── ANALYSES TAB ─── */}
-        {tab === 'analyses' && (
-          <div>
-            <h2 className="text-lg font-bold text-gray-800 mb-4">Анализы и исследования</h2>
-            {mis_analyses.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-center">
-                <div className="w-16 h-16 bg-gray-100 rounded-3xl flex items-center justify-center mb-4">
-                  <span className="material-symbols-outlined text-4xl text-gray-300">biotech</span>
-                </div>
-                <p className="text-gray-400 font-medium">Результаты анализов</p>
-                <p className="text-gray-300 text-sm mt-1">Данные загружаются из МИС</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {mis_analyses.map((a, i) => <AnalysisCard key={i} analysis={a} />)}
-              </div>
-            )}
+        {/* ── SUPPORT ── */}
+        {tab === 'support' && (
+          <div className="tab-enter">
+            <SupportTab phone={patient_phone} token={localStorage.getItem(TOKEN_KEY)} />
           </div>
         )}
-
-        {/* ─── SUPPORT TAB ─── */}
-        {tab === 'support' && <SupportTab phone={patient_phone} token={localStorage.getItem(TOKEN_KEY)} />}
       </div>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-gray-100 px-4 pb-safe z-40">
-        <div className="max-w-lg mx-auto flex items-center justify-around py-2">
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-xl transition ${tab === t.key ? 'text-blue-600' : 'text-gray-400'}`}>
-              <span className="material-symbols-outlined text-2xl leading-none"
-                style={tab === t.key ? { fontVariationSettings: "'FILL' 1" } : {}}>
-                {t.icon}
-              </span>
-              <span className="text-[10px] font-medium">{t.label}</span>
-            </button>
-          ))}
+      {/* ── Bottom Navigation ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40" style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom,0px)' }}>
+        <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2">
+          {TABS.map(t => {
+            const isActive = tab === t.key
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-2xl transition-all"
+                style={{ color: isActive ? '#1565C0' : '#9CA3AF', background: isActive ? 'rgba(21,101,192,.08)' : 'transparent' }}>
+                <span className="material-symbols-outlined text-2xl leading-none transition-all"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0", transform: isActive ? 'scale(1.1)' : 'scale(1)' }}>
+                  {t.icon}
+                </span>
+                <span className="text-[10px] font-semibold">{t.label}</span>
+                {isActive && <span className="w-1 h-1 rounded-full" style={{ background: '#1565C0' }} />}
+              </button>
+            )
+          })}
         </div>
-      </nav>
-    </div>
-  )
-}
-
-// ─── Support Chat Tab ───
-function SupportTab({ phone, token }) {
-  const [messages, setMessages] = useState([])
-  const [text, setText] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [sending, setSending] = useState(false)
-  const bottomRef = useRef(null)
-
-  const load = useCallback(async () => {
-    if (!phone) return
-    try {
-      const res = await axios.get(`${API}/support/patient/thread`, { params: { phone } })
-      setMessages(Array.isArray(res.data) ? res.data : [])
-    } catch {}
-    setLoading(false)
-  }, [phone])
-
-  useEffect(() => {
-    load()
-    const id = setInterval(load, 6000)
-    return () => clearInterval(id)
-  }, [load])
-
-  useEffect(() => {
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
-  }, [messages])
-
-  const send = async (e) => {
-    e.preventDefault()
-    if (!text.trim() || sending) return
-    const t = text.trim(); setText(''); setSending(true)
-    try {
-      await axios.post(`${API}/support/patient/send`, { phone, text: t })
-      await load()
-    } catch { setText(t) }
-    setSending(false)
-  }
-
-  if (loading) return <div className="text-center py-10 text-gray-400">Загрузка...</div>
-
-  return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 160px)' }}>
-      <h2 className="text-lg font-bold text-gray-800 mb-3">Поддержка</h2>
-      <div className="flex-1 overflow-y-auto space-y-2 mb-3">
-        {messages.length === 0 && (
-          <div className="text-center py-10 text-gray-400 text-sm">
-            <span className="material-symbols-outlined text-4xl block mb-2 text-gray-200">chat</span>
-            Напишите нам — мы ответим в рабочее время
-          </div>
-        )}
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.sender === 'patient' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
-              m.sender === 'patient'
-                ? 'bg-blue-600 text-white rounded-br-sm'
-                : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm'
-            }`}>
-              {m.text || m.content}
-              <p className={`text-[10px] mt-0.5 ${m.sender === 'patient' ? 'text-blue-200' : 'text-gray-400'}`}>
-                {fmt(m.created_at)}
-              </p>
-            </div>
-          </div>
-        ))}
-        <div ref={bottomRef} />
       </div>
-      <form onSubmit={send} className="flex gap-2">
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="Сообщение..."
-          className="flex-1 h-11 px-4 bg-white border border-gray-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-        <button type="submit" disabled={!text.trim() || sending}
-          className="w-11 h-11 bg-blue-600 text-white rounded-2xl flex items-center justify-center disabled:opacity-50">
-          <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>send</span>
-        </button>
-      </form>
     </div>
   )
 }
