@@ -57,7 +57,7 @@ const NAV = [
   { key: 'referrals',  label: 'Направления',  icon: 'moving' },
   { key: 'services',   label: 'Услуги',       icon: 'medical_services' },
   { key: 'analytics',  label: 'Аналитика',    icon: 'bar_chart' },
-  { key: 'bonuses',    label: 'Бонусы',       icon: 'savings' },
+  { key: 'bonuses',    label: 'Бонусы',       icon: 'payments' },
   { key: 'billing',    label: 'Биллинг',      icon: 'receipt_long' },
   { key: 'modules',    label: 'Модули',       icon: 'extension' },
   { key: 'mis',        label: 'МИС',          icon: 'sync_alt' },
@@ -800,32 +800,35 @@ function AnalyticsSection({ token }) {
 
       {overview && (
         <>
+          {/* API: {current:{total, confirmed, conversion_pct, bonuses_paid, bonuses_pending}, previous:{...}, delta:{...}} */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetaCard label="Направлений" value={fmt(overview.current?.total_referrals)} color="#0097A7" />
-            <MetaCard label="Конверсия" value={`${overview.conversion_rate ?? 0}%`} color="#166534" />
-            <MetaCard label="Пациентов" value={fmt(overview.current?.unique_patients)} color="#7c3aed" />
-            <MetaCard label="Средний бонус" value={`${fmt(overview.current?.avg_bonus)} ₸`} color="#b45309" />
+            <MetaCard label="Направлений" value={fmt(overview.current?.total)} color="#0097A7" />
+            <MetaCard label="Конверсия" value={`${overview.current?.conversion_pct ?? 0}%`} color="#166534" />
+            <MetaCard label="Подтверждено" value={fmt(overview.current?.confirmed)} color="#7c3aed" />
+            <MetaCard label="Бонусы выплачены" value={`${fmt(overview.current?.bonuses_paid)} ₸`} color="#b45309" />
           </div>
 
           {overview.previous && (
             <div className="bg-white rounded-2xl shadow-sm p-5">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">Сравнение периодов</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-4">Сравнение с прошлым периодом</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'Направлений', cur: overview.current?.total_referrals, prev: overview.previous?.total_referrals },
-                  { label: 'Конверсия', cur: overview.conversion_rate, prev: overview.prev_conversion_rate, pct: true },
-                  { label: 'Пациентов', cur: overview.current?.unique_patients, prev: overview.previous?.unique_patients },
-                  { label: 'Ср. бонус', cur: overview.current?.avg_bonus, prev: overview.previous?.avg_bonus },
+                  { label: 'Направлений',  cur: overview.current?.total,           prev: overview.previous?.total },
+                  { label: 'Конверсия',    cur: overview.current?.conversion_pct,  prev: overview.previous?.conversion_pct, pct: true },
+                  { label: 'Подтверждено', cur: overview.current?.confirmed,        prev: overview.previous?.confirmed },
+                  { label: 'Бонусы',       cur: overview.current?.bonuses_paid,    prev: overview.previous?.bonuses_paid },
                 ].map(m => {
-                  const delta = m.pct ? (m.cur - m.prev) : (m.cur - m.prev)
+                  const delta = (Number(m.cur) || 0) - (Number(m.prev) || 0)
                   const up = delta >= 0
                   return (
                     <div key={m.label} className="text-center p-3 rounded-xl bg-gray-50">
                       <div className="text-xs text-gray-400 mb-1">{m.label}</div>
                       <div className="text-lg font-bold text-gray-800">{fmt(m.cur)}{m.pct ? '%' : ''}</div>
-                      <div className={`text-xs font-semibold mt-1 ${up ? 'text-green-600' : 'text-red-500'}`}>
-                        {up ? '↑' : '↓'} {fmt(Math.abs(delta))}{m.pct ? '%' : ''} vs прошлый период
-                      </div>
+                      {m.prev != null && (
+                        <div className={`text-xs font-semibold mt-1 ${up ? 'text-green-600' : 'text-red-500'}`}>
+                          {up ? '↑' : '↓'} {fmt(Math.abs(delta))}{m.pct ? '%' : ''} vs прошлый
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -873,11 +876,13 @@ function AnalyticsSection({ token }) {
 }
 
 // ── BonusesSection ────────────────────────────────────────────────────────────
+// API /manager/reports/bonuses returns pre-grouped:
+// [{admin_id, full_name, clinic_name, pending_total, paid_total, pending_bonuses:[{bonus_id,service_name,patient_phone,amount,confirmed_at}], paid_bonuses:[...]}]
 function BonusesSection({ token }) {
-  const [items, setItems] = useState([])
+  const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('pending') // 'pending' | 'paid'
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('pending')
   const [paying, setPaying] = useState(null)
   const [payAll, setPayAll] = useState(null)
   const a = api(token)
@@ -885,11 +890,11 @@ function BonusesSection({ token }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await a.get('/manager/reports/bonuses', { status: statusFilter === 'all' ? undefined : statusFilter })
-      setItems(Array.isArray(r.data) ? r.data : [])
-    } catch { setItems([]) }
+      const r = await a.get('/manager/reports/bonuses')
+      setGroups(Array.isArray(r.data) ? r.data : [])
+    } catch { setGroups([]) }
     setLoading(false)
-  }, [token, statusFilter])
+  }, [token])
 
   useEffect(() => { load() }, [load])
 
@@ -898,11 +903,8 @@ function BonusesSection({ token }) {
     try {
       await a.patch(`/bonuses/${bonusId}/mark-paid`)
       load()
-    } catch (ex) {
-      alert(ex?.response?.data?.detail || 'Ошибка')
-    } finally {
-      setPaying(null)
-    }
+    } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') }
+    finally { setPaying(null) }
   }
 
   const handlePayAll = async (adminId) => {
@@ -911,106 +913,100 @@ function BonusesSection({ token }) {
     try {
       await a.post(`/manager/bonuses/mark-paid-all/${adminId}`)
       load()
-    } catch (ex) {
-      alert(ex?.response?.data?.detail || 'Ошибка')
-    } finally {
-      setPayAll(null)
-    }
+    } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') }
+    finally { setPayAll(null) }
   }
 
-  // Group by admin
-  const grouped = useMemo(() => {
-    const filtered = items.filter(b => {
-      if (!search.trim()) return true
-      const q = search.toLowerCase()
-      return (b.admin_name || '').toLowerCase().includes(q) ||
-        (b.patient_name || '').toLowerCase().includes(q)
-    })
-    const map = {}
-    filtered.forEach(b => {
-      const key = b.admin_id || '__none__'
-      if (!map[key]) map[key] = { name: b.admin_name || 'Неизвестно', items: [], total: 0 }
-      map[key].items.push(b)
-      if (b.status === 'pending') map[key].total += Number(b.amount || 0)
-    })
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total)
-  }, [items, search])
+  const totalPending = useMemo(() => groups.reduce((s, g) => s + Number(g.pending_total || 0), 0), [groups])
 
-  const total = useMemo(() => items.filter(b => b.status === 'pending').reduce((s, b) => s + Number(b.amount || 0), 0), [items])
+  const filtered = useMemo(() => groups.filter(g => {
+    if (!search.trim()) return true
+    return (g.full_name || '').toLowerCase().includes(search.toLowerCase())
+  }).filter(g => tab === 'pending' ? g.pending_total > 0 || g.pending_bonuses?.length > 0 : g.paid_total > 0 || g.paid_bonuses?.length > 0), [groups, search, tab])
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-xl font-bold text-gray-800">Бонусы</h2>
-        {total > 0 && (
+        {totalPending > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm font-semibold text-amber-700">
-            К выплате: {fmt(Math.round(total))} ₸
+            К выплате: {fmt(Math.round(totalPending))} ₸
           </div>
         )}
       </div>
 
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="flex gap-1.5">
-          {[{ k: 'pending', l: 'К выплате' }, { k: 'paid', l: 'Выплачены' }, { k: 'all', l: 'Все' }].map(s => (
-            <button key={s.k} onClick={() => setStatusFilter(s.k)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${statusFilter === s.k ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+          {[{ k: 'pending', l: 'К выплате' }, { k: 'paid', l: 'Выплачены' }].map(s => (
+            <button key={s.k} onClick={() => setTab(s.k)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${tab === s.k ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
               {s.l}
             </button>
           ))}
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск..."
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по сотруднику..."
           className="flex-1 min-w-40 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0097A7]" />
       </div>
 
-      {loading ? <Spinner /> : grouped.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center text-gray-400 text-sm shadow-sm">Бонусов нет</div>
+      {loading ? <Spinner /> : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center text-gray-400 text-sm shadow-sm">
+          {tab === 'pending' ? 'Нет бонусов к выплате' : 'Нет выплаченных бонусов'}
+        </div>
       ) : (
         <div className="space-y-4">
-          {grouped.map(([adminId, g]) => (
-            <div key={adminId} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                    style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-                    {(g.name || '?')[0].toUpperCase()}
-                  </div>
-                  <span className="text-sm font-semibold text-gray-800">{g.name}</span>
-                  <span className="text-xs text-gray-400">{plural(g.items.length, 'запись', 'записи', 'записей')}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  {g.total > 0 && <span className="text-sm font-bold text-amber-700">{fmt(Math.round(g.total))} ₸</span>}
-                  {statusFilter === 'pending' && g.total > 0 && (
-                    <button onClick={() => handlePayAll(adminId)} disabled={payAll === adminId}
-                      className="text-xs bg-[#0097A7] text-white rounded-lg px-3 py-1.5 font-semibold disabled:opacity-50">
-                      {payAll === adminId ? '...' : 'Выплатить всё'}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {g.items.map(b => (
-                  <div key={b.id} className="flex items-center justify-between px-4 py-3">
+          {filtered.map(g => {
+            const bonuses = tab === 'pending' ? (g.pending_bonuses || []) : (g.paid_bonuses || [])
+            const total = tab === 'pending' ? g.pending_total : g.paid_total
+            return (
+              <div key={g.admin_id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+                      {(g.full_name || '?')[0].toUpperCase()}
+                    </div>
                     <div>
-                      <div className="text-sm text-gray-800">{b.patient_name || '—'}</div>
-                      <div className="text-xs text-gray-400">{b.service_name || ''} · {b.created_at ? new Date(b.created_at).toLocaleDateString('ru') : ''}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-gray-800 text-sm">{fmt(b.amount)} ₸</span>
-                      {b.status === 'pending' && (
-                        <button onClick={() => handlePay(b.id)} disabled={paying === b.id}
-                          className="text-xs bg-green-100 text-green-700 rounded-lg px-2.5 py-1.5 font-semibold disabled:opacity-50">
-                          {paying === b.id ? '...' : 'Выплатить'}
-                        </button>
-                      )}
-                      {b.status === 'paid' && (
-                        <span className="text-xs text-green-600 font-semibold">✓ Выплачен</span>
+                      <span className="text-sm font-semibold text-gray-800">{g.full_name}</span>
+                      {g.clinic_name && g.clinic_name !== '—' && (
+                        <span className="text-xs text-gray-400 ml-2">{g.clinic_name}</span>
                       )}
                     </div>
                   </div>
-                ))}
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold ${tab === 'pending' ? 'text-amber-700' : 'text-green-600'}`}>
+                      {fmt(Math.round(total))} ₸
+                    </span>
+                    {tab === 'pending' && total > 0 && (
+                      <button onClick={() => handlePayAll(g.admin_id)} disabled={payAll === g.admin_id}
+                        className="text-xs bg-[#0097A7] text-white rounded-lg px-3 py-1.5 font-semibold disabled:opacity-50">
+                        {payAll === g.admin_id ? '...' : 'Выплатить всё'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {bonuses.map(b => (
+                    <div key={b.bonus_id} className="flex items-center justify-between px-4 py-3">
+                      <div>
+                        <div className="text-sm text-gray-800">{b.service_name || '—'}</div>
+                        <div className="text-xs text-gray-400">{b.patient_phone || ''}{b.confirmed_at ? ` · ${new Date(b.confirmed_at).toLocaleDateString('ru')}` : ''}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-gray-800 text-sm">{fmt(b.amount)} ₸</span>
+                        {tab === 'pending' && (
+                          <button onClick={() => handlePay(b.bonus_id)} disabled={paying === b.bonus_id}
+                            className="text-xs bg-green-100 text-green-700 rounded-lg px-2.5 py-1.5 font-semibold disabled:opacity-50">
+                            {paying === b.bonus_id ? '...' : 'Выплатить'}
+                          </button>
+                        )}
+                        {tab === 'paid' && <span className="text-xs text-green-600 font-semibold">✓</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -1224,7 +1220,9 @@ function ServicesSection({ token }) {
         a.get('/manager/services/categories'),
       ])
       setServices(Array.isArray(sr.data) ? sr.data : [])
-      setCategories(Array.isArray(cr.data) ? cr.data : [])
+      // API returns [{category, total, bonus_count}] or strings
+      const rawCats = Array.isArray(cr.data) ? cr.data : []
+      setCategories(rawCats.map(c => (typeof c === 'string' ? c : c?.category)).filter(Boolean))
     } catch { setErr('Ошибка загрузки') }
     setLoading(false)
   }, [token])
@@ -1575,21 +1573,23 @@ function BillingSection({ token }) {
 
       {tab === 'plans' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {plans.length > 0 ? plans.map(p => (
-            <div key={p.key || p.name} className={`bg-white rounded-2xl shadow-sm p-5 ${sub?.plan === (p.key || p.name) ? 'ring-2 ring-[#0097A7]' : ''}`}>
+          {plans.length > 0 ? plans.map(p => {
+            const key = p.plan || p.key || p.name
+            const isActive = sub?.plan === key
+            return (
+            <div key={key} className={`bg-white rounded-2xl shadow-sm p-5 ${isActive ? 'ring-2 ring-[#0097A7]' : ''}`}>
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bold text-gray-800">{PLAN_NAMES[p.key] || p.name}</div>
-                {sub?.plan === (p.key || p.name) && (
-                  <span className="text-xs bg-[#0097A7] text-white px-2 py-0.5 rounded-full font-semibold">Текущий</span>
-                )}
+                <div className="font-bold text-gray-800">{p.name || PLAN_NAMES[key] || key}</div>
+                {isActive && <span className="text-xs bg-[#0097A7] text-white px-2 py-0.5 rounded-full font-semibold">Текущий</span>}
               </div>
+              {p.subtitle && <div className="text-xs text-gray-400 mb-3">{p.subtitle}</div>}
               <div className="text-2xl font-bold text-[#0097A7] mb-1">
-                {fmt(p.prices?.monthly || p.monthly_price)} ₸
+                {fmt(p.price_monthly || p.prices?.monthly || p.monthly_price)} ₸
               </div>
               <div className="text-xs text-gray-400 mb-4">в месяц</div>
-              {p.features && (
+              {p.bullets && (
                 <ul className="space-y-1">
-                  {(Array.isArray(p.features) ? p.features : []).map((f, i) => (
+                  {(Array.isArray(p.bullets) ? p.bullets : []).map((f, i) => (
                     <li key={i} className="flex items-center gap-2 text-xs text-gray-600">
                       <span className="material-symbols-outlined text-green-500 text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
                       {f}
@@ -1598,7 +1598,8 @@ function BillingSection({ token }) {
                 </ul>
               )}
             </div>
-          )) : (
+            )
+          }) : (
             ['Basic', 'Professional', 'Enterprise'].map((name, i) => {
               const key = ['basic', 'professional', 'enterprise'][i]
               const prices = { basic: 9900, professional: 24900, enterprise: 49900 }
@@ -1741,9 +1742,16 @@ function MisSection({ token }) {
   const handleSync = async (type) => {
     setSyncing(type)
     try {
-      await a.post(`/mis/${type}/sync`)
-      if (type === 'clinics') { const r = await a.get('/mis/clinics'); setMisClinics(Array.isArray(r.data) ? r.data : []) }
-      if (type === 'doctors') { const r = await a.get('/mis/doctors'); setMisDoctors(Array.isArray(r.data) ? r.data : []) }
+      // Sync endpoints require {mis_ids:[...]} — fetch current list first to get IDs
+      let listData = []
+      if (type === 'clinics')  listData = misClinics.length  ? misClinics  : (await a.get('/mis/clinics').catch(() => ({data:[]}))).data
+      if (type === 'doctors')  listData = misDoctors.length  ? misDoctors  : (await a.get('/mis/doctors').catch(() => ({data:[]}))).data
+      if (type === 'services') listData = misServices.length ? misServices : (await a.get('/mis/services').catch(() => ({data:[]}))).data
+      const ids = (Array.isArray(listData) ? listData : []).map(x => x.mis_id || x.id).filter(Boolean)
+      await a.post(`/mis/${type}/sync`, { mis_ids: ids })
+      // Reload after sync
+      if (type === 'clinics')  { const r = await a.get('/mis/clinics');  setMisClinics(Array.isArray(r.data) ? r.data : []) }
+      if (type === 'doctors')  { const r = await a.get('/mis/doctors');  setMisDoctors(Array.isArray(r.data) ? r.data : []) }
       if (type === 'services') { const r = await a.get('/mis/services'); setMisServices(Array.isArray(r.data) ? r.data : []) }
     } catch (ex) {
       alert(ex?.response?.data?.detail || 'Ошибка синхронизации')
@@ -1801,17 +1809,23 @@ function MisSection({ token }) {
             <div className="space-y-3">
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <span className="text-sm text-gray-600">Статус подключения</span>
-                <span className={`text-sm font-semibold flex items-center gap-1 ${status.connected ? 'text-green-600' : 'text-red-500'}`}>
+                <span className={`text-sm font-semibold flex items-center gap-1 ${(status.connected || status.online) ? 'text-green-600' : 'text-red-500'}`}>
                   <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    {status.connected ? 'check_circle' : 'cancel'}
+                    {(status.connected || status.online) ? 'check_circle' : 'cancel'}
                   </span>
-                  {status.connected ? 'Подключено' : 'Не подключено'}
+                  {(status.connected || status.online) ? 'Подключено' : 'Не подключено'}
                 </span>
               </div>
               {status.url && (
                 <div className="flex items-center justify-between py-2 border-b border-gray-50">
                   <span className="text-sm text-gray-600">URL МИС</span>
                   <span className="text-sm text-gray-800 font-mono truncate max-w-xs">{status.url}</span>
+                </div>
+              )}
+              {status.clinic_count != null && (
+                <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                  <span className="text-sm text-gray-600">Клиник в МИС</span>
+                  <span className="text-sm font-semibold text-gray-800">{status.clinic_count}</span>
                 </div>
               )}
               {status.last_sync && (
@@ -1822,7 +1836,11 @@ function MisSection({ token }) {
               )}
             </div>
           ) : (
-            <div className="text-center text-gray-400 text-sm py-6">МИС не настроен или статус недоступен</div>
+            <div className="text-center py-6">
+          <span className="material-symbols-outlined text-4xl text-gray-200 block mb-2">sync_disabled</span>
+          <div className="text-sm text-gray-400">МИС не настроен или недоступен</div>
+          <div className="text-xs text-gray-300 mt-1">Настройте подключение в разделе «Настройки → МИС»</div>
+        </div>
           )}
         </div>
       )}
