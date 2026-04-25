@@ -2,12 +2,28 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listManagerServices, updateService } from '../api'
 
-export default function ManagerSettings() {
+function PageHeader({ title, icon, color }) {
   const nav = useNavigate()
-  const [services, setServices] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [savedMsg, setSavedMsg] = useState('')
-  const [error, setError] = useState('')
+  return (
+    <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
+      <div className="flex items-center gap-3">
+        <button onClick={() => nav('/manager')} className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+          <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
+        </button>
+        <div className="flex items-center gap-2">
+          <span className={`material-symbols-outlined text-xl ${color}`} style={{ fontVariationSettings:"'FILL' 1" }}>{icon}</span>
+          <h1 className="text-lg font-extrabold text-[#191c1e] dark:text-white font-headline">{title}</h1>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function ManagerSettings() {
+  const [services, setServices]           = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [savedMsg, setSavedMsg]           = useState('')
+  const [error, setError]                 = useState('')
   const [savingService, setSavingService] = useState(null)
   const [serviceBonuses, setServiceBonuses] = useState({})
 
@@ -16,85 +32,69 @@ export default function ManagerSettings() {
       .then(svRes => {
         const svcs = Array.isArray(svRes.data) ? svRes.data : []
         setServices(svcs)
-        const bonusMap = {}
-        svcs.forEach(s => { bonusMap[s.id] = String(s.bonus_amount ?? '') })
-        setServiceBonuses(bonusMap)
+        const bm = {}; svcs.forEach(s => { bm[s.id] = String(s.bonus_amount ?? '') })
+        setServiceBonuses(bm)
       })
       .catch(() => setError('Ошибка загрузки настроек'))
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSaveServiceBonus = async (svcId) => {
+  const handleSave = async (svcId) => {
     setSavingService(svcId)
     try {
-      await updateService(svcId, { bonus_amount: parseFloat(serviceBonuses[svcId]) || 0 })
-      setSavedMsg('Бонус обновлён')
-      setTimeout(() => setSavedMsg(''), 2000)
-    } catch {
-      setError('Ошибка сохранения бонуса')
-    } finally {
-      setSavingService(null)
-    }
+      await updateService(svcId, { bonus_amount: parseFloat(serviceBonuses[svcId])||0 })
+      setSavedMsg('Бонус обновлён'); setTimeout(()=>setSavedMsg(''),2000)
+    } catch { setError('Ошибка сохранения бонуса') } finally { setSavingService(null) }
   }
 
-  if (loading) return <div className="p-4 text-center text-gray-400 py-16">Загрузка...</div>
+  if (loading) return (
+    <div className="bg-[#f7f9fb] dark:bg-gray-900 min-h-screen">
+      <div className="flex items-center justify-center py-24"><div className="w-8 h-8 rounded-full border-4 border-[#0097A7]/20 border-t-[#0097A7] animate-spin" /></div>
+    </div>
+  )
 
   return (
-    <div className="p-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => nav('/manager')} className="text-gray-400 hover:text-gray-600">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-800">Настройки</h1>
-      </div>
+    <div className="bg-[#f7f9fb] dark:bg-gray-900 min-h-screen pb-24">
+      <PageHeader title="Настройки" icon="tune" color="text-[#374151] dark:text-gray-400" />
+      <div className="px-4">
+        {error   && <div className="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4"><p className="text-red-600 text-sm">{error}</p></div>}
+        {savedMsg && <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 mb-4"><p className="text-emerald-700 text-sm font-medium">✓ {savedMsg}</p></div>}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
-          <p className="text-red-600 text-sm">{error}</p>
+        {/* Инфо */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 mb-4 flex gap-3">
+          <span className="material-symbols-outlined text-blue-500 text-xl flex-shrink-0" style={{ fontVariationSettings:"'FILL' 1" }}>info</span>
+          <p className="text-blue-700 dark:text-blue-300 text-sm">Настройки МИС и Telegram доступны в панели администратора.</p>
         </div>
-      )}
-      {savedMsg && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-3 mb-4">
-          <p className="text-green-700 text-sm">{savedMsg}</p>
-        </div>
-      )}
 
-      {/* Info notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
-        <p className="text-blue-700 text-sm">Настройки МИС и Telegram доступны в панели администратора.</p>
-      </div>
-
-      {/* Services quick edit */}
-      <div className="bg-white rounded-2xl p-4 shadow-sm mb-4">
-        <p className="text-sm font-semibold text-gray-700 mb-3">Быстрое редактирование бонусов по услугам</p>
-        {services.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-3">Нет услуг</p>
-        ) : (
-          <div className="space-y-2">
-            {services.map(svc => (
-              <div key={svc.id} className="flex items-center gap-2">
-                <span className="flex-1 text-sm text-gray-700 truncate">{svc.name}</span>
-                <input
-                  type="number"
-                  value={serviceBonuses[svc.id] ?? ''}
-                  onChange={e => setServiceBonuses(b => ({ ...b, [svc.id]: e.target.value }))}
-                  className="border border-gray-200 rounded-xl p-2 text-sm w-24 text-right focus:outline-none focus:border-primary"
-                  placeholder="Б"
-                />
-                <button
-                  onClick={() => handleSaveServiceBonus(svc.id)}
-                  disabled={savingService === svc.id}
-                  className="bg-primary text-white rounded-xl px-3 py-2 text-xs font-medium disabled:opacity-50"
-                >
-                  {savingService === svc.id ? '...' : 'OK'}
-                </button>
-              </div>
-            ))}
+        {/* Бонусы по услугам */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-symbols-outlined text-amber-500 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>sell</span>
+            <h2 className="text-sm font-bold text-[#191c1e] dark:text-white">Бонусы по услугам</h2>
           </div>
-        )}
+          <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
+            {services.length===0 ? (
+              <div className="p-6 text-center text-[#727783] text-sm">Нет услуг</div>
+            ) : (
+              <div className="divide-y divide-[#f7f9fb] dark:divide-gray-700/50">
+                {services.map(svc => (
+                  <div key={svc.id} className="flex items-center gap-3 px-4 py-3">
+                    <p className="flex-1 text-sm font-medium text-[#191c1e] dark:text-white truncate">{svc.name}</p>
+                    <input type="number" value={serviceBonuses[svc.id] ?? ''}
+                      onChange={e => setServiceBonuses(b=>({...b,[svc.id]:e.target.value}))}
+                      className="bg-[#f7f9fb] dark:bg-gray-700 border-2 border-transparent focus:border-[#0097A7]/40 rounded-xl p-2 text-sm w-24 text-right outline-none text-[#191c1e] dark:text-white transition-all"
+                      placeholder="Б" />
+                    <button onClick={() => handleSave(svc.id)} disabled={savingService===svc.id}
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs disabled:opacity-50 active:scale-95 transition-transform"
+                      style={{ background:'linear-gradient(135deg,#0097A7,#006173)' }}>
+                      {savingService===svc.id ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'OK'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )

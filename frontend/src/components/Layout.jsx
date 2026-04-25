@@ -69,7 +69,7 @@ export default function Layout() {
             <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #1565c0 0%, #1e6fe8 100%)' }}
+                style={{ background: 'linear-gradient(135deg, #0097A7 0%, #006173 100%)' }}
               >
                 {initials}
               </div>

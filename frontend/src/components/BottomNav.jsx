@@ -51,7 +51,7 @@ export default function BottomNav() {
             end={to === '/'}
             className={({ isActive }) =>
               `flex-shrink-0 flex-1 min-w-[56px] flex flex-col items-center py-2 text-xs transition-colors ${
-                isActive ? 'text-[#1565c0] dark:text-[#a9c7ff]' : 'text-[#727783] dark:text-slate-500'
+                isActive ? 'text-[#0097A7] dark:text-[#4dd0e1]' : 'text-[#727783] dark:text-slate-500'
               }`
             }
           >
