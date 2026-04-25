@@ -50,3 +50,5 @@ from app.models.billing import TenantPluginSubscription, PluginSubStatus
 from app.models.doctor_clinic_access import DoctorClinicAccess
 from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus
 from app.models.ai_history import AIAnalysisHistory
+
+from app.models.commercial import CommercialModule, TenantModuleSubscription, TenantIntegration

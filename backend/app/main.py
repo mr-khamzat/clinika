@@ -29,6 +29,7 @@ from app.routers.patient import router as patient_router
 from app.routers.push import router as push_router
 from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
+from app.routers.commercial import router as commercial_router
 from app.routers.ai import router as ai_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.supervisor import router as supervisor_router
@@ -442,6 +443,7 @@ app.include_router(presence_router)
 app.include_router(push_router)
 app.include_router(webhooks_router)
 app.include_router(ads_router)
+app.include_router(commercial_router)
 app.include_router(ai_router)
 app.include_router(recruiter_router)
 app.include_router(supervisor_router)

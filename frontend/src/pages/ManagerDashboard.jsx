@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { getManagerSummary, getManagerAdmins, getManagerClinics, exportCSV, getCancelRequests, approveCancelRequest, rejectCancelRequest } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
-import AdminSupportPanel from '../components/AdminSupportPanel'
 
 function greeting() {
   const h = new Date().getHours()
@@ -317,16 +316,6 @@ export default function ManagerDashboard() {
           </div>
         </div>
 
-        {/* Поддержка */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-[#1565c0] text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
-            <h2 className="text-sm font-bold text-[#191c1e] dark:text-white">Поддержка</h2>
-          </div>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-            <AdminSupportPanel />
-          </div>
-        </div>
       </div>
     </div>
   )
