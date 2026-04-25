@@ -40,6 +40,46 @@ const CARD_GRADS = [
   ['#1B5E20','#33691E'],
 ]
 
+// ── AdBanner component ───────────────────────────────────────────────────────
+const AD_THEMES = [
+  { bg: 'linear-gradient(135deg,#003845,#0097A7)', glow: 'rgba(0,151,167,.4)' },
+  { bg: 'linear-gradient(135deg,#1a0038,#7c3aed)', glow: 'rgba(124,58,237,.4)' },
+  { bg: 'linear-gradient(135deg,#7c1900,#ff6a00)', glow: 'rgba(255,106,0,.4)'  },
+]
+function AdBanner({ ads, idx, setIdx }) {
+  if (!ads || ads.length === 0) return null
+  const ad = ads[idx]
+  const th = AD_THEMES[idx % AD_THEMES.length]
+  return (
+    <div key={idx}
+      onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
+      className="rounded-2xl p-4 relative overflow-hidden cursor-pointer"
+      style={{ background: th.bg, boxShadow: `0 4px 24px ${th.glow}` }}>
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+        <div className="absolute inset-0 w-1/2" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)', animation: 'shimmer 3s ease-in-out infinite' }} />
+      </div>
+      <div className="flex items-center gap-3 relative">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
+          <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>campaign</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white font-bold text-sm truncate">{ad.title}</p>
+          {ad.body && <p className="text-white/70 text-xs mt-0.5 truncate">{ad.body}</p>}
+        </div>
+        <span className="text-white/60 text-xs bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0">РЕКЛАМА</span>
+      </div>
+      {ads.length > 1 && (
+        <div className="flex justify-center gap-1.5 mt-3">
+          {ads.map((_,i) => (
+            <div key={i} onClick={e=>{e.stopPropagation();setIdx(i)}}
+              style={{ width: i===idx ? 16 : 5, height: 5, borderRadius: 3, background: i===idx ? 'white' : 'rgba(255,255,255,.4)', transition: 'all .3s', cursor: 'pointer' }} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Push helpers ──────────────────────────────────────────────────────────────
 async function subscribePush(phone, token) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false
@@ -412,6 +452,7 @@ export default function PatientCabinet() {
   const [pushLoading, setPushLoading] = useState(false)
   const [deferredPrompt, setDeferredPrompt] = useState(null)
   const [showInstall, setShowInstall] = useState(false)
+  const [showIosHint, setShowIosHint] = useState(false)
   const [searchQ, setSearchQ] = useState('')
   const [bannerAds, setBannerAds] = useState([])
   const [bannerIdx, setBannerIdx] = useState(0)
@@ -420,6 +461,11 @@ export default function PatientCabinet() {
     registerSW()
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
     window.addEventListener('beforeinstallprompt', handler)
+    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone
+    const dismissed = localStorage.getItem('clinika_ios_hint_ts')
+    const staleDays = dismissed ? (Date.now() - parseInt(dismissed)) / 86400000 : 999
+    if (isIos && !isStandalone && staleDays > 7) setShowIosHint(true)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
@@ -511,7 +557,72 @@ export default function PatientCabinet() {
   const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
 
   return (
-    <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
+    <div className="relative" style={{ background: '#F0F4F8' }}>
+      {/* ── Desktop Side Navigation ── */}
+      <nav className="pc-sidenav fixed left-0 top-0 h-full w-60 z-50 flex-col"
+        style={{ background: 'linear-gradient(180deg,#0A2342 0%,#1565C0 100%)', boxShadow: '4px 0 24px rgba(0,0,0,.25)' }}>
+        <div className="p-6 pb-4 border-b" style={{ borderColor: 'rgba(255,255,255,.1)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.15)' }}>
+              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
+            </div>
+            <div>
+              <p className="text-white font-extrabold text-base leading-none">Clinika</p>
+              <p className="text-blue-300 text-xs mt-0.5">Личный кабинет</p>
+            </div>
+          </div>
+          {patient_name && (
+            <div className="mt-4 flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black text-white flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#0097A7,#0A2342)' }}>{initials}</div>
+              <div className="min-w-0">
+                <p className="text-white text-xs font-semibold truncate">{patient_name}</p>
+                <p className="text-blue-300 text-[10px] truncate">{patient_phone}</p>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {TABS.map(t => {
+            const isA = tab === t.key
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all text-left"
+                style={{ background: isA ? 'rgba(255,255,255,.18)' : 'transparent', color: isA ? 'white' : 'rgba(255,255,255,.55)' }}>
+                <span className="material-symbols-outlined text-xl flex-shrink-0"
+                  style={{ fontVariationSettings: isA ? "'FILL' 1" : "'FILL' 0" }}>{t.icon}</span>
+                <span className="font-semibold text-sm flex-1">{t.label}</span>
+                {isA && <span className="w-1.5 h-1.5 bg-white rounded-full" />}
+              </button>
+            )
+          })}
+        </div>
+        <div className="px-3 pb-6 space-y-1 border-t pt-3" style={{ borderColor: 'rgba(255,255,255,.1)' }}>
+          {!pushEnabled && 'Notification' in window && (
+            <button onClick={handlePushToggle} disabled={pushLoading}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all"
+              style={{ background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.65)' }}>
+              <span className="material-symbols-outlined text-xl">notifications</span>
+              <span className="text-sm font-semibold">Уведомления</span>
+            </button>
+          )}
+          {pushEnabled && (
+            <div className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl" style={{ background: 'rgba(16,185,129,.2)', color: '#6EE7B7' }}>
+              <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>
+              <span className="text-sm font-semibold">Push включены</span>
+            </div>
+          )}
+          <button onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all"
+            style={{ background: 'rgba(239,68,68,.15)', color: '#FCA5A5' }}>
+            <span className="material-symbols-outlined text-xl">logout</span>
+            <span className="text-sm font-semibold">Выйти</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* ── Main area ── */}
+      <div className="pc-main min-h-screen pb-24">
       <style>{`
         @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
@@ -519,6 +630,21 @@ export default function PatientCabinet() {
         .card-in { animation: slideUp .35s cubic-bezier(.22,1,.36,1) both }
         @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
         @keyframes adGlow { 0%,100%{opacity:.7} 50%{opacity:1} }
+        @media(min-width:768px){
+          .pc-hero{padding-top:56px!important;}
+          .pc-hero-inner{max-width:740px!important;}
+          .pc-content-inner{max-width:740px!important;}
+        }
+        @media(min-width:1024px){
+          .pc-bottomnav{display:none!important;}
+          .pc-sidenav{display:flex!important;}
+          .pc-main{padding-left:240px;padding-bottom:40px;}
+          .pc-hero-inner{max-width:100%!important;}
+          .pc-content-inner{max-width:800px!important;}
+        }
+        @media(max-width:1023px){
+          .pc-sidenav{display:none!important;}
+        }
       `}</style>
 
       {/* ── Hero Header ── */}
@@ -527,7 +653,7 @@ export default function PatientCabinet() {
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full" style={{ background: 'rgba(0,151,167,.2)', filter: 'blur(40px)', transform: 'translate(30%,-30%)' }} />
         <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.05)', filter: 'blur(30px)', transform: 'translate(-30%,30%)' }} />
 
-        <div className="relative max-w-lg mx-auto px-5 pt-12 pb-2">
+        <div className="pc-hero-inner relative max-w-lg mx-auto px-5 pt-12 pb-2 pc-hero">
           {/* Top bar */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -535,23 +661,25 @@ export default function PatientCabinet() {
               <h1 className="text-white font-extrabold text-xl leading-tight mt-0.5 truncate max-w-[220px]">{patient_name || patient_phone}</h1>
             </div>
             <div className="flex items-center gap-2">
-              {!pushEnabled && 'Notification' in window && (
-                <button onClick={handlePushToggle} disabled={pushLoading}
+              <div className="flex items-center gap-2 lg:hidden">
+                {!pushEnabled && 'Notification' in window && (
+                  <button onClick={handlePushToggle} disabled={pushLoading}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
+                    style={{ background: 'rgba(255,255,255,.15)' }}>
+                    <span className="material-symbols-outlined text-white text-xl">notifications</span>
+                  </button>
+                )}
+                {pushEnabled && (
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,.25)' }}>
+                    <span className="material-symbols-outlined text-emerald-300 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>
+                  </div>
+                )}
+                <button onClick={handleLogout}
                   className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
                   style={{ background: 'rgba(255,255,255,.15)' }}>
-                  <span className="material-symbols-outlined text-white text-xl">notifications</span>
+                  <span className="material-symbols-outlined text-white/80 text-xl">logout</span>
                 </button>
-              )}
-              {pushEnabled && (
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,.25)' }}>
-                  <span className="material-symbols-outlined text-emerald-300 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>
-                </div>
-              )}
-              <button onClick={handleLogout}
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
-                style={{ background: 'rgba(255,255,255,.15)' }}>
-                <span className="material-symbols-outlined text-white/80 text-xl">logout</span>
-              </button>
+              </div>
             </div>
           </div>
 
@@ -595,59 +723,47 @@ export default function PatientCabinet() {
         </div>
       </div>
 
-      {/* ── Ad Banner ── */}
-      {bannerAds.length > 0 && (() => {
-        const THEMES = [
-          { bg: 'linear-gradient(135deg,#003845,#0097A7)', glow: 'rgba(0,151,167,.4)' },
-          { bg: 'linear-gradient(135deg,#1a0038,#7c3aed)', glow: 'rgba(124,58,237,.4)' },
-          { bg: 'linear-gradient(135deg,#7c1900,#ff6a00)', glow: 'rgba(255,106,0,.4)'  },
-        ]
-        const ad = bannerAds[bannerIdx]
-        const th = THEMES[bannerIdx % THEMES.length]
-        return (
-          <div className="max-w-lg mx-auto px-4 -mt-4 mb-0 relative z-10">
-            <div key={bannerIdx}
-              onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
-              className="rounded-2xl p-4 relative overflow-hidden cursor-pointer"
-              style={{ background: th.bg, boxShadow: `0 4px 24px ${th.glow}` }}>
-              <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-                <div className="absolute inset-0 w-1/2" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)', animation: 'shimmer 3s ease-in-out infinite' }} />
-              </div>
-              <div className="flex items-center gap-3 relative">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
-                  <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>campaign</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold text-sm truncate">{ad.title}</p>
-                  {ad.body && <p className="text-white/70 text-xs mt-0.5 truncate">{ad.body}</p>}
-                </div>
-                <span className="text-white/60 text-xs bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0">РЕКЛАМА</span>
-              </div>
-              {bannerAds.length > 1 && (
-                <div className="flex justify-center gap-1.5 mt-3">
-                  {bannerAds.map((_,i) => (
-                    <div key={i} onClick={e=>{e.stopPropagation();setBannerIdx(i)}}
-                      style={{ width: i===bannerIdx ? 16 : 5, height: 5, borderRadius: 3, background: i===bannerIdx ? 'white' : 'rgba(255,255,255,.4)', transition: 'all .3s', cursor: 'pointer' }} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )
-      })()}
+      {/* ── Ad Banner (top) ── */}
+      {bannerAds.length > 0 && (
+        <div className="max-w-screen-md mx-auto px-4 -mt-4 mb-0 relative z-10">
+          <AdBanner ads={bannerAds} idx={bannerIdx} setIdx={setBannerIdx} />
+        </div>
+      )}
 
       {/* ── Content ── */}
-      <div className="max-w-lg mx-auto px-4 pt-5">
-        {/* PWA install */}
+      <div className="pc-content-inner max-w-lg mx-auto px-4 pt-5">
+        {/* Android PWA install prompt */}
         {showInstall && (
           <div className="rounded-2xl p-4 mb-4 flex items-center gap-3" style={{ background: 'linear-gradient(135deg,#1565C0,#0097A7)', boxShadow: '0 4px 20px rgba(21,101,192,.3)' }}>
-            <span className="material-symbols-outlined text-white text-2xl flex-shrink-0">download</span>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
+              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>install_mobile</span>
+            </div>
             <div className="flex-1">
-              <p className="text-white font-bold text-sm">Установить приложение</p>
-              <p className="text-blue-100 text-xs">Быстрый доступ к кабинету</p>
+              <p className="text-white font-bold text-sm">Добавить на экран «Домой»</p>
+              <p className="text-blue-100 text-xs">Открывать как приложение, вход сохранится</p>
             </div>
             <button onClick={handleInstall} className="bg-white text-blue-700 rounded-xl px-3 py-1.5 text-xs font-bold flex-shrink-0">Добавить</button>
             <button onClick={() => setShowInstall(false)} className="text-white/60 text-xl leading-none flex-shrink-0">×</button>
+          </div>
+        )}
+
+        {/* iOS Add to Home Screen hint */}
+        {showIosHint && (
+          <div className="rounded-2xl p-4 mb-4" style={{ background: 'linear-gradient(135deg,#0A2342,#1565C0)', boxShadow: '0 4px 20px rgba(10,35,66,.4)' }}>
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: 'rgba(255,255,255,.15)' }}>
+                <span className="text-xl">📲</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-white font-bold text-sm mb-1">Добавить на экран «Домой»</p>
+                <p className="text-blue-200 text-xs leading-relaxed">
+                  Нажмите <span className="bg-white/15 rounded px-1.5 py-0.5 font-semibold text-white">↑ Поделиться</span> → <span className="font-semibold text-white">«На экран «Домой»»</span>
+                </p>
+                <p className="text-blue-300 text-xs mt-1.5">Кабинет откроется как приложение, авторизация сохранится</p>
+              </div>
+              <button onClick={() => { setShowIosHint(false); localStorage.setItem('clinika_ios_hint_ts', String(Date.now())) }}
+                className="text-white/50 text-xl leading-none flex-shrink-0 mt-0.5">×</button>
+            </div>
           </div>
         )}
 
@@ -750,7 +866,7 @@ export default function PatientCabinet() {
                 <p className="text-gray-500 font-semibold">Направлений нет</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
                 {searchedRefs.map((r, i) => <ReferralCard key={r.id} referral={r} index={i} onQr={setFullscreenQr} />)}
               </div>
             )}
@@ -774,9 +890,14 @@ export default function PatientCabinet() {
                   <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>verified</span>
                   <p className="text-emerald-700 text-xs font-semibold">Данные из медицинской системы клиники</p>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
                   {mis_visits.map((v, i) => <VisitCard key={i} visit={v} />)}
                 </div>
+                {bannerAds.length > 0 && (
+                  <div className="mt-4">
+                    <AdBanner ads={bannerAds} idx={bannerIdx} setIdx={setBannerIdx} />
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -790,8 +911,10 @@ export default function PatientCabinet() {
         )}
       </div>
 
-      {/* ── Bottom Navigation ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40" style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom,0px)' }}>
+      </div>{/* /pc-main */}
+
+      {/* ── Bottom Navigation (mobile + tablet) ── */}
+      <div className="pc-bottomnav fixed bottom-0 left-0 right-0 z-40" style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom,0px)' }}>
         <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2">
           {TABS.map(t => {
             const isActive = tab === t.key
