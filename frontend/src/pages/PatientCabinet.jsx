@@ -481,7 +481,7 @@ export default function PatientCabinet() {
     const refId = localStorage.getItem(REF_KEY)
     if (token && refId) {
       loadData(refId, token)
-      axios.get(`${API}/ads/banners`).then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      axios.get(`${API}/ads/active`, { params: { slug: SLUG, ad_type: 'banner' } }).then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     } else {
       setLoading(false); setShowLogin(true)
     }
@@ -568,7 +568,7 @@ export default function PatientCabinet() {
       `}</style>
 
       {/* ── Hero Header ── */}
-      <div className="relative" style={{ background: 'linear-gradient(145deg,#0A2342 0%,#1565C0 70%,#0097A7 100%)', paddingBottom: 32 }}>
+      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A2342 0%,#1565C0 70%,#0097A7 100%)', paddingBottom: 32 }}>
         {/* Decorative blobs */}
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full" style={{ background: 'rgba(0,151,167,.2)', filter: 'blur(40px)', transform: 'translate(30%,-30%)' }} />
         <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.05)', filter: 'blur(30px)', transform: 'translate(-30%,30%)' }} />
