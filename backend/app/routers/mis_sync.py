@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db
 from app.core.deps import get_current_user
+from app.services.settings_service import get_setting
 from app.models.user import User, UserRole
 from app.services.mis_sync_service import (
     get_mis_clinics,
@@ -34,9 +35,12 @@ def _require_manager(current_user: User = Depends(get_current_user)) -> User:
 # ── Клиники ──────────────────────────────────────────────────────────────────
 
 @router.get("/clinics")
-async def list_mis_clinics(current_user: User = Depends(_require_manager)):
+async def list_mis_clinics(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех клиник в МИС (для выбора перед импортом)."""
-    clinics = await get_mis_clinics()
+    tid = current_user.tenant_id
+    api_url = await get_setting(db, mis_api_url, , tenant_id=tid)
+    api_key = await get_setting(db, mis_api_key, , tenant_id=tid)
+    clinics = await get_mis_clinics(api_url=api_url, api_key=api_key)
     return {
         "clinics": [
             {
@@ -64,7 +68,10 @@ async def sync_mis_clinics(
     db: AsyncSession = Depends(get_db),
 ):
     """Импортировать/обновить выбранные клиники из МИС."""
-    results = await sync_clinics_bulk(db, body.mis_ids, current_user.tenant_id)
+    tid = current_user.tenant_id
+    api_url = await get_setting(db, mis_api_url, , tenant_id=tid)
+    api_key = await get_setting(db, mis_api_key, , tenant_id=tid)
+    results = await sync_clinics_bulk(db, body.mis_ids, tid, api_url=api_url, api_key=api_key)
     created = [r for r in results if r["action"] == "created"]
     updated = [r for r in results if r["action"] == "updated"]
     return {
@@ -77,9 +84,12 @@ async def sync_mis_clinics(
 # ── Врачи ────────────────────────────────────────────────────────────────────
 
 @router.get("/doctors")
-async def list_mis_doctors(current_user: User = Depends(_require_manager)):
+async def list_mis_doctors(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех врачей из МИС."""
-    users = await get_mis_users()
+    tid2 = current_user.tenant_id
+    api_url2 = await get_setting(db, mis_api_url, , tenant_id=tid2)
+    api_key2 = await get_setting(db, mis_api_key, , tenant_id=tid2)
+    users = await get_mis_users(api_url=api_url2, api_key=api_key2)
     doctors = [u for u in users if "doctor" in (u.get("role_names") or []) and not u.get("is_deleted")]
     return {
         "doctors": [
@@ -109,7 +119,10 @@ async def sync_mis_doctors(
     db: AsyncSession = Depends(get_db),
 ):
     """Импортировать/обновить врачей из МИС."""
-    results = await sync_doctors_bulk(db, body.mis_ids, current_user.tenant_id)
+    tid3 = current_user.tenant_id
+    api_url3 = await get_setting(db, "mis_api_url", "", tenant_id=tid3)
+    api_key3 = await get_setting(db, "mis_api_key", "", tenant_id=tid3)
+    results = await sync_doctors_bulk(db, body.mis_ids, tid3, api_url=api_url3, api_key=api_key3)
     return {
         "created": len([r for r in results if r["action"] == "created"]),
         "updated": len([r for r in results if r["action"] == "updated"]),
@@ -124,9 +137,13 @@ async def sync_mis_doctors(
 async def list_mis_services(
     clinic_mis_id: int = 1,
     current_user: User = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db),
 ):
     """Список услуг из МИС с категориями (для выбора перед импортом)."""
-    services = await get_mis_services(clinic_mis_id)
+    tid4 = current_user.tenant_id
+    api_url4 = await get_setting(db, "mis_api_url", "", tenant_id=tid4)
+    api_key4 = await get_setting(db, "mis_api_key", "", tenant_id=tid4)
+    services = await get_mis_services(clinic_mis_id, api_url=api_url4, api_key=api_key4)
 
     # Уникальные категории
     categories: dict[str, int] = {}
@@ -171,13 +188,18 @@ async def sync_mis_services(
     db: AsyncSession = Depends(get_db),
 ):
     """Импортировать услуги из МИС в выбранные клиники."""
+    tid5 = current_user.tenant_id
+    api_url5 = await get_setting(db, "mis_api_url", "", tenant_id=tid5)
+    api_key5 = await get_setting(db, "mis_api_key", "", tenant_id=tid5)
     result = await sync_services_bulk(
         db=db,
         source_clinic_mis_id=body.source_clinic_mis_id,
         target_clinic_ids=body.target_clinic_ids,
         category_filter=body.category_filter,
         service_mis_ids=body.service_mis_ids,
-        tenant_id=current_user.tenant_id,
+        tenant_id=tid5,
+        api_url=api_url5,
+        api_key=api_key5,
     )
     return result
 
@@ -188,9 +210,13 @@ async def sync_mis_services(
 async def get_patient_profile(
     phone: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """Профиль пациента из МИС по номеру телефона."""
-    patient = await get_patient_from_mis(phone)
+    tid6 = current_user.tenant_id
+    api_url6 = await get_setting(db, "mis_api_url", "", tenant_id=tid6)
+    api_key6 = await get_setting(db, "mis_api_key", "", tenant_id=tid6)
+    patient = await get_patient_from_mis(phone, api_url=api_url6, api_key=api_key6)
     if not patient:
         return {"found": False}
 
@@ -223,9 +249,13 @@ async def get_patient_appointments(
     phone: str,
     months_back: int = 12,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     """История визитов пациента из МИС."""
-    appts = await get_patient_appointments_from_mis(phone, months_back)
+    tid7 = current_user.tenant_id
+    api_url7 = await get_setting(db, "mis_api_url", "", tenant_id=tid7)
+    api_key7 = await get_setting(db, "mis_api_key", "", tenant_id=tid7)
+    appts = await get_patient_appointments_from_mis(phone, months_back, api_url=api_url7, api_key=api_key7)
 
     formatted = []
     for a in appts:

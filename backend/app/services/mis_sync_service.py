@@ -17,9 +17,9 @@ import uuid
 
 # ── Клиники ──────────────────────────────────────────────────────────────────
 
-async def get_mis_clinics() -> list[dict]:
+async def get_mis_clinics(api_url: str = "", api_key: str = "") -> list[dict]:
     """Все клиники из МИС."""
-    result = await _post("getClinics", show_all=1)
+    result = await _post("getClinics", api_url=api_url, api_key=api_key, show_all=1)
     if result.get("error") == 0:
         return result.get("data") or []
     return []
@@ -61,9 +61,11 @@ async def sync_clinics_bulk(
     db: AsyncSession,
     mis_ids: list[int],
     tenant_id: uuid.UUID | None,
+    api_url: str = "",
+    api_key: str = "",
 ) -> list[dict]:
     """Синхронизировать выбранные клиники по mis_id."""
-    all_mis = await get_mis_clinics()
+    all_mis = await get_mis_clinics(api_url=api_url, api_key=api_key)
     selected = [c for c in all_mis if c["id"] in mis_ids]
     results = []
     for mc in selected:
@@ -75,9 +77,9 @@ async def sync_clinics_bulk(
 
 # ── Врачи ────────────────────────────────────────────────────────────────────
 
-async def get_mis_users() -> list[dict]:
+async def get_mis_users(api_url: str = "", api_key: str = "") -> list[dict]:
     """Все пользователи МИС."""
-    result = await _post("getUsers")
+    result = await _post("getUsers", api_url=api_url, api_key=api_key)
     if result.get("error") == 0:
         return result.get("data") or []
     return []
@@ -87,9 +89,11 @@ async def sync_doctors_bulk(
     db: AsyncSession,
     mis_user_ids: list[int] | None,  # None = все врачи
     tenant_id: uuid.UUID | None,
+    api_url: str = "",
+    api_key: str = "",
 ) -> list[dict]:
     """Синхронизировать врачей из МИС."""
-    users = await get_mis_users()
+    users = await get_mis_users(api_url=api_url, api_key=api_key)
     doctors = [u for u in users if "doctor" in (u.get("role_names") or []) and not u.get("is_deleted")]
 
     if mis_user_ids is not None:
@@ -143,8 +147,8 @@ async def sync_doctors_bulk(
 
 # ── Услуги ───────────────────────────────────────────────────────────────────
 
-async def get_mis_services(clinic_id: int) -> list[dict]:
-    result = await _post("getServices", clinic_id=clinic_id)
+async def get_mis_services(clinic_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
+    result = await _post("getServices", api_url=api_url, api_key=api_key, clinic_id=clinic_id)
     if result.get("error") == 0:
         return result.get("data") or []
     return []
@@ -157,12 +161,14 @@ async def sync_services_bulk(
     category_filter: list[str] | None,  # None = все категории
     service_mis_ids: list[int] | None,  # None = все услуги
     tenant_id: uuid.UUID | None,
+    api_url: str = ,
+    api_key: str = ,
 ) -> dict:
     """
     Импортировать услуги из МИС в указанные клиники.
     Если услуга уже есть (по mis_id + clinic_id) — обновляем цену.
     """
-    mis_services = await get_mis_services(source_clinic_mis_id)
+    mis_services = await get_mis_services(source_clinic_mis_id, api_url=api_url, api_key=api_key)
 
     if category_filter:
         mis_services = [s for s in mis_services if s.get("category_title") in category_filter]
@@ -230,13 +236,13 @@ async def sync_services_bulk(
 
 # ── Приёмы пациента ───────────────────────────────────────────────────────────
 
-async def get_patient_from_mis(phone: str) -> dict | None:
+async def get_patient_from_mis(phone: str, api_url: str = "", api_key: str = "") -> dict | None:
     """Получить данные пациента из МИС по телефону."""
     from app.utils.phone import normalize_phone
     digits = normalize_phone(phone)
     for fmt in [digits, "+" + digits]:
         try:
-            result = await _post("getPatient", mobile=fmt)
+            result = await _post("getPatient", api_url=api_url, api_key=api_key, mobile=fmt)
             if result.get("error") == 0 and result.get("data"):
                 return result["data"]
         except Exception:
@@ -244,9 +250,9 @@ async def get_patient_from_mis(phone: str) -> dict | None:
     return None
 
 
-async def get_patient_appointments_from_mis(phone: str, months_back: int = 12) -> list[dict]:
+async def get_patient_appointments_from_mis(phone: str, months_back: int = 12, api_url: str = "", api_key: str = "") -> list[dict]:
     """История визитов пациента из МИС (по телефону → patient_id → appointments)."""
-    patient = await get_patient_from_mis(phone)
+    patient = await get_patient_from_mis(phone, api_url=api_url, api_key=api_key)
     if not patient:
         return []
     patient_id = patient.get("patient_id")
@@ -256,7 +262,7 @@ async def get_patient_appointments_from_mis(phone: str, months_back: int = 12) -
     date_from = (datetime.today() - timedelta(days=months_back * 30)).strftime("%d.%m.%Y")
     date_to = (datetime.today() + timedelta(days=90)).strftime("%d.%m.%Y")  # +будущие
 
-    result = await _post("getAppointments", patient_id=patient_id,
+    result = await _post("getAppointments", api_url=api_url, api_key=api_key, patient_id=patient_id,
                          date_updated_from=date_from, date_updated_to=date_to)
     if result.get("error") == 0:
         appts = result.get("data") or []

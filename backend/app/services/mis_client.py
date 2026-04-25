@@ -4,6 +4,7 @@ POST /api/public/METHOD + api_key in form body.
 """
 import logging
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.config import settings
 
 log = logging.getLogger("mis_client")
@@ -38,14 +39,26 @@ def _get_base(api_url: str = "") -> str:
     return DEFAULT_MIS_BASE
 
 
+@retry(
+    retry=retry_if_exception_type((httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+)
+async def _post_with_retry(client: httpx.AsyncClient, url: str, data: dict) -> httpx.Response:
+    """Выполнить POST-запрос с автоматическим retry при сетевых ошибках."""
+    resp = await client.post(url, data=data)
+    resp.raise_for_status()
+    return resp
+
+
 async def _post(method: str, api_url: str = "", api_key: str = "", ssl_verify: bool = True, **params) -> dict:
     key = api_key.strip() if api_key else settings.mis_api_key
     base = _get_base(api_url)
     data = {"api_key": key, **{k: v for k, v in params.items() if v is not None}}
     ssl = _ssl_context(ssl_verify)
     async with httpx.AsyncClient(verify=ssl, timeout=30) as client:
-        resp = await client.post(f"{base}/{method}", data=data)
-        resp.raise_for_status()
+        resp = await _post_with_retry(client, f"{base}/{method}", data)
         return resp.json()
 
 
