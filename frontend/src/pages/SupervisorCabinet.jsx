@@ -805,7 +805,7 @@ function AnalyticsSection({ token }) {
             <MetaCard label="Направлений" value={fmt(overview.current?.total)} color="#0097A7" />
             <MetaCard label="Конверсия" value={`${overview.current?.conversion_pct ?? 0}%`} color="#166534" />
             <MetaCard label="Подтверждено" value={fmt(overview.current?.confirmed)} color="#7c3aed" />
-            <MetaCard label="Бонусы выплачены" value={`${fmt(overview.current?.bonuses_paid)} тг`} color="#b45309" />
+            <MetaCard label="Бонусы выплачены" value={`${fmt(overview.current?.bonuses_paid)} ₽`} color="#b45309" />
           </div>
 
           {overview.previous && (
@@ -930,7 +930,7 @@ function BonusesSection({ token }) {
         <h2 className="text-xl font-bold text-gray-800">Бонусы</h2>
         {totalPending > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2 text-sm font-semibold text-amber-700">
-            К выплате: {fmt(Math.round(totalPending))} тг
+            К выплате: {fmt(Math.round(totalPending))} ₽
           </div>
         )}
       </div>
@@ -974,7 +974,7 @@ function BonusesSection({ token }) {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-sm font-bold ${tab === 'pending' ? 'text-amber-700' : 'text-green-600'}`}>
-                      {fmt(Math.round(total))} тг
+                      {fmt(Math.round(total))} ₽
                     </span>
                     {tab === 'pending' && total > 0 && (
                       <button onClick={() => handlePayAll(g.admin_id)} disabled={payAll === g.admin_id}
@@ -992,7 +992,7 @@ function BonusesSection({ token }) {
                         <div className="text-xs text-gray-400">{b.patient_phone || ''}{b.confirmed_at ? ` · ${new Date(b.confirmed_at).toLocaleDateString('ru')}` : ''}</div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-semibold text-gray-800 text-sm">{fmt(b.amount)} тг</span>
+                        <span className="font-semibold text-gray-800 text-sm">{fmt(b.amount)} ₽</span>
                         {tab === 'pending' && (
                           <button onClick={() => handlePay(b.bonus_id)} disabled={paying === b.bonus_id}
                             className="text-xs bg-green-100 text-green-700 rounded-lg px-2.5 py-1.5 font-semibold disabled:opacity-50">
@@ -1344,8 +1344,8 @@ function ServicesSection({ token }) {
                         <tr key={s.id} className={`border-b border-gray-50 ${i % 2 ? 'bg-gray-50/40' : ''}`}>
                           <td className="px-4 py-3 font-medium text-gray-800">{s.name}</td>
                           <td className="px-4 py-3 text-gray-400 text-xs font-mono">{s.code || '—'}</td>
-                          <td className="px-4 py-3 text-[#0097A7] font-semibold">{s.bonus_amount ? `${fmt(s.bonus_amount)} тг` : '—'}</td>
-                          <td className="px-4 py-3 text-gray-500">{s.original_price ? `${fmt(s.original_price)} тг` : '—'}</td>
+                          <td className="px-4 py-3 text-[#0097A7] font-semibold">{s.bonus_amount ? `${fmt(s.bonus_amount)} ₽` : '—'}</td>
+                          <td className="px-4 py-3 text-gray-500">{s.original_price ? `${fmt(s.original_price)} ₽` : '—'}</td>
                           <td className="px-4 py-3">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
                               {s.is_active !== false ? 'Активна' : 'Неактивна'}
@@ -1371,7 +1371,7 @@ function ServicesSection({ token }) {
                     <div key={s.id} className="p-4 flex items-center justify-between">
                       <div>
                         <div className="font-medium text-gray-800 text-sm">{s.name}</div>
-                        <div className="text-xs text-gray-400">{s.bonus_amount ? `бонус ${fmt(s.bonus_amount)} тг` : ''} {s.original_price ? `· цена ${fmt(s.original_price)} тг` : ''}</div>
+                        <div className="text-xs text-gray-400">{s.bonus_amount ? `бонус ${fmt(s.bonus_amount)} ₽` : ''} {s.original_price ? `· цена ${fmt(s.original_price)} ₽` : ''}</div>
                       </div>
                       <button onClick={() => openEdit(s)} className="text-xs text-[#0097A7] font-semibold">Изменить</button>
                     </div>
@@ -1416,12 +1416,12 @@ function ServicesSection({ token }) {
                   )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Бонус (тг)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Бонус (₽)</label>
                   <input type="number" min="0" step="0.01" value={form.bonus_amount} onChange={e => setForm(p => ({ ...p, bonus_amount: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Цена (тг)</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Цена (₽)</label>
                   <input type="number" min="0" step="0.01" value={form.original_price} onChange={e => setForm(p => ({ ...p, original_price: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
@@ -1508,7 +1508,7 @@ function BillingSection({ token }) {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-gray-50 rounded-xl p-3 text-center">
                   <div className="text-xs text-gray-400 mb-1">Сумма за период</div>
-                  <div className="font-bold text-gray-800">{fmt(sub.amount_per_period)} тг</div>
+                  <div className="font-bold text-gray-800">{fmt(sub.amount_per_period)} ₽</div>
                 </div>
                 <div className="bg-gray-50 rounded-xl p-3 text-center">
                   <div className="text-xs text-gray-400 mb-1">Период</div>
@@ -1534,11 +1534,11 @@ function BillingSection({ token }) {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
               <div className="text-xs text-gray-400 mb-1">Оплачено всего</div>
-              <div className="text-2xl font-bold text-green-600">{fmt(summary?.total_paid)} тг</div>
+              <div className="text-2xl font-bold text-green-600">{fmt(summary?.total_paid)} ₽</div>
             </div>
             <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
               <div className="text-xs text-gray-400 mb-1">К оплате</div>
-              <div className="text-2xl font-bold text-amber-600">{fmt(summary?.total_due)} тг</div>
+              <div className="text-2xl font-bold text-amber-600">{fmt(summary?.total_due)} ₽</div>
             </div>
             <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
               <div className="text-xs text-gray-400 mb-1">Счетов</div>
@@ -1569,7 +1569,7 @@ function BillingSection({ token }) {
                       {inv.period_start ? new Date(inv.period_start).toLocaleDateString('ru') : '—'} —{' '}
                       {inv.period_end ? new Date(inv.period_end).toLocaleDateString('ru') : '—'}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-gray-800">{fmt(inv.amount)} тг</td>
+                    <td className="px-4 py-3 font-semibold text-gray-800">{fmt(inv.amount)} ₽</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                         inv.status === 'paid' ? 'bg-green-100 text-green-700' :
@@ -1602,7 +1602,7 @@ function BillingSection({ token }) {
               </div>
               {p.subtitle && <div className="text-xs text-gray-400 mb-3">{p.subtitle}</div>}
               <div className="text-2xl font-bold text-[#0097A7] mb-1">
-                {fmt(p.price_monthly || p.prices?.monthly || p.monthly_price)} тг
+                {fmt(p.price_monthly || p.prices?.monthly || p.monthly_price)} ₽
               </div>
               <div className="text-xs text-gray-400 mb-4">в месяц</div>
               {p.bullets && (
@@ -1627,7 +1627,7 @@ function BillingSection({ token }) {
                     <div className="font-bold text-gray-800">{name}</div>
                     {sub?.plan === key && <span className="text-xs bg-[#0097A7] text-white px-2 py-0.5 rounded-full">Текущий</span>}
                   </div>
-                  <div className="text-2xl font-bold text-[#0097A7] mb-1">{fmt(prices[key])} тг</div>
+                  <div className="text-2xl font-bold text-[#0097A7] mb-1">{fmt(prices[key])} ₽</div>
                   <div className="text-xs text-gray-400">в месяц</div>
                 </div>
               )
@@ -1960,7 +1960,7 @@ function MisSection({ token }) {
                     <td className="px-4 py-3 font-medium text-gray-800">{s.name || s.mis_name || '—'}</td>
                     <td className="px-4 py-3 text-xs font-mono text-gray-400">{s.mis_id || s.code || '—'}</td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{s.category || '—'}</td>
-                    <td className="px-4 py-3 text-gray-700">{s.price ? `${fmt(s.price)} тг` : '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{s.price ? `${fmt(s.price)} ₽` : '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${s.synced ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
                         {s.synced ? 'Да' : 'Нет'}

@@ -275,7 +275,7 @@ function VisitCard({ visit }) {
         {(services.length > 1 || total > 0) && (
           <div className="flex items-center justify-between mt-2">
             {total > 0 && (
-              <span className="text-xs font-bold text-teal-700">{total.toLocaleString('ru-RU')} тг</span>
+              <span className="text-xs font-bold text-teal-700">{total.toLocaleString('ru-RU')} ₽</span>
             )}
             {services.length > 1 && (
               <button onClick={() => setExpanded(e => !e)}
@@ -292,7 +292,7 @@ function VisitCard({ visit }) {
           {services.map((s, i) => (
             <div key={i} className="flex items-center justify-between text-xs">
               <span className="text-gray-600 truncate flex-1 mr-2">{s.title || s.service_name || '—'}</span>
-              <span className="text-gray-800 font-semibold flex-shrink-0">{s.value || s.price ? `${parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} тг` : ''}</span>
+              <span className="text-gray-800 font-semibold flex-shrink-0">{s.value || s.price ? `${parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽` : ''}</span>
             </div>
           ))}
         </div>
