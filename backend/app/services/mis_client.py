@@ -9,7 +9,7 @@ from app.config import settings
 
 log = logging.getLogger("mis_client")
 
-DEFAULT_MIS_BASE = "https://mis.stoclinica.ru:3010/api/public"
+DEFAULT_MIS_BASE = "https://mis.stoclinic.ru:3010/api/public"
 MIS_CLINIC_IDS = {1, 4, 26}
 
 
@@ -33,6 +33,8 @@ def _ssl_context(ssl_verify: bool):
 def _get_base(api_url: str = "") -> str:
     if api_url and api_url.strip():
         url = api_url.strip().rstrip("/")
+        if url.startswith("http://"):
+            url = "https://" + url[7:]
         if not url.endswith("/api/public"):
             url = url + "/api/public"
         return url
@@ -52,12 +54,14 @@ async def _post_with_retry(client: httpx.AsyncClient, url: str, data: dict) -> h
     return resp
 
 
-async def _post(method: str, api_url: str = "", api_key: str = "", ssl_verify: bool = True, **params) -> dict:
+async def _post(method: str, api_url: str = "", api_key: str = "", ssl_verify: bool | None = None, **params) -> dict:
     key = api_key.strip() if api_key else settings.mis_api_key
     base = _get_base(api_url)
     data = {"api_key": key, **{k: v for k, v in params.items() if v is not None}}
+    if ssl_verify is None:
+        ssl_verify = settings.mis_ssl_verify
     ssl = _ssl_context(ssl_verify)
-    async with httpx.AsyncClient(verify=ssl, timeout=30) as client:
+    async with httpx.AsyncClient(verify=ssl, timeout=30, follow_redirects=True) as client:
         resp = await _post_with_retry(client, f"{base}/{method}", data)
         return resp.json()
 
