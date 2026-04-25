@@ -161,8 +161,8 @@ async def sync_services_bulk(
     category_filter: list[str] | None,  # None = все категории
     service_mis_ids: list[int] | None,  # None = все услуги
     tenant_id: uuid.UUID | None,
-    api_url: str = ,
-    api_key: str = ,
+    api_url: str = "",
+    api_key: str = "",
 ) -> dict:
     """
     Импортировать услуги из МИС в указанные клиники.

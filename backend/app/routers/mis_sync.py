@@ -38,8 +38,8 @@ def _require_manager(current_user: User = Depends(get_current_user)) -> User:
 async def list_mis_clinics(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех клиник в МИС (для выбора перед импортом)."""
     tid = current_user.tenant_id
-    api_url = await get_setting(db, mis_api_url, , tenant_id=tid)
-    api_key = await get_setting(db, mis_api_key, , tenant_id=tid)
+    api_url = await get_setting(db, "mis_api_url", "", tenant_id=tid)
+    api_key = await get_setting(db, "mis_api_key", "", tenant_id=tid)
     clinics = await get_mis_clinics(api_url=api_url, api_key=api_key)
     return {
         "clinics": [
@@ -69,8 +69,8 @@ async def sync_mis_clinics(
 ):
     """Импортировать/обновить выбранные клиники из МИС."""
     tid = current_user.tenant_id
-    api_url = await get_setting(db, mis_api_url, , tenant_id=tid)
-    api_key = await get_setting(db, mis_api_key, , tenant_id=tid)
+    api_url = await get_setting(db, "mis_api_url", "", tenant_id=tid)
+    api_key = await get_setting(db, "mis_api_key", "", tenant_id=tid)
     results = await sync_clinics_bulk(db, body.mis_ids, tid, api_url=api_url, api_key=api_key)
     created = [r for r in results if r["action"] == "created"]
     updated = [r for r in results if r["action"] == "updated"]
@@ -87,8 +87,8 @@ async def sync_mis_clinics(
 async def list_mis_doctors(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех врачей из МИС."""
     tid2 = current_user.tenant_id
-    api_url2 = await get_setting(db, mis_api_url, , tenant_id=tid2)
-    api_key2 = await get_setting(db, mis_api_key, , tenant_id=tid2)
+    api_url2 = await get_setting(db, "mis_api_url", "", tenant_id=tid2)
+    api_key2 = await get_setting(db, "mis_api_key", "", tenant_id=tid2)
     users = await get_mis_users(api_url=api_url2, api_key=api_key2)
     doctors = [u for u in users if "doctor" in (u.get("role_names") or []) and not u.get("is_deleted")]
     return {
