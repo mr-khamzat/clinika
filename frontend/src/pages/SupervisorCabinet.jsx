@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
 
@@ -55,8 +55,13 @@ const NAV = [
   { key: 'staff',      label: 'Персонал',     icon: 'group' },
   { key: 'clinics',    label: 'Клиники',      icon: 'local_hospital' },
   { key: 'referrals',  label: 'Направления',  icon: 'moving' },
+  { key: 'services',   label: 'Услуги',       icon: 'medical_services' },
   { key: 'analytics',  label: 'Аналитика',    icon: 'bar_chart' },
   { key: 'bonuses',    label: 'Бонусы',       icon: 'savings' },
+  { key: 'billing',    label: 'Биллинг',      icon: 'receipt_long' },
+  { key: 'modules',    label: 'Модули',       icon: 'extension' },
+  { key: 'mis',        label: 'МИС',          icon: 'sync_alt' },
+  { key: 'support',    label: 'Поддержка',    icon: 'support_agent' },
   { key: 'audit',      label: 'Аудит',        icon: 'manage_search' },
   { key: 'settings',   label: 'Настройки',    icon: 'settings' },
 ]
@@ -1197,6 +1202,941 @@ function SettingsSection({ token, user }) {
   )
 }
 
+// ── ServicesSection ───────────────────────────────────────────────────────────
+function ServicesSection({ token }) {
+  const [services, setServices] = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [catFilter, setCatFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [modal, setModal] = useState(null) // null | 'create' | serviceObj
+  const [form, setForm] = useState({ name: '', code: '', category: '', bonus_amount: '', original_price: '' })
+  const [saving, setSaving] = useState(false)
+  const a = api(token)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setErr('')
+    try {
+      const [sr, cr] = await Promise.all([
+        a.get('/manager/services/'),
+        a.get('/manager/services/categories'),
+      ])
+      setServices(Array.isArray(sr.data) ? sr.data : [])
+      setCategories(Array.isArray(cr.data) ? cr.data : [])
+    } catch { setErr('Ошибка загрузки') }
+    setLoading(false)
+  }, [token])
+
+  useEffect(() => { load() }, [load])
+
+  const openCreate = () => {
+    setForm({ name: '', code: '', category: categories[0] || '', bonus_amount: '', original_price: '' })
+    setModal('create')
+  }
+  const openEdit = (s) => {
+    setForm({ name: s.name, code: s.code || '', category: s.category || '', bonus_amount: s.bonus_amount || '', original_price: s.original_price || '' })
+    setModal(s)
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const body = {
+        name: form.name,
+        code: form.code || null,
+        category: form.category || null,
+        bonus_amount: parseFloat(form.bonus_amount) || 0,
+        original_price: form.original_price ? parseFloat(form.original_price) : null,
+      }
+      if (modal === 'create') {
+        await a.post('/manager/services/', body)
+      } else {
+        await a.patch(`/manager/services/${modal.id}`, body)
+      }
+      setModal(null)
+      load()
+    } catch (ex) {
+      alert(ex?.response?.data?.detail || 'Ошибка сохранения')
+    } finally { setSaving(false) }
+  }
+
+  const handleDeactivate = async (id) => {
+    if (!window.confirm('Деактивировать услугу?')) return
+    try {
+      await a.del(`/manager/services/${id}`)
+      load()
+    } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') }
+  }
+
+  const filtered = useMemo(() => services.filter(s => {
+    if (catFilter !== 'all' && s.category !== catFilter) return false
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (s.name || '').toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q)
+  }), [services, catFilter, search])
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800">Услуги</h2>
+        <button onClick={openCreate}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+          style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Добавить услугу
+        </button>
+      </div>
+
+      <div className="mb-4 space-y-2">
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setCatFilter('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${catFilter === 'all' ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+            Все
+          </button>
+          {categories.map(c => (
+            <button key={c} onClick={() => setCatFilter(c)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${catFilter === c ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
+              {c}
+            </button>
+          ))}
+        </div>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по названию или коду..."
+          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+      </div>
+
+      <Err msg={err} />
+      {loading ? <Spinner /> : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center text-gray-400 text-sm shadow-sm">Услуг нет</div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="hidden md:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  {['Название', 'Код', 'Категория', 'Бонус', 'Цена', 'Статус', ''].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((s, i) => (
+                  <tr key={s.id} className={`border-b border-gray-50 ${i % 2 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 font-medium text-gray-800">{s.name}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">{s.code || '—'}</td>
+                    <td className="px-4 py-3">
+                      {s.category ? (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{s.category}</span>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-[#0097A7] font-semibold">{s.bonus_amount ? `${fmt(s.bonus_amount)} ₸` : '—'}</td>
+                    <td className="px-4 py-3 text-gray-500">{s.original_price ? `${fmt(s.original_price)} ₸` : '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                        {s.is_active !== false ? 'Активна' : 'Неактивна'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2">
+                        <button onClick={() => openEdit(s)}
+                          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2.5 py-1.5 transition">Изменить</button>
+                        {s.is_active !== false && (
+                          <button onClick={() => handleDeactivate(s.id)}
+                            className="text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded-lg px-2.5 py-1.5 transition">Откл.</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="md:hidden divide-y divide-gray-100">
+            {filtered.map(s => (
+              <div key={s.id} className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-gray-800 text-sm">{s.name}</div>
+                  <div className="text-xs text-gray-400">{s.category || ''} {s.bonus_amount ? `· бонус ${fmt(s.bonus_amount)} ₸` : ''}</div>
+                </div>
+                <button onClick={() => openEdit(s)} className="text-xs text-[#0097A7] font-semibold">Изменить</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {modal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-800">{modal === 'create' ? 'Новая услуга' : 'Редактировать услугу'}</h2>
+              <button onClick={() => setModal(null)}><span className="material-symbols-outlined text-gray-400">close</span></button>
+            </div>
+            <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Название *</label>
+                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Код (МИС)</label>
+                  <input value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Категория</label>
+                  {categories.length > 0 ? (
+                    <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]">
+                      <option value="">— не задана —</option>
+                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Бонус (₸)</label>
+                  <input type="number" min="0" step="0.01" value={form.bonus_amount} onChange={e => setForm(p => ({ ...p, bonus_amount: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Цена (₸)</label>
+                  <input type="number" min="0" step="0.01" value={form.original_price} onChange={e => setForm(p => ({ ...p, original_price: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setModal(null)} className="px-4 py-2.5 text-sm text-gray-600">Отмена</button>
+                <button type="submit" disabled={saving}
+                  className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+                  {saving ? 'Сохранение...' : 'Сохранить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── BillingSection ────────────────────────────────────────────────────────────
+function BillingSection({ token }) {
+  const [summary, setSummary] = useState(null)
+  const [invoices, setInvoices] = useState([])
+  const [plans, setPlans] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('overview')
+  const a = api(token)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      a.get('/billing/summary').catch(() => ({ data: null })),
+      a.get('/billing/invoices').catch(() => ({ data: { items: [] } })),
+      a.get('/billing/plans').catch(() => ({ data: [] })),
+    ]).then(([s, inv, p]) => {
+      setSummary(s.data)
+      setInvoices(inv.data?.items || [])
+      setPlans(Array.isArray(p.data) ? p.data : [])
+    }).finally(() => setLoading(false))
+  }, [token])
+
+  const PLAN_NAMES = { basic: 'Basic', professional: 'Professional', enterprise: 'Enterprise' }
+  const STATUS_LABELS = {
+    active: { label: 'Активна', cls: 'bg-green-100 text-green-700' },
+    trial:  { label: 'Пробный период', cls: 'bg-amber-100 text-amber-700' },
+    expired: { label: 'Истекла', cls: 'bg-red-100 text-red-600' },
+    cancelled: { label: 'Отменена', cls: 'bg-gray-100 text-gray-600' },
+  }
+  const CYCLE_LABELS = { monthly: '1 мес', quarterly: '3 мес', semi_annual: '6 мес', nine_months: '9 мес', annual: '12 мес' }
+
+  const sub = summary?.subscription
+
+  if (loading) return <Spinner />
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 mb-5">Биллинг</h2>
+
+      <div className="flex gap-2 mb-5">
+        {[{ k: 'overview', l: 'Обзор' }, { k: 'invoices', l: 'Счета' }, { k: 'plans', l: 'Тарифы' }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${tab === t.k ? 'text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+            style={tab === t.k ? { background: 'linear-gradient(135deg,#0097A7,#006173)' } : {}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="space-y-4">
+          {sub ? (
+            <div className="bg-white rounded-2xl shadow-sm p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Текущая подписка</div>
+                  <div className="text-2xl font-bold text-gray-800">{PLAN_NAMES[sub.plan] || sub.plan}</div>
+                  <div className="text-sm text-gray-500 mt-1">{CYCLE_LABELS[sub.billing_cycle] || sub.billing_cycle}</div>
+                </div>
+                <span className={`text-xs font-semibold px-3 py-1 rounded-full ${STATUS_LABELS[sub.status]?.cls || 'bg-gray-100 text-gray-600'}`}>
+                  {STATUS_LABELS[sub.status]?.label || sub.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-xs text-gray-400 mb-1">Сумма за период</div>
+                  <div className="font-bold text-gray-800">{fmt(sub.amount_per_period)} ₸</div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-xs text-gray-400 mb-1">Период</div>
+                  <div className="font-bold text-gray-800 text-xs">
+                    {sub.current_period_start ? new Date(sub.current_period_start).toLocaleDateString('ru') : '—'} —{' '}
+                    {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString('ru') : '—'}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-xs text-gray-400 mb-1">Следующий счёт</div>
+                  <div className="font-bold text-gray-800 text-xs">
+                    {sub.next_invoice_date ? new Date(sub.next_invoice_date).toLocaleDateString('ru') : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl p-8 text-center text-gray-400 shadow-sm">
+              Подписка не найдена или недоступна
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
+              <div className="text-xs text-gray-400 mb-1">Оплачено всего</div>
+              <div className="text-2xl font-bold text-green-600">{fmt(summary?.total_paid)} ₸</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
+              <div className="text-xs text-gray-400 mb-1">К оплате</div>
+              <div className="text-2xl font-bold text-amber-600">{fmt(summary?.total_due)} ₸</div>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm p-5 text-center">
+              <div className="text-xs text-gray-400 mb-1">Счетов</div>
+              <div className="text-2xl font-bold text-gray-800">{summary?.invoices_count || 0}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'invoices' && (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          {invoices.length === 0 ? (
+            <div className="p-10 text-center text-gray-400 text-sm">Счетов нет</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  {['Номер', 'Период', 'Сумма', 'Статус', 'Дата'].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv, i) => (
+                  <tr key={inv.id} className={`border-b border-gray-50 ${i % 2 ? 'bg-gray-50/40' : ''}`}>
+                    <td className="px-4 py-3 text-xs font-mono text-gray-500">{inv.invoice_number || inv.id?.slice(0, 8)}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">
+                      {inv.period_start ? new Date(inv.period_start).toLocaleDateString('ru') : '—'} —{' '}
+                      {inv.period_end ? new Date(inv.period_end).toLocaleDateString('ru') : '—'}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-gray-800">{fmt(inv.amount)} ₸</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        inv.status === 'paid' ? 'bg-green-100 text-green-700' :
+                        inv.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
+                      }`}>
+                        {inv.status === 'paid' ? 'Оплачен' : inv.status === 'pending' ? 'Ожидает' : inv.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-400">
+                      {inv.created_at ? new Date(inv.created_at).toLocaleDateString('ru') : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'plans' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {plans.length > 0 ? plans.map(p => (
+            <div key={p.key || p.name} className={`bg-white rounded-2xl shadow-sm p-5 ${sub?.plan === (p.key || p.name) ? 'ring-2 ring-[#0097A7]' : ''}`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-bold text-gray-800">{PLAN_NAMES[p.key] || p.name}</div>
+                {sub?.plan === (p.key || p.name) && (
+                  <span className="text-xs bg-[#0097A7] text-white px-2 py-0.5 rounded-full font-semibold">Текущий</span>
+                )}
+              </div>
+              <div className="text-2xl font-bold text-[#0097A7] mb-1">
+                {fmt(p.prices?.monthly || p.monthly_price)} ₸
+              </div>
+              <div className="text-xs text-gray-400 mb-4">в месяц</div>
+              {p.features && (
+                <ul className="space-y-1">
+                  {(Array.isArray(p.features) ? p.features : []).map((f, i) => (
+                    <li key={i} className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="material-symbols-outlined text-green-500 text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )) : (
+            ['Basic', 'Professional', 'Enterprise'].map((name, i) => {
+              const key = ['basic', 'professional', 'enterprise'][i]
+              const prices = { basic: 9900, professional: 24900, enterprise: 49900 }
+              return (
+                <div key={key} className={`bg-white rounded-2xl shadow-sm p-5 ${sub?.plan === key ? 'ring-2 ring-[#0097A7]' : ''}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-bold text-gray-800">{name}</div>
+                    {sub?.plan === key && <span className="text-xs bg-[#0097A7] text-white px-2 py-0.5 rounded-full">Текущий</span>}
+                  </div>
+                  <div className="text-2xl font-bold text-[#0097A7] mb-1">{fmt(prices[key])} ₸</div>
+                  <div className="text-xs text-gray-400">в месяц</div>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── ModulesSection ────────────────────────────────────────────────────────────
+function ModulesSection({ token }) {
+  const [features, setFeatures] = useState([])
+  const [sub, setSub] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const a = api(token)
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      a.get('/modules/features').catch(() => ({ data: [] })),
+      a.get('/billing/subscription').catch(() => ({ data: null })),
+    ]).then(([f, s]) => {
+      setFeatures(Array.isArray(f.data) ? f.data : [])
+      setSub(s.data)
+    }).finally(() => setLoading(false))
+  }, [token])
+
+  const MODULE_LABELS = {
+    referrals: 'Направления', bonuses: 'Бонусы', clinics: 'Клиники', qr_scan: 'QR-сканер',
+    analytics: 'Аналитика', support: 'Поддержка', invitations: 'Приглашения',
+    discounts: 'Скидки', kpi: 'KPI', mis_sync: 'МИС-синхронизация',
+    partner_portal: 'Портал партнёров', custom_branding: 'Брендинг',
+    sms_notify: 'SMS уведомления', scheduling: 'Расписание',
+    billing: 'Биллинг', audit_log: 'Журнал аудита', multi_tenant: 'Мульти-тенант',
+    api_access: 'API доступ', financial_ledger: 'Фин. реестр',
+    telephony_basic: 'Телефония', video_calls: 'Видеозвонки', ai_analytics: 'AI-аналитика',
+    advertising: 'Реклама',
+  }
+
+  const PLAN_NAMES = { basic: 'Basic', professional: 'Professional', enterprise: 'Enterprise' }
+
+  if (loading) return <Spinner />
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 mb-5">Подключённые модули и тарифы</h2>
+
+      {sub && (
+        <div className="bg-white rounded-2xl shadow-sm p-5 mb-5" style={{ borderLeft: '4px solid #0097A7' }}>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Активный тариф</div>
+              <div className="text-xl font-bold text-gray-800">{PLAN_NAMES[sub.plan] || sub.plan}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-400 mb-1">Действует до</div>
+              <div className="font-semibold text-gray-700">
+                {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString('ru') : '—'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {features.map(f => (
+          <div key={f.name} className={`bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 ${f.enabled ? '' : 'opacity-60'}`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${f.enabled ? 'bg-[#0097A7]/10' : 'bg-gray-100'}`}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: f.enabled ? '#0097A7' : '#9ca3af', fontVariationSettings: f.enabled ? "'FILL' 1" : '' }}>
+                {f.enabled ? 'check_circle' : 'radio_button_unchecked'}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-gray-800 truncate">
+                {MODULE_LABELS[f.name] || f.name}
+              </div>
+              <div className="text-xs text-gray-400">{f.enabled ? 'Подключён' : 'Не подключён'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── MisSection ────────────────────────────────────────────────────────────────
+function MisSection({ token }) {
+  const [status, setStatus] = useState(null)
+  const [misClinics, setMisClinics] = useState([])
+  const [misDoctors, setMisDoctors] = useState([])
+  const [misServices, setMisServices] = useState([])
+  const [tab, setTab] = useState('status')
+  const [loading, setLoading] = useState(false)
+  const [syncing, setSyncing] = useState(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+  const a = api(token)
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const r = await a.get('/manager/mis/status')
+      setStatus(r.data)
+    } catch { setStatus(null) }
+  }, [token])
+
+  useEffect(() => { loadStatus() }, [loadStatus])
+
+  const loadTab = async (t) => {
+    setTab(t)
+    setLoading(true)
+    try {
+      if (t === 'clinics' && misClinics.length === 0) {
+        const r = await a.get('/mis/clinics')
+        setMisClinics(Array.isArray(r.data) ? r.data : [])
+      }
+      if (t === 'doctors' && misDoctors.length === 0) {
+        const r = await a.get('/mis/doctors')
+        setMisDoctors(Array.isArray(r.data) ? r.data : [])
+      }
+      if (t === 'services' && misServices.length === 0) {
+        const r = await a.get('/mis/services')
+        setMisServices(Array.isArray(r.data) ? r.data : [])
+      }
+    } catch {}
+    setLoading(false)
+  }
+
+  const handleSync = async (type) => {
+    setSyncing(type)
+    try {
+      await a.post(`/mis/${type}/sync`)
+      if (type === 'clinics') { const r = await a.get('/mis/clinics'); setMisClinics(Array.isArray(r.data) ? r.data : []) }
+      if (type === 'doctors') { const r = await a.get('/mis/doctors'); setMisDoctors(Array.isArray(r.data) ? r.data : []) }
+      if (type === 'services') { const r = await a.get('/mis/services'); setMisServices(Array.isArray(r.data) ? r.data : []) }
+    } catch (ex) {
+      alert(ex?.response?.data?.detail || 'Ошибка синхронизации')
+    } finally { setSyncing(null) }
+  }
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const r = await a.post('/manager/settings/test-mis')
+      setTestResult({ ok: true, msg: r.data?.message || 'Соединение успешно' })
+    } catch (ex) {
+      setTestResult({ ok: false, msg: ex?.response?.data?.detail || 'Ошибка соединения' })
+    } finally { setTesting(false) }
+  }
+
+  const tabs = [
+    { k: 'status', l: 'Статус' }, { k: 'clinics', l: 'Клиники' },
+    { k: 'doctors', l: 'Врачи' }, { k: 'services', l: 'Услуги' },
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <h2 className="text-xl font-bold text-gray-800">Интеграция МИС</h2>
+        <button onClick={handleTest} disabled={testing}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+          <span className="material-symbols-outlined text-[18px]">wifi_tethering</span>
+          {testing ? 'Проверяем...' : 'Проверить связь'}
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`rounded-xl px-4 py-3 mb-4 text-sm font-medium flex items-center gap-2 ${testResult.ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-600 border border-red-200'}`}>
+          <span className="material-symbols-outlined text-[18px]">{testResult.ok ? 'check_circle' : 'error'}</span>
+          {testResult.msg}
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {tabs.map(t => (
+          <button key={t.k} onClick={() => loadTab(t.k)}
+            className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${tab === t.k ? 'text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+            style={tab === t.k ? { background: 'linear-gradient(135deg,#0097A7,#006173)' } : {}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'status' && (
+        <div className="bg-white rounded-2xl shadow-sm p-6">
+          {status ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <span className="text-sm text-gray-600">Статус подключения</span>
+                <span className={`text-sm font-semibold flex items-center gap-1 ${status.connected ? 'text-green-600' : 'text-red-500'}`}>
+                  <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    {status.connected ? 'check_circle' : 'cancel'}
+                  </span>
+                  {status.connected ? 'Подключено' : 'Не подключено'}
+                </span>
+              </div>
+              {status.url && (
+                <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                  <span className="text-sm text-gray-600">URL МИС</span>
+                  <span className="text-sm text-gray-800 font-mono truncate max-w-xs">{status.url}</span>
+                </div>
+              )}
+              {status.last_sync && (
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-gray-600">Последняя синхронизация</span>
+                  <span className="text-sm text-gray-800">{new Date(status.last_sync).toLocaleString('ru')}</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center text-gray-400 text-sm py-6">МИС не настроен или статус недоступен</div>
+          )}
+        </div>
+      )}
+
+      {tab === 'clinics' && (
+        <div>
+          <div className="flex justify-end mb-3">
+            <button onClick={() => handleSync('clinics')} disabled={syncing === 'clinics'}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              <span className="material-symbols-outlined text-[16px]">sync</span>
+              {syncing === 'clinics' ? 'Синхронизация...' : 'Синхронизировать'}
+            </button>
+          </div>
+          {loading ? <Spinner /> : misClinics.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center text-gray-400 text-sm shadow-sm">Нет данных МИС</div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-100 bg-gray-50">
+                  {['ID в МИС', 'Название', 'Синхронизирован'].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>{misClinics.map((c, i) => (
+                  <tr key={c.mis_id || i} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-3 text-xs font-mono text-gray-400">{c.mis_id || '—'}</td>
+                    <td className="px-4 py-3 font-medium text-gray-800">{c.name || c.mis_name || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${c.synced ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {c.synced ? 'Да' : 'Нет'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'doctors' && (
+        <div>
+          <div className="flex justify-end mb-3">
+            <button onClick={() => handleSync('doctors')} disabled={syncing === 'doctors'}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              <span className="material-symbols-outlined text-[16px]">sync</span>
+              {syncing === 'doctors' ? 'Синхронизация...' : 'Синхронизировать'}
+            </button>
+          </div>
+          {loading ? <Spinner /> : misDoctors.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center text-gray-400 text-sm shadow-sm">Нет данных МИС</div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-100 bg-gray-50">
+                  {['ФИО', 'ID в МИС', 'Специализация', 'Аккаунт'].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>{misDoctors.map((d, i) => (
+                  <tr key={d.mis_id || i} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-3 font-medium text-gray-800">{d.full_name || d.mis_name || '—'}</td>
+                    <td className="px-4 py-3 text-xs font-mono text-gray-400">{d.mis_id || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{d.specialization || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${d.has_account ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {d.has_account ? 'Создан' : 'Нет'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'services' && (
+        <div>
+          <div className="flex justify-end mb-3">
+            <button onClick={() => handleSync('services')} disabled={syncing === 'services'}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              <span className="material-symbols-outlined text-[16px]">sync</span>
+              {syncing === 'services' ? 'Синхронизация...' : 'Синхронизировать'}
+            </button>
+          </div>
+          {loading ? <Spinner /> : misServices.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center text-gray-400 text-sm shadow-sm">Нет данных МИС</div>
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-gray-100 bg-gray-50">
+                  {['Название', 'Код МИС', 'Категория', 'Цена', 'Синх.'].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>{misServices.map((s, i) => (
+                  <tr key={s.mis_id || i} className="border-b border-gray-50 last:border-0">
+                    <td className="px-4 py-3 font-medium text-gray-800">{s.name || s.mis_name || '—'}</td>
+                    <td className="px-4 py-3 text-xs font-mono text-gray-400">{s.mis_id || s.code || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{s.category || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{s.price ? `${fmt(s.price)} ₸` : '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${s.synced ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {s.synced ? 'Да' : 'Нет'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── SupportSection ────────────────────────────────────────────────────────────
+function SupportSection({ token }) {
+  const [threads, setThreads] = useState([])
+  const [active, setActive] = useState(null) // { user_id, user_name, is_closed }
+  const [messages, setMessages] = useState([])
+  const [reply, setReply] = useState('')
+  const [sending, setSending] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const bottomRef = useRef(null)
+  const authH = { Authorization: `Bearer ${token}` }
+  const BASE = API_BASE + '/support'
+
+  const loadThreads = useCallback(async () => {
+    try {
+      const r = await axios.get(`${BASE}/admin/threads`, { headers: authH })
+      setThreads(Array.isArray(r.data) ? r.data : [])
+    } catch { setThreads([]) }
+    setLoading(false)
+  }, [token])
+
+  useEffect(() => { loadThreads() }, [loadThreads])
+
+  const loadMessages = useCallback(async (userId) => {
+    try {
+      const r = await axios.get(`${BASE}/admin/thread/${userId}`, { headers: authH })
+      setMessages(Array.isArray(r.data) ? r.data : [])
+    } catch {}
+  }, [token])
+
+  // Heartbeat while thread is open
+  useEffect(() => {
+    if (!active) return
+    loadMessages(active.user_id)
+    const beat = () => axios.post(`${BASE}/operator/heartbeat`, {}, { headers: authH }).catch(() => {})
+    beat()
+    const beatId = setInterval(beat, 30000)
+    const pollId = setInterval(() => loadMessages(active.user_id), 5000)
+    return () => {
+      clearInterval(beatId)
+      clearInterval(pollId)
+      axios.post(`${BASE}/operator/offline`, {}, { headers: authH }).catch(() => {})
+    }
+  }, [active?.user_id])
+
+  useEffect(() => {
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+  }, [messages])
+
+  const handleSend = async (e) => {
+    e.preventDefault()
+    if (!reply.trim() || sending) return
+    const t = reply.trim()
+    setReply('')
+    setSending(true)
+    try {
+      await axios.post(`${BASE}/admin/reply/${active.user_id}`, { text: t }, { headers: authH })
+      await loadMessages(active.user_id)
+    } catch { setReply(t) }
+    finally { setSending(false) }
+  }
+
+  const handleClose = async () => {
+    try {
+      await axios.post(`${BASE}/admin/close/${active.user_id}`, {}, { headers: authH })
+      setActive(p => ({ ...p, is_closed: true }))
+      loadThreads()
+    } catch {}
+  }
+
+  const handleReopen = async () => {
+    try {
+      await axios.post(`${BASE}/admin/reopen/${active.user_id}`, {}, { headers: authH })
+      setActive(p => ({ ...p, is_closed: false }))
+      loadThreads()
+    } catch {}
+  }
+
+  const fmtTime = (iso) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    const now = new Date()
+    return d.toDateString() === now.toDateString()
+      ? d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString('ru', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold text-gray-800 mb-5">Поддержка</h2>
+      <div className="flex gap-4 h-[calc(100vh-220px)] min-h-96">
+        {/* Thread list */}
+        <div className={`w-72 flex-shrink-0 bg-white rounded-2xl shadow-sm overflow-y-auto ${active ? 'hidden md:flex flex-col' : 'flex flex-col w-full'}`}>
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span className="text-sm font-bold text-gray-800">Диалоги</span>
+            <button onClick={loadThreads} className="text-gray-400 hover:text-gray-600">
+              <span className="material-symbols-outlined text-[18px]">refresh</span>
+            </button>
+          </div>
+          {loading ? <div className="p-4"><Spinner /></div> : threads.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 text-sm">Диалогов нет</div>
+          ) : threads.map(t => (
+            <button key={t.user_id} onClick={() => setActive(t)}
+              className={`w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition ${active?.user_id === t.user_id ? 'bg-[#0097A7]/5 border-l-4 border-l-[#0097A7]' : ''}`}>
+              <div className="flex items-start justify-between mb-0.5">
+                <span className="text-sm font-semibold text-gray-800 truncate">{t.user_name || '—'}</span>
+                {t.unread > 0 && (
+                  <span className="bg-[#0097A7] text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 flex-shrink-0 ml-1">
+                    {t.unread}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-gray-400 truncate">{t.last_message || '—'}</div>
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-gray-300">{fmtTime(t.last_at)}</span>
+                {t.is_closed && <span className="text-[10px] text-gray-400">Закрыт</span>}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Chat window */}
+        {active ? (
+          <div className="flex-1 bg-white rounded-2xl shadow-sm flex flex-col min-w-0">
+            {/* Chat header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100">
+              <button onClick={() => setActive(null)} className="md:hidden text-gray-400">
+                <span className="material-symbols-outlined">arrow_back</span>
+              </button>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+                {(active.user_name || '?')[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-gray-800">{active.user_name}</div>
+                <div className="text-xs text-gray-400">{active.user_role || ''}</div>
+              </div>
+              <div className="flex gap-2">
+                {active.is_closed ? (
+                  <button onClick={handleReopen}
+                    className="text-xs bg-green-100 text-green-700 rounded-lg px-3 py-1.5 font-semibold">
+                    Открыть
+                  </button>
+                ) : (
+                  <button onClick={handleClose}
+                    className="text-xs bg-gray-100 text-gray-600 rounded-lg px-3 py-1.5 font-semibold">
+                    Закрыть
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              {messages.map(m => (
+                <div key={m.id} className={`flex ${m.is_from_user ? 'justify-start' : 'justify-end'}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${
+                    m.is_from_user
+                      ? 'bg-gray-100 text-gray-800 rounded-tl-sm'
+                      : 'text-white rounded-tr-sm'
+                  }`} style={!m.is_from_user ? { background: 'linear-gradient(135deg,#0097A7,#006173)' } : {}}>
+                    {m.text}
+                    <div className={`text-[10px] mt-1 ${m.is_from_user ? 'text-gray-400' : 'text-white/60'}`}>
+                      {fmtTime(m.created_at)}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Reply form */}
+            {!active.is_closed && (
+              <form onSubmit={handleSend} className="px-4 py-3 border-t border-gray-100 flex gap-2">
+                <input value={reply} onChange={e => setReply(e.target.value)} placeholder="Написать ответ..."
+                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+                <button type="submit" disabled={!reply.trim() || sending}
+                  className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm disabled:opacity-40 transition"
+                  style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+                  <span className="material-symbols-outlined text-[18px]">send</span>
+                </button>
+              </form>
+            )}
+          </div>
+        ) : (
+          <div className="hidden md:flex flex-1 items-center justify-center bg-white rounded-2xl shadow-sm">
+            <div className="text-center text-gray-400">
+              <span className="material-symbols-outlined text-5xl mb-3 block text-gray-200">chat</span>
+              <div className="text-sm">Выберите диалог</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main SupervisorCabinet ────────────────────────────────────────────────────
 export default function SupervisorCabinet({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
@@ -1213,8 +2153,13 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'staff':     return <StaffSection token={adminToken} />
       case 'clinics':   return <ClinicsSection token={adminToken} />
       case 'referrals': return <ReferralsSection token={adminToken} />
+      case 'services':  return <ServicesSection token={adminToken} />
       case 'analytics': return <AnalyticsSection token={adminToken} />
       case 'bonuses':   return <BonusesSection token={adminToken} />
+      case 'billing':   return <BillingSection token={adminToken} />
+      case 'modules':   return <ModulesSection token={adminToken} />
+      case 'mis':       return <MisSection token={adminToken} />
+      case 'support':   return <SupportSection token={adminToken} />
       case 'audit':     return <AuditSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
       default:          return null
