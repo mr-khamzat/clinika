@@ -36,6 +36,8 @@ class Referral(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7))
 
     appointment_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    mis_appointment_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    mis_doctor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Cancellation fields
     cancel_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)

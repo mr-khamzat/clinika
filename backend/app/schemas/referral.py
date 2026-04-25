@@ -9,6 +9,7 @@ class ReferralCreate(BaseModel):
     patient_phone: str
     patient_name: str | None = None
     mis_patient_id: int | None = None
+    mis_doctor_id: int | None = None
     notes: str | None = None
     from_clinic_id: UUID | None = None  # только для менеджера
     appointment_at: datetime | None = None
@@ -24,6 +25,8 @@ class ReferralResponse(BaseModel):
     patient_phone: str
     patient_name: str | None = None
     mis_patient_id: int | None = None
+    mis_appointment_id: int | None = None
+    mis_doctor_id: int | None = None
     status: ReferralStatus
     qr_code: str | None
     patient_qr_code: str | None = None

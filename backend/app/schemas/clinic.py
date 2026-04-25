@@ -13,6 +13,7 @@ class ClinicResponse(BaseModel):
     address: str | None
     phone: str | None
     is_active: bool
+    mis_id: int | None = None
     created_at: datetime
 
     class Config:

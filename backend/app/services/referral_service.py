@@ -33,6 +33,7 @@ async def create_referral(
     appointment_at: datetime | None = None,
     patient_name: str | None = None,
     mis_patient_id: int | None = None,
+    mis_doctor_id: int | None = None,
     tenant_id: uuid.UUID | None = None,
 ) -> Referral:
     referral = Referral(
@@ -42,6 +43,7 @@ async def create_referral(
         patient_phone=patient_phone,
         patient_name=patient_name,
         mis_patient_id=mis_patient_id,
+        mis_doctor_id=mis_doctor_id,
         created_by_admin_id=created_by_admin_id,
         notes=notes,
         appointment_at=appointment_at,
@@ -59,6 +61,43 @@ async def create_referral(
     referral.patient_qr_code = generate_url_qr_base64(patient_url)
     await db.commit()
     await db.refresh(referral)
+
+    # Создаём запись в МИС (fire-and-forget, не прерывает создание направления)
+    try:
+        from sqlalchemy import select as _select
+        from app.models.clinic import Clinic as _Clinic
+        from app.services.mis_client import _post as _mis_post, find_patient_by_phone as _mis_find
+        from app.services.settings_service import get_setting as _get_s
+        _api_url = await _get_s(db, "mis_api_url", "", tenant_id=tenant_id) if tenant_id else ""
+        _api_key = await _get_s(db, "mis_api_key", "", tenant_id=tenant_id) if tenant_id else ""
+        # Найти пациента в МИС, если ещё не привязан
+        if not referral.mis_patient_id:
+            _pt = await _mis_find(patient_phone, api_url=_api_url, api_key=_api_key)
+            if _pt:
+                referral.mis_patient_id = _pt.get("patient_id")
+                await db.commit()
+        # Создать запись в расписании МИС
+        if appointment_at and mis_doctor_id:
+            _clinic_r = await db.execute(_select(_Clinic).where(_Clinic.id == to_clinic_id))
+            _clinic = _clinic_r.scalar_one_or_none()
+            if _clinic and _clinic.mis_id:
+                from datetime import timedelta as _td
+                _ts = appointment_at.strftime("%d.%m.%Y %H:%M")
+                _te = (appointment_at + _td(minutes=30)).strftime("%d.%m.%Y %H:%M")
+                _r = await _mis_post("createAppointment",
+                    api_url=_api_url, api_key=_api_key,
+                    mobile=patient_phone,
+                    clinic_id=_clinic.mis_id,
+                    doctor_id=mis_doctor_id,
+                    time_start=_ts,
+                    time_end=_te,
+                )
+                if _r.get("error") == 0 and _r.get("data"):
+                    referral.mis_appointment_id = int(_r["data"])
+                    await db.commit()
+    except Exception:
+        pass  # МИС недоступен — направление всё равно создано
+
     return referral
 
 
@@ -193,6 +232,21 @@ async def _apply_confirmation(
 
     await db.commit()
     await db.refresh(referral)
+
+    # Подтверждаем запись в МИС (fire-and-forget)
+    try:
+        if referral.mis_appointment_id:
+            from app.services.mis_client import _post as _mis_post2
+            from app.services.settings_service import get_setting as _get_s2
+            _api_url2 = await _get_s2(db, "mis_api_url", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
+            _api_key2 = await _get_s2(db, "mis_api_key", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
+            await _mis_post2("confirmAppointment",
+                api_url=_api_url2, api_key=_api_key2,
+                appointment_id=referral.mis_appointment_id,
+            )
+    except Exception:
+        pass  # МИС подтверждение не критично
+
     return referral
 
 

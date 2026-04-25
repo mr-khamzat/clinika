@@ -115,22 +115,62 @@ async def get_patient_referral(
     mis_patient_id = None
 
     try:
-        from app.services.mis_client import find_patient_by_phone, get_patient_visits, get_patient_analyses
-        patient = await find_patient_by_phone(ref.patient_phone)
+        from app.services.mis_client import find_patient_by_phone, _post as _mis_post
+        from app.services.settings_service import get_setting as _get_s
+        from app.models.clinic import Clinic as _ClinicM
+        from datetime import datetime as _dt, timedelta as _td
+
+        # Настройки МИС тенанта
+        _api_url = await _get_s(db, "mis_api_url", "", tenant_id=ref.tenant_id) if ref.tenant_id else ""
+        _api_key = await _get_s(db, "mis_api_key", "", tenant_id=ref.tenant_id) if ref.tenant_id else ""
+
+        patient = await find_patient_by_phone(ref.patient_phone, api_url=_api_url, api_key=_api_key)
         if patient:
             mis_patient_id = patient.get("patient_id") or patient.get("id")
+            _fn = f"{patient.get('last_name', '')} {patient.get('first_name', '')}".strip()
+            if patient.get('third_name'):
+                _fn += f" {patient['third_name']}"
             mis_info = {
                 "patient_id": mis_patient_id,
                 "card_number": patient.get("number"),
                 "birth_date": patient.get("birth_date"),
-                "gender": "М" if patient.get("gender") == 1 else ("Ж" if patient.get("gender") == 2 else None),
+                "age": patient.get("age"),
+                "gender": patient.get("gender"),
                 "has_account": patient.get("has_account", False),
-                "full_name": patient.get("full_name") or f"{patient.get('last_name', '')} {patient.get('first_name', '')}".strip(),
+                "full_name": _fn or patient.get("full_name", ""),
                 "email": patient.get("email"),
+                "send_sms": patient.get("send_sms"),
+                "date_created": patient.get("date_created"),
             }
-            if mis_patient_id:
-                mis_visits = await get_patient_visits(int(mis_patient_id))
-                mis_analyses = await get_patient_analyses(int(mis_patient_id))
+
+        # История визитов через getAppointments по всем клиникам тенанта
+        if mis_patient_id and ref.tenant_id:
+            _clinics_r = await db.execute(
+                select(_ClinicM).where(
+                    _ClinicM.tenant_id == ref.tenant_id,
+                    _ClinicM.mis_id.isnot(None),
+                    _ClinicM.is_active == True,
+                )
+            )
+            _tenant_clinics = _clinics_r.scalars().all()
+            _date_to  = _dt.now().strftime("%d.%m.%Y")
+            _date_from = (_dt.now() - _td(days=730)).strftime("%d.%m.%Y")
+            for _c in _tenant_clinics:
+                try:
+                    _res = await _mis_post(
+                        "getAppointments",
+                        api_url=_api_url, api_key=_api_key,
+                        clinic_id=_c.mis_id,
+                        date_from=_date_from,
+                        date_to=_date_to,
+                        patient_id=mis_patient_id,
+                    )
+                    _appts = _res.get("data") or []
+                    if isinstance(_appts, list):
+                        mis_visits.extend(_appts)
+                except Exception:
+                    continue
+            mis_visits.sort(key=lambda x: x.get("time_start", ""), reverse=True)
     except Exception:
         pass
 
@@ -143,8 +183,8 @@ async def get_patient_referral(
         },
         "other_referrals": other_refs,
         "mis_info": mis_info,
-        "mis_visits": mis_visits[:20],
-        "mis_analyses": mis_analyses[:20],
+        "mis_visits": mis_visits[:50],
+        "mis_analyses": [],
         "patient_token": t,
         "patient_phone": ref.patient_phone,
         "patient_name": ref.patient_name,

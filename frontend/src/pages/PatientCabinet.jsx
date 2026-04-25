@@ -214,39 +214,89 @@ function ReferralCard({ referral, index, onQr }) {
 }
 
 // ─── MIS Visit Card ───
+const VISIT_STATUS = {
+  completed: { label: 'Завершён',    bg: 'bg-emerald-50 text-emerald-600' },
+  upcoming:  { label: 'Предстоит',   bg: 'bg-blue-50 text-blue-600' },
+  refused:   { label: 'Отменён',     bg: 'bg-red-50 text-red-500' },
+}
+
+function fmtMisDate(str) {
+  if (!str) return '—'
+  // "25.04.2026 10:00" → "25 апр 2026, 10:00"
+  const months = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+  const [datePart, timePart] = str.split(' ')
+  if (!datePart) return str
+  const [d, m, y] = datePart.split('.')
+  const mon = months[parseInt(m, 10) - 1] || m
+  return timePart ? `${parseInt(d, 10)} ${mon} ${y}, ${timePart}` : `${parseInt(d, 10)} ${mon} ${y}`
+}
+
 function VisitCard({ visit }) {
-  const dateStr = visit.date || visit.appointment_date || visit.created_at
-  const doctor = visit.doctor_name || visit.doctor || '—'
-  const clinic = visit.clinic_name || visit.clinic || '—'
-  const service = visit.service_name || visit.service || visit.specialty || '—'
+  const [expanded, setExpanded] = useState(false)
+  // getAppointments structure
+  const dateStr = visit.time_start || visit.date || visit.appointment_date || visit.created_at
+  const doctor = visit.doctor || visit.doctor_name || '—'
+  const clinic = visit.clinic || visit.clinic_name || '—'
+  const services = Array.isArray(visit.services) ? visit.services : []
+  const firstService = services[0]?.title || visit.service_name || visit.service || visit.specialty || '—'
   const status = visit.status || visit.visit_status || ''
+  const sc = VISIT_STATUS[status] || { label: status, bg: 'bg-gray-100 text-gray-500' }
+  const total = visit.sum_value || 0
+  const isFirst = visit.is_first_clinic || visit.is_first
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-teal-50 rounded-xl flex items-center justify-center">
-            <span className="material-symbols-outlined text-teal-600 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="w-9 h-9 bg-teal-50 rounded-xl flex-shrink-0 flex items-center justify-center">
+              <span className="material-symbols-outlined text-teal-600 text-base" style={{ fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-gray-800 truncate">{firstService}</p>
+              <p className="text-xs text-gray-400 truncate">{doctor}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-800">{service}</p>
-            <p className="text-xs text-gray-400">{doctor}</p>
+          <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+            {isFirst && <span className="text-xs bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded-full font-semibold">1-й визит</span>}
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${sc.bg}`}>{sc.label}</span>
           </div>
         </div>
-        {status && (
-          <span className="text-xs font-medium bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">{status}</span>
+        <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">schedule</span>
+            {fmtMisDate(dateStr)}
+          </span>
+          <span className="flex items-center gap-1 truncate">
+            <span className="material-symbols-outlined text-sm">location_on</span>
+            <span className="truncate">{clinic}</span>
+          </span>
+        </div>
+        {(services.length > 1 || total > 0) && (
+          <div className="flex items-center justify-between mt-2">
+            {total > 0 && (
+              <span className="text-xs font-bold text-teal-700">{total.toLocaleString('ru-RU')} тг</span>
+            )}
+            {services.length > 1 && (
+              <button onClick={() => setExpanded(e => !e)}
+                className="text-xs text-[#0097A7] font-semibold ml-auto flex items-center gap-0.5">
+                {expanded ? 'Скрыть' : `+${services.length - 1} услуг`}
+                <span className="material-symbols-outlined text-sm">{expanded ? 'expand_less' : 'expand_more'}</span>
+              </button>
+            )}
+          </div>
         )}
       </div>
-      <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-        <span className="flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">calendar_today</span>
-          {fmt(dateStr)}
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="material-symbols-outlined text-sm">location_on</span>
-          {clinic}
-        </span>
-      </div>
+      {expanded && services.length > 0 && (
+        <div className="border-t border-gray-50 px-4 pb-3 pt-2 space-y-1">
+          {services.map((s, i) => (
+            <div key={i} className="flex items-center justify-between text-xs">
+              <span className="text-gray-600 truncate flex-1 mr-2">{s.title || s.service_name || '—'}</span>
+              <span className="text-gray-800 font-semibold flex-shrink-0">{s.value || s.price ? `${parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} тг` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

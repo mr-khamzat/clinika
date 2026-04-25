@@ -65,13 +65,15 @@ export default function CreateReferral() {
   const [loadingServices, setLoadingServices] = useState(false)
   const [form, setForm] = useState({
     from_clinic_id: '', to_clinic_id: '', service_id: '',
-    patient_phone: '', patient_name: '', mis_patient_id: null, notes: '', appointment_date: '', appointment_time: ''
+    patient_phone: '', patient_name: '', mis_patient_id: null, mis_doctor_id: null, notes: '', appointment_date: '', appointment_time: ''
   })
   const [loading, setLoading] = useState(false)
   const [templates, setTemplates] = useState(loadTemplates)
   const [misPatient, setMisPatient] = useState(null)
   const [misLinked, setMisLinked] = useState(false)
   const [misChecking, setMisChecking] = useState(false)
+  const [misDoctors, setMisDoctors] = useState([])
+  const [loadingDoctors, setLoadingDoctors] = useState(false)
   const [serviceCategory, setServiceCategory] = useState('')
   const [serviceSearch, setServiceSearch] = useState('')
   const { user } = useAuthStore()
@@ -86,13 +88,26 @@ export default function CreateReferral() {
   }, [])
 
   const handleToClinicChange = async (clinicId) => {
-    setForm(f => ({ ...f, to_clinic_id: clinicId, service_id: '', appointment_date: '', appointment_time: '' }))
+    setForm(f => ({ ...f, to_clinic_id: clinicId, service_id: '', appointment_date: '', appointment_time: '', mis_doctor_id: null }))
     setServices([])
     setSchedule([])
     setAvailableDates([])
+    setMisDoctors([])
     setServiceCategory('')
     setServiceSearch('')
     if (!clinicId) return
+    // Загрузить врачей МИС для этой клиники
+    const clinicData = allClinics.find(c => c.id === clinicId)
+    if (clinicData?.mis_id) {
+      setLoadingDoctors(true)
+      try {
+        const dr = await api.get('/mis/doctors')
+        const doctors = Array.isArray(dr.data?.doctors) ? dr.data.doctors : []
+        const filtered = doctors.filter(d => d.clinic_mis_id === clinicData.mis_id || (Array.isArray(d.clinic) && d.clinic.includes(String(clinicData.mis_id))))
+        setMisDoctors(filtered.length ? filtered : doctors)
+      } catch { setMisDoctors([]) }
+      finally { setLoadingDoctors(false) }
+    }
     setLoadingServices(true)
     try {
       const [svcRes, schedRes] = await Promise.all([
@@ -132,6 +147,7 @@ export default function CreateReferral() {
         patient_phone: form.patient_phone,
         patient_name: form.patient_name || null,
         mis_patient_id: form.mis_patient_id || null,
+        mis_doctor_id: form.mis_doctor_id || null,
         notes: form.notes || null,
       }
       if (isManager) payload.from_clinic_id = form.from_clinic_id
@@ -389,6 +405,35 @@ export default function CreateReferral() {
                     <p>{formatDateShort(selectedDate.date)}</p>
                   </div>
                 </div>
+              )}
+            </Section>
+          )}
+
+          {/* Врач МИС */}
+          {form.appointment_date && misDoctors.length > 0 && (
+            <Section icon="stethoscope" iconBg="bg-teal-50" iconColor="#0097A7" title="Врач (МИС)">
+              {loadingDoctors ? (
+                <div className="text-xs text-gray-400">Загрузка врачей...</div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={form.mis_doctor_id || ''}
+                    onChange={e => setForm(f => ({ ...f, mis_doctor_id: e.target.value ? parseInt(e.target.value) : null }))}
+                    className="w-full appearance-none bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-sm text-[#191c1e] outline-none border-2 border-transparent focus:border-[#0097A7]/30 focus:bg-white transition-all pr-10">
+                    <option value="">— Не выбран (без записи в МИС) —</option>
+                    {misDoctors.map(d => (
+                      <option key={d.mis_id} value={d.mis_id}>
+                        {d.name}{d.specialty ? ` · ${d.specialty}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-xl">expand_more</span>
+                </div>
+              )}
+              {form.mis_doctor_id && (
+                <p className="text-xs text-teal-600 mt-2 font-medium">
+                  ✓ Запись будет создана в МИС автоматически
+                </p>
               )}
             </Section>
           )}

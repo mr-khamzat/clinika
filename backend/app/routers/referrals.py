@@ -85,6 +85,7 @@ async def create_new_referral(
         patient_phone=data.patient_phone,
         patient_name=data.patient_name,
         mis_patient_id=data.mis_patient_id,
+        mis_doctor_id=getattr(data, "mis_doctor_id", None),
         created_by_admin_id=current_user.id,
         notes=data.notes,
         appointment_at=data.appointment_at,
