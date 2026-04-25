@@ -7364,6 +7364,15 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   }, [adminToken])
 
   const visibleNav = NAV.filter(item => {
+    // На тенант-URL (/arc/admin): скрываем Франшизы, гейтим рекламу и AI по модулям
+    if (SLUG) {
+      if (item.key === 'super_admin') return false
+      const m = activeModules
+      if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
+      if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
+      return true
+    }
+    // На платформенном /admin: super_admin видит всё
     if (isSuperAdmin || isSupervisor) return true
     const m = activeModules
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')

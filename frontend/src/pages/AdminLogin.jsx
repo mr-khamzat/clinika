@@ -17,16 +17,18 @@ export default function AdminLogin() {
       const data = res.data
       const redirect = data.redirect_url || ('/' + (data.tenant_slug || SLUG) + '/')
       const slug = data.tenant_slug || SLUG || 'arc'
+      // Если открыли тенант-панель (/arc/admin), не редиректить на /admin
+      const finalRedirect = SLUG && redirect === '/admin' ? '/' + SLUG + '/admin' : redirect
       // Все роли кроме partner идут в /{slug}/admin → clinika_admin_token_{slug}
       // partner идёт в /{slug}/ → clinika_token_{slug}
-      const isAdminPanel = redirect === '/admin' || redirect.endsWith('/admin')
+      const isAdminPanel = finalRedirect === '/admin' || finalRedirect.endsWith('/admin')
       if (isAdminPanel) {
-        const storageSlug = redirect === '/admin' ? '' : slug
+        const storageSlug = finalRedirect === '/admin' ? '' : slug
         localStorage.setItem('clinika_admin_token_' + storageSlug, data.access_token)
       } else {
         localStorage.setItem('clinika_token_' + slug, data.access_token)
       }
-      window.location.href = redirect
+      window.location.href = finalRedirect
     } catch {
       setError('Неверный логин или пароль')
     } finally {
