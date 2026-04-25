@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
+const AdsSection = lazy(() => import('../sections/AdsSection'))
+const AISection  = lazy(() => import('../sections/AISection'))
 import axios from 'axios'
 import { API_BASE } from '../config'
 
@@ -63,6 +65,8 @@ const NAV = [
   { key: 'mis',        label: 'МИС',          icon: 'sync_alt' },
   { key: 'support',    label: 'Поддержка',    icon: 'support_agent' },
   { key: 'audit',      label: 'Аудит',        icon: 'manage_search' },
+  { key: 'ads',          label: 'Реклама',      icon: 'campaign' },
+  { key: 'ai_analytics', label: 'AI-анализ',    icon: 'auto_awesome' },
   { key: 'settings',   label: 'Настройки',    icon: 'settings' },
 ]
 
@@ -2177,6 +2181,19 @@ function SupportSection({ token }) {
 export default function SupervisorCabinet({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [activeModules, setActiveModules] = useState(null)
+  useEffect(() => {
+    if (!adminToken) return
+    axios.get(API_BASE + '/modules/active-keys', { headers: { Authorization: `Bearer ${adminToken}` } })
+      .then(r => setActiveModules(new Set(Array.isArray(r.data) ? r.data : [])))
+      .catch(() => {})
+  }, [adminToken])
+  const visibleNav = NAV.filter(item => {
+    const m = activeModules
+    if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
+    if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
+    return true
+  })
 
   const handleNav = (key) => {
     setActiveSection(key)
@@ -2197,6 +2214,8 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'mis':       return <MisSection token={adminToken} />
       case 'support':   return <SupportSection token={adminToken} />
       case 'audit':     return <AuditSection token={adminToken} />
+      case 'ads':          return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
+      case 'ai_analytics': return <Suspense fallback={null}><AISection token={adminToken} isSuperAdmin={true} /></Suspense>
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
       default:          return null
     }
@@ -2232,7 +2251,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
 
         {/* Nav */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
-          {NAV.map(item => {
+          {visibleNav.map(item => {
             const isActive = activeSection === item.key
             return (
               <button key={item.key} onClick={() => handleNav(item.key)}

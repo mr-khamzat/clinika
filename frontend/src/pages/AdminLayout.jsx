@@ -7360,7 +7360,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     if (!adminToken) return
     apiFetch('get', '/modules/active-keys', adminToken)
       .then(r => setActiveModules(new Set(Array.isArray(r.data) ? r.data : [])))
-      .catch(() => setActiveModules(new Set()))
+      .catch(() => {})
   }, [adminToken])
 
   const visibleNav = NAV.filter(item => {
