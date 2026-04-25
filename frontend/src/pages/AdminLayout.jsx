@@ -7352,7 +7352,24 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const navBadge = {}
 
   const isSuperAdmin = user?.is_superadmin || user?.role === "super_admin"
-  const isTenantAdmin = isSuperAdmin || isSupervisor  // полный доступ к тенанту
+  const isSupervisor = user?.role === "supervisor"
+  const isTenantAdmin = isSuperAdmin || isSupervisor
+
+  const [activeModules, setActiveModules] = useState(null)
+  useEffect(() => {
+    if (!adminToken) return
+    apiFetch('get', '/modules/active-keys', adminToken)
+      .then(r => setActiveModules(new Set(Array.isArray(r.data) ? r.data : [])))
+      .catch(() => setActiveModules(new Set()))
+  }, [adminToken])
+
+  const visibleNav = NAV.filter(item => {
+    if (isSuperAdmin || isSupervisor) return true
+    const m = activeModules
+    if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
+    if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
+    return true
+  })
   const renderSection = () => {
 
     switch (activeSection) {
@@ -7428,7 +7445,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
         {/* Навигация */}
         <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
-          {NAV.map(item => {
+          {visibleNav.map(item => {
             const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key
             return (

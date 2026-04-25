@@ -58,16 +58,31 @@ function AdBanner({ ads, idx, setIdx }) {
       <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
         <div className="absolute inset-0 w-1/2" style={{ background: 'linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)', animation: 'shimmer 3s ease-in-out infinite' }} />
       </div>
-      <div className="flex items-center gap-3 relative">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
-          <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>campaign</span>
+      {(ad.image_data || ad.image_url) ? (
+        <div className="relative">
+          <img
+            src={ad.image_data
+              ? `data:${ad.image_mime || 'image/png'};base64,${ad.image_data}`
+              : ad.image_url}
+            alt={ad.title}
+            className="w-full rounded-xl object-cover block"
+            style={{ height: ad.banner_height || 80 }} />
+          <span className="absolute top-2 right-2 text-white/70 text-[10px] bg-black/30 px-1.5 py-0.5 rounded-full">РЕКЛАМА</span>
+          {ad.title && <p className="text-white font-bold text-sm mt-2 truncate">{ad.title}</p>}
+          {ad.body && <p className="text-white/65 text-xs mt-0.5 truncate">{ad.body}</p>}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-white font-bold text-sm truncate">{ad.title}</p>
-          {ad.body && <p className="text-white/70 text-xs mt-0.5 truncate">{ad.body}</p>}
+      ) : (
+        <div className="flex items-center gap-3 relative">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
+            <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>campaign</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-sm truncate">{ad.title}</p>
+            {ad.body && <p className="text-white/70 text-xs mt-0.5 truncate">{ad.body}</p>}
+          </div>
+          <span className="text-white/60 text-xs bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0">РЕКЛАМА</span>
         </div>
-        <span className="text-white/60 text-xs bg-white/10 px-2 py-0.5 rounded-full flex-shrink-0">РЕКЛАМА</span>
-      </div>
+      )}
       {ads.length > 1 && (
         <div className="flex justify-center gap-1.5 mt-3">
           {ads.map((_,i) => (

@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.deps import get_current_user
+from app.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.tenant import get_tenant_license
 from app.models.tenant import TenantLicense
 from app.modules import get_features_for_ui, has_feature, get_enabled_features
@@ -53,6 +55,28 @@ async def check_feature(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"Фича {name} не найдена")
     return {"name": name, "label": label, "enabled": enabled}
+
+
+@router.get("/active-keys")
+async def get_active_module_keys(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Активные коммерческие модули тенанта (для фильтрации меню фронтенда)."""
+    if not current_user.tenant_id:
+        return []
+    try:
+        from sqlalchemy import select as _sel
+        from app.models.commercial import TenantModuleSubscription as _TMS
+        rows = (await db.execute(
+            _sel(_TMS.module_key).where(
+                _TMS.tenant_id == current_user.tenant_id,
+                _TMS.status.in_(["active", "trial"]),
+            )
+        )).scalars().all()
+        return list(rows)
+    except Exception:
+        return []
 
 
 @router.get("/plans", response_model=list[PlanInfo])
