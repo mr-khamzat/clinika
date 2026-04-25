@@ -204,61 +204,61 @@ function ReferralCard({ referral, index, onQr }) {
   const isActive = referral.status === 'created' || referral.status === 'confirmed'
 
   return (
-    <div className="rounded-3xl overflow-hidden" style={{ boxShadow: '0 4px 24px rgba(0,0,0,.08)', border: '1px solid rgba(0,0,0,.06)' }}>
-      {/* Gradient header */}
-      <div className="p-5 relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
-        {/* Decorative circles */}
-        <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.07)' }} />
-        <div className="absolute -bottom-10 -left-4 w-24 h-24 rounded-full" style={{ background: 'rgba(255,255,255,.05)' }} />
-        <div className="relative">
-          <div className="flex items-start justify-between mb-4">
-            <div className="w-11 h-11 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.2)' }}>
-              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
-            </div>
-            <StatusBadge status={referral.status} />
-          </div>
-          <h3 className="text-xl font-extrabold text-white leading-tight">{referral.to_clinic_name || 'Клиника'}</h3>
-          <p className="text-white/70 text-sm mt-1 truncate">{referral.service_name}</p>
+    <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: '1px solid rgba(0,0,0,.06)' }}>
+      {/* Compact colour strip */}
+      <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
+        style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
+        <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full" style={{ background: 'rgba(255,255,255,.08)' }} />
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 relative"
+          style={{ background: 'rgba(255,255,255,.2)' }}>
+          <span className="material-symbols-outlined text-white text-base"
+            style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
         </div>
+        <div className="flex-1 min-w-0 relative">
+          <p className="text-white font-bold text-sm leading-tight truncate">{referral.to_clinic_name || 'Клиника'}</p>
+          <p className="text-white/65 text-xs truncate mt-0.5">{referral.service_name}</p>
+        </div>
+        <StatusBadge status={referral.status} />
       </div>
-      {/* Body */}
-      <div className="bg-white p-4 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Дата</p>
-            <p className="text-sm font-semibold text-gray-800 mt-0.5">
+      {/* Details row */}
+      <div className="px-4 py-2.5 space-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-[13px] text-gray-400">calendar_today</span>
+            <span className="font-semibold text-gray-700">
               {referral.appointment_at ? fmt(referral.appointment_at) : fmt(referral.created_at)}
-            </p>
-          </div>
+            </span>
+          </span>
           {referral.short_code && (
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Код</p>
-              <p className="text-sm font-bold text-gray-800 mt-0.5 tracking-widest">{referral.short_code}</p>
-            </div>
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-[13px] text-gray-400">tag</span>
+              <span className="font-bold text-gray-700 tracking-widest">{referral.short_code}</span>
+            </span>
+          )}
+          {referral.from_clinic_name && (
+            <span className="flex items-center gap-1 min-w-0">
+              <span className="material-symbols-outlined text-[13px] text-gray-400">arrow_forward</span>
+              <span className="truncate">{referral.from_clinic_name}</span>
+            </span>
           )}
         </div>
-        {referral.from_clinic_name && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
-            <span>Направлен из: <span className="font-semibold text-gray-700">{referral.from_clinic_name}</span></span>
-          </div>
-        )}
         {referral.notes && (
-          <div className="bg-gray-50 rounded-xl px-3 py-2 text-xs text-gray-600 italic">"{referral.notes}"</div>
+          <p className="text-xs text-gray-400 italic truncate">"{referral.notes}"</p>
         )}
-        {/* Actions */}
         {isActive && referral.qr_code && (
           <button onClick={() => onQr(referral.qr_code)}
-            className="w-full h-12 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all active:scale-[.98]"
-            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', color: 'white', boxShadow: '0 4px 16px rgba(0,151,167,.3)' }}>
-            <span className="material-symbols-outlined text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+            className="w-full h-9 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[.98]"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', color: 'white', boxShadow: '0 3px 10px rgba(0,151,167,.25)' }}>
+            <span className="material-symbols-outlined text-base"
+              style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
             Показать QR-код
           </button>
         )}
         {referral.status === 'confirmed' && (
-          <div className="flex items-center gap-2 bg-emerald-50 rounded-xl px-3 py-2">
-            <span className="material-symbols-outlined text-emerald-500 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
-            <span className="text-emerald-700 text-xs font-semibold">Посещение подтверждено {referral.confirmed_at ? fmt(referral.confirmed_at) : ''}</span>
+          <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+            <span className="material-symbols-outlined text-sm"
+              style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+            <span className="font-semibold">Подтверждено {referral.confirmed_at ? fmt(referral.confirmed_at) : ''}</span>
           </div>
         )}
       </div>
