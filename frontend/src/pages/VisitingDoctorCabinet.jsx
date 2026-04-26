@@ -326,9 +326,9 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
     setScanner(false)
     const v = value.trim()
 
-    // Извлечь apt_id из URL /p/apt/{uuid}
+    // Извлечь apt_id из URL /p/{uuid}?t=... или /p/apt/{uuid}
     let extractedId = null
-    const urlMatch = v.match(/\/p\/apt\/([0-9a-f-]{36})/i)
+    const urlMatch = v.match(/\/p\/(?:apt\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
     if (urlMatch) extractedId = urlMatch[1]
 
     const aptId = extractedId || (v.startsWith('APT:') ? v.slice(4) : null)

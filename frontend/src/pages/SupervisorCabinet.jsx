@@ -117,6 +117,14 @@ function ExtDoctorsSection({ token }) {
     setAptsLoading(false)
   }
 
+  // Автообновление таблицы записей каждые 30 сек
+  useEffect(() => {
+    if (mainTab !== "appointments") return
+    loadAllApts()
+    const timer = setInterval(loadAllApts, 30000)
+    return () => clearInterval(timer)
+  }, [mainTab])
+
   const openEditApt = (apt) => {
     setEditApt(apt)
     setEditAptForm({

@@ -35,6 +35,8 @@ async def create_referral(
     mis_patient_id: int | None = None,
     mis_doctor_id: int | None = None,
     tenant_id: uuid.UUID | None = None,
+    tenant_slug: str | None = None,
+    base_url: str | None = None,
 ) -> Referral:
     referral = Referral(
         from_clinic_id=from_clinic_id,
@@ -57,7 +59,12 @@ async def create_referral(
     referral.short_code = await _generate_short_code(db)
     # QR для пациента (ссылка на личный кабинет)
     token = make_patient_token(str(referral.id), referral.patient_phone)
-    patient_url = f"{settings.mini_app_url}/p/{referral.id}?t={token}"
+    _origin = (base_url or settings.mini_app_url).rstrip("/")
+    _slug = tenant_slug or ""
+    if _slug:
+        patient_url = f"{_origin}/{_slug}/p/{referral.id}?t={token}"
+    else:
+        patient_url = f"{_origin}/p/{referral.id}?t={token}"
     referral.patient_qr_code = generate_url_qr_base64(patient_url)
     await db.commit()
     await db.refresh(referral)

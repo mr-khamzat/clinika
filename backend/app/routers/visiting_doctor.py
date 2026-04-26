@@ -535,7 +535,7 @@ async def get_visiting_doctor_appointments(
             "patient_phone":    a.patient_phone,
             "appointment_date": a.appointment_date.isoformat(),
             "start_time":       str(a.start_time),
-            "status":           str(a.status),
+            "status":           a.status.value if hasattr(a.status, "value") else str(a.status),
             "price":            price_val,
             "doctor_share":     share,
         })
@@ -679,7 +679,7 @@ async def get_all_visiting_appointments(
             "appointment_date": a.appointment_date.isoformat(),
             "start_time":       str(a.start_time),
             "end_time":         str(a.end_time),
-            "status":           str(a.status),
+            "status":           a.status.value if hasattr(a.status, "value") else str(a.status),
             "price":            price_val,
             "doctor_share":     share,
         })

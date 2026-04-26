@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -69,6 +69,7 @@ async def verify_patient(
 @router.post("/", response_model=ReferralResponse)
 async def create_new_referral(
     data: ReferralCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -76,6 +77,14 @@ async def create_new_referral(
     # Партнёры (role=partner) не привязаны к клинике — from_clinic_id остаётся None
     if not from_clinic_id and current_user.role != UserRole.PARTNER:
         raise HTTPException(status_code=400, detail="Укажите клинику-отправителя")
+
+    # Получаем slug тенанта для URL пациента
+    _tenant_slug = None
+    if current_user.tenant_id:
+        from app.models.tenant import Tenant as _Tenant
+        _tenant = await db.get(_Tenant, current_user.tenant_id)
+        _tenant_slug = _tenant.slug if _tenant else None
+    _base_url = request.headers.get("origin") or request.headers.get("referer", "").rstrip("/").rsplit("/", 2)[0] or None
 
     referral = await create_referral(
         db=db,
@@ -90,6 +99,8 @@ async def create_new_referral(
         notes=data.notes,
         appointment_at=data.appointment_at,
         tenant_id=current_user.tenant_id,
+        tenant_slug=_tenant_slug,
+        base_url=_base_url,
     )
     await _log(db, current_user, "Создано направление", "referral", referral.id)
     if current_user.tenant_id:
