@@ -25,6 +25,17 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [externalDoctors, setExternalDoctors] = useState([])
   const [doctorRequests, setDoctorRequests] = useState([])
 
+  // Записи к приезжим врачам
+  const [visitingDoctors, setVisitingDoctors] = useState([])
+  const [visitingSettings, setVisitingSettings] = useState([])
+  const [visitingApts, setVisitingApts] = useState([])
+  const [visitingAptLoading, setVisitingAptLoading] = useState(false)
+  const [bookVisitDoc, setBookVisitDoc] = useState(null)
+  const [bookVisitForm, setBookVisitForm] = useState({ patient_name:'', patient_phone:'', appointment_date:'', start_time:'09:00', end_time:'09:30', price:'' })
+  const [bookVisitSaving, setBookVisitSaving] = useState(false)
+  const [bookVisitMsg, setBookVisitMsg] = useState('')
+  const [bookVisitResult, setBookVisitResult] = useState(null)
+
   // Форма создания направления
   const [form, setForm] = useState({ to_clinic_id: '', service_id: '', patient_phone: '', patient_name: '', notes: '' })
   const [createdRef, setCreatedRef] = useState(null)
@@ -36,6 +47,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
     if (tab === 'referrals') loadReferrals()
     if (tab === 'bonuses') loadBonuses()
     if (tab === 'doctors') loadDoctors()
+    if (tab === 'visiting') loadVisiting()
   }, [tab])
 
   async function loadDoctors() {
@@ -47,6 +59,42 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
       setExternalDoctors(Array.isArray(docRes.data) ? docRes.data : [])
       setDoctorRequests(Array.isArray(reqRes.data) ? reqRes.data : [])
     } catch {}
+  }
+
+  async function loadVisiting() {
+    setVisitingAptLoading(true)
+    try {
+      const [settRes, aptRes] = await Promise.all([
+        a.get('/visiting/admin/settings').catch(() => ({ data: [] })),
+        a.get('/visiting/admin/all-appointments').catch(() => ({ data: [] })),
+      ])
+      const settings = Array.isArray(settRes.data) ? settRes.data : []
+      setVisitingSettings(settings)
+      const docIds = [...new Set(settings.map(s => s.doctor_id))]
+      // Загрузить данные о врачах из settings (doctor_name есть в settings)
+      setVisitingDoctors(settings.filter((s, i, arr) => arr.findIndex(x => x.doctor_id === s.doctor_id) === i))
+      setVisitingApts(Array.isArray(aptRes.data) ? aptRes.data : [])
+    } catch {}
+    setVisitingAptLoading(false)
+  }
+
+  async function saveBookVisit(e) {
+    e.preventDefault(); setBookVisitSaving(true); setBookVisitMsg('')
+    try {
+      const r = await a.post('/visiting/admin/book-appointment', {
+        doctor_user_id: bookVisitDoc.doctor_id,
+        patient_name: bookVisitForm.patient_name,
+        patient_phone: bookVisitForm.patient_phone,
+        appointment_date: bookVisitForm.appointment_date,
+        start_time: bookVisitForm.start_time,
+        end_time: bookVisitForm.end_time,
+        price: bookVisitForm.price ? parseFloat(bookVisitForm.price) : null,
+      })
+      setBookVisitResult(r.data)
+      setBookVisitMsg('✅ Запись создана')
+      loadVisiting()
+    } catch (e) { setBookVisitMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
+    setBookVisitSaving(false)
   }
 
   async function loadStats() {
@@ -148,6 +196,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             ['dashboard', 'Главная'],
             ['create', 'Создать'],
             ['referrals', 'Направления'],
+            ['visiting', 'Приезжие врачи'],
             ['bonuses', 'Бонусы'],
             ['doctors', 'Врачи'],
           ].map(([id, label]) => (
@@ -306,6 +355,141 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         )}
 
         {/* ─── Bonuses ─── */}
+        {tab === 'visiting' && (
+          <div className="space-y-4">
+            {/* Модал записи */}
+            {bookVisitDoc && (
+              <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+                <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:400, width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
+                  <div className="flex justify-between items-center mb-4">
+                    <div className="font-bold text-gray-800">Запись к врачу: {bookVisitDoc.doctor_name}</div>
+                    <button onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }} className="text-gray-400 text-xl">✕</button>
+                  </div>
+                  {bookVisitResult ? (
+                    <div className="space-y-3">
+                      {bookVisitResult.patient_qr && (
+                        <div className="text-center">
+                          <img src={'data:image/png;base64,' + bookVisitResult.patient_qr} alt="QR пациента"
+                            className="w-40 h-40 mx-auto rounded-xl cursor-pointer border border-gray-200"
+                            onClick={() => window.open(bookVisitResult.patient_url, '_blank')} />
+                          <p className="text-xs text-gray-400 mt-1">QR для пациента (кабинет)</p>
+                        </div>
+                      )}
+                      {bookVisitResult.short_code && (
+                        <div className="text-center rounded-xl p-3" style={{ background:'#fff8e1', border:'1px solid #ffe082' }}>
+                          <p className="text-xs font-semibold uppercase text-orange-600 mb-1">Код для пациента</p>
+                          <p className="text-4xl font-black text-orange-600" style={{ letterSpacing:6 }}>{bookVisitResult.short_code}</p>
+                        </div>
+                      )}
+                      {bookVisitResult.patient_url && (
+                        <a href={bookVisitResult.patient_url} target="_blank" rel="noreferrer"
+                          className="block text-center text-xs text-teal-600 underline">Открыть кабинет пациента →</a>
+                      )}
+                      <button onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
+                        className="w-full py-2 rounded-xl font-semibold text-sm" style={{ background:'#0097A7', color:'#fff', border:'none' }}>
+                        Закрыть
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={saveBookVisit} className="space-y-3">
+                      {[
+                        { label:'ФИО пациента *', key:'patient_name', type:'text' },
+                        { label:'Телефон пациента *', key:'patient_phone', type:'tel' },
+                        { label:'Дата приёма *', key:'appointment_date', type:'date' },
+                      ].map(f => (
+                        <div key={f.key}>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">{f.label}</label>
+                          <input type={f.type} required value={bookVisitForm[f.key] || ''} onChange={e => setBookVisitForm(p => ({ ...p, [f.key]: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { label:'Начало', key:'start_time', type:'time' },
+                          { label:'Конец', key:'end_time', type:'time' },
+                        ].map(f => (
+                          <div key={f.key}>
+                            <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">{f.label}</label>
+                            <input type={f.type} required value={bookVisitForm[f.key] || ''} onChange={e => setBookVisitForm(p => ({ ...p, [f.key]: e.target.value }))}
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                          </div>
+                        ))}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Стоимость ₽ (необязательно)</label>
+                        <input type="number" value={bookVisitForm.price || ''} onChange={e => setBookVisitForm(p => ({ ...p, price: e.target.value }))}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none" />
+                      </div>
+                      {bookVisitMsg && <p className="text-sm text-center font-semibold">{bookVisitMsg}</p>}
+                      <div className="flex gap-2 pt-1">
+                        <button type="button" onClick={() => setBookVisitDoc(null)}
+                          className="flex-1 py-2 rounded-xl text-sm font-semibold text-gray-500" style={{ background:'#f0f5f6', border:'1px solid #e0eaec' }}>
+                          Отмена
+                        </button>
+                        <button type="submit" disabled={bookVisitSaving}
+                          className="flex-2 py-2 rounded-xl text-sm font-bold text-white" style={{ flex:2, background: bookVisitSaving ? '#b2dfdb' : '#0097A7', border:'none' }}>
+                          {bookVisitSaving ? 'Запись...' : '+ Записать'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Приезжие врачи</p>
+              {visitingAptLoading && <p className="text-gray-400 text-sm text-center py-4">Загрузка...</p>}
+              {!visitingAptLoading && visitingDoctors.length === 0 && (
+                <p className="text-gray-400 text-sm text-center py-4">Нет приезжих врачей</p>
+              )}
+              {visitingDoctors.filter(d => d.is_active !== false && !d.is_suspended).map(d => (
+                <div key={d.doctor_id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'#e0f7fa' }}>
+                    <span className="material-symbols-outlined text-teal-600" style={{ fontSize:20, fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{d.doctor_name}</p>
+                    <p className="text-xs text-gray-400">{parseFloat(d.price_per_visit || 0).toLocaleString('ru')} ₽ · {d.doctor_percent}% врачу</p>
+                  </div>
+                  <button onClick={() => {
+                    const today = new Date().toISOString().slice(0,10)
+                    setBookVisitDoc(d)
+                    setBookVisitForm({ patient_name:'', patient_phone:'', appointment_date:today, start_time:'09:00', end_time:'09:30', price: d.price_per_visit || '' })
+                    setBookVisitMsg(''); setBookVisitResult(null)
+                  }}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg text-white" style={{ background:'#0097A7', border:'none' }}>
+                    + Записать
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Записи на сегодня</p>
+              {visitingApts.filter(a => a.appointment_date === new Date().toISOString().slice(0,10)).length === 0 && (
+                <p className="text-gray-400 text-sm text-center py-2">Нет записей на сегодня</p>
+              )}
+              {visitingApts.filter(a => a.appointment_date === new Date().toISOString().slice(0,10)).map(a => (
+                <div key={a.id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{a.patient_name}</p>
+                      <p className="text-xs text-gray-400">{a.start_time?.slice(0,5)} — {a.end_time?.slice(0,5)} · {a.doctor_name}</p>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{
+                      background: String(a.status).includes('completed') ? '#e8f5e9' : '#e0f7fa',
+                      color: String(a.status).includes('completed') ? '#2e7d32' : '#0097A7'
+                    }}>
+                      {String(a.status).includes('completed') ? '✓ Завершён' : '⏳ Ожидает'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {tab === 'bonuses' && (
           <div className="space-y-4">
             <h2 className="text-lg font-bold text-gray-800 dark:text-white">Мои бонусы</h2>

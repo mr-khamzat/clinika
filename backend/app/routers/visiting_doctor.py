@@ -368,6 +368,8 @@ class UpdateDoctorBody(BaseModel):
     price_per_visit: Optional[float] = None
     doctor_percent: Optional[float] = None
     clinic_id: Optional[uuid.UUID] = None
+    username: Optional[str] = None
+    new_password: Optional[str] = None
 
 
 @router.post("/admin/book-appointment", status_code=201)
@@ -567,6 +569,11 @@ async def update_visiting_doctor(
     if body.phone_number   is not None: doctor_user.phone_number  = body.phone_number
     if body.email          is not None: doctor_user.email         = body.email
     if body.specialization is not None: doctor_user.specialization = body.specialization
+    if body.username       is not None and body.username.strip():
+        doctor_user.username = body.username.strip()
+    if body.new_password   is not None and body.new_password.strip():
+        from app.core.security import get_password_hash
+        doctor_user.hashed_password = get_password_hash(body.new_password.strip())
 
     if body.price_per_visit is not None or body.doctor_percent is not None:
         settings = await db.scalar(

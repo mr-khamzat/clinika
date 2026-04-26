@@ -227,7 +227,7 @@ function ExtDoctorsSection({ token }) {
   const openEdit = (doc) => {
     const s = settings.find(x => x.doctor_id === doc.id)
     setEditDoc(doc)
-    setEditForm({ full_name: doc.full_name, phone_number: doc.phone_number || '', email: doc.email || '', specialization: doc.specialization || '', price_per_visit: s ? s.price_per_visit : '', doctor_percent: s ? s.doctor_percent : '70' })
+    setEditForm({ full_name: doc.full_name, phone_number: doc.phone_number || '', email: doc.email || '', specialization: doc.specialization || '', price_per_visit: s ? s.price_per_visit : '', doctor_percent: s ? s.doctor_percent : '70', username: doc.username || '', new_password: '' })
   }
   const saveEdit = async (e) => {
     e.preventDefault(); setEditSaving(true)
@@ -367,6 +367,22 @@ function ExtDoctorsSection({ token }) {
                     style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
                 </div>
               ))}
+              <div style={{ background:'#f5f5f5', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#455a64', marginBottom:8 }}>Доступ (логин и пароль)</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  <div>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Логин</label>
+                    <input value={editForm.username || ''} onChange={e => setEditForm(p => ({ ...p, username: e.target.value }))}
+                      style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Новый пароль</label>
+                    <input type="password" value={editForm.new_password || ''} onChange={e => setEditForm(p => ({ ...p, new_password: e.target.value }))}
+                      placeholder="Оставьте пустым"
+                      style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                  </div>
+                </div>
+              </div>
               <div style={{ background:'#f0f9fa', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:D, marginBottom:8 }}>Условия работы</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
