@@ -126,8 +126,8 @@ function QrFullscreen({ qr, onClose }) {
         <span className="text-white text-2xl font-extrabold tracking-tight">Clinika</span>
       </div>
       <p className="text-blue-200 text-sm mb-6 text-center px-8">Покажите этот QR-код врачу или администратору</p>
-      <div className="bg-white rounded-3xl p-5 shadow-2xl" style={{ boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
-        <img src={`data:image/png;base64,${qr}`} alt="QR" className="w-64 h-64 rounded-2xl block" />
+      <div className="bg-white rounded-3xl shadow-2xl" style={{ padding: 16, boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
+        <img src={`data:image/png;base64,${qr}`} alt="QR" style={{ width: 280, height: 280, display: 'block', borderRadius: 0 }} />
       </div>
       <p className="text-blue-300 text-xs mt-8">Нажмите в любом месте, чтобы закрыть</p>
     </div>

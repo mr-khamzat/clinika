@@ -94,15 +94,20 @@ function QRScanner({ onDetect, onClose }) {
           await videoRef.current.play()
         }
 
+        // BarcodeDetector создаётся один раз
+        const barcodeDetector = ('BarcodeDetector' in window)
+          ? new window.BarcodeDetector({ formats: ['qr_code'] })
+          : null
+
         const tick = () => {
           if (detectedRef.current) return
           const video = videoRef.current
           const canvas = canvasRef.current
           if (!video || !canvas || video.readyState < 2) { rafRef.current = requestAnimationFrame(tick); return }
 
-          // Сначала BarcodeDetector (Chrome/Edge)
-          if ('BarcodeDetector' in window) {
-            new window.BarcodeDetector({ formats: ['qr_code'] }).detect(video)
+          if (barcodeDetector) {
+            // BarcodeDetector: Chrome/Edge/Android
+            barcodeDetector.detect(video)
               .then(codes => {
                 if (codes.length > 0 && !detectedRef.current) {
                   detectedRef.current = true
@@ -116,15 +121,15 @@ function QRScanner({ onDetect, onClose }) {
             return
           }
 
-          // Fallback: jsQR через canvas
+          // jsQR fallback: Safari/Firefox
           if (jsQR) {
             const ctx = canvas.getContext('2d')
-            canvas.width  = video.videoWidth  || 320
-            canvas.height = video.videoHeight || 240
+            canvas.width  = video.videoWidth  || 640
+            canvas.height = video.videoHeight || 480
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
             try {
               const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' })
               if (code && code.data && !detectedRef.current) {
                 detectedRef.current = true
                 setScanning(true)
@@ -132,6 +137,10 @@ function QRScanner({ onDetect, onClose }) {
                 return
               }
             } catch {}
+          } else {
+            // jsQR не загружен и BarcodeDetector недоступен
+            setCamErr('Сканер недоступен. Введите код вручную.')
+            return
           }
           rafRef.current = requestAnimationFrame(tick)
         }
