@@ -41,3 +41,4 @@ uploads/
 
 # package-lock (большой, генерируется автоматически)
 frontend/package-lock.json
+.github/
