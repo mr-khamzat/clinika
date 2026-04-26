@@ -157,6 +157,21 @@ async def generate_invoice(
     sub.status = SubStatus.ACTIVE
 
     await db.flush()
+
+    # Пишем в billing_ledger: начисление за подписку
+    if sub.amount_per_period and sub.amount_per_period > 0:
+        await record_billing_ledger(
+            db,
+            tenant_id=sub.tenant_id,
+            entry_type=EntryType.SUBSCRIPTION_CHARGE,
+            direction=Direction.DEBIT,
+            amount=sub.amount_per_period,
+            reference_id=invoice.id,
+            reference_type='invoice',
+            description=f'Подписка {sub.plan} ({sub.billing_cycle}) — {invoice.invoice_number}',
+            meta={'plan': sub.plan, 'cycle': sub.billing_cycle, 'invoice_number': invoice.invoice_number},
+        )
+
     return invoice
 
 
@@ -225,6 +240,20 @@ async def record_payment(
         sub.status = SubStatus.ACTIVE
 
     await db.flush()
+
+    # Пишем в billing_ledger: получение платежа
+    await record_billing_ledger(
+        db,
+        tenant_id=invoice.tenant_id,
+        entry_type=EntryType.PAYMENT_RECEIVED,
+        direction=Direction.CREDIT,
+        amount=amount,
+        reference_id=payment.id,
+        reference_type='payment',
+        description=f'Оплата счёта {invoice.invoice_number}',
+        meta={'invoice_id': str(invoice.id), 'method': method, 'gateway': gateway},
+    )
+
     return payment
 
 

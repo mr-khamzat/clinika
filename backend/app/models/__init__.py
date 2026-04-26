@@ -52,3 +52,8 @@ from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus
 from app.models.ai_history import AIAnalysisHistory
 
 from app.models.commercial import CommercialModule, TenantModuleSubscription, TenantIntegration
+
+# Система внешних и приглашённых врачей
+from app.models.external_doctor import DoctorRequest, VisitingDoctorSettings
+
+from app.models.wiki import WikiPage, WikiImage

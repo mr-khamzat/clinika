@@ -285,3 +285,150 @@ async def get_admin_stats(
         "pending_bonuses": bonus_sums.get(BonusStatus.PENDING, 0.0),
         "paid_bonuses": bonus_sums.get(BonusStatus.PAID, 0.0),
     }
+
+
+# ── Модерация заявок на привлечённых врачей ────────────────────────────────────
+
+@router.get("/doctor-requests")
+async def list_doctor_requests(
+    status_filter: str | None = None,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список заявок на регистрацию врача от менеджеров по привлечению."""
+    from app.models.external_doctor import DoctorRequest
+    q = select(DoctorRequest).where(DoctorRequest.tenant_id == current_user.tenant_id)
+    if status_filter:
+        q = q.where(DoctorRequest.status == status_filter)
+    q = q.order_by(DoctorRequest.created_at.desc())
+    rows = (await db.execute(q)).scalars().all()
+    result = []
+    for r in rows:
+        manager = None
+        if r.manager_id:
+            m = (await db.execute(select(User).where(User.id == r.manager_id))).scalar_one_or_none()
+            manager = m.full_name if m else None
+        result.append({
+            "id": r.id,
+            "manager_id": r.manager_id,
+            "manager_name": manager,
+            "doctor_name": r.doctor_name,
+            "phone": r.phone,
+            "clinic_name": r.clinic_name,
+            "specialization": r.specialization,
+            "notes": r.notes,
+            "status": r.status,
+            "created_at": r.created_at,
+            "approved_at": r.approved_at,
+        })
+    return result
+
+
+@router.post("/doctor-requests/{request_id}/approve")
+async def approve_doctor_request(
+    request_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Одобрить заявку — создать аккаунт external_doctor и обновить статус заявки."""
+    from app.models.external_doctor import DoctorRequest
+    import secrets, hashlib
+    from datetime import datetime, timezone
+
+    req = (await db.execute(
+        select(DoctorRequest).where(
+            DoctorRequest.id == request_id,
+            DoctorRequest.tenant_id == current_user.tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if req.status != "pending":
+        raise HTTPException(status_code=400, detail="Заявка уже обработана")
+
+    # Создаём пользователя
+    raw_pass = secrets.token_urlsafe(8)
+    hashed = hashlib.sha256(raw_pass.encode()).hexdigest()  # auth_utils недоступен напрямую
+    try:
+        from app.core.security import get_password_hash
+        hashed = get_password_hash(raw_pass)
+    except Exception:
+        try:
+            from app.core.auth import get_password_hash
+            hashed = get_password_hash(raw_pass)
+        except Exception:
+            pass
+
+    username = "doc_" + req.phone.replace("+", "").replace(" ", "")[-8:]
+    new_user = User(
+        full_name=req.doctor_name,
+        username=username,
+        hashed_password=hashed,
+        role=UserRole.EXTERNAL_DOCTOR,
+        tenant_id=current_user.tenant_id,
+        manager_id=req.manager_id,
+        is_active=True,
+    )
+    db.add(new_user)
+    await db.flush()
+
+    req.status = "approved"
+    req.approved_at = datetime.now(timezone.utc)
+    req.approved_by_id = current_user.id
+    req.created_user_id = new_user.id
+    await db.commit()
+
+    return {
+        "status": "approved",
+        "user_id": new_user.id,
+        "username": username,
+        "temp_password": raw_pass,
+    }
+
+
+@router.post("/doctor-requests/{request_id}/reject")
+async def reject_doctor_request(
+    request_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отклонить заявку."""
+    from app.models.external_doctor import DoctorRequest
+    req = (await db.execute(
+        select(DoctorRequest).where(
+            DoctorRequest.id == request_id,
+            DoctorRequest.tenant_id == current_user.tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    req.status = "rejected"
+    await db.commit()
+    return {"status": "rejected"}
+
+
+@router.get("/external-doctors")
+async def list_external_doctors(
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список всех external/visiting врачей тенанта."""
+    q = select(User).where(
+        User.tenant_id == current_user.tenant_id,
+        User.role.in_([UserRole.EXTERNAL_DOCTOR, UserRole.VISITING_DOCTOR]),
+        User.is_active == True,
+    ).order_by(User.full_name)
+    rows = (await db.execute(q)).scalars().all()
+    return [
+        {
+            "id": u.id,
+            "full_name": u.full_name,
+            "username": u.username,
+            "role": u.role.value,
+            "doctor_type": u.doctor_type,
+            "manager_id": u.manager_id,
+            "clinic_id": u.clinic_id,
+            "is_active": u.is_active,
+        }
+        for u in rows
+    ]

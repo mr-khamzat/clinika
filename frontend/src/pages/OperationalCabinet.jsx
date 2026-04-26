@@ -22,6 +22,9 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const [externalDoctors, setExternalDoctors] = useState([])
+  const [doctorRequests, setDoctorRequests] = useState([])
+
   // Форма создания направления
   const [form, setForm] = useState({ to_clinic_id: '', service_id: '', patient_phone: '', patient_name: '', notes: '' })
   const [createdRef, setCreatedRef] = useState(null)
@@ -32,7 +35,19 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   useEffect(() => {
     if (tab === 'referrals') loadReferrals()
     if (tab === 'bonuses') loadBonuses()
+    if (tab === 'doctors') loadDoctors()
   }, [tab])
+
+  async function loadDoctors() {
+    try {
+      const [docRes, reqRes] = await Promise.all([
+        a.get('/admins/external-doctors').catch(() => ({ data: [] })),
+        a.get('/admins/doctor-requests').catch(() => ({ data: [] })),
+      ])
+      setExternalDoctors(Array.isArray(docRes.data) ? docRes.data : [])
+      setDoctorRequests(Array.isArray(reqRes.data) ? reqRes.data : [])
+    } catch {}
+  }
 
   async function loadStats() {
     try {
@@ -134,6 +149,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             ['create', 'Создать'],
             ['referrals', 'Направления'],
             ['bonuses', 'Бонусы'],
+            ['doctors', 'Врачи'],
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition ${
@@ -315,6 +331,61 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {/* ─── Внешние врачи ─── */}
+        {tab === 'doctors' && (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Заявки на регистрацию</p>
+              {doctorRequests.length === 0 && <p className="text-gray-400 text-sm py-4 text-center">Заявок нет</p>}
+              {doctorRequests.map(r => {
+                const stColor = {pending:'bg-yellow-100 text-yellow-700',approved:'bg-green-100 text-green-700',rejected:'bg-red-100 text-red-700'}
+                const stLabel = {pending:'Ожидает',approved:'Одобрено',rejected:'Отклонено'}
+                return (
+                  <div key={r.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 mb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 dark:text-white">{r.doctor_name}</p>
+                        <p className="text-xs text-gray-400">{r.phone} · {r.specialization || '—'}</p>
+                        {r.manager_name && <p className="text-xs text-gray-400">Менеджер: {r.manager_name}</p>}
+                      </div>
+                      <div className="flex flex-col gap-1 flex-shrink-0 items-end">
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${stColor[r.status] || 'bg-gray-100 text-gray-500'}`}>
+                          {stLabel[r.status] || r.status}
+                        </span>
+                        {r.status === 'pending' && (
+                          <div className="flex gap-1">
+                            <button onClick={async () => { try { await a.post('/admins/doctor-requests/' + r.id + '/approve'); loadDoctors() } catch(e) { alert(e?.response?.data?.detail || 'Ошибка') } }}
+                              className="text-xs bg-green-600 text-white px-2 py-0.5 rounded-lg">✓</button>
+                            <button onClick={async () => { try { await a.post('/admins/doctor-requests/' + r.id + '/reject'); loadDoctors() } catch(e) { alert(e?.response?.data?.detail || 'Ошибка') } }}
+                              className="text-xs bg-red-600 text-white px-2 py-0.5 rounded-lg">✗</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Зарегистрированные врачи</p>
+              {externalDoctors.length === 0 && <p className="text-gray-400 text-sm py-4 text-center">Нет врачей</p>}
+              {externalDoctors.map(d => (
+                <div key={d.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-3 mb-2 flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+                    <span className="material-symbols-outlined text-teal-600 text-sm" style={{ fontVariationSettings:"'FILL' 1" }}>person</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-white truncate">{d.full_name}</p>
+                    <p className="text-xs text-gray-400">{d.role === 'visiting_doctor' ? 'Выездной' : 'Внешний'} · {d.username}</p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${d.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {d.is_active ? 'Активен' : 'Неактивен'}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

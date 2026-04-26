@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react
 const PlatformSection = lazy(() => import('../sections/PlatformSection'))
 const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
+const WikiSection = lazy(() => import('../sections/WikiSection'))
 const AISection = lazy(() => import('../sections/AISection'))
 const BillingLedgerSection = lazy(() => import('../sections/BillingLedgerSection'))
 const TenantDrawer = lazy(() => import('../sections/TenantDrawer'))
@@ -84,6 +85,7 @@ const NAV = [
   { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
   { key: 'push_notify',    label: 'Push',         icon: 'notifications' },
+  { key: 'wiki',           label: 'Документация', icon: 'auto_stories' },
   { key: 'settings',       label: 'Настройки',    icon: 'settings' },
 ]
 
@@ -7383,6 +7385,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
     switch (activeSection) {
       case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
+      case 'wiki': return <Suspense fallback={null}><WikiSection token={adminToken} /></Suspense>
       case 'settings':  return <SettingsSection token={adminToken} />
       case 'analytics': return <AnalyticsDrillSection token={adminToken} />
       case 'audit':     return <AuditSection token={adminToken} />

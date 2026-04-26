@@ -729,6 +729,57 @@ async def platform_ledger(
     }
 
 
+
+
+@router.get("/billing/ledger/entries")
+async def platform_ledger_entries(
+    days: int = 30,
+    entry_type: str = None,
+    tenant_id: uuid.UUID = None,
+    limit: int = 100,
+    offset: int = 0,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список отдельных записей billing_ledger (для журнала реестра)."""
+    from datetime import timedelta
+    from app.models.billing_ledger import BillingLedger
+
+    since = datetime.utcnow() - timedelta(days=days)
+    filters = [BillingLedger.created_at >= since, BillingLedger.is_split == False]
+    if entry_type:
+        filters.append(BillingLedger.entry_type == entry_type)
+    if tenant_id:
+        filters.append(BillingLedger.tenant_id == tenant_id)
+
+    rows = (await db.execute(
+        select(BillingLedger)
+        .where(*filters)
+        .order_by(BillingLedger.created_at.desc())
+        .limit(limit).offset(offset)
+    )).scalars().all()
+
+    total_q = await db.execute(
+        select(func.count(BillingLedger.id)).where(*filters)
+    )
+    total = total_q.scalar() or 0
+
+    def _out(e):
+        return {
+            "id":             str(e.id),
+            "tenant_id":      str(e.tenant_id) if e.tenant_id else None,
+            "entry_type":     e.entry_type,
+            "direction":      e.direction,
+            "amount":         float(e.amount),
+            "currency":       e.currency,
+            "reference_id":   str(e.reference_id) if e.reference_id else None,
+            "reference_type": e.reference_type,
+            "description":    e.description,
+            "meta":           e.meta,
+            "created_at":     e.created_at.isoformat(),
+        }
+
+    return {"total": total, "items": [_out(r) for r in rows]}
 @router.get("/tenants/{tenant_id}/credentials")
 async def get_tenant_credentials(
     tenant_id: uuid.UUID,

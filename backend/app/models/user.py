@@ -15,6 +15,9 @@ class UserRole(str, enum.Enum):
     NURSE = "nurse"
     RECRUITER = "recruiter"
     SUPERVISOR = "supervisor"
+    ACQUISITION_MANAGER = "acquisition_manager"
+    EXTERNAL_DOCTOR = "external_doctor"
+    VISITING_DOCTOR = "visiting_doctor"
 
 class User(Base):
     __tablename__ = "users"
@@ -40,6 +43,10 @@ class User(Base):
     consent_given: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, server_default="false")
     consent_given_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     consent_version: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Тип врача: internal | external | visiting
+    doctor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Менеджер привлечения (для external_doctor/visiting_doctor)
+    manager_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="users")

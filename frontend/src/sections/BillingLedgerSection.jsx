@@ -418,47 +418,54 @@ function SummaryTab({ summary, loading, p }) {
 
 // ── Журнал ────────────────────────────────────────────────────────────────────
 
-function JournalTab({ data, days, p }) {
+function JournalTab({ token, days, p }) {
   const [typeFilter, setTypeFilter] = useState('')
-  const [tenantFilter, setTenantFilter] = useState('')
+  const [entries, setEntries] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const LIMIT = 50
 
-  if (!data) return null
-
-  const summary = data.summary || {}
-  const bd = summary.breakdown || {}
-
-  // Синтезируем записи из breakdown для "журнала"
-  // (реального эндпоинта /billing/ledger со списком нет, используем breakdown)
-  const allRows = Object.entries(bd).map(([k, v]) => {
-    const isCredit = k.endsWith('_credit')
-    const typeKey = k.replace(/_credit$|_debit$/, '')
-    return {
-      key: k,
-      entry_type: typeKey,
-      label: ENTRY_LABELS[typeKey] || typeKey,
-      direction: isCredit ? 'credit' : 'debit',
-      amount: v.amount || 0,
-      count: v.count || 0,
+  const load = useCallback(async (off = 0) => {
+    setLoading(true)
+    setError('')
+    try {
+      let url = `/admin/billing/ledger/entries?days=${days}&limit=${LIMIT}&offset=${off}`
+      if (typeFilter) url += `&entry_type=${typeFilter}`
+      const d = await apiFetch(token, url)
+      setEntries(d.items || [])
+      setTotal(d.total || 0)
+      setOffset(off)
+    } catch (e) {
+      setError(e.message || 'Ошибка загрузки')
+    } finally {
+      setLoading(false)
     }
-  }).sort((a, b) => b.amount - a.amount)
+  }, [token, days, typeFilter])
 
-  const typeOptions = [...new Set(allRows.map(r => r.entry_type))]
-  const filtered = allRows.filter(r =>
-    (!typeFilter || r.entry_type === typeFilter)
-  )
+  useEffect(() => { load(0) }, [load])
+
+  const typeOptions = [
+    'subscription_charge','subscription_trial','plugin_charge','plugin_renewal',
+    'ad_charge','ad_click_income','ad_impression_income','payment_received',
+  ]
+
+  const fmtDate = iso => {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+  }
 
   return (
-    <div style={{
-      background: p.card, border: `1px solid ${p.cardBorder}`,
-      borderRadius: 16, padding: 24,
-    }}>
+    <div style={{ background: p.card, border: `1px solid ${p.cardBorder}`, borderRadius: 16, padding: 24 }}>
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: p.text1, flex: 1 }}>
-          Сводный журнал за {days} дней
+          {'Журнал операций за ' + days + ' дней · ' + total + ' записей'}
         </div>
         <select
           value={typeFilter}
-          onChange={e => setTypeFilter(e.target.value)}
+          onChange={e => { setTypeFilter(e.target.value) }}
           style={{
             background: p.inputBg, border: `1px solid ${p.inputBorder}`,
             borderRadius: 10, padding: '8px 12px', fontSize: 13, color: p.text1, outline: 'none',
@@ -471,50 +478,61 @@ function JournalTab({ data, days, p }) {
         </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {error && (
+        <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{error}</div>
+      )}
+
+      {loading ? (
+        <div style={{ color: p.text3, textAlign: 'center', padding: '32px 0', fontSize: 13 }}>Загрузка...</div>
+      ) : entries.length === 0 ? (
         <div style={{ color: p.text3, textAlign: 'center', padding: '32px 0', fontSize: 13 }}>
-          Нет записей за период
+          Нет записей за период · включите модули или выставьте счёт для появления данных
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: p.tableTh }}>
-                {['Тип операции', 'Направление', 'Сумма', 'Записей'].map(h => (
+                {['Дата', 'Тип', 'Описание', 'Направление', 'Сумма'].map(h => (
                   <th key={h} style={{
-                    padding: '10px 14px', textAlign: 'left',
-                    color: p.text2, fontWeight: 600,
-                    borderBottom: `1px solid ${p.border}`,
-                    whiteSpace: 'nowrap',
+                    padding: '10px 14px', textAlign: 'left', color: p.text2, fontWeight: 600,
+                    borderBottom: `1px solid ${p.border}`, whiteSpace: 'nowrap',
                   }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row, i) => (
-                <tr key={row.key} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
-                  <td style={{ padding: '10px 14px', color: p.text1, borderBottom: `1px solid ${p.border}` }}>
-                    {row.label}
+              {entries.map((row, i) => (
+                <tr key={row.id} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
+                  <td style={{ padding: '9px 14px', color: p.text3, borderBottom: `1px solid ${p.border}`, whiteSpace: 'nowrap' }}>
+                    {fmtDate(row.created_at)}
                   </td>
-                  <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                  <td style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
+                    <span style={{
+                      background: p.pillBg, color: p.text2,
+                      padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                    }}>
+                      {ENTRY_LABELS[row.entry_type] || row.entry_type}
+                    </span>
+                  </td>
+                  <td style={{ padding: '9px 14px', color: p.text1, borderBottom: `1px solid ${p.border}`, maxWidth: 260 }}>
+                    {row.description || '—'}
+                  </td>
+                  <td style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
                       background: row.direction === 'credit' ? '#d1fae5' : '#fee2e2',
                       color: row.direction === 'credit' ? '#065f46' : '#991b1b',
                     }}>
-                      {row.direction === 'credit' ? 'Кредит' : 'Дебет'}
+                      {row.direction === 'credit' ? '↑ Кредит' : '↓ Дебет'}
                     </span>
                   </td>
                   <td style={{
-                    padding: '10px 14px',
+                    padding: '9px 14px', fontWeight: 700,
                     color: row.direction === 'credit' ? p.green : '#ef4444',
-                    fontWeight: 700,
                     borderBottom: `1px solid ${p.border}`,
                   }}>
                     {row.direction === 'credit' ? '+' : '-'}{rub(row.amount)}
-                  </td>
-                  <td style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
-                    {row.count}
                   </td>
                 </tr>
               ))}
@@ -523,13 +541,26 @@ function JournalTab({ data, days, p }) {
         </div>
       )}
 
-      <div style={{ marginTop: 16, color: p.text3, fontSize: 12, textAlign: 'center' }}>
-        Данные агрегированы за период · реальные записи хранятся в billing_ledger
-      </div>
+      {total > LIMIT && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+          <button
+            onClick={() => load(Math.max(0, offset - LIMIT))}
+            disabled={offset === 0}
+            style={{ padding: '6px 16px', borderRadius: 8, border: `1px solid ${p.border}`, background: p.card, color: p.text1, cursor: offset === 0 ? 'not-allowed' : 'pointer', opacity: offset === 0 ? 0.4 : 1 }}
+          >{'← Назад'}</button>
+          <span style={{ fontSize: 12, color: p.text2, alignSelf: 'center' }}>
+            {offset + 1}&ndash;{Math.min(offset + LIMIT, total)} из {total}
+          </span>
+          <button
+            onClick={() => load(offset + LIMIT)}
+            disabled={offset + LIMIT >= total}
+            style={{ padding: '6px 16px', borderRadius: 8, border: `1px solid ${p.border}`, background: p.card, color: p.text1, cursor: offset + LIMIT >= total ? 'not-allowed' : 'pointer', opacity: offset + LIMIT >= total ? 0.4 : 1 }}
+          >{'Вперёд →'}</button>
+        </div>
+      )}
     </div>
   )
 }
-
 // ── По тенантам ───────────────────────────────────────────────────────────────
 
 function TenantsTab({ data, p }) {
@@ -912,7 +943,7 @@ export default function BillingLedgerSection({ token }) {
               Загрузка...
             </div>
           ) : (
-            <JournalTab data={data} days={days} p={p} />
+            <JournalTab token={token} days={days} p={p} />
           )
         )}
         {tab === 'tenants' && (

@@ -6,6 +6,9 @@ import DoctorLayout from './DoctorLayout'
 import OperationalCabinet from './OperationalCabinet'
 import RecruiterCabinet from './RecruiterCabinet'
 import SupervisorCabinet from './SupervisorCabinet'
+import AcquisitionManagerCabinet from './AcquisitionManagerCabinet'
+import ExternalDoctorCabinet from './ExternalDoctorCabinet'
+import VisitingDoctorCabinet from './VisitingDoctorCabinet'
 import InviteAccept from './InviteAccept'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
@@ -96,6 +99,21 @@ export default function AdminRoot() {
   // ── Администратор / Медсестра → операционный кабинет
   if (role === 'admin' || role === 'nurse') {
     return <OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Менеджер по привлечению
+  if (role === 'acquisition_manager') {
+    return <AcquisitionManagerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Внешний врач
+  if (role === 'external_doctor') {
+    return <ExternalDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Выездной врач
+  if (role === 'visiting_doctor') {
+    return <VisitingDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
   // ── Рекрутер → кабинет рекрутера

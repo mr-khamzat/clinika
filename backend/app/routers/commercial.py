@@ -261,6 +261,43 @@ async def enable_module(
         )
         db.add(sub)
 
+    await db.flush()
+
+    # Пишем в billing_ledger
+    from app.services.billing_service import record_billing_ledger, _apply_revenue_split
+    from app.models.billing_ledger import EntryType, Direction
+    from decimal import Decimal as _D
+
+    _price = sub.custom_price if sub.custom_price is not None else m.price_monthly
+    if body.trial_days > 0:
+        await record_billing_ledger(
+            db,
+            tenant_id=tenant_id,
+            entry_type=EntryType.SUBSCRIPTION_TRIAL,
+            direction=Direction.CREDIT,
+            amount=_D('0'),
+            reference_id=sub.id,
+            reference_type='tenant_module_subscription',
+            description=f'Trial {m.name} ({body.trial_days} дней)',
+            meta={'module_key': m.key, 'trial_days': body.trial_days},
+        )
+    elif _price and _price > 0:
+        _charge = await record_billing_ledger(
+            db,
+            tenant_id=tenant_id,
+            entry_type=EntryType.PLUGIN_CHARGE,
+            direction=Direction.DEBIT,
+            amount=_price,
+            reference_id=sub.id,
+            reference_type='tenant_module_subscription',
+            description=f'Активация модуля {m.name} ({sub.billing_cycle})',
+            meta={'module_key': m.key, 'billing_cycle': sub.billing_cycle},
+        )
+        await _apply_revenue_split(
+            db, tenant_id=tenant_id, gross_amount=_price,
+            source_entry=_charge, split_type='plugin',
+        )
+
     await db.commit()
     await db.refresh(sub)
     return _sub_out(sub)

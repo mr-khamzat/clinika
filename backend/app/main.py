@@ -32,8 +32,11 @@ from app.routers.ads import router as ads_router
 from app.routers.commercial import router as commercial_router
 from app.routers.ai import router as ai_router
 from app.routers.recruiter import router as recruiter_router
+from app.routers.acquisition_manager import router as acquisition_router
+from app.routers.visiting_doctor import router as visiting_router
 from app.routers.supervisor import router as supervisor_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
+from app.routers.wiki import router as wiki_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -425,6 +428,7 @@ app.include_router(contact_router)
 app.include_router(support_router)
 app.include_router(integrations.router)
 app.include_router(system_router)
+app.include_router(wiki_router)
 app.include_router(patient_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)
@@ -446,6 +450,8 @@ app.include_router(ads_router)
 app.include_router(commercial_router)
 app.include_router(ai_router)
 app.include_router(recruiter_router)
+app.include_router(acquisition_router)
+app.include_router(visiting_router)
 app.include_router(supervisor_router)
 app.include_router(prometheus_router)
 

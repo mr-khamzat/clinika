@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const AISection  = lazy(() => import('../sections/AISection'))
+import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
 
@@ -67,8 +68,148 @@ const NAV = [
   { key: 'audit',      label: 'Аудит',        icon: 'manage_search' },
   { key: 'ads',          label: 'Реклама',      icon: 'campaign' },
   { key: 'ai_analytics', label: 'AI-анализ',    icon: 'auto_awesome' },
+  { key: 'ext_doctors',  label: 'Внеш. врачи',  icon: 'person_add' },
   { key: 'settings',   label: 'Настройки',    icon: 'settings' },
 ]
+
+// ── ExtDoctorsSection ────────────────────────────────────────────────────────
+function ExtDoctorsSection({ token }) {
+  const [doctors, setDoctors] = useState([])
+  const [requests, setRequests] = useState([])
+  const [visitSettings, setVisitSettings] = useState([])
+  const [settingsForm, setSettingsForm] = useState({ doctor_id:'', price_per_visit:'', doctor_percent:'50', start_date:'' })
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState('')
+  const hdr = { headers: { Authorization: `Bearer ${token}` } }
+
+  useEffect(() => {
+    const b = (window.location.pathname.match(/^\/[^\/]+/) || [''])[0]
+    const base = b + '/api'
+    Promise.all([
+      axios.get(base + '/admins/external-doctors', hdr).catch(() => ({ data: [] })),
+      axios.get(base + '/admins/doctor-requests', hdr).catch(() => ({ data: [] })),
+      axios.get(base + '/visiting/admin/settings', hdr).catch(() => ({ data: [] })),
+    ]).then(([d, r, s]) => {
+      setDoctors(Array.isArray(d.data) ? d.data : [])
+      setRequests(Array.isArray(r.data) ? r.data : [])
+      setVisitSettings(Array.isArray(s.data) ? s.data : [])
+    })
+  }, [])
+
+  async function createSettings(e) {
+    e.preventDefault()
+    setSubmitting(true); setMsg('')
+    try {
+      const b = (window.location.pathname.match(/^\/[^\/]+/) || [''])[0]
+      await axios.post(b + '/api/visiting/admin/settings', {
+        ...settingsForm,
+        price_per_visit: parseFloat(settingsForm.price_per_visit),
+        doctor_percent: parseFloat(settingsForm.doctor_percent),
+      }, hdr)
+      setMsg('✅ Настройки сохранены')
+    } catch(e) { setMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
+    finally { setSubmitting(false) }
+  }
+
+  const fmt = d => d ? new Date(d).toLocaleDateString('ru-RU') : '—'
+  const stColor = {pending:'bg-yellow-100 text-yellow-700',approved:'bg-green-100 text-green-700',rejected:'bg-red-100 text-red-700'}
+  const stLabel = {pending:'Ожидает',approved:'Одобрено',rejected:'Отклонено'}
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-bold text-gray-700 mb-3">Заявки на регистрацию</h3>
+        {requests.length === 0 && <p className="text-gray-400 text-sm">Нет заявок</p>}
+        {requests.map(r => (
+          <div key={r.id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800">{r.doctor_name}</p>
+              <p className="text-xs text-gray-400">{r.phone} · {fmt(r.created_at)}</p>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${stColor[r.status] || 'bg-gray-100 text-gray-500'}`}>
+              {stLabel[r.status] || r.status}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-gray-700 mb-3">Зарегистрированные врачи</h3>
+        {doctors.length === 0 && <p className="text-gray-400 text-sm">Нет врачей</p>}
+        {doctors.map(d => (
+          <div key={d.id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
+              <span className="material-symbols-outlined text-teal-600 text-sm" style={{fontVariationSettings:"'FILL' 1"}}>person</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-800 truncate">{d.full_name}</p>
+              <p className="text-xs text-gray-400">{d.role === 'visiting_doctor' ? 'Выездной' : 'Внешний'} · {d.username}</p>
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${d.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+              {d.is_active ? 'Активен' : 'Неактивен'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-bold text-gray-700 mb-3">Настройки выездного врача</h3>
+        <div className="bg-white rounded-xl border border-gray-100 p-4">
+          <form onSubmit={createSettings} className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">ID врача</label>
+              <select value={settingsForm.doctor_id} onChange={e => setSettingsForm(p => ({...p, doctor_id: e.target.value}))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required>
+                <option value="">Выберите врача</option>
+                {doctors.filter(d => d.role === 'visiting_doctor').map(d => (
+                  <option key={d.id} value={d.id}>{d.full_name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Цена за визит ₽</label>
+                <input type="number" value={settingsForm.price_per_visit} onChange={e => setSettingsForm(p => ({...p, price_per_visit: e.target.value}))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 block mb-1">Доля врача %</label>
+                <input type="number" value={settingsForm.doctor_percent} onChange={e => setSettingsForm(p => ({...p, doctor_percent: e.target.value}))}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 block mb-1">Дата начала</label>
+              <input type="date" value={settingsForm.start_date} onChange={e => setSettingsForm(p => ({...p, start_date: e.target.value}))}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
+            </div>
+            {msg && <p className="text-sm">{msg}</p>}
+            <button type="submit" disabled={submitting}
+              className="w-full h-10 rounded-xl text-white font-bold text-sm disabled:opacity-60"
+              style={{background:'linear-gradient(135deg,#0097A7,#1565C0)'}}>
+              {submitting ? 'Сохранение...' : 'Сохранить настройки'}
+            </button>
+          </form>
+        </div>
+        {visitSettings.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {visitSettings.map(s => (
+              <div key={s.id} className="bg-white rounded-xl border border-gray-100 p-3 flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{s.price_per_visit} ₽ / {s.doctor_percent}%</p>
+                  <p className="text-xs text-gray-400">{fmt(s.start_date)} — {s.end_date ? fmt(s.end_date) : 'бессрочно'}</p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                  {s.is_active ? 'Активно' : 'Неактивно'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ── HomeDashboard ─────────────────────────────────────────────────────────────
 function HomeDashboard({ token, onNavigate }) {
@@ -2216,6 +2357,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'audit':     return <AuditSection token={adminToken} />
       case 'ads':          return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
       case 'ai_analytics': return <Suspense fallback={null}><AISection token={adminToken} isSuperAdmin={true} /></Suspense>
+      case 'ext_doctors': return <ExtDoctorsSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
       default:          return null
     }
