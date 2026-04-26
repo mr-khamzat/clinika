@@ -412,6 +412,70 @@ function SummaryTab({ summary, loading, p }) {
           </div>
         )}
       </div>
+      {/* Разбивка по модулям */}
+      {summary && summary.module_breakdown && summary.module_breakdown.length > 0 && (
+        <div style={{
+          background: p.card, border: `1px solid ${p.cardBorder}`,
+          borderRadius: 16, padding: 24, marginTop: 16,
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: p.text1, marginBottom: 16 }}>
+            Разбивка по модулям
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: p.tableTh }}>
+                  {['Модуль', 'Категория', 'Тип', 'Направление', 'Сумма'].map(h => (
+                    <th key={h} style={{
+                      padding: '10px 14px', textAlign: 'left',
+                      color: p.text2, fontWeight: 600, whiteSpace: 'nowrap',
+                      borderBottom: `1px solid ${p.border}`,
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {summary.module_breakdown.map((row, i) => (
+                  <tr key={i} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
+                    <td style={{ padding: '10px 14px', color: p.text1, fontWeight: 600, borderBottom: `1px solid ${p.border}` }}>
+                      {row.module_name}
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 20, fontSize: 11,
+                        background: p.pillBg, color: p.text2, fontWeight: 600,
+                      }}>
+                        {row.category === 'telephony' ? 'Телефония' :
+                         row.category === 'ai' ? 'AI' :
+                         row.category === 'advertising' ? 'Реклама' : row.category}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
+                      {ENTRY_LABELS[row.entry_type] || row.entry_type}
+                    </td>
+                    <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
+                        background: row.direction === 'credit' ? '#d1fae5' : '#fee2e2',
+                        color: row.direction === 'credit' ? '#065f46' : '#991b1b',
+                      }}>
+                        {row.direction === 'credit' ? 'Кредит' : 'Дебет'}
+                      </span>
+                    </td>
+                    <td style={{
+                      padding: '10px 14px',
+                      color: row.direction === 'credit' ? p.green : '#ef4444',
+                      fontWeight: 700, borderBottom: `1px solid ${p.border}`,
+                    }}>
+                      {row.entry_type === 'subscription_trial' ? 'Пробный' : rub(row.amount)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

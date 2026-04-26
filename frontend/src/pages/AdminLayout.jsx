@@ -5151,7 +5151,7 @@ function BillingSection({ token }) {
                         {Object.entries(ledgerSummary.breakdown).map(([type, data]) => (
                           <div key={type} className="px-4 py-3 flex justify-between items-center text-sm">
                             <span className="text-gray-500">{type.replace(/_/g, ' ')}</span>
-                            <span className="font-semibold">{(data.amount || data || 0).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
+                            <span className="font-semibold">{((data && typeof data === 'object' ? (data.amount ?? 0) : (data || 0))).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
                           </div>
                         ))}
                       </div>

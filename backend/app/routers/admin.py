@@ -684,11 +684,18 @@ async def platform_ledger(
         .group_by(BillingLedger.tenant_id)
     )
     plat_rows = (await db.execute(plat_q)).all()
-    plat_by_tid = {str(r.tenant_id): float(r.platform_income) for r in plat_rows}
+    # Фильтруем None (PLATFORM_INCOME пишется без tenant_id — это доход самой платформы)
+    plat_by_tid = {
+        str(r.tenant_id): float(r.platform_income)
+        for r in plat_rows
+        if r.tenant_id is not None
+    }
 
     tenants_data: dict = {}
     for row in per_rows:
-        tid = str(row.tenant_id)
+        tid = str(row.tenant_id) if row.tenant_id else None
+        if not tid:
+            continue
         if tid not in tenants_data:
             tenants_data[tid] = {
                 "tenant_id": tid,
@@ -708,24 +715,77 @@ async def platform_ledger(
 
     # Для тенантов, у которых есть только split (платформенный) доход
     for tid, pi in plat_by_tid.items():
+        if not tid or tid == "None":
+            continue
         if tid not in tenants_data:
-            r_q = await db.execute(select(Tenant.name, Tenant.slug).where(Tenant.id == uuid.UUID(tid)))
-            row = r_q.first()
-            if row:
-                tenants_data[tid] = {
-                    "tenant_id": tid,
-                    "tenant_name": row[0],
-                    "slug": row[1],
-                    "total_credit": 0.0,
-                    "total_debit": 0.0,
-                    "platform_income": pi,
-                    "breakdown": {},
-                }
+            try:
+                r_q = await db.execute(select(Tenant.name, Tenant.slug).where(Tenant.id == uuid.UUID(tid)))
+                row = r_q.first()
+                if row:
+                    tenants_data[tid] = {
+                        "tenant_id": tid,
+                        "tenant_name": row[0],
+                        "slug": row[1],
+                        "total_credit": 0.0,
+                        "total_debit": 0.0,
+                        "platform_income": pi,
+                        "breakdown": {},
+                    }
+            except Exception:
+                pass
+
+    # Разбивка по модулям
+    from app.models.commercial import CommercialModule, TenantModuleSubscription
+    mod_q = (
+        select(
+            BillingLedger.reference_id,
+            BillingLedger.entry_type,
+            BillingLedger.direction,
+            func.sum(BillingLedger.amount).label("total"),
+        )
+        .where(
+            BillingLedger.created_at >= since,
+            BillingLedger.is_split == False,
+            BillingLedger.reference_type == "tenant_module_subscription",
+        )
+        .group_by(BillingLedger.reference_id, BillingLedger.entry_type, BillingLedger.direction)
+    )
+    mod_rows = (await db.execute(mod_q)).all()
+
+    module_breakdown = []
+    for row in mod_rows:
+        sub_row = None
+        mod_name = "?"
+        mod_key = "unknown"
+        mod_cat = "?"
+        if row.reference_id:
+            sub_r = await db.execute(
+                select(TenantModuleSubscription).where(TenantModuleSubscription.id == row.reference_id)
+            )
+            sub_row = sub_r.scalar_one_or_none()
+        if sub_row:
+            mod_key = sub_row.module_key
+            mod_r = await db.execute(select(CommercialModule).where(CommercialModule.key == sub_row.module_key))
+            m = mod_r.scalar_one_or_none()
+            if m:
+                mod_name = m.name
+                mod_cat = m.category
+            else:
+                mod_name = sub_row.module_key
+        module_breakdown.append({
+            "module_key":  mod_key,
+            "module_name": mod_name,
+            "category":    mod_cat,
+            "entry_type":  row.entry_type,
+            "direction":   row.direction,
+            "amount":      float(row.total),
+        })
 
     return {
         "summary": summary,
         "tenants": list(tenants_data.values()),
         "period_days": days,
+        "module_breakdown": sorted(module_breakdown, key=lambda x: -x["amount"]),
     }
 
 

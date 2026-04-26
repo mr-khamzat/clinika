@@ -621,3 +621,61 @@ async def get_pricing_rules(
         "subscription_discount_percent": float(rules.subscription_discount_percent),
     }
 
+
+
+# ── Упрощённые shortcut-эндпоинты (используются старым фронтендом) ───────────
+
+@router.post("/generate", dependencies=[_feat, _mgr])
+async def generate_invoice_shortcut(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Выставить счёт — shortcut, определяет sub_id из тенанта автоматически."""
+    tenant = None
+    if current_user.tenant_id:
+        _t = await db.execute(_select_tenant(Tenant).where(Tenant.id == current_user.tenant_id))
+        tenant = _t.scalar_one_or_none()
+    if tenant is None:
+        _t2 = await db.execute(_select_tenant(Tenant).where(Tenant.slug == "default").limit(1))
+        tenant = _t2.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+    sub = await billing_service.get_active_subscription(db, tenant.id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Активная подписка не найдена — создайте подписку сначала")
+    inv = await billing_service.generate_invoice(db, sub.id)
+    await db.commit()
+    return _inv_out(inv)
+
+
+@router.post("/pay", dependencies=[_feat, _mgr])
+async def pay_invoice_shortcut(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Оплатить счёт — shortcut обёртка."""
+    invoice_id_raw = body.get("invoice_id")
+    amount_raw = body.get("amount")
+    method = body.get("payment_method", "manual")
+    if not invoice_id_raw or not amount_raw:
+        raise HTTPException(status_code=400, detail="invoice_id и amount обязательны")
+    try:
+        invoice_id = uuid.UUID(str(invoice_id_raw))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некорректный invoice_id")
+    inv_q = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
+    inv = inv_q.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    if current_user.tenant_id and inv.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Счёт не найден")
+    try:
+        payment = await billing_service.record_payment(
+            db, invoice_id, amount=Decimal(str(amount_raw)), method=method, gateway=method,
+        )
+        await db.commit()
+        return _pay_out(payment)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
