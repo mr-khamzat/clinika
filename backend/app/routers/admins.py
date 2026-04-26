@@ -429,6 +429,7 @@ async def list_external_doctors(
             "manager_id": u.manager_id,
             "clinic_id": u.clinic_id,
             "is_active": u.is_active,
+            "is_suspended": getattr(u, "is_suspended", False),
         }
         for u in rows
     ]

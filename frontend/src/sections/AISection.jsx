@@ -152,7 +152,7 @@ function exportPDF(data, days) {
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>AI Отчёт — ${title}</title>
+<title>КлиникСеть — ${title}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1e293b;font-size:13px;line-height:1.6;background:#f8fafc;padding:0}
@@ -194,9 +194,9 @@ tr:nth-child(even) td{background:#fafaf8}
 <div class="page">
   <!-- Шапка -->
   <div class="header">
-    <h1>🤖 AI-отчёт: ${title}</h1>
-    <div class="sub">${date} &nbsp;·&nbsp; Модель: ${model} &nbsp;·&nbsp; Период: ${days} дней</div>
-    <div class="badge">📊 КлиникаСеть AI-аналитика</div>
+    <h1>КлиникСеть — Аналитический отчёт: ${title}</h1>
+    <div class="sub">${date} &nbsp;·&nbsp; Период: ${days} дней</div>
+    <div class="badge">📊 КлиникСеть Аналитика</div>
   </div>
 
   <!-- Ключевые показатели -->
@@ -263,14 +263,14 @@ tr:nth-child(even) td{background:#fafaf8}
     </div>
   </div>
 
-  <!-- AI анализ -->
-  <div class="sec-title">AI Анализ: ${title}</div>
+  <!-- Анализ -->
+  <div class="sec-title">Аналитика: ${title}</div>
   <div class="ai-box">${aiHtml}</div>
 
   <!-- Подвал -->
   <div class="footer">
-    <span>КлиникаСеть AI · Отчёт: ${date}</span>
-    <span>Модель: ${model} · Период: ${days} дней · Всего направлений: ${stats.referrals_total}</span>
+    <span>КлиникСеть · Отчёт: ${date}</span>
+    <span>Период: ${days} дней · Всего направлений: ${stats.referrals_total}</span>
   </div>
 </div>
 </body>
@@ -312,8 +312,8 @@ td{vertical-align:middle}
 <body>
 <table width="800" cellspacing="0">
   <!-- Шапка -->
-  <tr><td colspan="4" class="xl-header">🤖 AI-отчёт: ${esc(title)}</td></tr>
-  <tr><td colspan="4" class="xl-subheader">${esc(date)} · Модель: ${esc(model)} · Период: ${days} дней</td></tr>
+  <tr><td colspan="4" class="xl-header">КлиникСеть — Аналитический отчёт: ${esc(title)}</td></tr>
+  <tr><td colspan="4" class="xl-subheader">${esc(date)} · Период: ${days} дней</td></tr>
   <tr><td colspan="4" style="height:12pt"></td></tr>
 
   <!-- Ключевые показатели -->
@@ -397,7 +397,7 @@ td{vertical-align:middle}
   <tr><td colspan="4" style="height:16pt"></td></tr>
 
   <!-- AI текст -->
-  <tr><td colspan="4" class="xl-section">🤖 AI АНАЛИЗ: ${esc(title)}</td></tr>
+  <tr><td colspan="4" class="xl-section">📊 АНАЛИТИЧЕСКИЙ АНАЛИЗ: ${esc(title)}</td></tr>
   ${result.split('\n').map(line => {
     if (!line.trim()) return '<tr><td colspan="4" style="height:6pt"></td></tr>'
     const clean = esc(line).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
@@ -408,7 +408,7 @@ td{vertical-align:middle}
   }).join('\n')}
 
   <tr><td colspan="4" style="height:16pt"></td></tr>
-  <tr><td colspan="4" style="color:#94a3b8;font-size:9pt;padding:4pt 8pt">Отчёт сгенерирован: ${esc(date)} · Модель: ${esc(model)} · КлиникаСеть AI</td></tr>
+  <tr><td colspan="4" style="color:#94a3b8;font-size:9pt;padding:4pt 8pt">Отчёт сгенерирован: ${esc(date)} · КлиникСеть</td></tr>
 </table>
 </body>
 </html>`
@@ -631,12 +631,16 @@ function BalanceBar({ token, modelInfo }) {
 // ── Карточки сценариев ────────────────────────────────────────────────────────
 
 const ANALYSIS_TYPES = [
-  { type: 'overview',  icon: 'dashboard',       label: 'Общий обзор',   color: '#7c3aed', desc: 'Инсайты по всей клинике' },
-  { type: 'services',  icon: 'medical_services', label: 'Услуги',        color: '#0891b2', desc: 'Эффективность по услугам' },
-  { type: 'staff',     icon: 'people',           label: 'Сотрудники',    color: '#059669', desc: 'Производительность команды' },
-  { type: 'clinics',   icon: 'local_hospital',   label: 'Клиники',       color: '#d97706', desc: 'Сравнение филиалов' },
-  { type: 'bonuses',   icon: 'payments',         label: 'Бонусы',        color: '#dc2626', desc: 'Мотивационная система' },
-  { type: 'forecast',  icon: 'trending_up',      label: 'Прогноз',       color: '#7c3aed', desc: 'Стратегия на следующий период' },
+  { type: 'overview',      icon: 'dashboard',        label: 'Общий обзор',        color: '#7c3aed', desc: 'Инсайты по всей клинике' },
+  { type: 'services',      icon: 'medical_services',  label: 'Услуги',             color: '#0891b2', desc: 'Эффективность по услугам' },
+  { type: 'staff',         icon: 'people',            label: 'Сотрудники',         color: '#059669', desc: 'Производительность команды' },
+  { type: 'clinics',       icon: 'local_hospital',    label: 'Клиники',            color: '#d97706', desc: 'Сравнение филиалов' },
+  { type: 'bonuses',       icon: 'payments',          label: 'Бонусы',             color: '#dc2626', desc: 'Мотивационная система' },
+  { type: 'forecast',      icon: 'trending_up',       label: 'Прогноз',            color: '#7c3aed', desc: 'Стратегия на следующий период' },
+  { type: 'anomaly',       icon: 'warning',           label: 'Аномалии',           color: '#f59e0b', desc: 'Неожиданные паттерны и выбросы' },
+  { type: 'load_forecast', icon: 'event_note',        label: 'Нагрузка по дням',   color: '#0891b2', desc: 'Прогноз загрузки по дням недели' },
+  { type: 'schedule',      icon: 'bolt',              label: 'Оптимизация',        color: '#059669', desc: 'Узкие места и quick wins' },
+  { type: 'bonus_roi',     icon: 'show_chart',        label: 'ROI бонусов',        color: '#e11d48', desc: 'Стоимость привлечения пациента' },
 ]
 
 function AnalysisCard({ item, active, onClick, loading }) {
@@ -697,7 +701,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
         <PeriodPill value={days} onChange={(n) => { setDays(n); setResults({}) }} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, marginBottom: 24 }}>
         {ANALYSIS_TYPES.map(item => (
           <AnalysisCard key={item.type} item={item} active={active} onClick={run} loading={loading} />
         ))}
@@ -727,7 +731,7 @@ function AnalyticsTab({ token, onGoToSettings, isSuperAdmin }) {
             </span>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15, color: d ? '#e9d5ff' : '#1e293b' }}>{current.title}</div>
-              <div style={{ fontSize: 11, color: c.text3 }}>за {days} дней · {current.model} · {new Date(current.generated_at).toLocaleString('ru-RU')}</div>
+              <div style={{ fontSize: 11, color: c.text3 }}>за {days} дней · {new Date(current.generated_at).toLocaleString('ru-RU')}</div>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, fontSize: 12, color: c.text2, flexWrap: 'wrap' }}>
               <span><strong style={{ color: c.text1 }}>{current.stats.referrals_total}</strong> направлений</span>

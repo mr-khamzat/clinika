@@ -35,6 +35,7 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, values_callable=lambda x: [e.value for e in x], create_type=False), default=UserRole.ADMIN)
     clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
     # Рекрутер: кто привлёк этого врача (FK на users)
     recruiter_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     # Индивидуальный % рекрутера (заполняется только для роли recruiter)
@@ -45,6 +46,8 @@ class User(Base):
     consent_version: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Тип врача: internal | external | visiting
     doctor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    specialization: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Менеджер привлечения (для external_doctor/visiting_doctor)
     manager_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

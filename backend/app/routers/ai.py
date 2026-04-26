@@ -132,7 +132,8 @@ async def _gather_service_stats(db: AsyncSession, tenant_id: uuid.UUID, days: in
             COUNT(r.id) as total,
             SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
             SUM(CASE WHEN r.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-            SUM(CASE WHEN r.status = 'expired' THEN 1 ELSE 0 END) as expired
+            SUM(CASE WHEN r.status = 'expired' THEN 1 ELSE 0 END) as expired,
+            AVG(s.bonus_amount) as avg_bonus
         FROM referrals r
         JOIN services s ON r.service_id = s.id
         WHERE r.tenant_id = :tid AND r.created_at >= :since
@@ -151,6 +152,7 @@ async def _gather_service_stats(db: AsyncSession, tenant_id: uuid.UUID, days: in
             "cancelled": row.cancelled or 0,
             "expired": row.expired or 0,
             "conv_pct": round(conf / total * 100, 1) if total > 0 else 0,
+            "avg_bonus": round(float(row.avg_bonus or 0), 0),
         })
     return result
 
@@ -219,7 +221,6 @@ async def _gather_clinic_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int
 
 async def _gather_bonus_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int) -> dict:
     since = datetime.utcnow() - timedelta(days=days)
-    # PostgreSQL enum bonusstatus хранит значения в верхнем регистре: PAID, PENDING
     rows = await db.execute(text("""
         SELECT
             COUNT(*) as total,
@@ -240,6 +241,106 @@ async def _gather_bonus_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int)
     }
 
 
+async def _gather_daily_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int) -> list[dict]:
+    """Статистика по дням — для аномалий и прогноза нагрузки."""
+    since = datetime.utcnow() - timedelta(days=days)
+    rows = await db.execute(text("""
+        SELECT
+            DATE(created_at) as day,
+            EXTRACT(DOW FROM created_at) as dow,
+            COUNT(*) as total,
+            SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+        FROM referrals
+        WHERE tenant_id = :tid AND created_at >= :since
+        GROUP BY DATE(created_at), EXTRACT(DOW FROM created_at)
+        ORDER BY day DESC
+        LIMIT 60
+    """), {"tid": str(tenant_id), "since": since})
+    dow_names = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+    result = []
+    for row in rows:
+        total = row.total or 0
+        conf = row.confirmed or 0
+        result.append({
+            "day": str(row.day),
+            "dow": dow_names[int(row.dow)],
+            "total": total,
+            "confirmed": conf,
+            "cancelled": row.cancelled or 0,
+            "conv_pct": round(conf / total * 100, 1) if total > 0 else 0,
+        })
+    return result
+
+
+async def _gather_bonus_roi_stats(db: AsyncSession, tenant_id: uuid.UUID, days: int) -> dict:
+    """Детальный ROI бонусной системы: стоимость привлечения одного подтверждённого направления."""
+    since = datetime.utcnow() - timedelta(days=days)
+    # Бонусы по сотрудникам + их эффективность
+    rows = await db.execute(text("""
+        SELECT
+            u.full_name,
+            u.role,
+            COUNT(b.id) as bonus_count,
+            SUM(b.amount) as bonus_total,
+            SUM(CASE WHEN b.status::text = 'PAID' THEN b.amount ELSE 0 END) as bonus_paid,
+            COUNT(r.id) as refs_total,
+            SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END) as refs_confirmed
+        FROM users u
+        LEFT JOIN bonuses b ON b.admin_id = u.id AND b.created_at >= :since
+        LEFT JOIN referrals r ON r.created_by_admin_id = u.id AND r.created_at >= :since
+        WHERE u.tenant_id = :tid AND u.is_active = true
+        GROUP BY u.id, u.full_name, u.role
+        HAVING COUNT(b.id) > 0 OR COUNT(r.id) > 0
+        ORDER BY bonus_total DESC NULLS LAST
+        LIMIT 10
+    """), {"tid": str(tenant_id), "since": since})
+    staff_roi = []
+    for row in rows:
+        bt = float(row.bonus_total or 0)
+        rc = int(row.refs_confirmed or 0)
+        staff_roi.append({
+            "name": row.full_name,
+            "role": row.role,
+            "bonus_total": bt,
+            "bonus_paid": float(row.bonus_paid or 0),
+            "refs_total": int(row.refs_total or 0),
+            "refs_confirmed": rc,
+            "cost_per_confirmed": round(bt / rc, 0) if rc > 0 else 0,
+            "roi_pct": round(rc / (bt / 1000) * 100, 1) if bt > 0 else 0,  # подтверждений на 1000 ₽
+        })
+
+    # Общая сводка по услугам: бонус vs конверсия
+    svc_rows = await db.execute(text("""
+        SELECT
+            s.name,
+            s.bonus_amount,
+            COUNT(r.id) as total,
+            SUM(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END) as confirmed
+        FROM services s
+        LEFT JOIN referrals r ON r.service_id = s.id AND r.created_at >= :since
+        WHERE s.tenant_id = :tid AND s.is_active = true
+        GROUP BY s.id, s.name, s.bonus_amount
+        HAVING COUNT(r.id) > 0
+        ORDER BY s.bonus_amount DESC NULLS LAST
+        LIMIT 8
+    """), {"tid": str(tenant_id), "since": since})
+    svc_roi = []
+    for row in svc_rows:
+        ba = float(row.bonus_amount or 0)
+        total = int(row.total or 0)
+        conf = int(row.confirmed or 0)
+        svc_roi.append({
+            "name": row.name,
+            "bonus_amount": ba,
+            "total": total,
+            "confirmed": conf,
+            "conv_pct": round(conf / total * 100, 1) if total > 0 else 0,
+            "total_bonus_cost": ba * total,
+        })
+    return {"staff_roi": staff_roi, "service_roi": svc_roi}
+
+
 # ── История AI (PostgreSQL) ───────────────────────────────────────────────────
 
 HISTORY_MAX = 30
@@ -248,7 +349,6 @@ HISTORY_MAX = 30
 async def _save_to_history_db(db: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, entry: dict) -> None:
     from app.models.ai_history import AIAnalysisHistory
     from sqlalchemy import select, func
-    # Удаляем старые записи если превышен лимит
     count_res = await db.execute(
         select(func.count()).select_from(AIAnalysisHistory).where(AIAnalysisHistory.tenant_id == tenant_id)
     )
@@ -387,11 +487,12 @@ async def get_ai_balance(current_user: User = Depends(require_manager)):
         return {"available": False, "error": str(e)[:100]}
 
 
-# ── Анализ ────────────────────────────────────────────────────────────────────
+# ── Промпты для всех типов анализа ────────────────────────────────────────────
 
 ANALYSIS_PROMPTS = {
     "overview": {
         "title": "Общий обзор",
+        "icon": "📊",
         "system": "Ты аналитик медицинской клиники. Анализируй данные и давай чёткие, конкретные инсайты на русском языке. Используй числа и проценты.",
         "user_tmpl": """Данные за {days} дней:
 - Направлений всего: {total} | Подтверждено: {confirmed} ({conv}%) | Отменено: {cancelled} ({cancel_pct}%) | Истекло: {expired} ({expire_pct}%)
@@ -401,6 +502,7 @@ ANALYSIS_PROMPTS = {
     },
     "services": {
         "title": "Анализ услуг",
+        "icon": "🏥",
         "system": "Ты аналитик медицинской клиники. Анализируй эффективность услуг. Отвечай на русском, используй конкретные цифры.",
         "user_tmpl": """Топ услуг за {days} дней:
 {services_table}
@@ -413,6 +515,7 @@ ANALYSIS_PROMPTS = {
     },
     "staff": {
         "title": "Эффективность сотрудников",
+        "icon": "👥",
         "system": "Ты HR-аналитик медицинской клиники. Анализируй показатели сотрудников объективно, без личных оценок.",
         "user_tmpl": """Показатели сотрудников за {days} дней:
 {staff_table}
@@ -425,6 +528,7 @@ ANALYSIS_PROMPTS = {
     },
     "clinics": {
         "title": "Сравнение клиник",
+        "icon": "🏢",
         "system": "Ты аналитик медицинской сети. Сравнивай клиники объективно, выявляй лучшие практики.",
         "user_tmpl": """Показатели клиник за {days} дней:
 {clinics_table}
@@ -437,6 +541,7 @@ ANALYSIS_PROMPTS = {
     },
     "bonuses": {
         "title": "Бонусная система",
+        "icon": "💰",
         "system": "Ты финансовый аналитик медицинской клиники. Анализируй бонусную систему и её влияние на мотивацию.",
         "user_tmpl": """Бонусная система за {days} дней:
 - Всего начислений: {total_bonuses}
@@ -451,7 +556,8 @@ ANALYSIS_PROMPTS = {
 4. Рекомендации по оптимизации бонусной системы""",
     },
     "forecast": {
-        "title": "Прогноз и рекомендации",
+        "title": "Прогноз и стратегия",
+        "icon": "🔮",
         "system": "Ты аналитик-стратег медицинской клиники. Делай обоснованные прогнозы на основе трендов.",
         "user_tmpl": """Данные за {days} дней:
 - Направлений: {total} | Конверсия: {conv}% | Отмены: {cancel_pct}% | Истечения: {expire_pct}%
@@ -464,12 +570,82 @@ ANALYSIS_PROMPTS = {
 3. Потенциал роста конверсии: на сколько % реально поднять и как
 4. ТОП-3 приоритетных действия на ближайший месяц""",
     },
+    "anomaly": {
+        "title": "Выявление аномалий",
+        "icon": "⚠️",
+        "system": "Ты аналитик данных медицинской клиники. Выявляй аномалии, выбросы и неожиданные паттерны в данных. Отвечай конкретно на русском языке.",
+        "user_tmpl": """Ежедневная статистика направлений за {days} дней (последние {rows_count} дней):
+{daily_table}
+
+Среднее в день: {avg_per_day} направлений | Конверсия в среднем: {avg_conv}%
+
+Выяви:
+1. Дни с аномально высоким/низким потоком — возможные причины
+2. Дни с резкими падениями конверсии — что могло произойти
+3. Паттерны по дням недели — когда пик, когда спад
+4. Конкретные рекомендации по устранению выявленных аномалий""",
+    },
+    "load_forecast": {
+        "title": "Прогноз нагрузки",
+        "icon": "📅",
+        "system": "Ты аналитик загрузки медицинской клиники. Прогнозируй нагрузку по дням недели на основе исторических данных.",
+        "user_tmpl": """Статистика по дням недели за {days} дней:
+{dow_table}
+
+Всего за период: {total} направлений, среднее {avg_per_day}/день
+
+Составь прогноз нагрузки:
+1. В какие дни недели ожидается максимальная/минимальная нагрузка
+2. Как распределить сотрудников по дням для оптимальной работы
+3. Какие дни недели показывают лучшую конверсию — почему
+4. Рекомендации по расписанию и staffing на следующий месяц""",
+    },
+    "schedule": {
+        "title": "Оптимизация процессов",
+        "icon": "⚡",
+        "system": "Ты операционный аналитик медицинской клиники. Анализируй процессы и предлагай конкретные улучшения.",
+        "user_tmpl": """Операционные данные за {days} дней:
+- Всего направлений: {total} | Подтверждено: {confirmed} ({conv}%) | Истекло (не обработано вовремя): {expired} ({expire_pct}%)
+- Активных сотрудников: {staff} | Клиник: {clinics}
+- Нагрузка по дням недели:
+{dow_table}
+- Топ услуги по объёму:
+{services_top}
+
+Предложи оптимизации:
+1. Процессы с наибольшими потерями — где теряются пациенты
+2. Как сократить количество истёкших направлений на 50%+
+3. Оптимальное распределение нагрузки по времени/дням
+4. Quick wins: что можно изменить прямо сейчас без доп. ресурсов""",
+    },
+    "bonus_roi": {
+        "title": "ROI бонусной системы",
+        "icon": "📈",
+        "system": "Ты финансовый аналитик. Анализируй отдачу от бонусной системы, считай стоимость привлечения одного пациента. Отвечай на русском с конкретными цифрами.",
+        "user_tmpl": """ROI бонусной системы за {days} дней:
+
+По сотрудникам:
+{staff_roi_table}
+
+По услугам (бонус vs конверсия):
+{service_roi_table}
+
+Итого: потрачено на бонусы {total_bonus} ₽ | подтверждено {confirmed} направлений | стоимость 1 подтверждения: {cost_per_ref} ₽
+
+Проанализируй:
+1. У кого самый высокий/низкий ROI среди сотрудников — причины
+2. По каким услугам бонус не окупается — что делать
+3. Оптимальный размер бонуса для максимальной мотивации без переплат
+4. Конкретные изменения в бонусной структуре для роста ROI на 20%+""",
+    },
 }
+
+ALL_ANALYSIS_TYPES = "|".join(ANALYSIS_PROMPTS.keys())
 
 
 @router.get("/analyze", dependencies=[_feat, _mgr])
 async def analyze(
-    type: str = Query("overview", regex="^(overview|services|staff|clinics|bonuses|forecast)$"),
+    type: str = Query("overview", regex=f"^({ALL_ANALYSIS_TYPES})$"),
     days: int = Query(30, ge=7, le=365),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -537,6 +713,107 @@ async def analyze(
             total_amount=int(bonuses["total_amount"]),
         )
 
+    elif type == "anomaly":
+        daily = await _gather_daily_stats(db, tid, days)
+        total_days = len(daily) or 1
+        avg_per_day = round(sum(d["total"] for d in daily) / total_days, 1)
+        avg_conv = round(sum(d["conv_pct"] for d in daily) / total_days, 1)
+        # Последние 14 дней для таблицы
+        table = "\n".join(
+            f"- {d['day']} ({d['dow']}): {d['total']} направл., конверсия {d['conv_pct']}%, отмены {d['cancelled']}"
+            for d in daily[:14]
+        )
+        user_msg = prompt_cfg["user_tmpl"].format(
+            days=days,
+            rows_count=min(len(daily), 14),
+            daily_table=table or "нет данных",
+            avg_per_day=avg_per_day,
+            avg_conv=avg_conv,
+        )
+
+    elif type == "load_forecast":
+        daily = await _gather_daily_stats(db, tid, days)
+        # Агрегируем по дням недели
+        dow_agg: dict[str, dict] = {}
+        for d in daily:
+            dow = d["dow"]
+            if dow not in dow_agg:
+                dow_agg[dow] = {"total": 0, "confirmed": 0, "count": 0}
+            dow_agg[dow]["total"] += d["total"]
+            dow_agg[dow]["confirmed"] += d["confirmed"]
+            dow_agg[dow]["count"] += 1
+        dow_order = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        dow_table = "\n".join(
+            f"- {dow}: среднее {round(dow_agg[dow]['total']/max(dow_agg[dow]['count'],1),1)}/день, "
+            f"конверсия {round(dow_agg[dow]['confirmed']/max(dow_agg[dow]['total'],1)*100,1)}%"
+            for dow in dow_order if dow in dow_agg
+        )
+        total_refs = sum(d["total"] for d in daily)
+        avg_per_day = round(total_refs / max(len(daily), 1), 1)
+        user_msg = prompt_cfg["user_tmpl"].format(
+            days=days,
+            dow_table=dow_table or "нет данных",
+            total=total_refs,
+            avg_per_day=avg_per_day,
+        )
+
+    elif type == "schedule":
+        daily = await _gather_daily_stats(db, tid, days)
+        services = await _gather_service_stats(db, tid, days)
+        dow_agg: dict[str, dict] = {}
+        for d in daily:
+            dow = d["dow"]
+            if dow not in dow_agg:
+                dow_agg[dow] = {"total": 0, "count": 0}
+            dow_agg[dow]["total"] += d["total"]
+            dow_agg[dow]["count"] += 1
+        dow_order = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+        dow_table = "\n".join(
+            f"- {dow}: среднее {round(dow_agg[dow]['total']/max(dow_agg[dow]['count'],1),1)}/день"
+            for dow in dow_order if dow in dow_agg
+        )
+        services_top = "\n".join(
+            f"- {s['name']}: {s['total']} направлений, конверсия {s['conv_pct']}%"
+            for s in services[:5]
+        )
+        user_msg = prompt_cfg["user_tmpl"].format(
+            days=days,
+            total=base["referrals_total"],
+            confirmed=base["referrals_confirmed"],
+            conv=base["conversion_rate_pct"],
+            expired=base["referrals_expired"],
+            expire_pct=base["expire_rate_pct"],
+            staff=base["staff_count"],
+            clinics=base["clinic_count"],
+            dow_table=dow_table or "нет данных",
+            services_top=services_top or "нет данных",
+        )
+
+    elif type == "bonus_roi":
+        roi_data = await _gather_bonus_roi_stats(db, tid, days)
+        bonuses = await _gather_bonus_stats(db, tid, days)
+        staff_roi_table = "\n".join(
+            f"- {s['name']} ({s['role']}): бонусы {int(s['bonus_total'])} ₽, "
+            f"направлений {s['refs_total']}, подтверждено {s['refs_confirmed']}, "
+            f"стоимость 1 подтв. {int(s['cost_per_confirmed'])} ₽"
+            for s in roi_data["staff_roi"]
+        )
+        service_roi_table = "\n".join(
+            f"- {s['name']}: бонус {int(s['bonus_amount'])} ₽/направл., "
+            f"всего {s['total']}, конверсия {s['conv_pct']}%, "
+            f"итого бонусов {int(s['total_bonus_cost'])} ₽"
+            for s in roi_data["service_roi"]
+        )
+        cost_per_ref = round(bonuses["total_amount"] / max(base["referrals_confirmed"], 1), 0)
+        user_msg = prompt_cfg["user_tmpl"].format(
+            days=days,
+            staff_roi_table=staff_roi_table or "нет данных",
+            service_roi_table=service_roi_table or "нет данных",
+            total_bonus=int(bonuses["total_amount"]),
+            confirmed=base["referrals_confirmed"],
+            cost_per_ref=int(cost_per_ref),
+        )
+
     else:  # overview
         user_msg = prompt_cfg["user_tmpl"].format(
             days=days,
@@ -565,6 +842,7 @@ async def analyze(
             "stats": base,
             "model": model_id,
             "generated_at": datetime.utcnow().isoformat(),
+            "days": days,
         }
         if current_user.tenant_id:
             try:
@@ -637,3 +915,16 @@ async def ask_ai(
         raise
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ошибка AI: {str(e)[:200]}")
+
+
+# ── Мета-данные типов анализа (для фронтенда) ─────────────────────────────────
+
+@router.get("/types")
+async def get_analysis_types(current_user: User = Depends(get_current_user)):
+    """Возвращает список доступных типов анализа с метаданными (без настроек модели)."""
+    return {
+        "types": [
+            {"key": k, "title": v["title"], "icon": v["icon"]}
+            for k, v in ANALYSIS_PROMPTS.items()
+        ]
+    }

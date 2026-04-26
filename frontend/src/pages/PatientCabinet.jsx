@@ -125,7 +125,7 @@ function QrFullscreen({ qr, onClose }) {
         </div>
         <span className="text-white text-2xl font-extrabold tracking-tight">Clinika</span>
       </div>
-      <p className="text-blue-200 text-sm mb-6 text-center px-8">Покажите этот QR-код администратору клиники</p>
+      <p className="text-blue-200 text-sm mb-6 text-center px-8">Покажите этот QR-код врачу или администратору</p>
       <div className="bg-white rounded-3xl p-5 shadow-2xl" style={{ boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
         <img src={`data:image/png;base64,${qr}`} alt="QR" className="w-64 h-64 rounded-2xl block" />
       </div>
@@ -170,7 +170,7 @@ function LoginScreen({ onLogin, errorMsg }) {
       {/* Card */}
       <div className="w-full max-w-sm login-card" style={{ animationDelay: '.1s', background: 'rgba(255,255,255,.07)', backdropFilter: 'blur(24px)', borderRadius: 28, border: '1px solid rgba(255,255,255,.12)', padding: 28 }}>
         <h2 className="text-xl font-bold text-white mb-1">Войти в кабинет</h2>
-        <p className="text-blue-200 text-sm mb-6">Введите код из направления и ваш телефон</p>
+        <p className="text-blue-200 text-sm mb-6">Введите код из направления или записи к врачу и ваш телефон</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="relative">
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 text-xl pointer-events-none">tag</span>
@@ -492,6 +492,19 @@ export default function PatientCabinet() {
   }, [bannerAds.length])
 
   useEffect(() => {
+    // Авто-вход по URL: /{slug}/p/{id}?t={token}
+    const urlPath = window.location.pathname
+    const urlSearch = window.location.search
+    const urlMatch = urlPath.match(/\/p\/([0-9a-f-]{36})/)
+    const urlToken = new URLSearchParams(urlSearch).get('t')
+    if (urlMatch && urlToken) {
+      const urlId = urlMatch[1]
+      localStorage.setItem(TOKEN_KEY, urlToken)
+      localStorage.setItem(REF_KEY, urlId)
+      loadData(urlId, urlToken)
+      axios.get(`${API}/ads/active`, { params: { slug: SLUG, ad_type: 'banner' } }).then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      return
+    }
     const token = localStorage.getItem(TOKEN_KEY)
     const refId = localStorage.getItem(REF_KEY)
     if (token && refId) {
@@ -557,8 +570,88 @@ export default function PatientCabinet() {
   if (showLogin) return <LoginScreen onLogin={handleLogin} errorMsg={error} />
   if (!data) return null
 
+  // Appointment data (запись к приезжему врачу) — нет current/referrals
+  if (data?.type === 'appointment') {
+    return (
+      <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
+        {fullscreenQr && <QrFullscreen qr={fullscreenQr} onClose={() => setFullscreenQr(null)} />}
+        <div className="px-4 pt-4 space-y-4">
+          {/* Статус */}
+          <div className="flex justify-center pt-2">
+            <span className="px-4 py-1.5 rounded-full text-sm font-bold"
+              style={{
+                background: String(data.status).includes('completed') ? 'rgba(16,185,129,.1)' : 'rgba(0,151,167,.1)',
+                color: String(data.status).includes('completed') ? '#065F46' : '#0097A7'
+              }}>
+              {String(data.status).includes('completed') ? '✓ Приём завершён' : '⏳ Ожидает приёма'}
+            </span>
+          </div>
+
+          {/* QR — главный блок */}
+          {!String(data.status).includes('completed') && data.qr_code && (
+            <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#0097A7 0%,#004D5F 100%)', boxShadow: '0 8px 32px rgba(0,151,167,.3)' }}>
+              <div className="p-5">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#34d399' }} />
+                  <p className="text-emerald-300 text-xs font-bold uppercase tracking-wide">Запись к врачу</p>
+                </div>
+                <h3 className="text-white font-extrabold text-lg leading-tight">{data.doctor_name}</h3>
+                <p className="text-blue-200 text-sm mt-0.5">{data.clinic_name}</p>
+              </div>
+              <button onClick={() => setFullscreenQr(data.qr_code)}
+                className="w-full py-4 flex items-center justify-center gap-3 transition-all active:opacity-80"
+                style={{ background: 'rgba(0,0,0,.25)', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+                <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+                <div className="text-left">
+                  <p className="text-white font-bold text-base">Показать QR врачу</p>
+                  <p className="text-blue-200 text-xs">Нажмите для полноэкранного QR</p>
+                </div>
+                <span className="material-symbols-outlined text-white/60 text-xl ml-auto">chevron_right</span>
+              </button>
+            </div>
+          )}
+
+          {/* Детали */}
+          <div className="bg-white rounded-3xl p-5 space-y-4" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
+            {[
+              { icon: 'calendar_today', label: 'Дата',    value: new Date(data.appointment_date + 'T00:00').toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long', year:'numeric' }), color: '#0097A7', bg: '#e0f7fa' },
+              { icon: 'schedule',       label: 'Время',   value: (data.start_time || '').slice(0,5) + ' — ' + (data.end_time || '').slice(0,5), color: '#0097A7', bg: '#e0f7fa' },
+              { icon: 'stethoscope',    label: 'Врач',    value: data.doctor_name, color: '#7b1fa2', bg: '#f3e5f5' },
+              { icon: 'local_hospital', label: 'Клиника', value: data.clinic_name, color: '#2e7d32', bg: '#e8f5e9' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: item.bg }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: item.color, fontVariationSettings:"'FILL' 1" }}>{item.icon}</span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{item.label}</p>
+                  <p className="text-sm font-bold text-gray-800 mt-0.5">{item.value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Код */}
+          {!String(data.status).includes('completed') && data.short_code && (
+            <div className="rounded-2xl p-4 text-center" style={{ background: '#fff8e1', border: '1px solid #ffe082' }}>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#e65100' }}>Код для врача (если нет QR)</p>
+              <p className="text-5xl font-black" style={{ color: '#e65100', letterSpacing: 12 }}>{data.short_code}</p>
+            </div>
+          )}
+
+          {/* Имя пациента */}
+          <div className="bg-white rounded-2xl p-4" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
+            <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Пациент</p>
+            <p className="text-sm font-bold text-gray-800 mt-1">{data.patient_name}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{data.patient_phone}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const { current, other_referrals = [], mis_info, mis_visits = [], patient_name, patient_phone } = data
-  const allRefs = [current, ...other_referrals]
+  const allRefs = [current, ...other_referrals].filter(Boolean)
   const activeRefs = allRefs.filter(r => r.status === 'created' || r.status === 'confirmed')
   const searchedRefs = searchQ ? allRefs.filter(r => (r.to_clinic_name + r.service_name + (r.short_code||'')).toLowerCase().includes(searchQ.toLowerCase())) : allRefs
 
@@ -698,8 +791,76 @@ export default function PatientCabinet() {
           </div>
         )}
 
-        {/* ── HOME ── */}
-        {tab === 'home' && (
+        {/* ── APPOINTMENT VIEW (для записей к приезжему врачу) ── */}
+        {data?.type === 'appointment' && (
+          <div className="space-y-4 tab-enter px-4 pt-4">
+            {/* Статус */}
+            <div className="flex justify-center">
+              <span className="px-4 py-1.5 rounded-full text-sm font-bold"
+                style={{
+                  background: String(data.status).includes('completed') ? 'rgba(16,185,129,.1)' : 'rgba(0,151,167,.1)',
+                  color: String(data.status).includes('completed') ? '#065F46' : '#0097A7'
+                }}>
+                {String(data.status).includes('completed') ? '✓ Приём завершён' : '⏳ Ожидает приёма'}
+              </span>
+            </div>
+
+            {/* QR — главный блок */}
+            {!String(data.status).includes('completed') && data.qr_code && (
+              <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#0097A7 0%,#004D5F 100%)', boxShadow: '0 8px 32px rgba(0,151,167,.3)' }}>
+                <div className="p-5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: '#34d399' }} />
+                    <p className="text-emerald-300 text-xs font-bold uppercase tracking-wide">Запись к врачу</p>
+                  </div>
+                  <h3 className="text-white font-extrabold text-lg leading-tight">{data.doctor_name}</h3>
+                  <p className="text-blue-200 text-sm mt-0.5">{data.clinic_name}</p>
+                </div>
+                <button onClick={() => setFullscreenQr(data.qr_code)}
+                  className="w-full py-4 flex items-center justify-center gap-3 transition-all active:opacity-80"
+                  style={{ background: 'rgba(0,0,0,.25)', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+                  <span className="material-symbols-outlined text-white text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+                  <div className="text-left">
+                    <p className="text-white font-bold text-base">Показать QR врачу</p>
+                    <p className="text-blue-200 text-xs">Нажмите для полноэкранного QR</p>
+                  </div>
+                  <span className="material-symbols-outlined text-white/60 text-xl ml-auto">chevron_right</span>
+                </button>
+              </div>
+            )}
+
+            {/* Детали приёма */}
+            <div className="bg-white rounded-3xl p-5 space-y-4" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
+              {[
+                { icon: 'calendar_today', label: 'Дата', value: new Date(data.appointment_date + 'T00:00').toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long', year:'numeric' }), color: '#0097A7', bg: '#e0f7fa' },
+                { icon: 'schedule',       label: 'Время', value: `${data.start_time?.slice(0,5)} — ${data.end_time?.slice(0,5)}`, color: '#0097A7', bg: '#e0f7fa' },
+                { icon: 'stethoscope',    label: 'Врач',  value: data.doctor_name, color: '#7b1fa2', bg: '#f3e5f5' },
+                { icon: 'local_hospital', label: 'Клиника', value: data.clinic_name, color: '#2e7d32', bg: '#e8f5e9' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: item.bg }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: item.color, fontVariationSettings:"'FILL' 1" }}>{item.icon}</span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{item.label}</p>
+                    <p className="text-sm font-bold text-gray-800 mt-0.5">{item.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Код */}
+            {!String(data.status).includes('completed') && data.short_code && (
+              <div className="rounded-2xl p-4 text-center" style={{ background: '#fff8e1', border: '1px solid #ffe082' }}>
+                <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#e65100' }}>Код для врача (если нет QR)</p>
+                <p className="text-5xl font-black tracking-widest" style={{ color: '#e65100', letterSpacing: 12 }}>{data.short_code}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── HOME (направления) ── */}
+        {tab === 'home' && !data?.type && (
           <div className="space-y-5 tab-enter">
             {/* Active QR — show current referral's QR prominently */}
             {current?.status === 'created' && current?.qr_code && (
@@ -781,7 +942,7 @@ export default function PatientCabinet() {
         )}
 
         {/* ── REFERRALS ── */}
-        {tab === 'referrals' && (
+        {tab === 'referrals' && !data?.type && (
           <div className="tab-enter">
             <div className="relative mb-4">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl pointer-events-none">search</span>
@@ -805,7 +966,7 @@ export default function PatientCabinet() {
         )}
 
         {/* ── HISTORY ── */}
-        {tab === 'history' && (
+        {tab === 'history' && !data?.type && (
           <div className="tab-enter">
             {mis_visits.length === 0 ? (
               <div className="flex flex-col items-center py-20 text-center">
@@ -835,7 +996,7 @@ export default function PatientCabinet() {
         )}
 
         {/* ── SUPPORT ── */}
-        {tab === 'support' && (
+        {tab === 'support' && !data?.type && (
           <div className="tab-enter">
             <SupportTab phone={patient_phone} token={localStorage.getItem(TOKEN_KEY)} />
           </div>

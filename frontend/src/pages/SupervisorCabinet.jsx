@@ -69,144 +69,1007 @@ const NAV = [
   { key: 'ads',          label: 'Реклама',      icon: 'campaign' },
   { key: 'ai_analytics', label: 'AI-анализ',    icon: 'auto_awesome' },
   { key: 'ext_doctors',  label: 'Внеш. врачи',  icon: 'person_add' },
+  { key: 'recruiters',   label: 'Рекрутеры',    icon: 'manage_accounts' },
   { key: 'settings',   label: 'Настройки',    icon: 'settings' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
 function ExtDoctorsSection({ token }) {
-  const [doctors, setDoctors] = useState([])
-  const [requests, setRequests] = useState([])
-  const [visitSettings, setVisitSettings] = useState([])
-  const [settingsForm, setSettingsForm] = useState({ doctor_id:'', price_per_visit:'', doctor_percent:'50', start_date:'' })
-  const [submitting, setSubmitting] = useState(false)
-  const [msg, setMsg] = useState('')
   const hdr = { headers: { Authorization: `Bearer ${token}` } }
+  const P = '#0097A7', D = '#004D5F'
 
-  useEffect(() => {
-    const b = (window.location.pathname.match(/^\/[^\/]+/) || [''])[0]
-    const base = b + '/api'
-    Promise.all([
-      axios.get(base + '/admins/external-doctors', hdr).catch(() => ({ data: [] })),
-      axios.get(base + '/admins/doctor-requests', hdr).catch(() => ({ data: [] })),
-      axios.get(base + '/visiting/admin/settings', hdr).catch(() => ({ data: [] })),
-    ]).then(([d, r, s]) => {
-      setDoctors(Array.isArray(d.data) ? d.data : [])
-      setRequests(Array.isArray(r.data) ? r.data : [])
-      setVisitSettings(Array.isArray(s.data) ? s.data : [])
-    })
-  }, [])
+  const [doctors,  setDoctors]  = useState([])
+  const [clinics,  setClinics]  = useState([])
+  const [settings, setSettings] = useState([])
+  const [showAdd,  setShowAdd]  = useState(false)
+  const [qrData,   setQrData]   = useState(null)
+  const [toggling, setToggling] = useState(null)
+  const [suspending, setSuspending] = useState(null)
+  const [search,   setSearch]   = useState('')
+  const [saving,   setSaving]   = useState(false)
+  const [msg,      setMsg]      = useState('')
 
-  async function createSettings(e) {
-    e.preventDefault()
-    setSubmitting(true); setMsg('')
+  // вкладка врачи/записи
+  const [mainTab, setMainTab] = useState("doctors")
+  const [allApts, setAllApts] = useState([])
+  const [aptsLoading, setAptsLoading] = useState(false)
+  const [aptsStatus, setAptsStatus] = useState("")
+  const [aptsDateFrom, setAptsDateFrom] = useState("")
+  const [aptsDateTo, setAptsDateTo] = useState("")
+  const [editApt, setEditApt] = useState(null)
+  const [editAptForm, setEditAptForm] = useState({})
+  const [editAptSaving, setEditAptSaving] = useState(false)
+  const [editAptMsg, setEditAptMsg] = useState("")
+  const [deleteAptId, setDeleteAptId] = useState(null)
+  const [deleteAptSaving, setDeleteAptSaving] = useState(false)
+
+  const loadAllApts = async () => {
+    setAptsLoading(true)
     try {
-      const b = (window.location.pathname.match(/^\/[^\/]+/) || [''])[0]
-      await axios.post(b + '/api/visiting/admin/settings', {
-        ...settingsForm,
-        price_per_visit: parseFloat(settingsForm.price_per_visit),
-        doctor_percent: parseFloat(settingsForm.doctor_percent),
-      }, hdr)
-      setMsg('✅ Настройки сохранены')
-    } catch(e) { setMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
-    finally { setSubmitting(false) }
+      const params = new URLSearchParams()
+      if (aptsDateFrom) params.set("date_from", aptsDateFrom)
+      if (aptsDateTo)   params.set("date_to", aptsDateTo)
+      const statusVal = typeof aptsStatus === 'object' ? (aptsStatus.status || '') : aptsStatus
+      if (statusVal) params.set("status", statusVal)
+      const r = await axios.get(API_BASE + "/visiting/admin/all-appointments?" + params, hdr)
+      setAllApts(Array.isArray(r.data) ? r.data : [])
+    } catch {}
+    setAptsLoading(false)
   }
 
-  const fmt = d => d ? new Date(d).toLocaleDateString('ru-RU') : '—'
-  const stColor = {pending:'bg-yellow-100 text-yellow-700',approved:'bg-green-100 text-green-700',rejected:'bg-red-100 text-red-700'}
-  const stLabel = {pending:'Ожидает',approved:'Одобрено',rejected:'Отклонено'}
+  const openEditApt = (apt) => {
+    setEditApt(apt)
+    setEditAptForm({
+      patient_name: apt.patient_name || '',
+      patient_phone: apt.patient_phone || '',
+      appointment_date: apt.appointment_date || '',
+      start_time: apt.start_time?.slice(0,5) || '',
+      end_time: apt.end_time?.slice(0,5) || '',
+      price: apt.price || '',
+      status: String(apt.status).includes('completed') ? 'completed'
+            : String(apt.status).includes('cancelled') ? 'cancelled' : 'pending',
+      notes: apt.notes || '',
+    })
+    setEditAptMsg('')
+  }
+
+  const saveEditApt = async (e) => {
+    e.preventDefault()
+    setEditAptSaving(true); setEditAptMsg('')
+    try {
+      await axios.patch(API_BASE + `/visiting/admin/appointments/${editApt.id}/edit`, {
+        ...editAptForm,
+        price: editAptForm.price ? parseFloat(editAptForm.price) : null,
+      }, hdr)
+      setEditAptMsg('✅ Сохранено')
+      await loadAllApts()
+      setTimeout(() => setEditApt(null), 800)
+    } catch (e) { setEditAptMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
+    setEditAptSaving(false)
+  }
+
+  const confirmDeleteApt = async () => {
+    if (!deleteAptId) return
+    setDeleteAptSaving(true)
+    try {
+      await axios.delete(API_BASE + `/visiting/admin/appointments/${deleteAptId}`, hdr)
+      setDeleteAptId(null)
+      await loadAllApts()
+    } catch (e) { alert('Ошибка: ' + (e?.response?.data?.detail || e.message)) }
+    setDeleteAptSaving(false)
+  }
+
+  // форма добавления
+  const [form, setForm] = useState({ full_name:'', phone_number:'', email:'', specialization:'', address:'', username:'', password:'', clinic_ids:[], price_per_visit:'', doctor_percent:'70' })
+  // редактирование
+  const [editDoc,  setEditDoc]  = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [editSaving, setEditSaving] = useState(false)
+  // запись
+  const [bookDoc,  setBookDoc]  = useState(null)
+  const [bookForm, setBookForm] = useState({ patient_name:'', patient_phone:'', appointment_date:'', start_time:'09:00', end_time:'09:30', price:'' })
+  const [bookSaving, setBookSaving] = useState(false)
+  const [bookMsg,    setBookMsg]    = useState('')
+  const [bookResult, setBookResult] = useState(null)  // {short_code, patient_url, patient_qr, qr_code}
+  // отчёт
+  const [reportDoc,  setReportDoc]  = useState(null)
+  const [reportData, setReportData] = useState(null)
+  const [reportFrom, setReportFrom] = useState('')
+  const [reportTo,   setReportTo]   = useState('')
+  const [reportLoading, setReportLoading] = useState(false)
+
+  const load = () => {
+    axios.get(API_BASE + '/manager/all-external-doctors', hdr).then(r => setDoctors(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    axios.get(API_BASE + '/manager/clinics/', hdr).then(r => setClinics(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    axios.get(API_BASE + '/visiting/admin/settings', hdr).then(r => setSettings(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  }
+  useEffect(() => { load() }, [])
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const toggleCl = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x => x !== id) : [...form.clinic_ids, id])
+
+  // ── Регистрация нового врача ──
+  const registerDoctor = async (e) => {
+    e.preventDefault(); setSaving(true); setMsg('')
+    try {
+      const r = await axios.post(API_BASE + '/manager/register-external-doctor', { ...form, doctor_type: 'visiting', price_per_visit: form.price_per_visit ? parseFloat(form.price_per_visit) : null, doctor_percent: parseFloat(form.doctor_percent || 70) }, hdr)
+      setQrData(r.data); setShowAdd(false)
+      setForm({ full_name:'', phone_number:'', email:'', specialization:'', address:'', username:'', password:'', clinic_ids:[], price_per_visit:'', doctor_percent:'70' })
+      load()
+    } catch (e) { setMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
+    setSaving(false)
+  }
+
+  // ── Блокировка / активация ──
+  const toggleActive = async (doc) => {
+    setToggling(doc.id)
+    await axios.patch(API_BASE + `/manager/recruiter-doctors/${doc.id}/toggle-active`, {}, hdr).catch(() => {})
+    load(); setToggling(null)
+  }
+
+  // ── Приостановка ──
+  const toggleSuspend = async (doc) => {
+    setSuspending(doc.id)
+    const endpoint = doc.is_suspended ? 'resume-doctor' : 'suspend-doctor'
+    await axios.patch(API_BASE + `/visiting/${endpoint}/${doc.id}`, {}, hdr).catch(() => {})
+    load(); setSuspending(null)
+  }
+
+  // ── Редактирование ──
+  const openEdit = (doc) => {
+    const s = settings.find(x => x.doctor_id === doc.id)
+    setEditDoc(doc)
+    setEditForm({ full_name: doc.full_name, phone_number: doc.phone_number || '', email: doc.email || '', specialization: doc.specialization || '', price_per_visit: s ? s.price_per_visit : '', doctor_percent: s ? s.doctor_percent : '70' })
+  }
+  const saveEdit = async (e) => {
+    e.preventDefault(); setEditSaving(true)
+    try {
+      await axios.patch(API_BASE + `/visiting/admin/update-doctor/${editDoc.id}`, { ...editForm, price_per_visit: editForm.price_per_visit ? parseFloat(editForm.price_per_visit) : undefined, doctor_percent: editForm.doctor_percent ? parseFloat(editForm.doctor_percent) : undefined }, hdr)
+      setEditDoc(null); load()
+    } catch (e) { alert('Ошибка: ' + (e?.response?.data?.detail || e.message)) }
+    setEditSaving(false)
+  }
+
+  // ── Запись на приём ──
+  const openBook = (doc) => {
+    const today = new Date().toISOString().slice(0, 10)
+    const s = settings.find(x => x.doctor_id === doc.id)
+    setBookDoc(doc)
+    setBookForm({ patient_name:'', patient_phone:'', appointment_date: today, start_time:'09:00', end_time:'09:30', price: s ? s.price_per_visit : '', clinic_id: doc.clinics?.[0]?.id || '' })
+    setBookMsg('')
+  }
+  const saveBook = async (e) => {
+    e.preventDefault(); setBookSaving(true); setBookMsg('')
+    try {
+      const clinic_id = bookForm.clinic_id || (clinics[0]?.id || '')
+      const r = await axios.post(API_BASE + '/visiting/admin/book-appointment', { doctor_user_id: bookDoc.id, clinic_id, patient_name: bookForm.patient_name, patient_phone: bookForm.patient_phone, appointment_date: bookForm.appointment_date, start_time: bookForm.start_time, end_time: bookForm.end_time, price: bookForm.price ? parseFloat(bookForm.price) : null }, hdr)
+      setBookResult(r.data)
+      setBookMsg('✅ Запись создана')
+    } catch (e) { setBookMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }
+    setBookSaving(false)
+  }
+
+  // ── Отчёт ──
+  const loadReport = async (docId) => {
+    setReportLoading(true); setReportData(null)
+    try {
+      const params = new URLSearchParams()
+      if (reportFrom) params.append('date_from', reportFrom)
+      if (reportTo)   params.append('date_to',   reportTo)
+      const r = await axios.get(API_BASE + `/visiting/admin/appointments/${docId}?${params}`, hdr)
+      setReportData(r.data)
+    } catch {}
+    setReportLoading(false)
+  }
+  const openReport = (doc) => {
+    setReportDoc(doc)
+    setReportData(null)
+    const to   = new Date().toISOString().slice(0, 10)
+    const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    setReportFrom(from); setReportTo(to)
+    setTimeout(() => {}, 0)
+  }
+  useEffect(() => {
+    if (reportDoc) loadReport(reportDoc.id)
+  }, [reportDoc, reportFrom, reportTo])
+
+  // CSV экспорт
+  const exportCSV = () => {
+    if (!reportData) return
+    const rows = [['Пациент', 'Телефон', 'Дата', 'Время', 'Статус', 'Цена, ₽', 'Доля врача, ₽']]
+    reportData.appointments.forEach(a => rows.push([a.patient_name || '', a.patient_phone || '', a.appointment_date, a.start_time?.slice(0,5), a.status, a.price, a.doctor_share]))
+    const csv = rows.map(r => r.join(';')).join('\n')
+    const a = document.createElement('a')
+    a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv)
+    a.download = `отчёт_${reportDoc.full_name}_${reportFrom}_${reportTo}.csv`
+    a.click()
+  }
+
+  // Простой SVG бар-чарт по дням
+  const BarChart = ({ appointments }) => {
+    if (!appointments || !appointments.length) return null
+    const byDate = {}
+    appointments.forEach(a => {
+      if (!byDate[a.appointment_date]) byDate[a.appointment_date] = { total: 0, completed: 0 }
+      byDate[a.appointment_date].total++
+      if (a.status === 'completed') byDate[a.appointment_date].completed++
+    })
+    const dates = Object.keys(byDate).sort().slice(-14)
+    if (!dates.length) return null
+    const maxVal = Math.max(...dates.map(d => byDate[d].total), 1)
+    const W = 420, H = 90, pad = 24, barW = Math.min(24, (W - pad * 2) / dates.length - 4)
+    return (
+      <svg width="100%" viewBox={`0 0 ${W} ${H + 20}`} style={{ display:'block', margin:'0 auto' }}>
+        {dates.map((d, i) => {
+          const x = pad + i * ((W - pad * 2) / dates.length) + ((W - pad * 2) / dates.length - barW) / 2
+          const h = Math.max(4, (byDate[d].total / maxVal) * H)
+          const hc = Math.max(0, (byDate[d].completed / maxVal) * H)
+          return (
+            <g key={d}>
+              <rect x={x} y={H - h} width={barW} height={h} rx={3} fill="#e0f7fa" />
+              <rect x={x} y={H - hc} width={barW} height={hc} rx={3} fill={P} />
+              <text x={x + barW / 2} y={H + 14} textAnchor="middle" fontSize={8} fill="#90a4ae">{d.slice(5)}</text>
+            </g>
+          )
+        })}
+      </svg>
+    )
+  }
+
+  const filtered = doctors.filter(d => !search || [d.full_name, d.username, d.specialization, d.phone_number].some(v => v && v.toLowerCase().includes(search.toLowerCase())))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-sm font-bold text-gray-700 mb-3">Заявки на регистрацию</h3>
-        {requests.length === 0 && <p className="text-gray-400 text-sm">Нет заявок</p>}
-        {requests.map(r => (
-          <div key={r.id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800">{r.doctor_name}</p>
-              <p className="text-xs text-gray-400">{r.phone} · {fmt(r.created_at)}</p>
-            </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${stColor[r.status] || 'bg-gray-100 text-gray-500'}`}>
-              {stLabel[r.status] || r.status}
-            </span>
-          </div>
-        ))}
-      </div>
+    <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
-      <div>
-        <h3 className="text-sm font-bold text-gray-700 mb-3">Зарегистрированные врачи</h3>
-        {doctors.length === 0 && <p className="text-gray-400 text-sm">Нет врачей</p>}
-        {doctors.map(d => (
-          <div key={d.id} className="bg-white rounded-xl border border-gray-100 p-3 mb-2 flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">
-              <span className="material-symbols-outlined text-teal-600 text-sm" style={{fontVariationSettings:"'FILL' 1"}}>person</span>
+      {/* ── QR попап ── */}
+      {qrData && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:360, width:'100%' }}>
+            <div style={{ fontWeight:700, color:D, marginBottom:8 }}>✅ {qrData.message}</div>
+            <div style={{ textAlign:'center', margin:'12px 0' }}>
+              <img src={`data:image/png;base64,${qrData.qr_code}`} alt="QR" style={{ width:150, height:150, borderRadius:10 }} />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-800 truncate">{d.full_name}</p>
-              <p className="text-xs text-gray-400">{d.role === 'visiting_doctor' ? 'Выездной' : 'Внешний'} · {d.username}</p>
+            <div style={{ background:'#f0f9fa', borderRadius:10, padding:'10px 12px', marginBottom:12, fontSize:13 }}>
+              <div><b>Логин:</b> {qrData.credentials?.username}</div>
+              <div><b>Пароль:</b> {qrData.credentials?.password}</div>
             </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${d.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-              {d.is_active ? 'Активен' : 'Неактивен'}
-            </span>
+            <button onClick={() => setQrData(null)} style={{ width:'100%', background:P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:'pointer' }}>Закрыть</button>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      <div>
-        <h3 className="text-sm font-bold text-gray-700 mb-3">Настройки выездного врача</h3>
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <form onSubmit={createSettings} className="space-y-3">
-            <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">ID врача</label>
-              <select value={settingsForm.doctor_id} onChange={e => setSettingsForm(p => ({...p, doctor_id: e.target.value}))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required>
-                <option value="">Выберите врача</option>
-                {doctors.filter(d => d.role === 'visiting_doctor').map(d => (
-                  <option key={d.id} value={d.id}>{d.full_name}</option>
+      {/* ── Модал редактирования ── */}
+      {editDoc && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:440, width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:D }}>Редактировать врача</div>
+              <button onClick={() => setEditDoc(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#90a4ae' }}>✕</button>
+            </div>
+            <form onSubmit={saveEdit}>
+              {[
+                { label:'ФИО',            key:'full_name' },
+                { label:'Телефон',         key:'phone_number' },
+                { label:'Email',           key:'email' },
+                { label:'Специализация',   key:'specialization' },
+              ].map(f => (
+                <div key={f.key} style={{ marginBottom:10 }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                  <input value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                </div>
+              ))}
+              <div style={{ background:'#f0f9fa', borderRadius:10, padding:'10px 12px', marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:D, marginBottom:8 }}>Условия работы</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                  {[
+                    { label:'Цена за приём ₽', key:'price_per_visit' },
+                    { label:'Доля врача %',    key:'doctor_percent' },
+                  ].map(f => (
+                    <div key={f.key}>
+                      <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                      <input type="number" value={editForm[f.key] || ''} onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                        style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button type="button" onClick={() => setEditDoc(null)} style={{ flex:1, background:'#f0f5f6', border:'1px solid #e0eaec', borderRadius:10, padding:'10px 0', fontWeight:600, cursor:'pointer', color:'#607d8b' }}>Отмена</button>
+                <button type="submit" disabled={editSaving} style={{ flex:2, background:editSaving?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:editSaving?'not-allowed':'pointer' }}>
+                  {editSaving ? 'Сохранение...' : 'Сохранить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал записи на приём ── */}
+      {bookDoc && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:400, width:'100%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontWeight:700, fontSize:15, color:D }}>Запись к врачу: {bookDoc.full_name}</div>
+              <button onClick={() => setBookDoc(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#90a4ae' }}>✕</button>
+            </div>
+            <form onSubmit={saveBook}>
+              {[
+                { label:'Имя пациента *', key:'patient_name', type:'text' },
+                { label:'Телефон *',       key:'patient_phone', type:'tel' },
+              ].map(f => (
+                <div key={f.key} style={{ marginBottom:10 }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                  <input type={f.type} required value={bookForm[f.key] || ''} onChange={e => setBookForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                </div>
+              ))}
+              <div style={{ marginBottom:10 }}>
+                <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Дата приёма *</label>
+                <input type="date" required value={bookForm.appointment_date} onChange={e => setBookForm(p => ({ ...p, appointment_date: e.target.value }))}
+                  style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:10 }}>
+                {[
+                  { label:'Начало',   key:'start_time', type:'time' },
+                  { label:'Конец',    key:'end_time',   type:'time' },
+                  { label:'Цена ₽',   key:'price',      type:'number' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                    <input type={f.type} value={bookForm[f.key] || ''} onChange={e => setBookForm(p => ({ ...p, [f.key]: e.target.value }))} required={f.key !== 'price'}
+                      style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 8px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                  </div>
                 ))}
+              </div>
+              {clinics.length > 1 && (
+                <div style={{ marginBottom:10 }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Клиника</label>
+                  <select value={bookForm.clinic_id || ''} onChange={e => setBookForm(p => ({ ...p, clinic_id: e.target.value }))}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box', background:'#fff' }}>
+                    {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {bookMsg && <div style={{ fontSize:13, marginBottom:8 }}>{bookMsg}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                {bookResult && (
+                  <div style={{ gridColumn:'1 / span 2', background:'#f0f9fa', borderRadius:12, padding:'12px', border:'1px solid #b2dfdb' }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:'#004D5F', marginBottom:8 }}>Данные для пациента</div>
+                    <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
+                      {bookResult.patient_qr && (
+                        <img src={'data:image/png;base64,' + bookResult.patient_qr} alt="QR"
+                          style={{ width:88, height:88, borderRadius:8, border:'1px solid #e0eaec', flexShrink:0, cursor:'pointer' }}
+                          onClick={() => window.open(bookResult.patient_url, '_blank')} />
+                      )}
+                      <div style={{ flex:1 }}>
+                        {bookResult.short_code && (
+                          <div style={{ marginBottom:6 }}>
+                            <div style={{ fontSize:10, color:'#90a4ae', fontWeight:700, textTransform:'uppercase' }}>Код записи</div>
+                            <div style={{ fontSize:30, fontWeight:900, color:'#e65100', letterSpacing:4 }}>{bookResult.short_code}</div>
+                          </div>
+                        )}
+                        {bookResult.patient_url && (
+                          <a href={bookResult.patient_url} target="_blank" rel="noreferrer"
+                            style={{ fontSize:11, color:'#0097A7', wordBreak:'break-all' }}>
+                            Открыть кабинет пациента →
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <button type="button" onClick={() => { setBookDoc(null); setBookResult(null) }} style={{ flex:1, background:'#f0f5f6', border:'1px solid #e0eaec', borderRadius:10, padding:'10px 0', fontWeight:600, cursor:'pointer', color:'#607d8b' }}>
+                  {bookResult ? 'Закрыть' : 'Отмена'}
+                </button>
+                {!bookResult && (
+                  <button type="submit" disabled={bookSaving} style={{ flex:2, background:bookSaving?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:bookSaving?'not-allowed':'pointer' }}>
+                    {bookSaving ? 'Запись...' : '+ Записать пациента'}
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал отчёта ── */}
+      {reportDoc && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16, overflowY:'auto' }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:680, width:'100%', maxHeight:'95vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:D }}>Отчёт: {reportDoc.full_name}</div>
+              <button onClick={() => setReportDoc(null)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#90a4ae' }}>✕</button>
+            </div>
+            {/* Фильтр дат */}
+            <div style={{ display:'flex', gap:8, marginBottom:14, alignItems:'flex-end', flexWrap:'wrap' }}>
+              {[
+                { label:'С', key:'from', val:reportFrom, set:setReportFrom },
+                { label:'По', key:'to', val:reportTo, set:setReportTo },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:3, textTransform:'uppercase' }}>{f.label}</label>
+                  <input type="date" value={f.val} onChange={e => f.set(e.target.value)}
+                    style={{ border:'1.5px solid #cdd8da', borderRadius:8, padding:'7px 10px', fontSize:13, outline:'none' }} />
+                </div>
+              ))}
+              <div style={{ display:'flex', gap:6 }}>
+                <button onClick={exportCSV} style={{ background:'#e8f5e9', border:'1px solid #a5d6a7', borderRadius:8, padding:'7px 12px', fontSize:12, fontWeight:700, color:'#2e7d32', cursor:'pointer' }}>⬇ Excel (CSV)</button>
+                <button onClick={() => window.print()} style={{ background:'#fff3e0', border:'1px solid #ffcc80', borderRadius:8, padding:'7px 12px', fontSize:12, fontWeight:700, color:'#e65100', cursor:'pointer' }}>🖨 PDF</button>
+              </div>
+            </div>
+            {reportLoading && (
+              <div style={{ textAlign:'center', padding:32, color:'#90a4ae', fontSize:14 }}>Загрузка...</div>
+            )}
+            {!reportLoading && reportData && (
+              <>
+                {/* Статистика */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8, marginBottom:16 }}>
+                  {[
+                    { label:'Всего записей',   value:reportData.stats.total,                       color:D,        bg:'#f0f9fa' },
+                    { label:'В очереди',        value:reportData.stats.active,                      color:P,        bg:'#e0f7fa' },
+                    { label:'Завершено',         value:reportData.stats.completed,                   color:'#2e7d32', bg:'#e8f5e9' },
+                    { label:'Выручка ₽',         value:reportData.stats.revenue.toLocaleString('ru'), color:'#1565c0', bg:'#e3f2fd' },
+                    { label:'Врачу ₽',           value:reportData.stats.doctor_share.toLocaleString('ru'), color:'#7b1fa2', bg:'#f3e5f5' },
+                  ].map(c => (
+                    <div key={c.label} style={{ background:c.bg, borderRadius:12, padding:'10px 8px', textAlign:'center' }}>
+                      <div style={{ fontSize:9, color:'#90a4ae', textTransform:'uppercase', fontWeight:700, marginBottom:4 }}>{c.label}</div>
+                      <div style={{ fontWeight:800, fontSize:18, color:c.color }}>{c.value}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* График */}
+                {reportData.appointments.length > 0 && (
+                  <div style={{ background:'#f8fbfc', borderRadius:12, padding:'12px 8px', marginBottom:14 }}>
+                    <div style={{ fontSize:11, color:'#607d8b', fontWeight:700, marginBottom:6, textTransform:'uppercase', paddingLeft:8 }}>
+                      Приёмы по дням <span style={{ color:P }}>■ выполнено</span> <span style={{ color:'#e0f7fa', textShadow:'0 0 0 #90a4ae' }}>■ всего</span>
+                    </div>
+                    <BarChart appointments={reportData.appointments} />
+                  </div>
+                )}
+                {/* Таблица */}
+                {reportData.appointments.length === 0 ? (
+                  <div style={{ textAlign:'center', padding:'24px 0', color:'#90a4ae', fontSize:14 }}>Записей за период нет</div>
+                ) : (
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+                      <thead>
+                        <tr style={{ background:'#f0f9fa' }}>
+                          {['Пациент','Телефон','Дата','Время','Статус','Цена ₽','Врачу ₽'].map(h => (
+                            <th key={h} style={{ padding:'8px 6px', textAlign:'left', fontWeight:700, color:'#607d8b', fontSize:10, textTransform:'uppercase', whiteSpace:'nowrap', borderBottom:'1px solid #e0eaec' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.appointments.map(a => (
+                          <tr key={a.id} style={{ borderBottom:'1px solid #f0f5f6' }}>
+                            <td style={{ padding:'7px 6px', fontWeight:600, color:D }}>{a.patient_name || '—'}</td>
+                            <td style={{ padding:'7px 6px', color:'#607d8b', fontFamily:'monospace' }}>{a.patient_phone}</td>
+                            <td style={{ padding:'7px 6px', color:'#607d8b' }}>{a.appointment_date}</td>
+                            <td style={{ padding:'7px 6px', color:'#607d8b' }}>{a.start_time?.slice(0,5)}</td>
+                            <td style={{ padding:'7px 6px' }}>
+                              <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:10, background: a.status==='completed'?'#e8f5e9':'#e0f7fa', color: a.status==='completed'?'#2e7d32':P }}>
+                                {a.status === 'completed' ? '✓ Завершён' : '⏳ Ожидает'}
+                              </span>
+                            </td>
+                            <td style={{ padding:'7px 6px', fontWeight:700, color:'#1565c0' }}>{Number(a.price).toLocaleString('ru')}</td>
+                            <td style={{ padding:'7px 6px', fontWeight:700, color:'#7b1fa2' }}>{Number(a.doctor_share).toLocaleString('ru')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Шапка ── */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8 }}>
+        <div>
+          <h3 style={{ fontWeight:700, fontSize:16, color:D, margin:0 }}>Приезжие врачи</h3>
+          <p style={{ fontSize:12, color:'#90a4ae', margin:0 }}>{doctors.length} врачей зарегистрировано</p>
+        </div>
+        {mainTab === "doctors" && (
+          <button onClick={() => setShowAdd(!showAdd)} style={{ background:showAdd?'#f0f5f6':P, color:showAdd?D:'#fff', border:showAdd?'1px solid #e0eaec':'none', borderRadius:10, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer' }}>
+            {showAdd ? '✕ Закрыть' : '+ Добавить врача'}
+          </button>
+        )}
+      </div>
+
+      {/* ── Вкладки Врачи / Записи ── */}
+      <div style={{ display:'flex', gap:6, marginBottom:16, background:'#f0f5f6', borderRadius:12, padding:4 }}>
+        {[{ k:"doctors", label:"Врачи" }, { k:"appointments", label:"Все записи" }].map(t => (
+          <button key={t.k}
+            onClick={() => { setMainTab(t.k); if (t.k === "appointments") loadAllApts() }}
+            style={{ flex:1, padding:'8px 0', borderRadius:10, border:'none', fontWeight:700, fontSize:13, cursor:'pointer',
+              background: mainTab === t.k ? '#fff' : 'transparent',
+              color: mainTab === t.k ? P : '#90a4ae',
+              boxShadow: mainTab === t.k ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
+              transition: 'all 0.15s' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Вкладка: Все записи ── */}
+      {mainTab === "appointments" && (
+        <div>
+          <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap', alignItems:'flex-end' }}>
+            <div>
+              <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>С</label>
+              <input type="date" value={aptsDateFrom} onChange={e => setAptsDateFrom(e.target.value)}
+                style={{ border:'1.5px solid #cdd8da', borderRadius:8, padding:'7px 10px', fontSize:13, outline:'none' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>По</label>
+              <input type="date" value={aptsDateTo} onChange={e => setAptsDateTo(e.target.value)}
+                style={{ border:'1.5px solid #cdd8da', borderRadius:8, padding:'7px 10px', fontSize:13, outline:'none' }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Врач</label>
+              <select value={aptsStatus.doctor || ''} onChange={e => setAptsStatus(prev => ({ ...prev, doctor: e.target.value }))}
+                style={{ border:'1.5px solid #cdd8da', borderRadius:8, padding:'7px 10px', fontSize:13, outline:'none', background:'#fff' }}>
+                <option value="">Все врачи</option>
+                {doctors.map(d => <option key={d.id} value={d.full_name}>{d.full_name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Цена за визит ₽</label>
-                <input type="number" value={settingsForm.price_per_visit} onChange={e => setSettingsForm(p => ({...p, price_per_visit: e.target.value}))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 block mb-1">Доля врача %</label>
-                <input type="number" value={settingsForm.doctor_percent} onChange={e => setSettingsForm(p => ({...p, doctor_percent: e.target.value}))}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
-              </div>
-            </div>
             <div>
-              <label className="text-xs font-medium text-gray-500 block mb-1">Дата начала</label>
-              <input type="date" value={settingsForm.start_date} onChange={e => setSettingsForm(p => ({...p, start_date: e.target.value}))}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-400" required />
+              <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Статус</label>
+              <select value={typeof aptsStatus === 'object' ? (aptsStatus.status || '') : aptsStatus} onChange={e => setAptsStatus(prev => typeof prev === 'object' ? { ...prev, status: e.target.value } : e.target.value)}
+                style={{ border:'1.5px solid #cdd8da', borderRadius:8, padding:'7px 10px', fontSize:13, outline:'none', background:'#fff' }}>
+                <option value="">Все</option>
+                <option value="pending">Ожидает</option>
+                <option value="completed">Завершён</option>
+              </select>
             </div>
-            {msg && <p className="text-sm">{msg}</p>}
-            <button type="submit" disabled={submitting}
-              className="w-full h-10 rounded-xl text-white font-bold text-sm disabled:opacity-60"
-              style={{background:'linear-gradient(135deg,#0097A7,#1565C0)'}}>
-              {submitting ? 'Сохранение...' : 'Сохранить настройки'}
+            <button onClick={loadAllApts}
+              style={{ background:P, color:'#fff', border:'none', borderRadius:8, padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer', alignSelf:'flex-end' }}>
+              Обновить
+            </button>
+          </div>
+
+          {/* Итоги */}
+          {allApts.length > 0 && (() => {
+            const docFilter = typeof aptsStatus === 'object' ? (aptsStatus.doctor || '') : ''
+            const filtered = docFilter ? allApts.filter(a => a.doctor_name === docFilter) : allApts
+            const completed = filtered.filter(a => String(a.status).includes('completed'))
+            const totalShare = completed.reduce((s, a) => s + (Number(a.doctor_share) || 0), 0)
+            return (
+              <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+                {[
+                  { label:'Всего записей', value: filtered.length, color:'#004D5F', bg:'#f0f9fa' },
+                  { label:'Завершено',     value: completed.length, color:'#2e7d32', bg:'#e8f5e9' },
+                  { label:'Выплатить врачам', value: totalShare.toLocaleString('ru') + ' ₽', color:'#7b1fa2', bg:'#f3e5f5' },
+                ].map(c => (
+                  <div key={c.label} style={{ background:c.bg, borderRadius:12, padding:'10px 14px', flex:1, minWidth:100 }}>
+                    <div style={{ fontSize:10, color:'#90a4ae', textTransform:'uppercase', fontWeight:700, marginBottom:4 }}>{c.label}</div>
+                    <div style={{ fontWeight:800, fontSize:18, color:c.color }}>{c.value}</div>
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
+          {aptsLoading ? (
+            <div style={{ textAlign:'center', padding:40, color:'#90a4ae' }}>Загрузка...</div>
+          ) : allApts.length === 0 ? (
+            <div style={{ textAlign:'center', padding:40, color:'#90a4ae' }}>Записей нет</div>
+          ) : (
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                <thead>
+                  <tr style={{ background:'#f0f9fa' }}>
+                    {['Врач', 'Пациент', 'Телефон', 'Дата', 'Время', 'Статус', 'Заработок врача', ''].map(h => (
+                      <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, fontSize:11, color:'#607d8b', textTransform:'uppercase', borderBottom:'2px solid #e0eaec' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(typeof aptsStatus === 'object' && aptsStatus.doctor
+                    ? allApts.filter(a => a.doctor_name === aptsStatus.doctor)
+                    : allApts
+                  ).map(a => (
+                    <tr key={a.id} style={{ borderBottom:'1px solid #f0f5f6' }}>
+                      <td style={{ padding:'9px 10px', fontWeight:600, color:D }}>{a.doctor_name}</td>
+                      <td style={{ padding:'9px 10px', color:'#333' }}>{a.patient_name || '—'}</td>
+                      <td style={{ padding:'9px 10px', color:'#607d8b', fontFamily:'monospace', fontSize:12 }}>{a.patient_phone}</td>
+                      <td style={{ padding:'9px 10px', color:'#607d8b' }}>{a.appointment_date}</td>
+                      <td style={{ padding:'9px 10px', color:'#607d8b' }}>{a.start_time?.slice(0,5)}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
+                          background: String(a.status).includes('completed') ? '#e8f5e9' : '#fff3e0',
+                          color: String(a.status).includes('completed') ? '#2e7d32' : '#e65100' }}>
+                          {String(a.status).includes('completed') ? 'Завершён' : 'Ожидает'}
+                        </span>
+                      </td>
+                      <td style={{ padding:'9px 10px', fontWeight:700, color:'#2e7d32' }}>
+                        {Number(a.doctor_share).toLocaleString('ru')} ₽
+                      </td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button onClick={() => openEditApt(a)}
+                            style={{ background:'#e3f2fd', border:'1px solid #90caf9', borderRadius:6, padding:'4px 8px', fontSize:11, fontWeight:600, color:'#1565c0', cursor:'pointer' }}>
+                            ✏
+                          </button>
+                          <button onClick={() => setDeleteAptId(a.id)}
+                            style={{ background:'#ffeaea', border:'1px solid #ffcdd2', borderRadius:6, padding:'4px 8px', fontSize:11, fontWeight:600, color:'#c62828', cursor:'pointer' }}>
+                            🗑
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Модал редактирования записи ── */}
+      {editApt && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:480, width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:16, color:D }}>Редактировать запись</div>
+              <button onClick={() => setEditApt(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#90a4ae' }}>✕</button>
+            </div>
+            <form onSubmit={saveEditApt}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+                {[
+                  { label:'Пациент', key:'patient_name', type:'text', span:2 },
+                  { label:'Телефон', key:'patient_phone', type:'tel', span:2 },
+                  { label:'Дата', key:'appointment_date', type:'date', span:1 },
+                  { label:'Начало', key:'start_time', type:'time', span:1 },
+                  { label:'Конец', key:'end_time', type:'time', span:1 },
+                  { label:'Цена ₽', key:'price', type:'number', span:1 },
+                ].map(f => (
+                  <div key={f.key} style={{ gridColumn: f.span === 2 ? '1 / span 2' : undefined }}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                    <input type={f.type} value={editAptForm[f.key] || ''} onChange={e => setEditAptForm(p => ({ ...p, [f.key]: e.target.value }))}
+                      style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                  </div>
+                ))}
+                <div style={{ gridColumn:'1 / span 2' }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Статус</label>
+                  <select value={editAptForm.status || 'pending'} onChange={e => setEditAptForm(p => ({ ...p, status: e.target.value }))}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', background:'#fff' }}>
+                    <option value="pending">Ожидает</option>
+                    <option value="completed">Завершён</option>
+                    <option value="cancelled">Отменён (не пришёл)</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn:'1 / span 2' }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Примечание</label>
+                  <textarea value={editAptForm.notes || ''} onChange={e => setEditAptForm(p => ({ ...p, notes: e.target.value }))} rows={2}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', resize:'vertical', boxSizing:'border-box' }} />
+                </div>
+              </div>
+              {editAptMsg && <div style={{ fontSize:13, marginBottom:8, color: editAptMsg.startsWith('✅') ? '#2e7d32' : '#c62828' }}>{editAptMsg}</div>}
+              <div style={{ display:'flex', gap:8 }}>
+                <button type="button" onClick={() => setEditApt(null)} style={{ flex:1, background:'#f0f5f6', border:'1px solid #e0eaec', borderRadius:10, padding:'10px 0', fontWeight:600, cursor:'pointer', color:'#607d8b' }}>Отмена</button>
+                <button type="submit" disabled={editAptSaving} style={{ flex:2, background:editAptSaving?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:editAptSaving?'not-allowed':'pointer' }}>
+                  {editAptSaving ? 'Сохранение...' : 'Сохранить'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Подтверждение удаления ── */}
+      {deleteAptId && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:20, padding:28, maxWidth:340, width:'100%', textAlign:'center' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🗑️</div>
+            <div style={{ fontWeight:700, fontSize:16, color:D, marginBottom:8 }}>Удалить запись?</div>
+            <div style={{ fontSize:13, color:'#90a4ae', marginBottom:20 }}>Это действие нельзя отменить</div>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => setDeleteAptId(null)} style={{ flex:1, background:'#f0f5f6', border:'1px solid #e0eaec', borderRadius:10, padding:'11px 0', fontWeight:600, cursor:'pointer', color:'#607d8b' }}>Отмена</button>
+              <button onClick={confirmDeleteApt} disabled={deleteAptSaving}
+                style={{ flex:2, background:deleteAptSaving?'#ffcdd2':'#c62828', color:'#fff', border:'none', borderRadius:10, padding:'11px 0', fontWeight:700, cursor:deleteAptSaving?'not-allowed':'pointer' }}>
+                {deleteAptSaving ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Вкладка: Врачи (основной контент) ── */}
+      {mainTab === "doctors" && (<>
+
+      {/* ── Форма регистрации ── */}
+      {showAdd && (
+        <div style={{ background:'#fff', borderRadius:16, border:'1px solid #e0eaec', padding:20, marginBottom:16 }}>
+          <h4 style={{ fontWeight:700, color:D, marginTop:0, marginBottom:12 }}>Регистрация приезжего врача</h4>
+          <form onSubmit={registerDoctor}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
+              {[
+                { label:'ФИО *',          key:'full_name' },
+                { label:'Телефон',         key:'phone_number' },
+                { label:'Email',           key:'email' },
+                { label:'Специализация',   key:'specialization' },
+                { label:'Адрес',           key:'address' },
+                { label:'Логин *',         key:'username' },
+                { label:'Пароль *',        key:'password' },
+              ].map(f => (
+                <div key={f.key} style={{ gridColumn: ['full_name','address'].includes(f.key) ? '1 / span 2' : undefined }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                  <input value={form[f.key]} onChange={e => set(f.key, e.target.value)} required={f.label.includes('*')}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ background:'#f0f9fa', borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:D, marginBottom:8 }}>Условия работы</div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                {[
+                  { label:'Цена за приём ₽', key:'price_per_visit' },
+                  { label:'Доля врача %',    key:'doctor_percent' },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>{f.label}</label>
+                    <input type="number" value={form[f.key]} onChange={e => set(f.key, e.target.value)}
+                      style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', boxSizing:'border-box' }} />
+                  </div>
+                ))}
+              </div>
+              {form.price_per_visit && form.doctor_percent && (
+                <div style={{ fontSize:12, color:'#2e7d32', fontWeight:600, marginTop:6 }}>
+                  Врач получит: {Math.round(parseFloat(form.price_per_visit) * parseFloat(form.doctor_percent) / 100).toLocaleString('ru')} ₽ / приём
+                </div>
+              )}
+            </div>
+            {clinics.length > 0 && (
+              <div style={{ marginBottom:12 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#607d8b', marginBottom:6, textTransform:'uppercase' }}>Клиники</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {clinics.map(c => (
+                    <button type="button" key={c.id} onClick={() => toggleCl(c.id)}
+                      style={{ padding:'4px 10px', borderRadius:20, border:`1.5px solid ${form.clinic_ids.includes(c.id)?P:'#e0eaec'}`, background:form.clinic_ids.includes(c.id)?'#e0f7fa':'#fff', color:form.clinic_ids.includes(c.id)?D:'#607d8b', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {msg && <div style={{ fontSize:13, marginBottom:8 }}>{msg}</div>}
+            <button type="submit" disabled={saving} style={{ width:'100%', background:saving?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:saving?'not-allowed':'pointer' }}>
+              {saving ? 'Регистрация...' : 'Зарегистрировать и получить QR'}
             </button>
           </form>
         </div>
-        {visitSettings.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {visitSettings.map(s => (
-              <div key={s.id} className="bg-white rounded-xl border border-gray-100 p-3 flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">{s.price_per_visit} ₽ / {s.doctor_percent}%</p>
-                  <p className="text-xs text-gray-400">{fmt(s.start_date)} — {s.end_date ? fmt(s.end_date) : 'бессрочно'}</p>
+      )}
+
+      {/* ── Поиск ── */}
+      <div style={{ background:'#fff', borderRadius:10, border:'1px solid #e0eaec', padding:'8px 12px', marginBottom:12, display:'flex', gap:8, alignItems:'center' }}>
+        <span className="material-symbols-outlined" style={{ fontSize:18, color:'#90a4ae' }}>search</span>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск..."
+          style={{ flex:1, border:'none', outline:'none', fontSize:13 }} />
+      </div>
+
+      {/* ── Список врачей ── */}
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'32px 0', color:'#90a4ae', fontSize:14 }}>
+          {search ? 'Ничего не найдено' : 'Нет приезжих врачей — нажмите «Добавить врача»'}
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {filtered.map(doc => {
+            const docSettings = settings.find(s => s.doctor_id === doc.id)
+            return (
+              <div key={doc.id} style={{ background:'#fff', borderRadius:14, border:`1px solid ${!doc.is_active?'#ffd7d7':doc.is_suspended?'#ffe0b2':'#e0eaec'}`, padding:'12px 14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:700, fontSize:14, color:D }}>{doc.full_name}</div>
+                    {doc.specialization && <div style={{ fontSize:12, color:P }}>{doc.specialization}</div>}
+                    <div style={{ fontSize:11, color:'#90a4ae', fontFamily:'monospace' }}>{doc.username} · {doc.phone_number || '—'}</div>
+                  </div>
+                  <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
+                    background: !doc.is_active ? '#ffeaea' : doc.is_suspended ? '#fff8e1' : '#e0f7fa',
+                    color: !doc.is_active ? '#c62828' : doc.is_suspended ? '#e65100' : P,
+                    flexShrink:0 }}>
+                    {!doc.is_active ? 'Заблокирован' : doc.is_suspended ? 'Приостановлен' : 'Активен'}
+                  </span>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${s.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  {s.is_active ? 'Активно' : 'Неактивно'}
-                </span>
+                {docSettings && (
+                  <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                    <span style={{ fontSize:12, background:'#f0f9fa', color:D, padding:'2px 8px', borderRadius:8, fontWeight:600 }}>{parseFloat(docSettings.price_per_visit).toLocaleString('ru')} ₽/приём</span>
+                    <span style={{ fontSize:12, background:'#e8f5e9', color:'#2e7d32', padding:'2px 8px', borderRadius:8, fontWeight:600 }}>{docSettings.doctor_percent}% доля</span>
+                    <span style={{ fontSize:12, background:'#f3e5f5', color:'#7b1fa2', padding:'2px 8px', borderRadius:8, fontWeight:600 }}>
+                      Врачу: {Math.round(parseFloat(docSettings.price_per_visit)*parseFloat(docSettings.doctor_percent)/100).toLocaleString('ru')} ₽
+                    </span>
+                  </div>
+                )}
+                {doc.clinics?.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:8 }}>
+                    {doc.clinics.map(c => <span key={c.id} style={{ fontSize:11, background:'#e0f7fa', color:D, padding:'2px 8px', borderRadius:16, fontWeight:600 }}>{c.name}</span>)}
+                  </div>
+                )}
+                {/* Кнопки действий */}
+                <div style={{ display:'flex', gap:6, paddingTop:8, borderTop:'1px solid #f0f5f6', flexWrap:'wrap' }}>
+                  <button onClick={() => openEdit(doc)}
+                    style={{ background:'#e3f2fd', border:'1px solid #90caf9', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#1565c0', cursor:'pointer' }}>
+                    ✏ Редактировать
+                  </button>
+                  {!doc.is_suspended && (
+                  <button onClick={() => openBook(doc)}
+                    style={{ background:'#e8f5e9', border:'1px solid #a5d6a7', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#2e7d32', cursor:'pointer' }}>
+                    + Записать
+                  </button>
+                  )}
+                  <button onClick={() => openReport(doc)}
+                    style={{ background:'#f3e5f5', border:'1px solid #ce93d8', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color:'#7b1fa2', cursor:'pointer' }}>
+                    📊 Отчёт
+                  </button>
+                  {doc.is_active && (
+                    <button onClick={() => toggleSuspend(doc)} disabled={suspending === doc.id}
+                      style={{ background: doc.is_suspended ? '#f0f9fa' : '#fff8e1', border:`1px solid ${doc.is_suspended?'#b2dfdb':'#ffe082'}`, borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color: doc.is_suspended ? P : '#e65100', cursor:'pointer' }}>
+                      {suspending === doc.id ? '...' : doc.is_suspended ? '▶ Возобновить' : '⏸ Приостановить'}
+                    </button>
+                  )}
+                  <button onClick={() => toggleActive(doc)} disabled={toggling === doc.id}
+                    style={{ marginLeft: doc.is_active ? '0' : 'auto', background:doc.is_active?'#fff3f3':'#f0f9fa', border:`1px solid ${doc.is_active?'#ffcdd2':'#b2dfdb'}`, borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color:doc.is_active?'#c62828':P, cursor:'pointer' }}>
+                    {toggling === doc.id ? '...' : doc.is_active ? '🚫 Заблокировать' : '✓ Активировать'}
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      </>)}
+    </div>
+  )
+}
+
+// ── RecruiterSection ──────────────────────────────────────────────────────────
+function RecruiterSection({ token }) {
+  const hdr = { headers: { Authorization: `Bearer ${token}` } }
+  const [recruiters, setRecruiters] = useState([])
+  const [selected, setSelected]     = useState(null)  // {recruiter, doctors}
+  const [editPercent, setEditPercent] = useState({})  // id → value
+  const [saving, setSaving]         = useState(null)
+  const [search, setSearch]         = useState('')
+  const [msg, setMsg]               = useState({})
+
+  const load = () => {
+    axios.get(API_BASE + '/manager/recruiters', hdr)
+      .then(r => setRecruiters(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {})
+  }
+  useEffect(() => { load() }, [])
+
+  const openDetail = async (rec) => {
+    const r = await axios.get(API_BASE + `/manager/recruiters/${rec.id}/doctors`, hdr).catch(() => ({ data: [] }))
+    setSelected({ recruiter: rec, doctors: Array.isArray(r.data) ? r.data : [] })
+  }
+
+  const savePercent = async (id) => {
+    const val = editPercent[id]
+    if (val === undefined || val === '') return
+    setSaving(id)
+    try {
+      await axios.patch(API_BASE + `/manager/recruiters/${id}/percent`, { bonus_percent: parseFloat(val) }, hdr)
+      setMsg(p => ({...p, [id]: '✅ Сохранено'}))
+      load()
+      setTimeout(() => setMsg(p => ({...p, [id]: ''})), 2000)
+    } catch(e) { setMsg(p => ({...p, [id]: '❌ ' + (e?.response?.data?.detail || 'Ошибка')})) }
+    setSaving(null)
+  }
+
+  const filtered = recruiters.filter(r => !search || r.full_name.toLowerCase().includes(search.toLowerCase()))
+  const P = '#0097A7', D = '#004D5F'
+
+  if (selected) {
+    const { recruiter, doctors } = selected
+    return (
+      <div style={{ maxWidth:700, margin:'0 auto' }}>
+        <button onClick={()=>setSelected(null)} style={{ background:'#f0f5f6', border:'1px solid #e0eaec', borderRadius:8, padding:'6px 12px', fontSize:13, fontWeight:600, color:D, cursor:'pointer', marginBottom:16 }}>
+          ← Назад к рекрутерам
+        </button>
+        <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e0eaec', padding:'16px', marginBottom:16 }}>
+          <div style={{ fontWeight:700, fontSize:16, color:D, marginBottom:4 }}>{recruiter.full_name}</div>
+          <div style={{ fontSize:12, color:'#90a4ae', marginBottom:12 }}>Рекрутер · {recruiter.username}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(130px,1fr))', gap:8 }}>
+            {[
+              { label:'Врачей', value: recruiter.doctors_count, bg:'#e0f7fa', color:D },
+              { label:'Бонусов всего', value: `${recruiter.bonus_total.toLocaleString('ru')} ₽`, bg:'#e8f5e9', color:'#2e7d32' },
+              { label:'К выплате', value: `${recruiter.bonus_pending.toLocaleString('ru')} ₽`, bg:'#fff3e0', color:'#e65100' },
+              { label:'% бонус', value: `${recruiter.bonus_percent}%`, bg:'#f3e5f5', color:'#7b1fa2' },
+            ].map(c => (
+              <div key={c.label} style={{ background:c.bg, borderRadius:10, padding:'10px', textAlign:'center' }}>
+                <div style={{ fontSize:10, color:'#90a4ae', textTransform:'uppercase', fontWeight:700, marginBottom:3 }}>{c.label}</div>
+                <div style={{ fontWeight:800, color:c.color, fontSize:15 }}>{c.value}</div>
               </div>
             ))}
           </div>
-        )}
+        </div>
+        <h4 style={{ fontWeight:700, color:D, marginBottom:10 }}>Привлечённые врачи ({doctors.length})</h4>
+        {doctors.length === 0
+          ? <div style={{ textAlign:'center', padding:'32px 0', color:'#90a4ae', fontSize:14 }}>Нет привлечённых врачей</div>
+          : doctors.map(doc => (
+            <div key={doc.id} style={{ background:'#fff', borderRadius:12, border:'1px solid #e0eaec', padding:'12px 14px', marginBottom:8, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:14, color:D }}>{doc.full_name}</div>
+                {doc.specialization && <div style={{ fontSize:12, color:P }}>{doc.specialization}</div>}
+                <div style={{ fontSize:11, color:'#90a4ae' }}>{new Date(doc.created_at).toLocaleDateString('ru')}</div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontWeight:700, color:'#2e7d32', fontSize:14 }}>+{doc.bonus_earned.toLocaleString('ru')} ₽</div>
+                <div style={{ fontSize:11, color:'#90a4ae' }}>бонусов</div>
+              </div>
+            </div>
+          ))
+        }
       </div>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth:700, margin:'0 auto' }}>
+      <div style={{ marginBottom:16 }}>
+        <h3 style={{ fontWeight:700, fontSize:16, color:D, margin:'0 0 4px' }}>Рекрутеры</h3>
+        <p style={{ fontSize:12, color:'#90a4ae', margin:0 }}>{recruiters.length} рекрутеров в системе</p>
+      </div>
+
+      <div style={{ background:'#fff', borderRadius:10, border:'1px solid #e0eaec', padding:'8px 12px', marginBottom:12, display:'flex', gap:8, alignItems:'center' }}>
+        <span className="material-symbols-outlined" style={{ fontSize:18, color:'#90a4ae' }}>search</span>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по имени..."
+          style={{ flex:1, border:'none', outline:'none', fontSize:13 }} />
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'32px 0', color:'#90a4ae', fontSize:14 }}>Рекрутеров нет</div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {filtered.map(rec => (
+            <div key={rec.id} style={{ background:'#fff', borderRadius:14, border:'1px solid #e0eaec', padding:'14px 16px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:12 }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:15, color:D }}>{rec.full_name}</div>
+                  <div style={{ fontSize:12, color:'#90a4ae' }}>{rec.username}{rec.phone_number ? ' · ' + rec.phone_number : ''}</div>
+                </div>
+                <button onClick={()=>openDetail(rec)} style={{ background:'#f0f9fa', border:'1px solid #b2dfdb', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, color:P, cursor:'pointer' }}>
+                  Детали →
+                </button>
+              </div>
+
+              {/* Статистика */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:6, marginBottom:12 }}>
+                {[
+                  { label:'Врачей',  value: rec.doctors_count, bg:'#e0f7fa', color:D },
+                  { label:'Бонусов', value: `${Number(rec.bonus_total).toLocaleString('ru')} ₽`, bg:'#e8f5e9', color:'#2e7d32' },
+                  { label:'К выплате', value: `${Number(rec.bonus_pending).toLocaleString('ru')} ₽`, bg:'#fff3e0', color:'#e65100' },
+                ].map(c => (
+                  <div key={c.label} style={{ background:c.bg, borderRadius:8, padding:'6px 0', textAlign:'center' }}>
+                    <div style={{ fontSize:10, color:'#90a4ae', textTransform:'uppercase', fontWeight:700, marginBottom:2 }}>{c.label}</div>
+                    <div style={{ fontWeight:800, color:c.color, fontSize:13 }}>{c.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Установка % */}
+              <div style={{ display:'flex', gap:8, alignItems:'center', padding:'10px 12px', background:'#f0f9fa', borderRadius:10 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:D }}>% бонус рекрутера:</div>
+                <input type="number" min="0" max="100" step="0.5"
+                  value={editPercent[rec.id] !== undefined ? editPercent[rec.id] : rec.bonus_percent}
+                  onChange={e => setEditPercent(p => ({...p, [rec.id]: e.target.value}))}
+                  style={{ width:70, border:'1.5px solid #cdd8da', borderRadius:8, padding:'5px 8px', fontSize:13, outline:'none', textAlign:'center' }} />
+                <span style={{ fontSize:12, color:'#607d8b' }}>%</span>
+                <button onClick={()=>savePercent(rec.id)} disabled={saving===rec.id}
+                  style={{ background: saving===rec.id?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:8, padding:'5px 12px', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                  {saving===rec.id ? '...' : 'Сохранить'}
+                </button>
+                {msg[rec.id] && <span style={{ fontSize:12 }}>{msg[rec.id]}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -2358,6 +3221,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'ads':          return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
       case 'ai_analytics': return <Suspense fallback={null}><AISection token={adminToken} isSuperAdmin={true} /></Suspense>
       case 'ext_doctors': return <ExtDoctorsSection token={adminToken} />
+      case 'recruiters':  return <RecruiterSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
       default:          return null
     }

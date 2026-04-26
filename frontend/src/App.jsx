@@ -33,6 +33,7 @@ import ManagerBonuses from './pages/ManagerBonuses'
 import ManagerAnalytics from './pages/ManagerAnalytics'
 import ManagerKPI from './pages/ManagerKPI'
 import ManagerActivity from './pages/ManagerActivity'
+import ManagerRecruitDoctors from './pages/ManagerRecruitDoctors'
 import ManagerSettings from './pages/ManagerSettings'
 import ClinicSchedules from './pages/ClinicSchedules'
 import AdminPanel from './pages/AdminPanel'
@@ -137,6 +138,12 @@ function MiniApp() {
     return <ProfileSetup />
   }
 
+  // ─── Приезжие и внешние врачи → только /admin ───
+  if (user?.role === 'visiting_doctor' || user?.role === 'external_doctor') {
+    window.location.replace('/' + SLUG + '/admin')
+    return null
+  }
+
   // ─── Основные маршруты приложения ───
   return (
     <BrowserRouter basename={"/" + SLUG}>
@@ -153,7 +160,7 @@ function MiniApp() {
           <Route path="partner/create" element={<PartnerCreateReferral />} />
 
           {/* ─── Маршруты для сотрудников клиники (admin/manager) ─── */}
-          {user?.role !== 'partner' && (
+          {user?.role !== 'partner' && user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && (
             <>
               <Route path="create" element={<CreateReferral />} />
               <Route path="scan" element={<ScanScreen />} />
@@ -171,6 +178,7 @@ function MiniApp() {
               <Route path="manager/kpi" element={<ManagerKPI />} />
               <Route path="manager/activity" element={<ManagerActivity />} />
               <Route path="manager/settings" element={<ManagerSettings />} />
+              <Route path="manager/recruit-doctors" element={<ManagerRecruitDoctors />} />
               <Route path="admin-panel" element={<AdminPanel />} />
             </>
           )}

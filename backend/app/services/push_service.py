@@ -123,3 +123,26 @@ async def send_push_to_all(tenant_id: str, title: str, body: str, data: dict | N
     if count or dead:
         await db.commit()
     return count
+
+
+async def send_push_to_user(user_id: str, title: str, body: str, data: dict | None = None, db: AsyncSession = None) -> int:
+    if not db:
+        return 0
+    rows = (await db.execute(
+        text("SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :uid"),
+        {"uid": user_id}
+    )).fetchall()
+    count = 0
+    dead = []
+    for row in rows:
+        sub = {"endpoint": row[0], "p256dh": row[1], "auth": row[2]}
+        ok = await send_push(sub, title, body, data, db)
+        if ok:
+            count += 1
+        else:
+            dead.append(row[0])
+    for ep in dead:
+        await db.execute(text("DELETE FROM push_subscriptions WHERE endpoint = :ep"), {"ep": ep})
+    if count or dead:
+        await db.commit()
+    return count

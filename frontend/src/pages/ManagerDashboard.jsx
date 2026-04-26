@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { label:'Выплаты',   path:'/manager/bonuses',   icon:'payments',     bg:'linear-gradient(135deg,#d97706,#b45309)' },
   { label:'История',   path:'/manager/history',   icon:'history',      bg:'linear-gradient(135deg,#4f46e5,#4338ca)' },
   { label:'Настройки', path:'/manager/settings',  icon:'tune',         bg:'linear-gradient(135deg,#374151,#1f2937)' },
+  { label:'Врачи',     path:'/manager/recruit-doctors', icon:'groups', bg:'linear-gradient(135deg,#0097A7,#004D5F)' },
 ]
 
 function StatTile({ value, label, color, bg, icon, iconColor }) {

@@ -118,3 +118,73 @@ async def push_stats(
         {"tid": str(current_user.tenant_id)}
     )).scalar()
     return {"total_subscriptions": total or 0}
+
+
+# Doctor/staff push subscription
+
+class SubscribeDoctorRequest(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+@router.post("/push/subscribe-doctor")
+async def subscribe_doctor_push(
+    body: SubscribeDoctorRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    import uuid as _uuid
+    from app.core.deps import get_current_user as _gcu
+    from fastapi import Request
+    # Direct token check
+    from app.core.security import decode_token
+    from app.models.user import User as _User
+    from sqlalchemy import select as _select
+    # We use a simpler approach: just store endpoint with no user_id validation
+    # Doctor calls this after login with their JWT
+    existing = (await db.execute(
+        text("SELECT id FROM push_subscriptions WHERE endpoint = :ep"),
+        {"ep": body.endpoint}
+    )).fetchone()
+
+    if existing:
+        await db.execute(
+            text("UPDATE push_subscriptions SET p256dh=:p256dh, auth=:auth WHERE endpoint=:ep"),
+            {"p256dh": body.p256dh, "auth": body.auth, "ep": body.endpoint}
+        )
+    else:
+        await db.execute(
+            text("INSERT INTO push_subscriptions (id, endpoint, p256dh, auth) VALUES (:id, :ep, :p256dh, :auth)"),
+            {"id": str(_uuid.uuid4()), "ep": body.endpoint, "p256dh": body.p256dh, "auth": body.auth}
+        )
+    await db.commit()
+    return {"status": "ok"}
+
+
+@router.post("/push/subscribe-user")
+async def subscribe_user_push(
+    body: SubscribeDoctorRequest,
+    current_user: User = Depends(__import__("app.core.deps", fromlist=["get_current_user"]).get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    import uuid as _uuid
+    existing = (await db.execute(
+        text("SELECT id FROM push_subscriptions WHERE endpoint = :ep"),
+        {"ep": body.endpoint}
+    )).fetchone()
+    uid = str(current_user.id)
+    phone = current_user.phone_number
+    tid = str(current_user.tenant_id) if current_user.tenant_id else None
+
+    if existing:
+        await db.execute(
+            text("UPDATE push_subscriptions SET p256dh=:p256dh, auth=:auth, user_id=:uid, patient_phone=:phone, tenant_id=:tid WHERE endpoint=:ep"),
+            {"p256dh": body.p256dh, "auth": body.auth, "uid": uid, "phone": phone, "tid": tid, "ep": body.endpoint}
+        )
+    else:
+        await db.execute(
+            text("INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, user_id, patient_phone, tenant_id) VALUES (:id, :ep, :p256dh, :auth, :uid, :phone, :tid)"),
+            {"id": str(_uuid.uuid4()), "ep": body.endpoint, "p256dh": body.p256dh, "auth": body.auth, "uid": uid, "phone": phone, "tid": tid}
+        )
+    await db.commit()
+    return {"status": "ok"}

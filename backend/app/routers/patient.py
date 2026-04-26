@@ -72,6 +72,48 @@ async def get_patient_referral(
     t: str = Query(..., description="Patient JWT token"),
     db: AsyncSession = Depends(get_db),
 ):
+    # Проверяем тип токена — appointment или referral
+    try:
+        from app.core.security import decode_patient_token as _decode
+        payload = _decode(t)
+        if payload.get("type") == "appointment":
+            # Это токен записи к приезжему врачу
+            from app.models.doctor import Appointment as Apt, Doctor
+            from app.models.clinic import Clinic
+            from app.core.security import verify_appointment_token
+            try:
+                aid = uuid.UUID(referral_id)
+            except ValueError:
+                raise HTTPException(404, "Запись не найдена")
+            apt = await db.get(Apt, aid)
+            if not apt:
+                raise HTTPException(404, "Запись не найдена")
+            if not verify_appointment_token(str(apt.id), apt.patient_phone, t):
+                raise HTTPException(403, "Токен недействителен или истёк")
+            doctor = await db.get(Doctor, apt.doctor_id)
+            clinic = await db.get(Clinic, apt.clinic_id)
+            return {
+                "type": "appointment",
+                "id": str(apt.id),
+                "patient_name": apt.patient_name,
+                "patient_phone": apt.patient_phone,
+                "appointment_date": apt.appointment_date.isoformat(),
+                "start_time": str(apt.start_time),
+                "end_time": str(apt.end_time),
+                "status": str(apt.status),
+                "doctor_name": doctor.full_name if doctor else "—",
+                "clinic_name": clinic.name if clinic else "—",
+                "short_code": apt.short_code,
+                "qr_code": apt.qr_code,
+                "patient_token": t,
+                "patient_phone": apt.patient_phone,
+                "patient_name": apt.patient_name,
+            }
+    except Exception as e:
+        if "appointment" in str(e):
+            raise
+        pass  # Продолжаем как обычно для referral
+
     ref = await _referral_or_404(referral_id, db)
 
     if not verify_patient_token(str(ref.id), ref.patient_phone, t):
@@ -196,19 +238,97 @@ async def get_by_short_code(
     body: CodeSearchRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    from app.core.security import make_patient_token
+
+    # Сначала ищем направление
     result = await db.execute(select(Referral).where(Referral.short_code == body.code))
     ref = result.scalar_one_or_none()
-    if not ref:
-        raise HTTPException(status_code=404, detail="Referral not found")
+    if ref:
+        if normalize_phone(body.phone) != normalize_phone(ref.patient_phone):
+            raise HTTPException(status_code=403, detail="Номер телефона не совпадает")
+        token = make_patient_token(str(ref.id), ref.patient_phone)
+        return {"referral_id": str(ref.id), "patient_token": token, "found": True}
 
-    if normalize_phone(body.phone) != normalize_phone(ref.patient_phone):
-        raise HTTPException(status_code=403, detail="Phone number does not match")
+    # Потом ищем запись к приезжему врачу
+    from app.models.doctor import Appointment as Apt
+    from app.core.security import make_appointment_token
+    apt_res = await db.execute(select(Apt).where(Apt.short_code == body.code))
+    apt = apt_res.scalar_one_or_none()
+    if apt:
+        if normalize_phone(body.phone) != normalize_phone(apt.patient_phone):
+            raise HTTPException(status_code=403, detail="Номер телефона не совпадает")
+        token = make_appointment_token(str(apt.id), apt.patient_phone)
+        return {"referral_id": str(apt.id), "patient_token": token, "found": True, "type": "appointment"}
 
-    from app.core.security import make_patient_token
-    token = make_patient_token(str(ref.id), ref.patient_phone)
+    raise HTTPException(status_code=404, detail="Запись не найдена")
+
+
+# ── Кабинет пациента для записи к приезжему врачу ────────────────────────────
+
+@router.get("/appointment/{apt_id}")
+async def get_patient_appointment(
+    apt_id: str,
+    t: str = Query(..., description="Appointment JWT token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Публичный endpoint для пациента — посмотреть запись и получить QR."""
+    try:
+        aid = uuid.UUID(apt_id)
+    except ValueError:
+        raise HTTPException(404, "Запись не найдена")
+
+    from app.models.doctor import Appointment as Apt, Doctor, AppointmentStatus
+    from app.models.clinic import Clinic
+    from app.core.security import verify_appointment_token
+
+    apt = await db.get(Apt, aid)
+    if not apt:
+        raise HTTPException(404, "Запись не найдена")
+
+    if not verify_appointment_token(str(apt.id), apt.patient_phone, t):
+        raise HTTPException(403, "Токен недействителен или истёк")
+
+    doctor = await db.get(Doctor, apt.doctor_id)
+    clinic = await db.get(Clinic, apt.clinic_id)
 
     return {
-        "referral_id": str(ref.id),
+        "id": str(apt.id),
+        "patient_name": apt.patient_name,
+        "patient_phone": apt.patient_phone,
+        "appointment_date": apt.appointment_date.isoformat(),
+        "start_time": str(apt.start_time),
+        "end_time": str(apt.end_time),
+        "status": str(apt.status),
+        "doctor_name": doctor.full_name if doctor else "—",
+        "clinic_name": clinic.name if clinic else "—",
+        "short_code": apt.short_code,
+        "qr_code": apt.qr_code,
+    }
+
+
+@router.post("/appointment/by-code")
+async def get_appointment_by_code(
+    body: CodeSearchRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Найти запись по short_code + телефону."""
+    from app.models.doctor import Appointment as Apt
+    from app.core.security import make_appointment_token
+    from app.utils.phone import normalize_phone
+
+    result = await db.execute(
+        select(Apt).where(Apt.short_code == body.code)
+    )
+    apt = result.scalar_one_or_none()
+    if not apt:
+        raise HTTPException(404, "Запись не найдена")
+
+    if normalize_phone(body.phone) != normalize_phone(apt.patient_phone):
+        raise HTTPException(403, "Номер телефона не совпадает")
+
+    token = make_appointment_token(str(apt.id), apt.patient_phone)
+    return {
+        "appointment_id": str(apt.id),
         "patient_token": token,
         "found": True,
     }

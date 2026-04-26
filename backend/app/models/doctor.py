@@ -4,7 +4,7 @@
 """
 import uuid
 from datetime import datetime, date, time
-from sqlalchemy import String, Boolean, Integer, ForeignKey, Date, Time, Text, Enum as SAEnum
+from sqlalchemy import String, Boolean, Integer, ForeignKey, Date, Time, Text, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
@@ -97,6 +97,10 @@ class Appointment(Base):
         default=AppointmentStatus.PENDING, nullable=False, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
+    short_code: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True, index=True)
+    patient_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

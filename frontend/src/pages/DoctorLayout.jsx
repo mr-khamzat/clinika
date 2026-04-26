@@ -23,7 +23,7 @@ function Spinner() {
 
 function StatCard({ label, value, color = 'text-gray-800', icon }) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+    <div className="rounded-2xl p-5 border" style={{ background: "#fff", borderColor: "#e0eaec" }}>
       <div className="flex items-center gap-2 mb-1">
         {icon && <span className="material-symbols-outlined text-teal-600 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
@@ -194,7 +194,7 @@ function ReferralsTab({ token }) {
 
 // ─── Main DoctorLayout ───
 export default function DoctorLayout({ adminToken, user, onLogout }) {
-  const [tab, setTab] = useState('schedule')
+  const [tab, setTab] = useState('referrals')
   const [doctorInfo, setDoctorInfo] = useState(null)
   const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
 
@@ -220,9 +220,9 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
   ]
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-950 font-sans">
+    <div className="flex min-h-screen font-sans" style={{ background: "#F0F5F6", minHeight: "100vh" }}>
       {/* Sidebar */}
-      <aside className="hidden md:flex w-60 bg-slate-800 text-white flex-col">
+      <aside className="hidden md:flex w-60 text-white flex-col" style={{ background: "#004D5F" }}>
         <div className="px-6 py-6">
           <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center mb-3">
             <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
@@ -235,7 +235,7 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-left transition mb-0.5
-                ${tab === t.key ? 'bg-teal-600/20 text-white font-bold border-l-4 border-teal-500' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+                ${tab === t.key ? 'text-white font-bold border-l-4 border-[#0097A7]" style={{ background: "rgba(0,151,167,0.2)" }}' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
               <span className="material-symbols-outlined text-[18px]"
                 style={tab === t.key ? { fontVariationSettings: "'FILL' 1" } : {}}>{t.icon}</span>
               {t.label}
@@ -268,10 +268,10 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
         </div>
 
         {/* Mobile tabs */}
-        <div className="md:hidden flex gap-1 bg-white rounded-xl p-1 mb-4 shadow-sm border border-gray-100">
+        <div className="md:hidden flex gap-1 rounded-xl p-1 mb-4 border" style={{ background: "#fff", borderColor: "#e0eaec" }}>
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition ${tab === t.key ? 'bg-teal-600 text-white' : 'text-gray-500'}`}>
+              className={`flex-1 py-2 rounded-lg text-xs font-medium transition ${tab === t.key ? 'text-white' : 'text-gray-500'} style={{ background: tab === t.key ? '#0097A7' : 'transparent' }} : 'text-gray-500'}`}>
               {t.label}
             </button>
           ))}
@@ -290,8 +290,10 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
         </div>
 
         {!doctorId && tab !== 'referrals' && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-4">
-            <p className="text-yellow-700 text-sm">Профиль врача не найден. Обратитесь к администратору для привязки кабинета.</p>
+          <div style={{ background: '#e0f7fa', border: '1px solid #80cbc4', borderRadius: 12, padding: '10px 16px', marginBottom: 16 }}>
+            <p style={{ fontSize: 13, color: '#004D5F', margin: 0 }}>
+              Расписание и записи доступны после привязки кабинета администратором. Для работы с направлениями переключитесь на вкладку «Направления».
+            </p>
           </div>
         )}
 

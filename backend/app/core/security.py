@@ -131,3 +131,23 @@ def decode_patient_token(token: str) -> dict:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
     except JWTError as e:
         raise ValueError(f'Invalid patient token: {e}')
+
+
+def make_appointment_token(apt_id: str, phone: str) -> str:
+    """JWT-токен для пациентского кабинета записи (90 дней)."""
+    payload = {
+        "sub": phone,
+        "apt": apt_id,
+        "exp": datetime.utcnow() + timedelta(days=90),
+        "iat": datetime.utcnow(),
+        "type": "appointment",
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def verify_appointment_token(apt_id: str, phone: str, token: str) -> bool:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        return payload.get("type") == "appointment" and payload.get("apt") == apt_id and payload.get("sub") == phone
+    except JWTError:
+        return False

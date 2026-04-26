@@ -26,7 +26,7 @@ class RecruiterBonus(Base):
     percent_applied: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
     # Итоговая сумма начисления рекрутеру
     amount: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    status: Mapped[RecruiterBonusStatus] = mapped_column(SAEnum(RecruiterBonusStatus), default=RecruiterBonusStatus.PENDING)
+    status: Mapped[RecruiterBonusStatus] = mapped_column(SAEnum(RecruiterBonusStatus, values_callable=lambda x: [e.value for e in x]), default=RecruiterBonusStatus.PENDING)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
