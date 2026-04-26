@@ -16,7 +16,8 @@
     "zustand": "^4.5.2",
     "material-symbols": "^0.24.0",
     "@fontsource/inter": "^5.0.0",
-    "@fontsource/manrope": "^5.0.0"
+    "@fontsource/manrope": "^5.0.0",
+    "jsqr": "^1.4.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

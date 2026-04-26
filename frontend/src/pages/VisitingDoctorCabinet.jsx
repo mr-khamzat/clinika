@@ -68,37 +68,80 @@ function DoneModal({ result, onClose }) {
 
 // ─── QR-сканер ────────────────────────────────────────────────
 function QRScanner({ onDetect, onClose }) {
-  const videoRef = useRef(null)
-  const rafRef   = useRef(null)
+  const videoRef   = useRef(null)
+  const canvasRef  = useRef(null)
+  const rafRef     = useRef(null)
+  const streamRef  = useRef(null)
+  const detectedRef = useRef(false)
   const [camErr, setCamErr] = useState('')
   const [manual, setManual] = useState('')
   const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
-    let stream = null
+    let jsQR = null
     ;(async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
-        if ('BarcodeDetector' in window) {
-          const det = new window.BarcodeDetector({ formats: ['qr_code'] })
-          const scan = async () => {
-            if (!videoRef.current) return
-            try {
-              const codes = await det.detect(videoRef.current)
-              if (codes.length > 0) { setScanning(true); setTimeout(() => onDetect(codes[0].rawValue), 300); return }
-            } catch {}
-            rafRef.current = requestAnimationFrame(scan)
-          }
-          rafRef.current = requestAnimationFrame(scan)
-        } else {
-          setCamErr('Автосканирование недоступно. Введите ID вручную.')
+        // Загружаем jsQR динамически
+        const mod = await import('jsqr')
+        jsQR = mod.default || mod
+      } catch { jsQR = null }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
         }
+
+        const tick = () => {
+          if (detectedRef.current) return
+          const video = videoRef.current
+          const canvas = canvasRef.current
+          if (!video || !canvas || video.readyState < 2) { rafRef.current = requestAnimationFrame(tick); return }
+
+          // Сначала BarcodeDetector (Chrome/Edge)
+          if ('BarcodeDetector' in window) {
+            new window.BarcodeDetector({ formats: ['qr_code'] }).detect(video)
+              .then(codes => {
+                if (codes.length > 0 && !detectedRef.current) {
+                  detectedRef.current = true
+                  setScanning(true)
+                  setTimeout(() => onDetect(codes[0].rawValue), 300)
+                } else {
+                  rafRef.current = requestAnimationFrame(tick)
+                }
+              })
+              .catch(() => { rafRef.current = requestAnimationFrame(tick) })
+            return
+          }
+
+          // Fallback: jsQR через canvas
+          if (jsQR) {
+            const ctx = canvas.getContext('2d')
+            canvas.width  = video.videoWidth  || 320
+            canvas.height = video.videoHeight || 240
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+            try {
+              const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
+              const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+              if (code && code.data && !detectedRef.current) {
+                detectedRef.current = true
+                setScanning(true)
+                setTimeout(() => onDetect(code.data), 300)
+                return
+              }
+            } catch {}
+          }
+          rafRef.current = requestAnimationFrame(tick)
+        }
+        rafRef.current = requestAnimationFrame(tick)
       } catch { setCamErr('Нет доступа к камере. Введите ID вручную.') }
     })()
+
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
-      if (stream) stream.getTracks().forEach(t => t.stop())
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
     }
   }, [])
 
@@ -117,6 +160,7 @@ function QRScanner({ onDetect, onClose }) {
       {/* Камера */}
       <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
         <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted playsInline />
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
         {/* Оверлей */}
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ position: 'relative', width: 240, height: 240 }}>
