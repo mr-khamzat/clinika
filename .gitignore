@@ -1,44 +1,5 @@
-# Environment
-.env
-.env.local
-.env.*
-*.env
+BILLING_ARCHITECTURE.md is a source file and should not be added to .gitignore. Since there are no build artifacts, dependencies, or temporary files in the changes, the .gitignore should remain empty.
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
+```gitignore
 
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-build/
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Editors
-.vscode/
-.DS_Store
-
-# Backups
-/opt/backups/
-backups/
-
-# Uploads с историями AI
-uploads/ai_histories/
-
-# Uploads (user files, не в репо)
-uploads/
-
-# Backup файлы редактора
-*.bak
-
-# package-lock (большой, генерируется автоматически)
-frontend/package-lock.json
-.github/
+```
