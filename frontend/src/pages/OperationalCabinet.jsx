@@ -1,6 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
+
+const BrandingSection = lazy(() => import('../sections/BrandingSection'))
+const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
+const ActsSection     = lazy(() => import('../sections/ActsSection'))
 
 const api = (token) => ({
   get: (url, params) => axios.get(API_BASE + url, { headers: { Authorization: `Bearer ${token}` }, params }),
@@ -199,6 +203,11 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             ['visiting', 'Приезжие врачи'],
             ['bonuses', 'Бонусы'],
             ['doctors', 'Врачи'],
+            ...(user?.role === 'admin' ? [
+              ['branding', 'Брендинг'],
+              ['cms', 'CMS'],
+              ['acts', 'Акты'],
+            ] : []),
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition ${
@@ -571,6 +580,21 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
               ))}
             </div>
           </div>
+        )}
+        {tab === 'branding' && user?.role === 'admin' && (
+          <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"/></div>}>
+            <BrandingSection token={adminToken} />
+          </Suspense>
+        )}
+        {tab === 'cms' && user?.role === 'admin' && (
+          <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"/></div>}>
+            <CMSPagesSection token={adminToken} />
+          </Suspense>
+        )}
+        {tab === 'acts' && user?.role === 'admin' && (
+          <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin"/></div>}>
+            <ActsSection token={adminToken} isSuperAdmin={false} />
+          </Suspense>
         )}
       </div>
     </div>

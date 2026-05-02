@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const AISection  = lazy(() => import('../sections/AISection'))
+const BrandingSection = lazy(() => import('../sections/BrandingSection'))
+const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
+const ActsSection     = lazy(() => import('../sections/ActsSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -71,6 +74,9 @@ const NAV = [
   { key: 'ext_doctors',  label: 'Внеш. врачи',  icon: 'person_add' },
   { key: 'recruiters',   label: 'Рекрутеры',    icon: 'manage_accounts' },
   { key: 'settings',   label: 'Настройки',    icon: 'settings' },
+  { key: 'branding',   label: 'Брендинг',      icon: 'palette' },
+  { key: 'cms',        label: 'CMS Страницы',  icon: 'web' },
+  { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
@@ -3247,6 +3253,21 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'ext_doctors': return <ExtDoctorsSection token={adminToken} />
       case 'recruiters':  return <RecruiterSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
+      case 'branding': return (
+        <Suspense fallback={null}>
+          <BrandingSection token={adminToken} />
+        </Suspense>
+      )
+      case 'cms': return (
+        <Suspense fallback={null}>
+          <CMSPagesSection token={adminToken} />
+        </Suspense>
+      )
+      case 'acts': return (
+        <Suspense fallback={null}>
+          <ActsSection token={adminToken} isSuperAdmin={false} />
+        </Suspense>
+      )
       default:          return null
     }
   }
