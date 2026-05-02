@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from app.core.logging import setup_logging, get_logger
 from app.core.prometheus import router as prometheus_router, metrics_middleware
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.security_utils import SlidingWindowRateLimiter
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.config import settings
@@ -175,9 +176,34 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
+    scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
+
+async def archive_audit_job():
+    """Архивация audit_log: записи старше 90 дней переносятся в audit_log_archive."""
+    try:
+        from app.database import async_session
+        from sqlalchemy import text
+        from datetime import datetime, timedelta
+        cutoff = datetime.utcnow() - timedelta(days=90)
+        async with async_session() as db:
+            # Создаём архивную таблицу если нет
+            await db.execute(text(
+                "CREATE TABLE IF NOT EXISTS audit_log_archive (LIKE audit_log INCLUDING ALL)"
+            ))
+            # Перемещаем
+            result = await db.execute(text(
+                "WITH moved AS (DELETE FROM audit_log WHERE created_at < :cutoff RETURNING *) "
+                "INSERT INTO audit_log_archive SELECT * FROM moved"
+            ), {"cutoff": cutoff})
+            await db.commit()
+        import logging
+        logging.getLogger("scheduler").info(f"audit_archive: moved records older than {cutoff.date()}")
+    except Exception as e:
+        import logging; logging.getLogger("scheduler").error(f"audit_archive: {e}")
+
 
 
 async def seed_initial_data():
@@ -377,6 +403,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
 
 # ─── Security headers ───
 @app.middleware("http")
