@@ -151,3 +151,26 @@ def verify_appointment_token(apt_id: str, phone: str, token: str) -> bool:
         return payload.get("type") == "appointment" and payload.get("apt") == apt_id and payload.get("sub") == phone
     except JWTError:
         return False
+
+
+def make_portal_token(patient_id: str, phone: str) -> str:
+    """JWT-токен для личного кабинета пациента (30 дней)."""
+    payload = {
+        "sub": phone,
+        "pid": patient_id,
+        "exp": datetime.utcnow() + timedelta(days=30),
+        "iat": datetime.utcnow(),
+        "type": "portal",
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_portal_token(token: str) -> dict:
+    """Декодировать portal_token → {'pid': ..., 'sub': ...}. Поднимает ValueError при ошибке."""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        if payload.get("type") != "portal":
+            raise ValueError("Not a portal token")
+        return payload
+    except JWTError as e:
+        raise ValueError(f"Invalid portal token: {e}")

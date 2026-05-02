@@ -41,6 +41,8 @@ import AdminPanel from './pages/AdminPanel'
 import AdminRoot from './pages/AdminRoot'
 import { PLATFORM_MODE } from './config'
 import PatientCabinet from './pages/PatientCabinet'
+import OnlineBooking from './pages/OnlineBooking'
+import PatientPortal from './pages/PatientPortal'
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -210,6 +212,16 @@ export default function App() {
   // Панель управления тенанта: /{slug}/admin
   if (SLUG && path.startsWith('/' + SLUG + '/admin')) {
     return <AdminRoot />
+  }
+
+  // Онлайн-запись пациентов
+  if (SLUG && (path.startsWith('/' + SLUG + '/book') || path === '/' + SLUG + '/book')) {
+    return <OnlineBooking />
+  }
+
+  // Личный кабинет пациента Portal v2 — с аккаунтом
+  if (SLUG && (path.startsWith('/' + SLUG + '/portal'))) {
+    return <PatientPortal />
   }
 
   // Личный кабинет пациента — публичный

@@ -28,6 +28,7 @@ from app.routers.presence import router as presence_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
+from app.routers.portal import router as portal_router
 from app.routers.push import router as push_router
 from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
@@ -40,6 +41,7 @@ from app.routers.supervisor import router as supervisor_router
 from app.routers.cms import router as cms_router
 from app.routers.acts import router as acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
+from app.routers.public_booking import router as public_booking_router
 from app.routers.wiki import router as wiki_router
 from app.routers.reviews import router as reviews_router
 from app.routers.inter_clinic_invoices import router as ici_router
@@ -504,6 +506,7 @@ app.include_router(wiki_router)
 app.include_router(reviews_router)
 app.include_router(ici_router)
 app.include_router(patient_router)
+app.include_router(portal_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)
 app.include_router(plugins_router)
@@ -529,6 +532,7 @@ app.include_router(visiting_router)
 app.include_router(supervisor_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
+app.include_router(public_booking_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
