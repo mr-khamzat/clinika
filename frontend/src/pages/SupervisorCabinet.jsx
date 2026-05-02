@@ -1795,120 +1795,175 @@ function ReferralsSection({ token }) {
   )
 }
 
-// ── AnalyticsSection ──────────────────────────────────────────────────────────
+// ── AnalyticsSection ─────────────────────────────────────────────────────────
 function AnalyticsSection({ token }) {
+  const PRESETS = [
+    { label: '7 дней',  days: 7 },
+    { label: '30 дней', days: 30 },
+    { label: '90 дней', days: 90 },
+    { label: '365 дней',days: 365 },
+  ]
+  const [preset, setPreset]     = useState(30)
   const [overview, setOverview] = useState(null)
+  const [dynamics, setDynamics] = useState([])
+  const [clinics,  setClinics]  = useState([])
   const [topStaff, setTopStaff] = useState([])
-  const [topServices, setTopServices] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [period, setPeriod] = useState({ from: '', to: '' })
+  const [loading,  setLoading]  = useState(true)
   const a = api(token)
 
-  useEffect(() => {
+  useEffect(() => { load(preset) }, [preset])
+
+  async function load(days) {
     setLoading(true)
-    const today = new Date()
-    const ago30 = new Date(today - 30 * 86400000)
-    const toStr = today.toISOString().slice(0, 10)
-    const fromStr = ago30.toISOString().slice(0, 10)
-    setPeriod({ from: fromStr, to: toStr })
-    Promise.all([
-      a.get('/analytics/overview', { date_from: fromStr, date_to: toStr }),
-      a.get('/analytics/top-staff',    { date_from: fromStr, date_to: toStr }),
-      a.get('/analytics/top-services', { date_from: fromStr, date_to: toStr }),
-    ]).then(([ov, ts, tsv]) => {
+    try {
+      const [ov, dyn, cl, ts] = await Promise.all([
+        a.get('/analytics/overview',   { days }),
+        a.get('/analytics/dynamics',   { days, granularity: days > 60 ? 'week' : 'day' }),
+        a.get('/analytics/clinics',    { days }),
+        a.get('/analytics/top-staff',  { days }),
+      ])
       setOverview(ov.data)
+      setDynamics(Array.isArray(dyn.data?.series) ? dyn.data.series : [])
+      setClinics(Array.isArray(cl.data?.items) ? cl.data.items : [])
       setTopStaff(Array.isArray(ts.data) ? ts.data : [])
-      setTopServices(Array.isArray(tsv.data) ? tsv.data : [])
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [])
+    } catch {}
+    setLoading(false)
+  }
+
+  // Mini bar chart
+  function BarChart({ data }) {
+    if (!data.length) return <div className="text-xs text-gray-400 text-center py-4">Нет данных</div>
+    const maxVal = Math.max(...data.map(d => d.total), 1)
+    return (
+      <div className="mt-3">
+        <div className="flex items-end gap-1 h-20">
+          {data.map((d, i) => (
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5 group relative">
+              <div className="absolute bottom-full mb-1 bg-gray-800 text-white text-xs px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition pointer-events-none z-10">
+                {d.date}: {d.total} / {d.confirmed} ✓
+              </div>
+              <div className="w-full rounded-t-sm bg-[#0097A7] opacity-80 transition hover:opacity-100"
+                style={{ height: `${Math.max(2, (d.total / maxVal) * 72)}px` }} />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <span>{data[0]?.date}</span>
+          <span>{data[data.length - 1]?.date}</span>
+        </div>
+      </div>
+    )
+  }
 
   if (loading) return <Spinner />
 
-  const MetaCard = ({ label, value, sub, color }) => (
-    <div className="bg-white rounded-2xl shadow-sm p-5">
-      <div className="text-xs text-gray-400 mb-1">{label}</div>
-      <div className="text-2xl font-bold" style={{ color }}>{value}</div>
-      {sub && <div className="text-xs text-gray-400 mt-1">{sub}</div>}
-    </div>
-  )
-
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-800">Аналитика</h2>
-
-      {overview && (
-        <>
-          {/* API: {current:{total, confirmed, conversion_pct, bonuses_paid, bonuses_pending}, previous:{...}, delta:{...}} */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <MetaCard label="Направлений" value={fmt(overview.current?.total)} color="#0097A7" />
-            <MetaCard label="Конверсия" value={`${overview.current?.conversion_pct ?? 0}%`} color="#166534" />
-            <MetaCard label="Подтверждено" value={fmt(overview.current?.confirmed)} color="#7c3aed" />
-            <MetaCard label="Бонусы выплачены" value={`${fmt(overview.current?.bonuses_paid)} ₽`} color="#b45309" />
-          </div>
-
-          {overview.previous && (
-            <div className="bg-white rounded-2xl shadow-sm p-5">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">Сравнение с прошлым периодом</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { label: 'Направлений',  cur: overview.current?.total,           prev: overview.previous?.total },
-                  { label: 'Конверсия',    cur: overview.current?.conversion_pct,  prev: overview.previous?.conversion_pct, pct: true },
-                  { label: 'Подтверждено', cur: overview.current?.confirmed,        prev: overview.previous?.confirmed },
-                  { label: 'Бонусы',       cur: overview.current?.bonuses_paid,    prev: overview.previous?.bonuses_paid },
-                ].map(m => {
-                  const delta = (Number(m.cur) || 0) - (Number(m.prev) || 0)
-                  const up = delta >= 0
-                  return (
-                    <div key={m.label} className="text-center p-3 rounded-xl bg-gray-50">
-                      <div className="text-xs text-gray-400 mb-1">{m.label}</div>
-                      <div className="text-lg font-bold text-gray-800">{fmt(m.cur)}{m.pct ? '%' : ''}</div>
-                      {m.prev != null && (
-                        <div className={`text-xs font-semibold mt-1 ${up ? 'text-green-600' : 'text-red-500'}`}>
-                          {up ? '↑' : '↓'} {fmt(Math.abs(delta))}{m.pct ? '%' : ''} vs прошлый
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Top staff */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Топ сотрудников</h3>
-          {topStaff.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-4">Нет данных</div>
-          ) : topStaff.slice(0, 8).map((s, i) => (
-            <div key={s.admin_id || i} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-              <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-                {(s.full_name || '?')[0].toUpperCase()}
-              </div>
-              <span className="flex-1 text-sm text-gray-700 truncate">{s.full_name || '—'}</span>
-              <span className="text-sm font-semibold text-[#0097A7]">{fmt(s.referrals_count)}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Top services */}
-        <div className="bg-white rounded-2xl shadow-sm p-5">
-          <h3 className="text-sm font-bold text-gray-700 mb-4">Топ услуг</h3>
-          {topServices.length === 0 ? (
-            <div className="text-xs text-gray-400 text-center py-4">Нет данных</div>
-          ) : topServices.slice(0, 8).map((s, i) => (
-            <div key={s.service_id || i} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-              <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
-              <span className="flex-1 text-sm text-gray-700 truncate">{s.service_name || '—'}</span>
-              <span className="text-sm font-semibold text-[#0097A7]">{fmt(s.count)}</span>
-            </div>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-xl font-bold text-gray-800">Аналитика франшизы</h2>
+        <div className="flex gap-1.5">
+          {PRESETS.map(p => (
+            <button key={p.days} onClick={() => setPreset(p.days)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                preset === p.days ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+              }`}>{p.label}</button>
           ))}
         </div>
       </div>
+
+      {/* KPI */}
+      {overview && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: 'Направлений',  value: fmt(overview.current?.total),         color: '#0097A7' },
+            { label: 'Конверсия',    value: `${overview.current?.conversion_pct ?? 0}%`, color: '#166534' },
+            { label: 'Подтверждено', value: fmt(overview.current?.confirmed),      color: '#7c3aed' },
+            { label: 'Бонусы выплач.', value: `${fmt(overview.current?.bonuses_paid)} ₽`, color: '#b45309' },
+          ].map(m => (
+            <div key={m.label} className="bg-white rounded-2xl shadow-sm p-4">
+              <div className="text-xs text-gray-400 mb-1">{m.label}</div>
+              <div className="text-xl font-bold" style={{ color: m.color }}>{m.value}</div>
+              {overview.previous && (() => {
+                const key = m.label === 'Направлений' ? 'total' : m.label === 'Конверсия' ? 'conversion_pct' : m.label === 'Подтверждено' ? 'confirmed' : 'bonuses_paid'
+                const delta = (Number(overview.current?.[key]) || 0) - (Number(overview.previous?.[key]) || 0)
+                if (delta === 0) return null
+                return (
+                  <div className={`text-xs font-semibold mt-0.5 ${delta >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {delta >= 0 ? '↑' : '↓'} {fmt(Math.abs(delta))} vs пред.
+                  </div>
+                )
+              })()}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Динамика */}
+      {dynamics.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-gray-700 mb-1">Динамика направлений</h3>
+          <div className="text-xs text-gray-400 mb-2">тёмный = всего, светлый = подтверждено</div>
+          <BarChart data={dynamics} />
+        </div>
+      )}
+
+      {/* Клиники */}
+      {clinics.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-gray-700 mb-4">Клиники франшизы</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-400 border-b border-gray-100">
+                  <th className="pb-2 text-left">#</th>
+                  <th className="pb-2 text-left">Клиника</th>
+                  <th className="pb-2 text-right">Направлений</th>
+                  <th className="pb-2 text-right">Конверсия</th>
+                  <th className="pb-2 text-right">Бонусы</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clinics.map(c => (
+                  <tr key={c.clinic_id} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                    <td className="py-2 text-xs text-gray-400">{c.rank}</td>
+                    <td className="py-2 font-medium text-gray-800">{c.name}</td>
+                    <td className="py-2 text-right text-[#0097A7] font-semibold">{fmt(c.total)}</td>
+                    <td className="py-2 text-right">
+                      <span className={`font-semibold ${c.conversion_pct >= 50 ? 'text-green-600' : c.conversion_pct >= 25 ? 'text-amber-600' : 'text-red-500'}`}>
+                        {c.conversion_pct}%
+                      </span>
+                    </td>
+                    <td className="py-2 text-right text-gray-600">{fmt(c.bonuses)} ₽</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Топ сотрудников */}
+      {topStaff.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <h3 className="text-sm font-bold text-gray-700 mb-4">Топ сотрудников</h3>
+          <div className="space-y-2">
+            {topStaff.slice(0, 8).map((s, i) => (
+              <div key={s.admin_id || i} className="flex items-center gap-3">
+                <span className="text-xs font-bold text-gray-400 w-5">{i + 1}</span>
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                  style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
+                  {(s.full_name || '?')[0].toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-gray-700 truncate">{s.full_name || '—'}</div>
+                  {s.clinic_name && <div className="text-xs text-gray-400 truncate">{s.clinic_name}</div>}
+                </div>
+                <span className="text-sm font-semibold text-[#0097A7]">{fmt(s.referrals_count)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
