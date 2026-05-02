@@ -41,7 +41,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 async def require_manager(user: User = Depends(get_current_user)) -> User:
     """Системный администратор (manager) или super_admin."""
-    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
+    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR, UserRole.FRANCHISE_OWNER):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для системного администратора"
