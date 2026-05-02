@@ -57,3 +57,6 @@ from app.models.commercial import CommercialModule, TenantModuleSubscription, Te
 from app.models.external_doctor import DoctorRequest, VisitingDoctorSettings
 
 from app.models.wiki import WikiPage, WikiImage
+
+# CMS страницы тенантов (Phase 1 SaaS)
+from app.models.cms import TenantCmsPage

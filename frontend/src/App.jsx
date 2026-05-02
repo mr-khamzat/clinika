@@ -42,6 +42,7 @@ import { PLATFORM_MODE } from './config'
 import PatientCabinet from './pages/PatientCabinet'
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
+import { loadTheme } from "./utils/ThemeLoader"
 
 // ─── Применяем тему ДО первого рендера ───
 ;(function applyThemeEarly() {
@@ -65,6 +66,7 @@ function MiniApp() {
   // потом — Telegram SDK (только если URL содержит tgWebApp в hash).
   useEffect(() => {
     const init = async () => {
+      loadTheme().catch(() => {})
       try {
         // 1. Восстанавливаем веб-сессию по токену (без ожидания Telegram)
         if (token) {

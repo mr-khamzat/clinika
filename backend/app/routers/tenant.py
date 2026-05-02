@@ -53,6 +53,19 @@ class BrandingOut(BaseModel):
     sidebar_color: str
     bg_color: str
     font_family: str
+    # White-label CMS расширения
+    secondary_color: Optional[str] = None
+    favicon_url: Optional[str] = None
+    og_image_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    custom_domain: Optional[str] = None
+    domain_verified: bool = False
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
+    support_phone: Optional[str] = None
+    support_email: Optional[str] = None
+    hide_menu_items: Optional[list] = []
+    rename_menu_items: Optional[dict] = {}
 
     class Config:
         from_attributes = True
@@ -65,6 +78,19 @@ class BrandingUpdate(BaseModel):
     sidebar_color: Optional[str] = None
     bg_color: Optional[str] = None
     font_family: Optional[str] = None
+    # White-label CMS расширения
+    secondary_color: Optional[str] = None
+    favicon_url: Optional[str] = None
+    og_image_url: Optional[str] = None
+    footer_text: Optional[str] = None
+    custom_domain: Optional[str] = None
+    domain_verified: Optional[bool] = None
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
+    support_phone: Optional[str] = None
+    support_email: Optional[str] = None
+    hide_menu_items: Optional[list] = None
+    rename_menu_items: Optional[dict] = None
 
 
 # --- Эндпоинты ---
