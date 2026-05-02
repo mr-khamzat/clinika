@@ -18,6 +18,8 @@ class UserRole(str, enum.Enum):
     ACQUISITION_MANAGER = "acquisition_manager"
     EXTERNAL_DOCTOR = "external_doctor"
     VISITING_DOCTOR = "visiting_doctor"
+    FRANCHISE_OWNER = "franchise_owner"
+    ACCOUNTANT = "accountant"
 
 class User(Base):
     __tablename__ = "users"

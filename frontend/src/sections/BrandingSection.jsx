@@ -5,7 +5,7 @@ import { applyTheme } from '../utils/ThemeLoader';
 
 const FONT_OPTIONS = ['Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Nunito', 'PT Sans'];
 
-export default function BrandingSection() {
+export default function BrandingSection({ token }) {
   const [form, setForm] = useState({
     brand_name: '', primary_color: '#0097A7', secondary_color: '#E0F7FA',
     sidebar_color: '#004D5F', bg_color: '#F0F5F6', font_family: 'Inter',
@@ -23,7 +23,7 @@ export default function BrandingSection() {
 
   async function fetchBranding() {
     try {
-      const r = await axios.get(`${API_BASE}/tenant/branding`);
+      const r = await axios.get(`${API_BASE}/tenant/branding`, { headers: { Authorization: `Bearer ${token}` } });
       setForm(f => ({ ...f, ...r.data }));
     } catch {}
     setLoading(false);
@@ -32,7 +32,7 @@ export default function BrandingSection() {
   async function save() {
     setSaving(true);
     try {
-      await axios.patch(`${API_BASE}/tenant/branding`, form);
+      await axios.patch(`${API_BASE}/tenant/branding`, form, { headers: { Authorization: `Bearer ${token}` } });
       applyTheme(form);
       setMsg('Сохранено ✓');
       setTimeout(() => setMsg(''), 3000);

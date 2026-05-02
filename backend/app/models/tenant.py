@@ -4,7 +4,7 @@
 
 import uuid
 from datetime import datetime, date
-from sqlalchemy import String, Boolean, DateTime, Date, Integer, ForeignKey, Text
+from sqlalchemy import String, Boolean, DateTime, Date, Integer, ForeignKey, Text, Numeric
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -18,6 +18,11 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     domain: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    franchise_owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    legal_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    legal_inn: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    legal_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    royalty_percent: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     license: Mapped["TenantLicense | None"] = relationship(

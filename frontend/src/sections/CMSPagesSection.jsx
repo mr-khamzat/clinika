@@ -4,7 +4,7 @@ import { API_BASE } from '../config';
 
 const PAGE_TYPES = ['info', 'landing', 'service', 'contact', 'faq'];
 
-export default function CMSPagesSection() {
+export default function CMSPagesSection({ token }) {
   const [pages, setPages] = useState([]);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -16,7 +16,7 @@ export default function CMSPagesSection() {
   async function load() {
     setLoading(true);
     try {
-      const r = await axios.get(`${API_BASE}/cms/pages?all=true`);
+      const r = await axios.get(`${API_BASE}/cms/pages?all=true`, { headers: { Authorization: `Bearer ${token}` } });
       setPages(r.data);
     } catch {}
     setLoading(false);
@@ -35,9 +35,9 @@ export default function CMSPagesSection() {
   async function save() {
     try {
       if (editing === 'new') {
-        await axios.post(`${API_BASE}/cms/pages`, form);
+        await axios.post(`${API_BASE}/cms/pages`, form, { headers: { Authorization: `Bearer ${token}` } });
       } else {
-        await axios.put(`${API_BASE}/cms/pages/${form.slug}`, form);
+        await axios.put(`${API_BASE}/cms/pages/${form.slug}`, form, { headers: { Authorization: `Bearer ${token}` } });
       }
       setMsg('Сохранено ✓');
       setEditing(null);
@@ -50,7 +50,7 @@ export default function CMSPagesSection() {
 
   async function deletePage(slug) {
     if (!window.confirm('Удалить страницу?')) return;
-    await axios.delete(`${API_BASE}/cms/pages/${slug}`);
+    await axios.delete(`${API_BASE}/cms/pages/${slug}`, { headers: { Authorization: `Bearer ${token}` } });
     await load();
   }
 

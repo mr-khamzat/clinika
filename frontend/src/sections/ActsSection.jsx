@@ -11,7 +11,7 @@ const STATUS_LABELS = {
   overdue: { label: 'Просрочен', color: '#e53935' },
 };
 
-export default function ActsSection({ isSuperAdmin }) {
+export default function ActsSection({ token, isSuperAdmin }) {
   const [acts, setActs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
@@ -26,7 +26,7 @@ export default function ActsSection({ isSuperAdmin }) {
     setLoading(true);
     try {
       const params = filter ? `?act_status=${filter}` : '';
-      const r = await axios.get(`${API_BASE}/acts/${params}`);
+      const r = await axios.get(`${API_BASE}/acts/${params}`, { headers: { Authorization: `Bearer ${token}` } });
       setActs(r.data);
     } catch {}
     setLoading(false);
@@ -34,7 +34,7 @@ export default function ActsSection({ isSuperAdmin }) {
 
   async function generateAct() {
     try {
-      await axios.post(`${API_BASE}/acts/generate`, genForm);
+      await axios.post(`${API_BASE}/acts/generate`, genForm, { headers: { Authorization: `Bearer ${token}` } });
       setMsg('Акт сформирован ✓');
       await load();
     } catch (e) {
@@ -46,7 +46,7 @@ export default function ActsSection({ isSuperAdmin }) {
   async function signAct() {
     if (!signerName.trim()) return;
     try {
-      await axios.post(`${API_BASE}/acts/${signModal}/sign`, { signer_name: signerName });
+      await axios.post(`${API_BASE}/acts/${signModal}/sign`, { signer_name: signerName }, { headers: { Authorization: `Bearer ${token}` } });
       setSignModal(null);
       setSignerName('');
       setMsg('Акт подписан ✓');
@@ -58,7 +58,7 @@ export default function ActsSection({ isSuperAdmin }) {
   }
 
   async function payAct(act_number, amount) {
-    await axios.post(`${API_BASE}/acts/${act_number}/pay`, { amount });
+    await axios.post(`${API_BASE}/acts/${act_number}/pay`, { amount }, { headers: { Authorization: `Bearer ${token}` } });
     setMsg('Оплата зарегистрирована ✓');
     await load();
     setTimeout(() => setMsg(''), 3000);

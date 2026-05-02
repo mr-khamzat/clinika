@@ -9,6 +9,9 @@ const WikiSection = lazy(() => import('../sections/WikiSection'))
 const AISection = lazy(() => import('../sections/AISection'))
 const BillingLedgerSection = lazy(() => import('../sections/BillingLedgerSection'))
 const TenantDrawer = lazy(() => import('../sections/TenantDrawer'))
+const BrandingSection = lazy(() => import('../sections/BrandingSection'))
+const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
+const ActsSection = lazy(() => import('../sections/ActsSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -87,6 +90,9 @@ const NAV = [
   { key: 'push_notify',    label: 'Push',         icon: 'notifications' },
   { key: 'wiki',           label: 'Документация', icon: 'auto_stories' },
   { key: 'settings',       label: 'Настройки',    icon: 'settings' },
+  { key: 'branding',   label: 'Брендинг',      icon: 'palette' },
+  { key: 'cms',        label: 'CMS Страницы',  icon: 'web' },
+  { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -279,6 +285,8 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
                 <option value="nurse">Медсестра</option>
                 <option value="recruiter">Менеджер (рекрутер)</option>
                 <option value="supervisor">Владелец франшизы</option>
+                <option value="franchise_owner">Franchise Owner</option>
+                <option value="accountant">Бухгалтер</option>
               </select>
             </div>
             <div>
@@ -7418,6 +7426,21 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'super_admin': return (
         <Suspense fallback={<SectionLoader />}>
           <PlatformSection token={adminToken} />
+        </Suspense>
+      )
+      case 'branding': return (
+        <Suspense fallback={<SectionLoader />}>
+          <BrandingSection token={adminToken} />
+        </Suspense>
+      )
+      case 'cms': return (
+        <Suspense fallback={<SectionLoader />}>
+          <CMSPagesSection token={adminToken} />
+        </Suspense>
+      )
+      case 'acts': return (
+        <Suspense fallback={<SectionLoader />}>
+          <ActsSection token={adminToken} isSuperAdmin={isSuperAdmin} />
         </Suspense>
       )
       default:          return null

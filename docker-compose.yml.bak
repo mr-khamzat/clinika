@@ -1,0 +1,71 @@
+services:
+  clinika-db:
+    image: postgres:16-alpine
+    container_name: clinika-db
+    restart: always
+    environment:
+      POSTGRES_DB: clinika
+      POSTGRES_USER: clinika
+      POSTGRES_PASSWORD: clinika_pass
+    volumes:
+      - clinika-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clinika"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - clinika-net
+
+  clinika-redis:
+    image: redis:7-alpine
+    container_name: clinika-redis
+    restart: always
+    volumes:
+      - clinika-redis-data:/data
+    networks:
+      - clinika-net
+
+  clinika-backend:
+    build: ./backend
+    container_name: clinika-backend
+    restart: always
+    env_file: .env
+    volumes:
+      - ./VERSION:/app/VERSION:ro
+    ports:
+      - "127.0.0.1:8900:8000"
+    depends_on:
+      clinika-db:
+        condition: service_healthy
+      clinika-redis:
+        condition: service_started
+    networks:
+      - clinika-net
+
+  clinika-frontend:
+    build: ./frontend
+    container_name: clinika-frontend
+    restart: always
+    ports:
+      - "127.0.0.1:8901:80"
+    networks:
+      - clinika-net
+
+  clinika-bot:
+    build: ./bot
+    container_name: clinika-bot
+    restart: always
+    env_file: .env
+    depends_on:
+      - clinika-backend
+    networks:
+      - clinika-net
+
+volumes:
+  clinika-db-data:
+  clinika-redis-data:
+
+networks:
+  clinika-net:
+    driver: bridge

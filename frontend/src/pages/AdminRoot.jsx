@@ -10,6 +10,9 @@ import AcquisitionManagerCabinet from './AcquisitionManagerCabinet'
 import ExternalDoctorCabinet from './ExternalDoctorCabinet'
 import VisitingDoctorCabinet from './VisitingDoctorCabinet'
 import InviteAccept from './InviteAccept'
+import PatientCabinet from './PatientCabinet'
+import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
+import AccountantCabinet from './AccountantCabinet'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 // Проверяем — вдруг это страница принятия приглашения: /invite/{token}
@@ -116,6 +119,11 @@ export default function AdminRoot() {
     return <VisitingDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
+  // ── Пациент → личный кабинет пациента
+  if (role === 'patient') {
+    return <PatientCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
   // ── Рекрутер → кабинет рекрутера
   if (role === 'recruiter') {
     return <RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
@@ -124,6 +132,16 @@ export default function AdminRoot() {
   // ── Супервизор → кабинет супервизора (только чтение)
   if (role === 'supervisor') {
     return <SupervisorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Владелец франшизы
+  if (role === 'franchise_owner') {
+    return <FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  }
+
+  // ── Бухгалтер
+  if (role === 'accountant') {
+    return <AccountantCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
