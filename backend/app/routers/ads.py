@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.core.deps import get_current_user, require_manager
-from app.core.tenant import require_feature
+from app.core.tenant import require_feature, require_module
 from app.models.user import User
 from app.models.advertising import Ad, AdEvent, AdStatus, AdType, PricingModel
 from app.services import billing_service
@@ -23,6 +23,7 @@ from app.utils.geo import get_client_ip
 router = APIRouter(prefix="/ads", tags=["ads"])
 
 _feat = Depends(require_feature("billing"))
+_mod  = Depends(require_module("ads_basic", "ads_agency"))
 _mgr  = Depends(require_manager)
 
 
@@ -38,6 +39,8 @@ class CreateAdRequest(BaseModel):
     price: float = Field(..., ge=0)
     impressions_limit: Optional[int] = None
     clicks_limit: Optional[int] = None
+    image_data: Optional[str] = None
+    banner_height: Optional[int] = None
     image_data: Optional[str] = None
     image_mime: Optional[str] = None
     banner_height: Optional[int] = None
@@ -59,6 +62,8 @@ class UpdateAdRequest(BaseModel):
     price: Optional[float] = None
     impressions_limit: Optional[int] = None
     clicks_limit: Optional[int] = None
+    image_data: Optional[str] = None
+    banner_height: Optional[int] = None
     image_data: Optional[str] = None
     image_mime: Optional[str] = None
     banner_height: Optional[int] = None
@@ -136,7 +141,7 @@ async def list_ads(
     return ads_out
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[_mod])
 async def create_ad(
     body: CreateAdRequest,
     current_user: User = Depends(require_manager),
@@ -287,7 +292,7 @@ async def get_ad(
         raise HTTPException(status_code=404, detail="Объявление не найдено")
     return _ad_out(ad)
 
-@router.patch("/reorder", status_code=200)
+@router.patch("/reorder", status_code=200, dependencies=[_mod])
 async def reorder_ads(
     body: list[dict],  # [{"id": "...", "sort_order": 0}, ...]
     current_user: User = Depends(require_manager),
@@ -303,7 +308,7 @@ async def reorder_ads(
     return {"ok": True}
 
 
-@router.patch("/{ad_id}")
+@router.patch("/{ad_id}", dependencies=[_mod])
 async def update_ad(
     ad_id: uuid.UUID,
     body: UpdateAdRequest,
@@ -372,7 +377,7 @@ async def record_ad_event(
     return {"ok": True, "event_id": str(event.id), "event_type": event.event_type}
 
 
-@router.post("/{ad_id}/duplicate", status_code=201)
+@router.post("/{ad_id}/duplicate", status_code=201, dependencies=[_mod])
 async def duplicate_ad(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),

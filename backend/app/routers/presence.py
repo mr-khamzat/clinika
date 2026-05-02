@@ -19,6 +19,8 @@ from app.models.presence import UserPresence, PresenceStatus, CallPermission, No
 
 router = APIRouter(prefix="/presence", tags=["presence"])
 
+_mod_telephony = Depends(require_module("telephony_basic", "cross_clinic_audio", "video_calls", "video_conference", "call_recording"))
+
 
 # ── WebSocket менеджер ────────────────────────────────────────────────────────
 
@@ -468,7 +470,7 @@ async def get_call_permissions(
     }
 
 
-@router.post("/call-permissions")
+@router.post("/call-permissions", dependencies=[_mod_telephony])
 async def upsert_call_permission(
     body: UpsertCallPermissionRequest,
     current_user: User = Depends(get_current_user),

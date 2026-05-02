@@ -81,3 +81,34 @@ def require_feature(feature_name: str):
                 detail=f"Фича {feature_name} недоступна в вашем тарифном плане",
             )
     return checker
+
+
+def require_module(*module_keys: str):
+    async def checker(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ):
+        from app.models.user import UserRole
+        from app.config import settings
+        from app.models.commercial import TenantModuleSubscription, ModuleStatus
+
+        if (current_user.role == UserRole.SUPER_ADMIN or
+                (current_user.username and current_user.username == settings.superadmin_username)):
+            return
+        if not current_user.tenant_id:
+            return
+
+        row = (await db.execute(
+            select(TenantModuleSubscription).where(
+                TenantModuleSubscription.tenant_id == current_user.tenant_id,
+                TenantModuleSubscription.module_key.in_(list(module_keys)),
+                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL]),
+            )
+        )).first()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Модуль не подключён. Обратитесь к администратору платформы.",
+            )
+    return checker
+

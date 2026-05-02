@@ -16,12 +16,13 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.core.deps import get_current_user, require_manager, require_super_admin
-from app.core.tenant import require_feature
+from app.core.tenant import require_feature, require_module
 from app.models.user import User
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 _feat = Depends(require_feature("analytics"))
+_mod  = Depends(require_module("ai_analytics_basic", "ai_analytics_pro"))
 _mgr  = Depends(require_manager)
 
 CONFIG_PATH = Path("/app/uploads/ai_config.json")
@@ -446,7 +447,7 @@ async def list_ai_models(current_user: User = Depends(get_current_user)):
     return {"models": result, "selected": selected, "provider": prov_name}
 
 
-@router.get("/history", dependencies=[_feat, _mgr])
+@router.get("/history", dependencies=[_feat, _mod, _mgr])
 async def get_ai_history(
     limit: int = Query(20, ge=1, le=30),
     current_user: User = Depends(get_current_user),
@@ -643,7 +644,7 @@ ANALYSIS_PROMPTS = {
 ALL_ANALYSIS_TYPES = "|".join(ANALYSIS_PROMPTS.keys())
 
 
-@router.get("/analyze", dependencies=[_feat, _mgr])
+@router.get("/analyze", dependencies=[_feat, _mod, _mgr])
 async def analyze(
     type: str = Query("overview", regex=f"^({ALL_ANALYSIS_TYPES})$"),
     days: int = Query(30, ge=7, le=365),
@@ -863,7 +864,7 @@ class AskRequest(BaseModel):
     days: int = 30
 
 
-@router.post("/ask", dependencies=[_feat, _mgr])
+@router.post("/ask", dependencies=[_feat, _mod, _mgr])
 async def ask_ai(
     body: AskRequest,
     current_user: User = Depends(get_current_user),
