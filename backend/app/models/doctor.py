@@ -34,6 +34,8 @@ class Doctor(Base):
     photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     slot_duration: Mapped[int] = mapped_column(Integer, default=30, nullable=False)  # минут
+    experience_years: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    education: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
     mis_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

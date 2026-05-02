@@ -42,6 +42,7 @@ from app.routers.cms import router as cms_router
 from app.routers.acts import router as acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
 from app.routers.public_booking import router as public_booking_router
+from app.routers.public_clinic import router as public_clinic_router
 from app.routers.wiki import router as wiki_router
 from app.routers.reviews import router as reviews_router
 from app.routers.inter_clinic_invoices import router as ici_router
@@ -533,6 +534,7 @@ app.include_router(supervisor_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
 app.include_router(public_booking_router)
+app.include_router(public_clinic_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
