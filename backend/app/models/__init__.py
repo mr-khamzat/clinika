@@ -60,3 +60,6 @@ from app.models.wiki import WikiPage, WikiImage
 
 # CMS страницы тенантов (Phase 1 SaaS)
 from app.models.cms import TenantCmsPage
+
+from app.models.review import Review
+from app.models.inter_clinic_invoice import InterClinicInvoice

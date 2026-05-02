@@ -14,6 +14,7 @@ import asyncio
 
 from app.database import get_db
 from app.core.deps import get_current_user
+from app.core.tenant import require_module
 from app.models.user import User, UserRole
 from app.models.presence import UserPresence, PresenceStatus, CallPermission, NotificationSetting, CallLog
 

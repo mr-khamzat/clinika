@@ -42,6 +42,7 @@ from app.routers.acts import router as acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
 from app.routers.wiki import router as wiki_router
 from app.routers.reviews import router as reviews_router
+from app.routers.inter_clinic_invoices import router as ici_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -178,9 +179,46 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
+    scheduler.add_job(daily_invoices_job, 'cron', hour=0, minute=0, id='daily_invoices', replace_existing=True)
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
+
+async def daily_invoices_job():
+    """Ежедневная генерация счетов для активных подписок (00:00)."""
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.billing_service import generate_invoice
+        from app.models.billing import Subscription, SubscriptionStatus, Invoice
+        from sqlalchemy import select
+        from datetime import date
+        async with AsyncSessionLocal() as db:
+            subs = await db.execute(
+                select(Subscription).where(Subscription.status == SubscriptionStatus.ACTIVE)
+            )
+            active_subs = subs.scalars().all()
+            generated = 0
+            for sub in active_subs:
+                try:
+                    # Проверяем что счёт на текущий период ещё не выставлен
+                    today = date.today()
+                    exists = await db.execute(
+                        select(Invoice).where(
+                            Invoice.subscription_id == sub.id,
+                            Invoice.period_start <= today,
+                            Invoice.period_end >= today,
+                        ).limit(1)
+                    )
+                    if not exists.scalar_one_or_none():
+                        await generate_invoice(db, sub.id)
+                        generated += 1
+                except Exception as e:
+                    logger.error(f'daily_invoices: sub {sub.id}: {e}')
+            await db.commit()
+            logger.info(f'daily_invoices: сгенерировано {generated} счетов из {len(active_subs)} активных подписок')
+    except Exception as e:
+        logger.error(f'daily_invoices_job: {e}')
+
 
 async def archive_audit_job():
     """Архивация audit_log: записи старше 90 дней переносятся в audit_log_archive."""
@@ -464,6 +502,7 @@ app.include_router(integrations.router)
 app.include_router(system_router)
 app.include_router(wiki_router)
 app.include_router(reviews_router)
+app.include_router(ici_router)
 app.include_router(patient_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)

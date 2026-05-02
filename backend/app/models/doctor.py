@@ -97,6 +97,7 @@ class Appointment(Base):
         default=AppointmentStatus.PENDING, nullable=False, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)  # acquiring/cash/transfer
     price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_code: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True, index=True)

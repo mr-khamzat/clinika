@@ -183,3 +183,44 @@ async def manual_adjust(
         "description": entry.description,
         "created_at": entry.created_at.isoformat(),
     }
+
+
+# ── Выплата бонуса ────────────────────────────────────────────────────────────
+
+@router.post("/payout/{bonus_id}", dependencies=[_feature, Depends(require_manager)])
+async def payout_bonus(
+    bonus_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Выплатить бонус: статус PENDING → PAID, запись BONUS_PAID в реестр."""
+    from app.services.bonus_service import mark_bonus_paid
+    from app.models.bonus import Bonus
+    from sqlalchemy import select as _select
+
+    r = await db.execute(_select(Bonus).where(Bonus.id == bonus_id))
+    bonus = r.scalar_one_or_none()
+    if not bonus:
+        raise HTTPException(404, "Бонус не найден")
+    # IDOR: только тенант пользователя
+    if current_user.role not in {"super_admin"} and hasattr(bonus, "tenant_id") and bonus.tenant_id:
+        if str(bonus.tenant_id) != str(current_user.tenant_id):
+            raise HTTPException(403, "Нет доступа")
+
+    updated = await mark_bonus_paid(db, bonus_id)
+    if not updated:
+        raise HTTPException(409, "Бонус нельзя выплатить в текущем статусе")
+
+    await audit_service.write_safe(
+        db, AuditAction.BONUS_PAID,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type="bonus", entity_id=bonus_id,
+        after={"amount": float(bonus.amount), "admin_id": str(bonus.admin_id)},
+    )
+    return {
+        "id": str(updated.id),
+        "status": updated.status,
+        "paid_at": updated.paid_at.isoformat() if updated.paid_at else None,
+        "amount": float(updated.amount),
+    }
+

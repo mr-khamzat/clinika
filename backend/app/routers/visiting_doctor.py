@@ -540,16 +540,27 @@ async def get_visiting_doctor_appointments(
             "status":           a.status.value if hasattr(a.status, "value") else str(a.status),
             "price":            price_val,
             "doctor_share":     share,
+            "payment_method":   a.payment_method,
         })
+
+    # Разбивка по способам оплаты (только COMPLETED)
+    pay_acquiring = sum(float(a.price or base_price) for a in apts if str(a.status) in ("completed", "AppointmentStatus.COMPLETED") and a.payment_method == "acquiring")
+    pay_cash      = sum(float(a.price or base_price) for a in apts if str(a.status) in ("completed", "AppointmentStatus.COMPLETED") and a.payment_method == "cash")
+    pay_transfer  = sum(float(a.price or base_price) for a in apts if str(a.status) in ("completed", "AppointmentStatus.COMPLETED") and a.payment_method == "transfer")
+    no_show_count = sum(1 for a in apts if str(a.status) in ("no_show", "AppointmentStatus.NO_SHOW"))
 
     return {
         "appointments": apt_list,
         "stats": {
-            "total":        len(apts),
-            "active":       active,
-            "completed":    completed,
-            "revenue":      round(total_revenue, 2),
-            "doctor_share": round(doctor_share_total, 2),
+            "total":          len(apts),
+            "active":         active,
+            "completed":      completed,
+            "no_show":        no_show_count,
+            "revenue":        round(total_revenue, 2),
+            "doctor_share":   round(doctor_share_total, 2),
+            "pay_acquiring":  round(pay_acquiring, 2),
+            "pay_cash":       round(pay_cash, 2),
+            "pay_transfer":   round(pay_transfer, 2),
         },
     }
 
@@ -700,8 +711,9 @@ class AppointmentEditBody(BaseModel):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     price: Optional[float] = None
-    status: Optional[str] = None   # pending | completed | cancelled
+    status: Optional[str] = None   # pending | completed | cancelled | no_show
     notes: Optional[str] = None
+    payment_method: Optional[str] = None  # acquiring / cash / transfer
 
 
 @router.patch("/admin/appointments/{apt_id}/edit")
@@ -737,13 +749,16 @@ async def edit_appointment(
         apt.notes = body.notes
     if body.status is not None:
         status_map = {
-            "pending": AppointmentStatus.PENDING,
+            "pending":   AppointmentStatus.PENDING,
             "completed": AppointmentStatus.COMPLETED,
             "cancelled": AppointmentStatus.CANCELLED,
+            "no_show":   AppointmentStatus.NO_SHOW,
         }
         new_status = status_map.get(body.status.lower())
         if new_status:
             apt.status = new_status
+    if body.payment_method is not None:
+        apt.payment_method = body.payment_method
 
     apt.updated_at = datetime.utcnow()
     await db.commit()

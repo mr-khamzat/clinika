@@ -35,6 +35,7 @@ import ManagerKPI from './pages/ManagerKPI'
 import ManagerActivity from './pages/ManagerActivity'
 import ManagerRecruitDoctors from './pages/ManagerRecruitDoctors'
 import ManagerSettings from './pages/ManagerSettings'
+import ManagerInvoices from './pages/ManagerInvoices'
 import ClinicSchedules from './pages/ClinicSchedules'
 import AdminPanel from './pages/AdminPanel'
 import AdminRoot from './pages/AdminRoot'
@@ -181,6 +182,7 @@ function MiniApp() {
               <Route path="manager/activity" element={<ManagerActivity />} />
               <Route path="manager/settings" element={<ManagerSettings />} />
               <Route path="manager/recruit-doctors" element={<ManagerRecruitDoctors />} />
+              <Route path="manager/invoices" element={<ManagerInvoices />} />
               <Route path="admin-panel" element={<AdminPanel />} />
             </>
           )}

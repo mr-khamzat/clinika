@@ -5,6 +5,7 @@ const BrandingSection = lazy(() => import('../sections/BrandingSection'))
 const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection     = lazy(() => import('../sections/ActsSection'))
 const ReviewsSection  = lazy(() => import('../sections/ReviewsSection'))
+const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -79,6 +80,7 @@ const NAV = [
   { key: 'cms',        label: 'CMS Страницы',  icon: 'web' },
   { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
   { key: 'reviews',    label: 'Отзывы',        icon: 'rate_review' },
+  { key: 'clinic_invoices', label: 'Межкл. счета',  icon: 'receipt_long' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
@@ -143,8 +145,10 @@ function ExtDoctorsSection({ token }) {
       end_time: apt.end_time?.slice(0,5) || '',
       price: apt.price || '',
       status: String(apt.status).includes('completed') ? 'completed'
+            : String(apt.status).includes('no_show') ? 'no_show'
             : String(apt.status).includes('cancelled') ? 'cancelled' : 'pending',
       notes: apt.notes || '',
+      payment_method: apt.payment_method || '',
     })
     setEditAptMsg('')
   }
@@ -539,10 +543,13 @@ function ExtDoctorsSection({ token }) {
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:8, marginBottom:16 }}>
                   {[
                     { label:'Всего записей',   value:reportData.stats.total,                       color:D,        bg:'#f0f9fa' },
-                    { label:'В очереди',        value:reportData.stats.active,                      color:P,        bg:'#e0f7fa' },
                     { label:'Завершено',         value:reportData.stats.completed,                   color:'#2e7d32', bg:'#e8f5e9' },
-                    { label:'Выручка ₽',         value:reportData.stats.revenue.toLocaleString('ru'), color:'#1565c0', bg:'#e3f2fd' },
-                    { label:'Врачу ₽',           value:reportData.stats.doctor_share.toLocaleString('ru'), color:'#7b1fa2', bg:'#f3e5f5' },
+                    { label:'Не пришёл',         value:reportData.stats.no_show ?? 0,                color:'#c62828', bg:'#ffebee' },
+                    { label:'Выручка ₽',         value:(reportData.stats.revenue||0).toLocaleString('ru'), color:'#1565c0', bg:'#e3f2fd' },
+                    { label:'Врачу ₽',           value:(reportData.stats.doctor_share||0).toLocaleString('ru'), color:'#7b1fa2', bg:'#f3e5f5' },
+                    { label:'Эквайринг ₽',       value:(reportData.stats.pay_acquiring||0).toLocaleString('ru'), color:'#0077b6', bg:'#e0f0ff' },
+                    { label:'Наличные ₽',        value:(reportData.stats.pay_cash||0).toLocaleString('ru'), color:'#2e7d32', bg:'#e8f5e9' },
+                    { label:'Перевод ₽',         value:(reportData.stats.pay_transfer||0).toLocaleString('ru'), color:'#7b4f00', bg:'#fff8e1' },
                   ].map(c => (
                     <div key={c.label} style={{ background:c.bg, borderRadius:12, padding:'10px 8px', textAlign:'center' }}>
                       <div style={{ fontSize:9, color:'#90a4ae', textTransform:'uppercase', fontWeight:700, marginBottom:4 }}>{c.label}</div>
@@ -567,7 +574,7 @@ function ExtDoctorsSection({ token }) {
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                       <thead>
                         <tr style={{ background:'#f0f9fa' }}>
-                          {['Пациент','Телефон','Дата','Время','Статус','Цена ₽','Врачу ₽'].map(h => (
+                          {['Пациент','Телефон','Дата','Время','Статус','Оплата','Цена ₽','Врачу ₽'].map(h => (
                             <th key={h} style={{ padding:'8px 6px', textAlign:'left', fontWeight:700, color:'#607d8b', fontSize:10, textTransform:'uppercase', whiteSpace:'nowrap', borderBottom:'1px solid #e0eaec' }}>{h}</th>
                           ))}
                         </tr>
@@ -580,9 +587,14 @@ function ExtDoctorsSection({ token }) {
                             <td style={{ padding:'7px 6px', color:'#607d8b' }}>{a.appointment_date}</td>
                             <td style={{ padding:'7px 6px', color:'#607d8b' }}>{a.start_time?.slice(0,5)}</td>
                             <td style={{ padding:'7px 6px' }}>
-                              <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:10, background: a.status==='completed'?'#e8f5e9':'#e0f7fa', color: a.status==='completed'?'#2e7d32':P }}>
-                                {a.status === 'completed' ? '✓ Завершён' : '⏳ Ожидает'}
+                              <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:10,
+                                background: a.status==='completed'?'#e8f5e9':a.status==='no_show'?'#ffebee':'#e0f7fa',
+                                color: a.status==='completed'?'#2e7d32':a.status==='no_show'?'#c62828':P }}>
+                                {a.status==='completed'?'✓ Завершён':a.status==='no_show'?'✗ Не пришёл':a.status==='cancelled'?'Отменён':'⏳ Ожидает'}
                               </span>
+                            </td>
+                            <td style={{ padding:'7px 6px', color:'#374151', fontSize:11 }}>
+                              {a.payment_method==='acquiring'?'💳 Карта':a.payment_method==='cash'?'💵 Нал.':a.payment_method==='transfer'?'📲 Перевод':'—'}
                             </td>
                             <td style={{ padding:'7px 6px', fontWeight:700, color:'#1565c0' }}>{Number(a.price).toLocaleString('ru')}</td>
                             <td style={{ padding:'7px 6px', fontWeight:700, color:'#7b1fa2' }}>{Number(a.doctor_share).toLocaleString('ru')}</td>
@@ -694,7 +706,7 @@ function ExtDoctorsSection({ token }) {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#f0f9fa' }}>
-                    {['Врач', 'Пациент', 'Телефон', 'Дата', 'Время', 'Статус', 'Заработок врача', ''].map(h => (
+                    {['Врач', 'Пациент', 'Телефон', 'Дата', 'Время', 'Статус', 'Оплата', 'Заработок', ''].map(h => (
                       <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontWeight:700, fontSize:11, color:'#607d8b', textTransform:'uppercase', borderBottom:'2px solid #e0eaec' }}>{h}</th>
                     ))}
                   </tr>
@@ -712,10 +724,13 @@ function ExtDoctorsSection({ token }) {
                       <td style={{ padding:'9px 10px', color:'#607d8b' }}>{a.start_time?.slice(0,5)}</td>
                       <td style={{ padding:'9px 10px' }}>
                         <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
-                          background: String(a.status).includes('completed') ? '#e8f5e9' : '#fff3e0',
-                          color: String(a.status).includes('completed') ? '#2e7d32' : '#e65100' }}>
-                          {String(a.status).includes('completed') ? 'Завершён' : 'Ожидает'}
+                          background: String(a.status).includes('completed')?'#e8f5e9':String(a.status).includes('no_show')?'#ffebee':'#fff3e0',
+                          color: String(a.status).includes('completed')?'#2e7d32':String(a.status).includes('no_show')?'#c62828':'#e65100' }}>
+                          {String(a.status).includes('completed')?'✓ Завершён':String(a.status).includes('no_show')?'✗ Не пришёл':'⏳ Ожидает'}
                         </span>
+                      </td>
+                      <td style={{ padding:'9px 10px', fontSize:12, color:'#374151' }}>
+                        {a.payment_method==='acquiring'?'💳 Карта':a.payment_method==='cash'?'💵 Нал.':a.payment_method==='transfer'?'📲 Перевод':'—'}
                       </td>
                       <td style={{ padding:'9px 10px', fontWeight:700, color:'#2e7d32' }}>
                         {Number(a.doctor_share).toLocaleString('ru')} ₽
@@ -770,8 +785,19 @@ function ExtDoctorsSection({ token }) {
                   <select value={editAptForm.status || 'pending'} onChange={e => setEditAptForm(p => ({ ...p, status: e.target.value }))}
                     style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', background:'#fff' }}>
                     <option value="pending">Ожидает</option>
-                    <option value="completed">Завершён</option>
-                    <option value="cancelled">Отменён (не пришёл)</option>
+                    <option value="completed">Завершён (пришёл)</option>
+                    <option value="no_show">Не пришёл</option>
+                    <option value="cancelled">Отменён</option>
+                  </select>
+                </div>
+                <div style={{ gridColumn:'1 / span 2' }}>
+                  <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:4, textTransform:'uppercase' }}>Способ оплаты</label>
+                  <select value={editAptForm.payment_method || ''} onChange={e => setEditAptForm(p => ({ ...p, payment_method: e.target.value }))}
+                    style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'8px 10px', fontSize:13, outline:'none', background:'#fff' }}>
+                    <option value="">— не указан —</option>
+                    <option value="acquiring">Эквайринг (карта)</option>
+                    <option value="cash">Наличные</option>
+                    <option value="transfer">Перевод</option>
                   </select>
                 </div>
                 <div style={{ gridColumn:'1 / span 2' }}>
@@ -3323,6 +3349,16 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'acts': return (
         <Suspense fallback={null}>
           <ActsSection token={adminToken} isSuperAdmin={false} />
+        </Suspense>
+      )
+      case 'reviews': return (
+        <Suspense fallback={null}>
+          <ReviewsSection token={adminToken} />
+        </Suspense>
+      )
+      case 'clinic_invoices': return (
+        <Suspense fallback={null}>
+          <InterClinicInvoicesSection isSupervisor={true} />
         </Suspense>
       )
       default:          return null

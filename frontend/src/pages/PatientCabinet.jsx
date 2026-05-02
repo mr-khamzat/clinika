@@ -456,6 +456,123 @@ function SupportTab({ phone }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
+
+// ── Reviews Tab ────────────────────────────────────────────────────────────────
+function ReviewsTab({ phone, refs, apiBase, token }) {
+  const [form, setForm] = useState({ referral_id: '', doctor_id: '', rating: 0, comment: '', is_anonymous: false })
+  const [hover, setHover] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  // Подтверждённые направления — только по ним можно оставить оценку
+  const completedRefs = (refs || []).filter(r => r.status === 'confirmed' || r.status === 'completed')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.rating) return setMsg('Укажите оценку')
+    if (!form.referral_id) return setMsg('Выберите направление')
+    setSubmitting(true); setMsg('')
+    try {
+      await axios.post(`${apiBase}/reviews`, {
+        referral_id: form.referral_id,
+        doctor_id: form.doctor_id || undefined,
+        patient_name: form.is_anonymous ? null : undefined,
+        patient_phone: form.is_anonymous ? null : phone,
+        rating: form.rating,
+        comment: form.comment || null,
+        is_anonymous: form.is_anonymous,
+      })
+      setSubmitted(true)
+      setMsg('Спасибо! Ваш отзыв отправлен на модерацию.')
+    } catch (e) {
+      const detail = e?.response?.data?.detail || 'Ошибка'
+      setMsg(detail.includes('уже') ? '⚠️ Вы уже оставляли отзыв по этому направлению.' : '❌ ' + detail)
+    }
+    setSubmitting(false)
+  }
+
+  if (submitted) return (
+    <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg,#1565C0,#0097A7)' }}>
+        <span className="material-symbols-outlined text-white text-4xl" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+      </div>
+      <h2 className="text-xl font-black text-gray-800 mb-2">Отзыв отправлен!</h2>
+      <p className="text-gray-500 text-sm">{msg}</p>
+      <button onClick={() => { setSubmitted(false); setMsg(''); setForm(f => ({...f, rating:0, comment:''})) }}
+        className="mt-6 px-6 py-2 rounded-2xl font-bold text-white text-sm"
+        style={{ background: 'linear-gradient(135deg,#1565C0,#0097A7)' }}>
+        Написать ещё
+      </button>
+    </div>
+  )
+
+  return (
+    <div className="max-w-lg mx-auto">
+      <h2 className="text-xl font-black text-gray-800 mb-4">Оценить врача</h2>
+      {completedRefs.length === 0 ? (
+        <div className="bg-white rounded-3xl p-6 text-center" style={{ boxShadow: '0 2px 12px rgba(0,0,0,.06)' }}>
+          <span className="material-symbols-outlined text-4xl text-gray-300 mb-3 block">star_border</span>
+          <p className="text-gray-500 text-sm">Оставить отзыв можно после подтверждённого визита</p>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-5 space-y-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,.06)' }}>
+          {/* Направление */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Направление</label>
+            <select value={form.referral_id} onChange={e => setForm(f => ({...f, referral_id: e.target.value, doctor_id: completedRefs.find(r=>r.id===e.target.value)?.doctor_id||''}))}
+              className="w-full rounded-2xl px-4 py-3 text-sm bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="">Выберите визит...</option>
+              {completedRefs.map(r => (
+                <option key={r.id} value={r.id}>{r.to_clinic_name} — {r.service_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Рейтинг звёздами */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-2">Оценка</label>
+            <div className="flex gap-2">
+              {[1,2,3,4,5].map(s => (
+                <button key={s} type="button"
+                  onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(0)}
+                  onClick={() => setForm(f => ({...f, rating: s}))}
+                  className="transition-transform active:scale-90"
+                  style={{ fontSize: 36, color: s <= (hover || form.rating) ? '#F59E0B' : '#E5E7EB', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                  ★
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Комментарий */}
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase tracking-wide block mb-1.5">Комментарий (необязательно)</label>
+            <textarea value={form.comment} onChange={e => setForm(f => ({...f, comment: e.target.value}))}
+              rows={3} placeholder="Ваш опыт, пожелания..."
+              className="w-full rounded-2xl px-4 py-3 text-sm bg-gray-50 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+          </div>
+
+          {/* Анонимно */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input type="checkbox" checked={form.is_anonymous} onChange={e => setForm(f => ({...f, is_anonymous: e.target.checked}))}
+              className="w-5 h-5 rounded accent-blue-600" />
+            <span className="text-sm text-gray-600">Оставить анонимно</span>
+          </label>
+
+          {msg && <p className="text-sm font-medium" style={{ color: msg.startsWith('❌')||msg.startsWith('⚠️') ? '#DC2626' : '#16A34A' }}>{msg}</p>}
+
+          <button type="submit" disabled={submitting || !form.rating || !form.referral_id}
+            className="w-full py-4 rounded-2xl font-bold text-white text-base disabled:opacity-50 transition-all active:scale-[.98]"
+            style={{ background: 'linear-gradient(135deg,#1565C0,#0097A7)' }}>
+            {submitting ? 'Отправка...' : 'Отправить отзыв'}
+          </button>
+        </form>
+      )}
+    </div>
+  )
+}
+
 export default function PatientCabinet() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -587,6 +704,7 @@ export default function PatientCabinet() {
         { key: 'home',      icon: 'home',       label: 'Главная'     },
         { key: 'referrals', icon: 'assignment',  label: 'Направления' },
         { key: 'history',   icon: 'history',     label: 'История'     },
+        { key: 'reviews',   icon: 'star',         label: 'Оценки'      },
         { key: 'support',   icon: 'chat_bubble', label: 'Чат'         },
       ]
 
@@ -919,6 +1037,13 @@ export default function PatientCabinet() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* ── REVIEWS ── */}
+        {tab === 'reviews' && !data?.type && (
+          <div className="tab-enter px-1 pt-2">
+            <ReviewsTab phone={patient_phone} refs={allRefs} apiBase={API} token={localStorage.getItem(TOKEN_KEY)} />
           </div>
         )}
 

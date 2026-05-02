@@ -237,6 +237,29 @@ async def _apply_confirmation(
     except Exception:
         pass
 
+    # Автоматически создаём межклиничный счёт при начислении бонуса
+    try:
+        if service and service.bonus_amount > 0 and referral.from_clinic_id and referral.to_clinic_id and referral.from_clinic_id != referral.to_clinic_id:
+            from app.services.inter_clinic_invoice_service import auto_create_from_referral
+            from app.models.clinic import Clinic as _Clinic2
+            _fc = await db.execute(select(_Clinic2).where(_Clinic2.id == referral.from_clinic_id))
+            _from_clinic = _fc.scalar_one_or_none()
+            _tc = await db.execute(select(_Clinic2).where(_Clinic2.id == referral.to_clinic_id))
+            _to_clinic = _tc.scalar_one_or_none()
+            await auto_create_from_referral(
+                db,
+                referral_id=referral.id,
+                from_clinic_id=referral.from_clinic_id,
+                from_tenant_id=_from_clinic.tenant_id if _from_clinic else referral.tenant_id,
+                to_clinic_id=referral.to_clinic_id,
+                to_tenant_id=_to_clinic.tenant_id if _to_clinic else None,
+                bonus_amount=float(service.bonus_amount),
+                service_name=service.name if hasattr(service, 'name') else None,
+                created_by_id=referral.created_by_admin_id,
+            )
+    except Exception:
+        pass  # Межклиничный счёт не блокирует подтверждение
+
     await db.commit()
     await db.refresh(referral)
 
