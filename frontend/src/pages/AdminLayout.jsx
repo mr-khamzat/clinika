@@ -12,6 +12,7 @@ const TenantDrawer = lazy(() => import('../sections/TenantDrawer'))
 const BrandingSection = lazy(() => import('../sections/BrandingSection'))
 const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection = lazy(() => import('../sections/ActsSection'))
+const ModulesCatalogSection = lazy(() => import('../sections/ModulesCatalogSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -84,6 +85,7 @@ const NAV = [
   { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
+  { key: 'modules_catalog', label: 'Каталог модулей', icon: 'storefront' },
   { key: 'plugins',        label: 'Плагины',      icon: 'extension' },
   { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
@@ -7404,6 +7406,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         </Suspense>
       )
       case 'monitoring': return <MonitoringSection token={adminToken} />
+      case 'modules_catalog': return (
+        <Suspense fallback={<SectionLoader />}>
+          <ModulesCatalogSection token={adminToken} />
+        </Suspense>
+      )
       case 'plugins':   return <PluginsSection token={adminToken} />
       case 'mis_sync':  return <MisSyncSection token={adminToken} />
       case 'calls_cfg': return <CallsConfigSection token={adminToken} />
