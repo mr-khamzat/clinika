@@ -3,6 +3,7 @@ from app.core.logging import setup_logging, get_logger
 from app.core.prometheus import router as prometheus_router, metrics_middleware
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.security_utils import SlidingWindowRateLimiter
+from app.core.domain_router import DomainRouterMiddleware, router as domain_router
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.config import settings
@@ -405,6 +406,7 @@ app.add_middleware(
 )
 
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
+app.add_middleware(DomainRouterMiddleware)
 
 # ─── Security headers ───
 @app.middleware("http")
@@ -449,6 +451,7 @@ async def security_headers_middleware(request: Request, call_next):
 async def prometheus_middleware(request: Request, call_next):
     return await metrics_middleware(request, call_next)
 
+app.include_router(domain_router)  # /.well-known/clinika-domain/*
 app.include_router(auth.router)
 app.include_router(referrals.router)
 app.include_router(bonuses.router)
