@@ -25,7 +25,7 @@ function Badge({ status }) {
 }
 
 function InvoiceTable({ invoices, onAction, isSupervisor }) {
-  if (!invoices.length) return <p style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>Счетов нет</p>
+  if (!Array.isArray(invoices) || !invoices.length) return <p style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>Счетов нет</p>
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -90,7 +90,7 @@ export default function InterClinicInvoicesSection({ isSupervisor = false }) {
     try {
       const endpoint = t === 'all' ? '/clinic-invoices/all' : `/clinic-invoices/${t}`
       const { data } = await api.get(endpoint)
-      setInvoices(data)
+      setInvoices(Array.isArray(data) ? data : [])
     } catch { setInvoices([]) }
     setLoading(false)
   }
@@ -98,7 +98,7 @@ export default function InterClinicInvoicesSection({ isSupervisor = false }) {
   useEffect(() => { load(tab) }, [tab])
 
   useEffect(() => {
-    api.get('/clinics').then(r => setClinics(r.data || [])).catch(() => {})
+    api.get('/clinics/').then(r => setClinics(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   const handleAction = async (action, id) => {
