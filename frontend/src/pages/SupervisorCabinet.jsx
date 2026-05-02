@@ -4,6 +4,7 @@ const AISection  = lazy(() => import('../sections/AISection'))
 const BrandingSection = lazy(() => import('../sections/BrandingSection'))
 const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection     = lazy(() => import('../sections/ActsSection'))
+const ReviewsSection  = lazy(() => import('../sections/ReviewsSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -77,6 +78,7 @@ const NAV = [
   { key: 'branding',   label: 'Брендинг',      icon: 'palette' },
   { key: 'cms',        label: 'CMS Страницы',  icon: 'web' },
   { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
+  { key: 'reviews',    label: 'Отзывы',        icon: 'rate_review' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────

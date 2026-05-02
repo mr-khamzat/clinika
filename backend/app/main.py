@@ -39,6 +39,7 @@ from app.routers.cms import router as cms_router
 from app.routers.acts import router as acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
 from app.routers.wiki import router as wiki_router
+from app.routers.reviews import router as reviews_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -431,6 +432,7 @@ app.include_router(support_router)
 app.include_router(integrations.router)
 app.include_router(system_router)
 app.include_router(wiki_router)
+app.include_router(reviews_router)
 app.include_router(patient_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)
@@ -458,6 +460,11 @@ app.include_router(supervisor_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
 app.include_router(prometheus_router)
+
+# Reviews plugin
+from app.plugins.reviews import ReviewsPlugin
+from app.plugins.registry import plugin_registry
+plugin_registry.register(ReviewsPlugin())
 
 
 @app.get("/health")
