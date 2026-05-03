@@ -2322,239 +2322,367 @@ function SettingsSection({ token, user }) {
 }
 
 // ── ServicesSection ───────────────────────────────────────────────────────────
+
+function SvcRow({ svc, categories, token, onUpdated }) {
+  const a = api(token)
+  const [bonus, setBonus] = useState(String(svc.bonus_amount || 0))
+  const [cat, setCat] = useState(svc.category === 'Без категории' ? '' : (svc.category || ''))
+  const [savingB, setSavingB] = useState(false)
+  const [savingC, setSavingC] = useState(false)
+
+  const saveBonus = async () => {
+    const amount = parseFloat(bonus)
+    if (isNaN(amount) || amount < 0) return
+    setSavingB(true)
+    try { await a.patch('/manager/services/' + svc.id, { bonus_amount: amount }); onUpdated() }
+    catch (_) {} finally { setSavingB(false) }
+  }
+  const saveCat = async (val) => {
+    setCat(val); setSavingC(true)
+    try { await a.patch('/manager/services/' + svc.id, { category: val || null }); onUpdated() }
+    catch (_) {} finally { setSavingC(false) }
+  }
+  const changedB = parseFloat(bonus) !== parseFloat(svc.bonus_amount || 0)
+  return (
+    <tr className="border-b border-gray-50 hover:bg-teal-50/30 transition-colors">
+      <td className="px-4 py-3">
+        <div className="font-medium text-gray-800 text-sm">{svc.name}</div>
+        {svc.code && <div className="text-xs text-gray-400 font-mono">{svc.code}</div>}
+      </td>
+      <td className="px-3 py-3 w-48">
+        <div className="flex items-center gap-1">
+          <select value={cat} onChange={e => saveCat(e.target.value)} disabled={savingC}
+            className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs focus:outline-none focus:border-[#0097A7] bg-white disabled:opacity-60">
+            <option value="">— без категории —</option>
+            {categories.filter(c => c !== 'Без категории').map(c => <option key={c} value={c}>{c.length > 32 ? c.slice(0,30)+'…' : c}</option>)}
+          </select>
+          {savingC && <span className="text-xs text-gray-400">⏳</span>}
+        </div>
+      </td>
+      <td className="px-3 py-3 text-sm text-gray-500 text-right whitespace-nowrap">
+        {svc.original_price ? fmt(svc.original_price)+' ₽' : '—'}
+      </td>
+      <td className="px-3 py-3 w-36">
+        <div className="flex items-center gap-1">
+          <input type="number" min="0" step="50" value={bonus}
+            onChange={e => setBonus(e.target.value)}
+            onBlur={() => changedB && saveBonus()}
+            onKeyDown={e => e.key === 'Enter' && changedB && saveBonus()}
+            className={'w-20 border rounded-lg px-2 py-1 text-sm text-right font-semibold focus:outline-none transition ' +
+              (parseFloat(bonus) > 0 ? 'border-teal-300 text-teal-700 bg-teal-50' : 'border-gray-200 text-gray-400 bg-white')} />
+          <span className="text-xs text-gray-400">₽</span>
+          {savingB && <span className="text-xs text-gray-400">⏳</span>}
+          {changedB && !savingB && (
+            <button onClick={saveBonus} className="text-xs bg-teal-600 text-white rounded px-1.5 py-0.5 hover:bg-teal-700">✓</button>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function CatAccordion({ cat, token, categories }) {
+  const a = api(token)
+  const [open, setOpen] = useState(false)
+  const [svcs, setSvcs] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [bonusInput, setBonusInput] = useState('')
+  const [applying, setApplying] = useState(false)
+  const [showBonusBar, setShowBonusBar] = useState(false)
+  const [loadTick, setLoadTick] = useState(0)
+
+  const fetchSvcs = useCallback(async () => {
+    setLoading(true); setSvcs(null)
+    try {
+      const catParam = cat.category === 'Без категории' ? '' : cat.category
+      const r = await a.get('/manager/services/', { category: catParam })
+      setSvcs(Array.isArray(r.data) ? r.data : [])
+    } catch (_) { setSvcs([]) } finally { setLoading(false) }
+  }, [cat.category, token])
+
+  useEffect(() => { if (open || loadTick > 0) fetchSvcs() }, [open, loadTick])
+
+  const handleToggle = () => setOpen(v => !v)
+  const handleSetAll = async () => {
+    const amount = parseFloat(bonusInput)
+    if (isNaN(amount) || amount < 0) return
+    setApplying(true)
+    try {
+      await a.post('/manager/services/set-category-bonus', { category: cat.category, bonus_amount: amount })
+      setShowBonusBar(false); setBonusInput(''); setLoadTick(t => t + 1)
+    } catch (_) { alert('Ошибка') } finally { setApplying(false) }
+  }
+  const hasBonus = cat.bonus_count > 0
+  return (
+    <div className={'rounded-xl border overflow-hidden ' + (hasBonus ? 'border-teal-200' : 'border-gray-100')}>
+      <div className="flex items-center gap-2 px-4 py-3 bg-white">
+        <button onClick={handleToggle} className="flex items-center gap-2 flex-1 min-w-0 text-left">
+          <span className="text-gray-400 text-xs flex-shrink-0">{open ? '▼' : '▶'}</span>
+          <span className={'text-sm font-semibold truncate ' + (hasBonus ? 'text-gray-800' : 'text-gray-500')}>{cat.category}</span>
+          <span className="text-xs text-gray-400 flex-shrink-0">{cat.total}</span>
+          {hasBonus && <span className="bg-teal-100 text-teal-700 text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0">✓ {cat.bonus_count}</span>}
+        </button>
+        <button onClick={() => setShowBonusBar(v => !v)}
+          className="flex-shrink-0 text-xs border border-gray-200 text-gray-500 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 transition">
+          Бонус всем
+        </button>
+      </div>
+      {showBonusBar && (
+        <div className="px-4 py-2 flex items-center gap-2 bg-amber-50 border-t border-amber-100">
+          <span className="text-xs text-amber-700 font-medium">Бонус для {cat.total} услуг:</span>
+          <input type="number" min="0" step="50" placeholder="0" value={bonusInput}
+            onChange={e => setBonusInput(e.target.value)}
+            className="w-20 border border-amber-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none bg-white" />
+          <span className="text-xs text-gray-500">₽</span>
+          <button onClick={handleSetAll} disabled={applying || !bonusInput}
+            className="text-xs bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-lg px-3 py-1.5 font-medium">
+            {applying ? '⏳' : 'Применить'}
+          </button>
+          <button onClick={() => setShowBonusBar(false)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+        </div>
+      )}
+      {open && (
+        <div className="border-t border-gray-100 overflow-x-auto">
+          {loading ? (
+            <div className="px-4 py-3 text-sm text-gray-400">Загрузка...</div>
+          ) : (
+            <table className="w-full min-w-[520px]" key={rev}>
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
+                  <th className="text-left px-4 py-2 font-medium">Название</th>
+                  <th className="text-left px-3 py-2 font-medium w-48">Категория</th>
+                  <th className="text-right px-3 py-2 font-medium">Цена МИС</th>
+                  <th className="text-left px-3 py-2 font-medium">Бонус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(svcs || []).length === 0 ? (
+                  <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-xs">Нет услуг</td></tr>
+                ) : (svcs || []).map(s => (
+                  <SvcRow key={s.id} svc={s} categories={categories} token={token} onUpdated={() => setLoadTick(t => t + 1)} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ServicesSection({ token }) {
-  const [services, setServices] = useState([])
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState('')
-  const [catFilter, setCatFilter] = useState('all')
+  const a = api(token)
+  const [bonused, setBonused] = useState(null)
+  const [allCats, setAllCats] = useState([])
+  const [catNames, setCatNames] = useState([])
+  const [loadingCats, setLoadingCats] = useState(true)
   const [search, setSearch] = useState('')
-  const [modal, setModal] = useState(null) // null | 'create' | serviceObj
+  const [searchResults, setSearchResults] = useState(null)
+  const [searching, setSearching] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', code: '', category: '', bonus_amount: '', original_price: '' })
   const [saving, setSaving] = useState(false)
-  const a = api(token)
+  const [rev, setRev] = useState(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setErr('')
+  const reload = useCallback(async () => {
+    setBonused(null); setLoadingCats(true)
     try {
-      const [sr, cr] = await Promise.all([
-        a.get('/manager/services/'),
+      const [br, cr] = await Promise.all([
+        a.get('/manager/services/', { has_bonus: true }),
         a.get('/manager/services/categories'),
       ])
-      setServices(Array.isArray(sr.data) ? sr.data : [])
-      // API returns [{category, total, bonus_count}] or strings
-      const rawCats = Array.isArray(cr.data) ? cr.data : []
-      setCategories(rawCats.map(c => (typeof c === 'string' ? c : c?.category)).filter(Boolean))
-    } catch { setErr('Ошибка загрузки') }
-    setLoading(false)
+      setBonused(Array.isArray(br.data) ? br.data : [])
+      const cats = Array.isArray(cr.data) ? cr.data : []
+      setAllCats(cats)
+      setCatNames(cats.map(c => c.category).filter(Boolean))
+    } catch (_) { setBonused([]); setAllCats([]) } finally { setLoadingCats(false) }
   }, [token])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { reload() }, [token, rev])
 
-  const openCreate = () => {
-    setForm({ name: '', code: '', category: categories[0] || '', bonus_amount: '', original_price: '' })
-    setModal('create')
-  }
-  const openEdit = (s) => {
-    setForm({ name: s.name, code: s.code || '', category: s.category || '', bonus_amount: s.bonus_amount || '', original_price: s.original_price || '' })
-    setModal(s)
-  }
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults(null); return }
+    const t = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const r = await a.get('/manager/services/', { search: search.trim() })
+        setSearchResults(Array.isArray(r.data) ? r.data : [])
+      } catch (_) { setSearchResults([]) } finally { setSearching(false) }
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search, token])
 
-  const handleSave = async (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault()
+    if (!form.name.trim()) return
     setSaving(true)
     try {
-      const body = {
-        name: form.name,
-        code: form.code || null,
+      await a.post('/manager/services/', {
+        name: form.name.trim(), code: form.code.trim() || null,
         category: form.category || null,
         bonus_amount: parseFloat(form.bonus_amount) || 0,
         original_price: form.original_price ? parseFloat(form.original_price) : null,
-      }
-      if (modal === 'create') {
-        await a.post('/manager/services/', body)
-      } else {
-        await a.patch(`/manager/services/${modal.id}`, body)
-      }
-      setModal(null)
-      load()
-    } catch (ex) {
-      alert(ex?.response?.data?.detail || 'Ошибка сохранения')
-    } finally { setSaving(false) }
+      })
+      setShowCreate(false)
+      setForm({ name: '', code: '', category: '', bonus_amount: '', original_price: '' })
+      setRev(r => r + 1)
+    } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') } finally { setSaving(false) }
   }
-
-  const handleDeactivate = async (id) => {
-    if (!window.confirm('Деактивировать услугу?')) return
-    try {
-      await a.del(`/manager/services/${id}`)
-      load()
-    } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') }
-  }
-
-  const filtered = useMemo(() => services.filter(s => {
-    if (catFilter !== 'all' && s.category !== catFilter) return false
-    if (!search.trim()) return true
-    const q = search.toLowerCase()
-    return (s.name || '').toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q)
-  }), [services, catFilter, search])
-
-  const grouped = useMemo(() => {
-    const map = {}
-    filtered.forEach(s => {
-      const cat = s.category || 'Без категории'
-      if (!map[cat]) map[cat] = []
-      map[cat].push(s)
-    })
-    return Object.entries(map).sort(([a], [b]) =>
-      a === 'Без категории' ? 1 : b === 'Без категории' ? -1 : a.localeCompare(b, 'ru')
-    )
-  }, [filtered])
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-xl font-bold text-gray-800">Услуги</h2>
-        <button onClick={openCreate}
+        <div>
+          <h2 className="text-xl font-bold text-gray-800">Услуги</h2>
+          {!loadingCats && allCats.length > 0 && (
+            <p className="text-xs text-gray-400 mt-0.5">{allCats.reduce((s,c) => s+c.total, 0).toLocaleString('ru')} услуг · {allCats.length} категорий</p>
+          )}
+        </div>
+        <button onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white"
           style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
           <span className="material-symbols-outlined text-[18px]">add</span>
-          Добавить услугу
+          Добавить
         </button>
       </div>
 
-      <div className="mb-4 space-y-2">
-        <div className="flex gap-1.5 flex-wrap">
-          <button onClick={() => setCatFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${catFilter === 'all' ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-            Все
-          </button>
-          {categories.map(c => (
-            <button key={c} onClick={() => setCatFilter(c)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${catFilter === c ? 'bg-[#0097A7] text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}>
-              {c}
-            </button>
-          ))}
+      {/* Блок "С бонусом" */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-symbols-outlined text-[18px] text-teal-600" style={{fontVariationSettings:"'FILL' 1"}}>stars</span>
+          <span className="text-sm font-bold text-gray-800">Услуги с бонусом</span>
+          {bonused !== null && <span className="bg-teal-100 text-teal-700 text-xs font-bold px-2 py-0.5 rounded-full">{bonused.length}</span>}
         </div>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск по названию или коду..."
-          className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+        <div className="bg-white rounded-2xl border border-teal-200 shadow-sm overflow-x-auto">
+          {bonused === null ? (
+            <div className="px-4 py-4 text-sm text-gray-400">Загрузка...</div>
+          ) : bonused.length === 0 ? (
+            <div className="px-4 py-6 text-center text-gray-400 text-sm">
+              <span className="material-symbols-outlined text-3xl block mb-2 text-gray-300">star_border</span>
+              Ни одна услуга не имеет бонуса.<br />Нажмите «Бонус всем» в категории ниже или создайте услугу с бонусом вручную.
+            </div>
+          ) : (
+            <table className="w-full min-w-[520px]">
+              <thead>
+                <tr className="bg-teal-50 text-xs text-teal-700 uppercase tracking-wide">
+                  <th className="text-left px-4 py-2.5 font-semibold">Услуга</th>
+                  <th className="text-left px-3 py-2.5 font-semibold w-48">Категория</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Цена</th>
+                  <th className="text-left px-3 py-2.5 font-semibold">Бонус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bonused.map(s => (
+                  <SvcRow key={s.id} svc={s} categories={catNames} token={token} onUpdated={() => setRev(r => r+1)} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
-      <Err msg={err} />
-      {loading ? <Spinner /> : filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center text-gray-400 text-sm shadow-sm">Услуг нет</div>
+      {/* Поиск */}
+      <div className="mb-4">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-gray-400 text-[18px]">search</span>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Поиск по названию или коду..."
+            className="w-full border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {search.trim() ? (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+          {searching ? (
+            <div className="px-4 py-4 text-sm text-gray-400">Поиск...</div>
+          ) : !searchResults ? null : searchResults.length === 0 ? (
+            <div className="px-4 py-6 text-center text-gray-400 text-sm">Ничего не найдено</div>
+          ) : (
+            <table className="w-full min-w-[520px]">
+              <thead>
+                <tr className="bg-gray-50 text-xs text-gray-400 uppercase tracking-wide">
+                  <th className="text-left px-4 py-2.5 font-medium">Услуга</th>
+                  <th className="text-left px-3 py-2.5 font-medium w-48">Категория</th>
+                  <th className="text-right px-3 py-2.5 font-medium">Цена</th>
+                  <th className="text-left px-3 py-2.5 font-medium">Бонус</th>
+                </tr>
+              </thead>
+              <tbody>
+                {searchResults.map(s => (
+                  <SvcRow key={s.id} svc={s} categories={catNames} token={token} onUpdated={() => setRev(r => r+1)} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       ) : (
-        <div className="space-y-4">
-          {grouped.map(([cat, items]) => (
-            <div key={cat}>
-              <div className="flex items-center gap-2 mb-2 px-1">
-                <span className="material-symbols-outlined text-[16px] text-[#0097A7]">category</span>
-                <span className="text-sm font-bold text-gray-700">{cat}</span>
-                <span className="ml-1 text-xs bg-[#e0f7fa] text-[#0097A7] px-2 py-0.5 rounded-full font-semibold">{items.length}</span>
-              </div>
-              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        {['Название', 'Код', 'Бонус', 'Цена', 'Статус', ''].map(h => (
-                          <th key={h} className="text-left text-xs font-semibold text-gray-400 px-4 py-3 uppercase tracking-wide">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((s, i) => (
-                        <tr key={s.id} className={`border-b border-gray-50 ${i % 2 ? 'bg-gray-50/40' : ''}`}>
-                          <td className="px-4 py-3 font-medium text-gray-800">{s.name}</td>
-                          <td className="px-4 py-3 text-gray-400 text-xs font-mono">{s.code || '—'}</td>
-                          <td className="px-4 py-3 text-[#0097A7] font-semibold">{s.bonus_amount ? `${fmt(s.bonus_amount)} ₽` : '—'}</td>
-                          <td className="px-4 py-3 text-gray-500">{s.original_price ? `${fmt(s.original_price)} ₽` : '—'}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${s.is_active !== false ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
-                              {s.is_active !== false ? 'Активна' : 'Неактивна'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-2">
-                              <button onClick={() => openEdit(s)}
-                                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2.5 py-1.5 transition">Изменить</button>
-                              {s.is_active !== false && (
-                                <button onClick={() => handleDeactivate(s.id)}
-                                  className="text-xs bg-red-50 hover:bg-red-100 text-red-600 rounded-lg px-2.5 py-1.5 transition">Откл.</button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="md:hidden divide-y divide-gray-100">
-                  {items.map(s => (
-                    <div key={s.id} className="p-4 flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-gray-800 text-sm">{s.name}</div>
-                        <div className="text-xs text-gray-400">{s.bonus_amount ? `бонус ${fmt(s.bonus_amount)} ₽` : ''} {s.original_price ? `· цена ${fmt(s.original_price)} ₽` : ''}</div>
-                      </div>
-                      <button onClick={() => openEdit(s)} className="text-xs text-[#0097A7] font-semibold">Изменить</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Категории МИС ({allCats.length})
+          </p>
+          {loadingCats ? <Spinner /> : (
+            <div className="space-y-2" key={rev}>
+              {allCats.map(cat => (
+                <CatAccordion key={cat.category} cat={cat} token={token} categories={catNames} />
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
-      {modal && (
+      {showCreate && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="font-bold text-gray-800">{modal === 'create' ? 'Новая услуга' : 'Редактировать услугу'}</h2>
-              <button onClick={() => setModal(null)}><span className="material-symbols-outlined text-gray-400">close</span></button>
+              <h2 className="font-bold text-gray-800">Новая услуга</h2>
+              <button onClick={() => setShowCreate(false)}><span className="material-symbols-outlined text-gray-400">close</span></button>
             </div>
-            <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
+            <form onSubmit={handleCreate} className="px-6 py-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1">Название *</label>
                 <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} required
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Код (МИС)</label>
                   <input value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Категория</label>
-                  {categories.length > 0 ? (
-                    <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]">
-                      <option value="">— не задана —</option>
-                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  ) : (
-                    <input value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
-                  )}
-                </div>
-                <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1">Бонус (₽)</label>
-                  <input type="number" min="0" step="0.01" value={form.bonus_amount} onChange={e => setForm(p => ({ ...p, bonus_amount: e.target.value }))}
+                  <input type="number" min="0" step="0.01" value={form.bonus_amount}
+                    onChange={e => setForm(p => ({ ...p, bonus_amount: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Цена (₽)</label>
-                  <input type="number" min="0" step="0.01" value={form.original_price} onChange={e => setForm(p => ({ ...p, original_price: e.target.value }))}
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Категория</label>
+                  <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]">
+                    <option value="">— без категории —</option>
+                    {catNames.filter(c => c !== 'Без категории').map(c => <option key={c} value={c}>{c.length > 28 ? c.slice(0,26)+'…' : c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Цена МИС (₽)</label>
+                  <input type="number" min="0" step="0.01" value={form.original_price}
+                    onChange={e => setForm(p => ({ ...p, original_price: e.target.value }))}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setModal(null)} className="px-4 py-2.5 text-sm text-gray-600">Отмена</button>
+                <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm text-gray-600">Отмена</button>
                 <button type="submit" disabled={saving}
                   className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
                   style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-                  {saving ? 'Сохранение...' : 'Сохранить'}
+                  {saving ? 'Создание...' : 'Создать'}
                 </button>
               </div>
             </form>
@@ -2564,6 +2692,7 @@ function ServicesSection({ token }) {
     </div>
   )
 }
+
 
 // ── BillingSection ────────────────────────────────────────────────────────────
 function BillingSection({ token }) {

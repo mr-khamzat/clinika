@@ -113,6 +113,7 @@ class UpdateServiceRequest(BaseModel):
     clinic_id: Optional[UUID] = None
     bonus_amount: Optional[float] = None
     is_active: Optional[bool] = None
+    category: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

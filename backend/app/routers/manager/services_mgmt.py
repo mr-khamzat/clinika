@@ -112,6 +112,7 @@ async def update_service(
     if body.clinic_id is not None: svc.clinic_id = body.clinic_id
     if body.bonus_amount is not None: svc.bonus_amount = body.bonus_amount
     if body.is_active is not None: svc.is_active = body.is_active
+    if body.category is not None: svc.category = None if body.category.strip() in ('', 'Без категории') else body.category.strip()
     await db.commit()
     await db.refresh(svc)
     return ServiceSchema.model_validate(svc)
