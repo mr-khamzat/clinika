@@ -6,6 +6,7 @@ const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection     = lazy(() => import('../sections/ActsSection'))
 const ReviewsSection  = lazy(() => import('../sections/ReviewsSection'))
 const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
+const RequisitesSection = lazy(() => import('../sections/RequisitesSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -81,6 +82,7 @@ const NAV = [
   { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
   { key: 'reviews',    label: 'Отзывы',        icon: 'rate_review' },
   { key: 'clinic_invoices', label: 'Межкл. счета',  icon: 'receipt_long' },
+  { key: 'requisites',    label: 'Реквизиты',     icon: 'corporate_fare' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
@@ -3358,7 +3360,12 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       )
       case 'clinic_invoices': return (
         <Suspense fallback={null}>
-          <InterClinicInvoicesSection isSupervisor={true} />
+          <InterClinicInvoicesSection isSupervisor={true} token={adminToken} />
+        </Suspense>
+      )
+      case 'requisites': return (
+        <Suspense fallback={null}>
+          <RequisitesSection token={adminToken} />
         </Suspense>
       )
       default:          return null
