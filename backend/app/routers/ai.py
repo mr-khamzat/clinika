@@ -426,7 +426,7 @@ async def save_ai_config(body: AIConfigRequest, sa: User = Depends(require_super
 
 
 @router.get("/models")
-async def list_ai_models(current_user: User = Depends(get_current_user)):
+async def list_ai_models(sa: User = Depends(require_super_admin)):
     cfg = _load_config()
     provider = cfg.get("provider", {})
     if not provider:
