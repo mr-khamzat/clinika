@@ -595,9 +595,9 @@ export default function Landing() {
                 <div className="bg-white rounded-3xl shadow-2xl w-72 overflow-hidden text-gray-900">
                   <div className="bg-gradient-to-br from-[#0A2342] to-[#1a6b8a] p-5 text-white">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">А</div>
+                      <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">К</div>
                       <div>
-                        <div className="font-semibold text-sm">Алия Мусаева</div>
+                        <div className="font-semibold text-sm">Карина Петрова</div>
                         <div className="text-white/60 text-xs">Пациент</div>
                       </div>
                     </div>
@@ -609,9 +609,9 @@ export default function Landing() {
                   </div>
                   <div className="p-4 space-y-3">
                     {[
-                      { doc: 'Гудаев Х.С.', spec: 'Хирург', date: '28 апр', status: 'Завершён', color: 'bg-emerald-50 text-emerald-700' },
-                      { doc: 'Ахматова Т.С.', spec: 'Терапевт', date: '15 апр', status: 'Завершён', color: 'bg-emerald-50 text-emerald-700' },
-                      { doc: 'Айза', spec: 'Кардиолог', date: '10 апр', status: 'Отменён', color: 'bg-red-50 text-red-600' },
+                      { doc: 'Иванов А.В.', spec: 'Хирург', date: '28 апр', status: 'Завершён', color: 'bg-emerald-50 text-emerald-700' },
+                      { doc: 'Смирнова Е.Н.', spec: 'Терапевт', date: '15 апр', status: 'Завершён', color: 'bg-emerald-50 text-emerald-700' },
+                      { doc: 'Фёдоров И.П.', spec: 'Кардиолог', date: '10 апр', status: 'Отменён', color: 'bg-red-50 text-red-600' },
                     ].map((item, i) => (
                       <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
                         <div className="w-8 h-8 rounded-lg bg-[#0A2342]/10 flex items-center justify-center text-xs font-bold text-[#0A2342]">
@@ -632,7 +632,7 @@ export default function Landing() {
                 </div>
                 {/* Всплывашка рейтинга */}
                 <div className="absolute -right-4 top-16 bg-white rounded-2xl shadow-xl p-3 w-44 border border-gray-100">
-                  <div className="text-xs font-bold text-gray-800 mb-1">Гудаев Х.С.</div>
+                  <div className="text-xs font-bold text-gray-800 mb-1">Иванов А.В.</div>
                   <div className="flex items-center gap-1 mb-1">
                     {[1,2,3,4,5].map(i => (
                       <span key={i} className="material-symbols-outlined text-sm text-amber-400" style={{fontVariationSettings:"'FILL' 1"}}>star</span>
