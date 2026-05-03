@@ -7,6 +7,7 @@ const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const WikiSection = lazy(() => import('../sections/WikiSection'))
 const AISection = lazy(() => import('../sections/AISection'))
+const PlatformAISection = lazy(() => import('../sections/PlatformAISection'))
 const BillingLedgerSection = lazy(() => import('../sections/BillingLedgerSection'))
 const TenantDrawer = lazy(() => import('../sections/TenantDrawer'))
 const BrandingSection = lazy(() => import('../sections/BrandingSection'))
@@ -7454,7 +7455,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       )
       case 'ai_analytics': return (
         <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
-          <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />
+          {isSuperAdmin
+            ? <PlatformAISection token={adminToken} />
+            : <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />
+          }
         </Suspense>
       )
       case 'super_admin': return (

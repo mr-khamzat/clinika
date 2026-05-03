@@ -34,6 +34,7 @@ from app.routers.webhooks import router as webhooks_router
 from app.routers.ads import router as ads_router
 from app.routers.commercial import router as commercial_router
 from app.routers.ai import router as ai_router
+from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.acquisition_manager import router as acquisition_router
 from app.routers.visiting_doctor import router as visiting_router
@@ -527,6 +528,7 @@ app.include_router(webhooks_router)
 app.include_router(ads_router)
 app.include_router(commercial_router)
 app.include_router(ai_router)
+app.include_router(ai_platform_router)
 app.include_router(recruiter_router)
 app.include_router(acquisition_router)
 app.include_router(visiting_router)
