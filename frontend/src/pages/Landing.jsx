@@ -245,23 +245,23 @@ export default function Landing() {
           <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full opacity-5" style={{ background: 'radial-gradient(circle, #00b4d8 0%, transparent 70%)' }} />
           <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.8) 1px, transparent 1px)', backgroundSize: '80px 80px' }} />
         </div>
-        <div className="relative max-w-7xl mx-auto px-5 py-24 grid lg:grid-cols-2 gap-16 items-center w-full">
+        <div className="relative max-w-7xl mx-auto px-5 py-14 md:py-24 grid lg:grid-cols-2 gap-16 items-center w-full">
           <div>
             <div className="inline-flex items-center gap-2 border border-white/15 rounded-full px-4 py-1.5 text-white/70 text-sm font-medium mb-8 backdrop-blur bg-white/5">
               <span className="w-2 h-2 bg-[#00b4d8] rounded-full animate-pulse" />
               Платформа-франшиза для медицинских сетей
             </div>
-            <h1 className="font-black text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-7 text-white">
+            <h1 className="font-black text-3xl sm:text-5xl md:text-6xl lg:text-[4.5rem] leading-[1.04] mb-5 md:mb-7 text-white">
               Управляйте<br />
               <span style={{ background: 'linear-gradient(90deg, #48cae4, #90e0ef)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                 клиникой
               </span>
               <br />умнее.
             </h1>
-            <p className="text-white/55 text-xl leading-relaxed mb-10 max-w-lg">
+            <p className="text-white/55 text-base md:text-xl leading-relaxed mb-8 md:mb-10 max-w-lg">
               Единая экосистема: от регистратуры и врача до пациента. QR-направления, AI-аналитика, личный кабинет пациента, рейтинги врачей, white-label домен.
             </p>
-            <div className="flex flex-wrap gap-4 mb-12">
+            <div className="flex flex-col sm:flex-row gap-3 mb-8 md:mb-12">
               <button onClick={() => setShowContact(true)}
                 className="px-8 py-4 text-white rounded-2xl font-bold text-base transition shadow-2xl flex items-center gap-2 hover:opacity-90"
                 style={{ background: 'linear-gradient(135deg, #00b4d8, #0077b6)' }}>
@@ -373,10 +373,10 @@ export default function Landing() {
       </section>
 
       {/* ══ FEATURES ══ */}
-      <section id="features" className="py-28 px-5 bg-white">
+      <section id="features" className="py-16 md:py-28 px-5 bg-white">
         <div className="max-w-7xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-20">
+            <div className="text-center mb-12 md:mb-20">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-[#00b4d8] mb-4">Возможности платформы</div>
               <h2 className="font-black text-4xl md:text-5xl text-gray-900 mb-5 leading-tight">
                 Всё необходимое —<br />в одной системе
@@ -455,10 +455,10 @@ export default function Landing() {
       </section>
 
       {/* ══ AI SECTION ══ */}
-      <section id="ai" className="py-28 px-5 overflow-hidden" style={{ background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)' }}>
+      <section id="ai" className="py-16 md:py-28 px-5 overflow-hidden" style={{ background: 'linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)' }}>
         <div className="max-w-7xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-20">
+            <div className="text-center mb-12 md:mb-20">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-violet-600 mb-4">Искусственный интеллект</div>
               <h2 className="font-black text-4xl md:text-5xl text-gray-900 mb-5 leading-tight">
                 AI-аналитик знает<br />
@@ -526,7 +526,7 @@ export default function Landing() {
                         <span className="text-xs text-gray-400">Онлайн</span>
                       </div>
                     </div>
-                    <div className="ml-auto flex gap-1">
+                    <div className="ml-auto hidden sm:flex gap-1">
                       {['7 дней','30 дней','90 дней'].map((p, i) => (
                         <button key={p} className={`text-[11px] px-2.5 py-1 rounded-lg font-medium ${i === 1 ? 'bg-violet-600 text-white' : 'text-gray-400 hover:bg-gray-50'}`}>{p}</button>
                       ))}
@@ -549,8 +549,9 @@ export default function Landing() {
                         <p className="text-sm text-gray-800 leading-relaxed mb-3">
                           📊 <b>Сводка за 30 дней:</b>
                         </p>
+                        <div className="overflow-x-auto">
                         {[['Направлений','187','+23%','up'],['Конверсия','79%','+15 п.п.','up'],['Выплачено бонусов','124 300 ₽','-8%','down'],['Средний рейтинг','4.8 ★','+0.3','up']].map(([l,v,d,dir]) => (
-                          <div key={l} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+                          <div key={l} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 min-w-[200px]">
                             <span className="text-xs text-gray-500">{l}</span>
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-bold text-gray-900">{v}</span>
@@ -558,6 +559,7 @@ export default function Landing() {
                             </div>
                           </div>
                         ))}
+                        </div>
                         <p className="text-xs text-gray-500 mt-3 leading-relaxed">
                           ⚡ <b>Рекомендация:</b> снижение выплат при росте конверсии — хороший сигнал. Рассмотрите увеличение ставки за первичных пациентов.
                         </p>
@@ -594,7 +596,7 @@ export default function Landing() {
       </section>
 
       {/* ══ PATIENT CABINET ══ */}
-      <section id="patient" className="py-28 px-5 overflow-hidden" style={{ background: 'linear-gradient(150deg, #05111f 0%, #0A2342 50%, #0a5e7a 100%)' }}>
+      <section id="patient" className="py-16 md:py-28 px-5 overflow-hidden" style={{ background: 'linear-gradient(150deg, #05111f 0%, #0A2342 50%, #0a5e7a 100%)' }}>
         <div className="max-w-7xl mx-auto">
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <FadeIn>
@@ -660,7 +662,7 @@ export default function Landing() {
                           <div className="text-xs font-semibold text-gray-800 truncate">{doc}</div>
                           <div className="text-[10px] text-gray-400">{spec} · {date}</div>
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full bg-${color}-50 text-${color}-${color === 'red' ? '600' : '700'}`}>{st}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${color === 'red' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{st}</span>
                       </div>
                     ))}
                     <button className="w-full py-2.5 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5"
@@ -677,10 +679,10 @@ export default function Landing() {
       </section>
 
       {/* ══ HOW IT WORKS ══ */}
-      <section id="how" className="py-28 px-5 bg-white">
+      <section id="how" className="py-16 md:py-28 px-5 bg-white">
         <div className="max-w-5xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-20">
+            <div className="text-center mb-12 md:mb-20">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-[#00b4d8] mb-4">Процесс</div>
               <h2 className="font-black text-4xl md:text-5xl text-gray-900 mb-5">Как работает платформа</h2>
               <p className="text-gray-500 text-lg">От направления до бонуса — полностью автоматически</p>
@@ -716,10 +718,10 @@ export default function Landing() {
       </section>
 
       {/* ══ PRICING ══ */}
-      <section id="pricing" className="py-28 px-5" style={{ background: '#f8fafc' }}>
+      <section id="pricing" className="py-16 md:py-28 px-5" style={{ background: '#f8fafc' }}>
         <div className="max-w-6xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-16">
+            <div className="text-center mb-10 md:mb-16">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-[#0A2342] mb-4">Тарифы</div>
               <h2 className="font-black text-4xl md:text-5xl text-gray-900 mb-4">Цены без сюрпризов</h2>
               <p className="text-gray-500 text-lg mb-8">Начните с малого — масштабируйтесь без переустановки</p>
@@ -786,10 +788,10 @@ export default function Landing() {
       </section>
 
       {/* ══ FOR WHOM ══ */}
-      <section id="roles" className="py-28 px-5 bg-white">
+      <section id="roles" className="py-16 md:py-28 px-5 bg-white">
         <div className="max-w-7xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-20">
+            <div className="text-center mb-12 md:mb-20">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-violet-600 mb-4">Для каждой роли</div>
               <h2 className="font-black text-4xl md:text-5xl text-gray-900 mb-5">Один вход — каждый получает своё</h2>
               <p className="text-gray-500 text-lg">Система сама определяет, что показать именно вам</p>
@@ -839,10 +841,10 @@ export default function Landing() {
       </section>
 
       {/* ══ WHY US ══ */}
-      <section className="py-28 px-5" style={{ background: 'linear-gradient(150deg, #05111f 0%, #0A2342 60%, #0d4a6e 100%)' }}>
+      <section className="py-16 md:py-28 px-5" style={{ background: 'linear-gradient(150deg, #05111f 0%, #0A2342 60%, #0d4a6e 100%)' }}>
         <div className="max-w-7xl mx-auto">
           <FadeIn>
-            <div className="text-center mb-20">
+            <div className="text-center mb-12 md:mb-20">
               <div className="inline-block text-xs font-bold uppercase tracking-[0.2em] text-[#48cae4] mb-4">Наши преимущества</div>
               <h2 className="font-black text-4xl md:text-5xl text-white mb-5">Не просто CRM.<br />Готовая экосистема.</h2>
               <p className="text-white/50 text-lg max-w-2xl mx-auto">
@@ -874,17 +876,17 @@ export default function Landing() {
       </section>
 
       {/* ══ CTA ══ */}
-      <section className="py-24 px-5 bg-white">
+      <section className="py-14 md:py-24 px-5 bg-white">
         <div className="max-w-4xl mx-auto">
           <FadeIn>
-            <div className="rounded-3xl p-12 text-center text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0A2342 0%, #0d4a6e 50%, #0a6e8a 100%)' }}>
+            <div className="rounded-3xl p-7 sm:p-10 md:p-12 text-center text-white relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0A2342 0%, #0d4a6e 50%, #0a6e8a 100%)' }}>
               <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
               <div className="relative">
                 <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 rounded-full px-4 py-1.5 text-white/70 text-sm font-medium mb-6">
                   <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
                   14 дней бесплатного доступа
                 </div>
-                <h2 className="font-black text-4xl md:text-5xl mb-5">
+                <h2 className="font-black text-3xl md:text-5xl mb-5">
                   Готовы запустить<br />вашу платформу?
                 </h2>
                 <p className="text-white/60 text-lg mb-10 max-w-xl mx-auto">
