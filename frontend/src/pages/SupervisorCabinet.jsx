@@ -3428,14 +3428,16 @@ function SupportSection({ token }) {
 // ── Main SupervisorCabinet ────────────────────────────────────────────────────
 export default function SupervisorCabinet({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [activeModules, setActiveModules] = useState(null)
+
   useEffect(() => {
     if (!adminToken) return
     axios.get(API_BASE + '/modules/active-keys', { headers: { Authorization: `Bearer ${adminToken}` } })
       .then(r => setActiveModules(new Set(Array.isArray(r.data) ? r.data : [])))
       .catch(() => {})
   }, [adminToken])
+
   const visibleNav = NAV.filter(item => {
     const m = activeModules
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
@@ -3445,7 +3447,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
 
   const handleNav = (key) => {
     setActiveSection(key)
-    setSidebarOpen(false)
+    setMoreOpen(false)
   }
 
   const renderSection = () => {
@@ -3467,150 +3469,238 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'ext_doctors': return <ExtDoctorsSection token={adminToken} />
       case 'recruiters':  return <RecruiterSection token={adminToken} />
       case 'settings':  return <SettingsSection token={adminToken} user={user} />
-      case 'branding': return (
-        <Suspense fallback={null}>
-          <BrandingSection token={adminToken} />
-        </Suspense>
-      )
-      case 'cms': return (
-        <Suspense fallback={null}>
-          <CMSPagesSection token={adminToken} />
-        </Suspense>
-      )
-      case 'acts': return (
-        <Suspense fallback={null}>
-          <ActsSection token={adminToken} isSuperAdmin={false} />
-        </Suspense>
-      )
-      case 'reviews': return (
-        <Suspense fallback={null}>
-          <ReviewsSection token={adminToken} />
-        </Suspense>
-      )
-      case 'clinic_invoices': return (
-        <Suspense fallback={null}>
-          <InterClinicInvoicesSection isSupervisor={true} token={adminToken} />
-        </Suspense>
-      )
-      case 'requisites': return (
-        <Suspense fallback={null}>
-          <RequisitesSection token={adminToken} />
-        </Suspense>
-      )
-      default:          return null
+      case 'branding': return <Suspense fallback={null}><BrandingSection token={adminToken} /></Suspense>
+      case 'cms':      return <Suspense fallback={null}><CMSPagesSection token={adminToken} /></Suspense>
+      case 'acts':     return <Suspense fallback={null}><ActsSection token={adminToken} isSuperAdmin={false} /></Suspense>
+      case 'reviews':  return <Suspense fallback={null}><ReviewsSection token={adminToken} /></Suspense>
+      case 'clinic_invoices': return <Suspense fallback={null}><InterClinicInvoicesSection isSupervisor={true} token={adminToken} /></Suspense>
+      case 'requisites':      return <Suspense fallback={null}><RequisitesSection token={adminToken} /></Suspense>
+      default: return null
     }
   }
 
-  const activeNav = NAV.find(n => n.key === activeSection)
+  const activeNav = visibleNav.find(n => n.key === activeSection)
+  const userName  = user?.full_name || user?.username || 'Администратор'
+  const userInit  = userName[0].toUpperCase()
+
+  // 5 bottom-nav items + «Ещё»
+  const BOTTOM_KEYS = ['home', 'referrals', 'analytics', 'services', 'bonuses']
+  const bottomItems = BOTTOM_KEYS.map(k => visibleNav.find(n => n.key === k)).filter(Boolean)
+  const moreItems   = visibleNav.filter(n => !BOTTOM_KEYS.includes(n.key))
 
   return (
-    <div className="flex min-h-screen bg-[#f7f9fb] font-sans">
-      {/* Sidebar overlay mobile */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+    <div className="flex min-h-screen font-sans" style={{ background: '#F0F4F8' }}>
 
-      {/* ── Sidebar ── */}
-      <aside className={`
-        fixed top-0 left-0 h-full w-64 bg-[#1a2232] text-white z-30 flex flex-col
-        transition-transform duration-200 shadow-2xl
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0 md:static md:flex
-      `}>
+      {/* ════════════════════════════════════════
+          DESKTOP SIDEBAR
+          ════════════════════════════════════════ */}
+      <aside className="hidden md:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen"
+        style={{ background: 'linear-gradient(180deg,#0a1628 0%,#0d2040 100%)' }}>
+
         {/* Logo */}
-        <div className="px-6 py-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>health_and_safety</span>
+        <div className="px-5 pt-7 pb-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#00c4d9)' }}>
+            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>health_and_safety</span>
           </div>
           <div>
-            <div className="text-base font-bold leading-tight font-headline tracking-tight">КлиникСеть</div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Franchise Admin</div>
+            <div className="text-[15px] font-bold text-white leading-tight tracking-tight">КлиникСеть</div>
+            <div className="text-[10px] text-[#0097A7] uppercase tracking-widest mt-0.5 font-semibold">Franchise Admin</div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 overflow-y-auto space-y-0.5 pb-4">
           {visibleNav.map(item => {
             const isActive = activeSection === item.key
             return (
               <button key={item.key} onClick={() => handleNav(item.key)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-left transition-all duration-150
-                  ${isActive
-                    ? 'bg-[#0097A7]/20 text-white font-bold border-l-4 border-[#0097A7]'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 font-medium border-l-4 border-transparent'}`}>
-                <span className="material-symbols-outlined text-[20px] flex-shrink-0"
-                  style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}>
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-all duration-150 group"
+                style={isActive ? {
+                  background: 'linear-gradient(90deg,rgba(0,151,167,0.25),rgba(0,151,167,0.08))',
+                  color: '#00d4eb',
+                } : { color: '#8ba0b8' }}>
+                <span className="material-symbols-outlined text-[19px] flex-shrink-0 transition-colors"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                    color: isActive ? '#00d4eb' : undefined }}>
                   {item.icon}
                 </span>
-                <span className="flex-1 leading-none">{item.label}</span>
+                <span className={`flex-1 leading-none font-${isActive ? 'semibold' : 'medium'}`}>{item.label}</span>
+                {isActive && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#0097A7' }} />}
               </button>
             )
           })}
         </nav>
 
-        {/* User + logout */}
-        <div className="px-2 py-4 mt-auto border-t border-white/10">
-          <div className="flex items-center gap-2.5 px-4 py-3 mb-1">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-              {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
+        {/* User */}
+        <div className="px-3 pb-4 mt-auto">
+          <div className="rounded-2xl p-3 flex items-center gap-3" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+              style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
+              {userInit}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-white truncate">{user?.full_name || user?.username || 'Администратор'}</div>
-              <div className="text-[10px] text-slate-500 mt-0.5">Владелец франшизы</div>
+              <div className="text-xs font-semibold text-white truncate leading-tight">{userName}</div>
+              <div className="text-[10px] mt-0.5" style={{ color: '#0097A7' }}>Владелец франшизы</div>
             </div>
+            <button onClick={onLogout} title="Выйти"
+              className="text-[#4a6080] hover:text-white transition flex-shrink-0 p-1 rounded-lg hover:bg-white/10">
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+            </button>
           </div>
-          <button onClick={onLogout}
-            className="w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-3">
-            <span className="material-symbols-outlined text-[18px]">logout</span>
-            Выйти
-          </button>
         </div>
       </aside>
 
-      {/* ── Content ── */}
+      {/* ════════════════════════════════════════
+          MAIN AREA
+          ════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile header */}
-        <header className="md:hidden bg-[#1a2232] text-white flex items-center gap-3 px-4 py-3 sticky top-0 z-10">
-          <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-white transition">
-            <span className="material-symbols-outlined">menu</span>
+
+        {/* ── MOBILE TOP HEADER ── */}
+        <header className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-white/10"
+          style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)', backdropFilter: 'blur(12px)' }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#0097A7' }}>КлиникСеть</div>
+            <div className="text-white font-bold text-base leading-tight truncate">
+              {activeNav?.label || 'Обзор'}
+            </div>
+          </div>
+          <button onClick={onLogout}
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <span className="material-symbols-outlined text-[18px] text-white">logout</span>
           </button>
-          <span className="font-headline font-bold text-sm tracking-tight">КлиникСеть</span>
-          <button onClick={onLogout} className="ml-auto text-slate-400 hover:text-white transition">
-            <span className="material-symbols-outlined text-lg">logout</span>
-          </button>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
+            {userInit}
+          </div>
         </header>
 
-        {/* Desktop header */}
-        <header className="hidden md:flex items-center justify-between px-8 h-16
-          bg-white border-b border-[#eceef0] sticky top-0 z-10">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[#0097A7] text-lg"
-              style={{ fontVariationSettings: "'FILL' 1" }}>
-              {activeNav?.icon || 'dashboard'}
-            </span>
-            <h1 className="font-headline font-bold text-base text-gray-800 tracking-tight">
-              {activeNav?.label || 'Панель управления'}
-            </h1>
+        {/* ── DESKTOP TOP BAR ── */}
+        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white/80 sticky top-0 z-10 border-b border-gray-100"
+          style={{ backdropFilter: 'blur(12px)' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg,rgba(0,151,167,0.12),rgba(0,151,167,0.05))' }}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#0097A7', fontVariationSettings:"'FILL' 1" }}>
+                {activeNav?.icon || 'dashboard'}
+              </span>
+            </div>
+            <h1 className="font-bold text-gray-900 text-lg tracking-tight">{activeNav?.label || 'Обзор'}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <div className="text-sm font-semibold text-gray-800">{user?.full_name || user?.username}</div>
-              <div className="text-[10px] text-gray-400 uppercase tracking-wider">Владелец франшизы</div>
+            <div className="text-right hidden sm:block">
+              <div className="text-sm font-semibold text-gray-800 leading-tight">{userName}</div>
+              <div className="text-[11px] text-gray-400">Владелец франшизы</div>
             </div>
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white"
-              style={{ background: 'linear-gradient(135deg,#0097A7,#006173)' }}>
-              {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
+              style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
+              {userInit}
             </div>
           </div>
         </header>
 
-        {/* Main content */}
-        <main className="flex-1 px-4 md:px-8 py-6 max-w-5xl w-full mx-auto">
+        {/* ── PAGE CONTENT ── */}
+        <main className="flex-1 px-4 md:px-8 py-5 md:py-7 pb-24 md:pb-8 w-full max-w-5xl mx-auto">
           {renderSection()}
         </main>
       </div>
+
+      {/* ════════════════════════════════════════
+          MOBILE BOTTOM NAV
+          ════════════════════════════════════════ */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch"
+        style={{
+          background: 'rgba(10,22,40,0.97)',
+          backdropFilter: 'blur(20px)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.3)',
+        }}>
+        {bottomItems.map(item => {
+          const isActive = activeSection === item.key
+          return (
+            <button key={item.key} onClick={() => handleNav(item.key)}
+              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all duration-150 relative">
+              {isActive && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
+                  style={{ background: '#0097A7' }} />
+              )}
+              <span className="material-symbols-outlined text-[22px] transition-all"
+                style={{
+                  color: isActive ? '#00d4eb' : '#4a6080',
+                  fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                }}>
+                {item.icon}
+              </span>
+              <span className="text-[10px] font-semibold transition-colors leading-none"
+                style={{ color: isActive ? '#00d4eb' : '#4a6080' }}>
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+        {/* "Ещё" button */}
+        <button onClick={() => setMoreOpen(true)}
+          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all duration-150">
+          <span className="material-symbols-outlined text-[22px]" style={{ color: '#4a6080' }}>more_horiz</span>
+          <span className="text-[10px] font-semibold leading-none" style={{ color: '#4a6080' }}>Ещё</span>
+        </button>
+      </nav>
+
+      {/* ════════════════════════════════════════
+          MOBILE "ЕЩЁ" DRAWER
+          ════════════════════════════════════════ */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
+          <div className="relative rounded-t-3xl overflow-hidden"
+            style={{ background: 'linear-gradient(180deg,#0d2040,#0a1628)', maxHeight: '80vh' }}>
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-white/10">
+              <span className="text-white font-bold text-base">Все разделы</span>
+              <button onClick={() => setMoreOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(255,255,255,0.1)' }}>
+                <span className="material-symbols-outlined text-white text-[18px]">close</span>
+              </button>
+            </div>
+            {/* Grid of items */}
+            <div className="overflow-y-auto px-4 py-4 grid grid-cols-3 gap-2"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
+              {moreItems.map(item => {
+                const isActive = activeSection === item.key
+                return (
+                  <button key={item.key} onClick={() => handleNav(item.key)}
+                    className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all"
+                    style={{
+                      background: isActive
+                        ? 'linear-gradient(135deg,rgba(0,151,167,0.3),rgba(0,151,167,0.15))'
+                        : 'rgba(255,255,255,0.06)',
+                      border: isActive ? '1px solid rgba(0,151,167,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                    }}>
+                    <span className="material-symbols-outlined text-[24px]"
+                      style={{
+                        color: isActive ? '#00d4eb' : '#8ba0b8',
+                        fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                      }}>
+                      {item.icon}
+                    </span>
+                    <span className="text-[11px] font-semibold text-center leading-tight"
+                      style={{ color: isActive ? '#00d4eb' : '#8ba0b8' }}>
+                      {item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7341,22 +7341,20 @@ function PluginsSection({ token }) {
 
 export default function AdminLayout({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
-  const [helpOpen, setHelpOpen] = useState(false)
-  const [branding, setBranding] = useState(null)
+  const [moreOpen, setMoreOpen]   = useState(false)
+  const [dark, setDark]           = useState(() => localStorage.getItem('adminTheme') === 'dark')
+  const [helpOpen, setHelpOpen]   = useState(false)
+  const [branding, setBranding]   = useState(null)
 
-  // Загружаем брендинг и применяем CSS-переменные
   useEffect(() => {
     apiFetch('get', '/tenant/branding', adminToken).then(r => {
       const b = r.data
       setBranding(b)
       if (b.primary_color) document.documentElement.style.setProperty('--color-primary', b.primary_color)
       if (b.sidebar_color) document.documentElement.style.setProperty('--color-sidebar', b.sidebar_color)
-      if (b.bg_color) document.documentElement.style.setProperty('--color-bg', b.bg_color)
-      if (b.font_family) document.documentElement.style.setProperty('--font-main', b.font_family)
+      if (b.bg_color)      document.documentElement.style.setProperty('--color-bg', b.bg_color)
+      if (b.font_family)   document.documentElement.style.setProperty('--font-main', b.font_family)
     }).catch(() => {})
-    // Загружаем статус trial/подписки для баннера
   }, [adminToken])
 
   useEffect(() => {
@@ -7364,26 +7362,19 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     localStorage.setItem('adminTheme', dark ? 'dark' : 'light')
   }, [dark])
 
-
-  // Бейдж-конфиг: раздел → значение счётчика
   const [contactsBadge, setContactsBadge] = useState(0)
   useEffect(() => {
     if (!adminToken) return
-    apiFetch('get', '/contact/admin/unread-count', adminToken)
-      .then(r => setContactsBadge(r.data?.count || 0))
-      .catch(() => {})
-    const iv = setInterval(() => {
-      apiFetch('get', '/contact/admin/unread-count', adminToken)
-        .then(r => setContactsBadge(r.data?.count || 0))
-        .catch(() => {})
-    }, 60000)
+    const poll = () => apiFetch('get', '/contact/admin/unread-count', adminToken)
+      .then(r => setContactsBadge(r.data?.count || 0)).catch(() => {})
+    poll()
+    const iv = setInterval(poll, 60000)
     return () => clearInterval(iv)
   }, [adminToken])
   const navBadge = { contacts: contactsBadge }
 
-  const isSuperAdmin = user?.is_superadmin || user?.role === "super_admin"
-  const isSupervisor = user?.role === "supervisor"
-  const isTenantAdmin = isSuperAdmin || isSupervisor
+  const isSuperAdmin = user?.is_superadmin || user?.role === 'super_admin'
+  const isSupervisor = user?.role === 'supervisor'
 
   const [activeModules, setActiveModules] = useState(null)
   useEffect(() => {
@@ -7394,7 +7385,6 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   }, [adminToken])
 
   const visibleNav = NAV.filter(item => {
-    // На тенант-URL (/arc/admin): скрываем Франшизы, гейтим рекламу и AI по модулям
     if (SLUG) {
       if (item.key === 'super_admin') return false
       const m = activeModules
@@ -7402,255 +7392,319 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
       return true
     }
-    // На платформенном /admin: super_admin видит всё
     if (isSuperAdmin || isSupervisor) return true
     const m = activeModules
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
     if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
     return true
   })
-  const renderSection = () => {
 
+  const renderSection = () => {
     switch (activeSection) {
-      case 'home':     return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
-      case 'wiki': return <Suspense fallback={null}><WikiSection token={adminToken} /></Suspense>
-      case 'settings':  return <SettingsSection token={adminToken} />
-      case 'analytics': return <AnalyticsDrillSection token={adminToken} />
-      case 'audit':     return <AuditSection token={adminToken} />
-      case 'billing':   return <BillingSection token={adminToken} />
-      case 'billing_ledger': return (
-        <Suspense fallback={<SectionLoader />}>
-          <BillingLedgerSection token={adminToken} />
+      case 'home':           return <HomeDashboard token={adminToken} onNavigate={setActiveSection} />
+      case 'wiki':           return <Suspense fallback={null}><WikiSection token={adminToken} /></Suspense>
+      case 'settings':       return <SettingsSection token={adminToken} />
+      case 'analytics':      return <AnalyticsDrillSection token={adminToken} />
+      case 'audit':          return <AuditSection token={adminToken} />
+      case 'billing':        return <BillingSection token={adminToken} />
+      case 'billing_ledger': return <Suspense fallback={<SectionLoader />}><BillingLedgerSection token={adminToken} /></Suspense>
+      case 'monitoring':     return <MonitoringSection token={adminToken} />
+      case 'contacts':       return <Suspense fallback={<SectionLoader />}><ContactsSection token={adminToken} /></Suspense>
+      case 'reviews':        return <Suspense fallback={<SectionLoader />}><ReviewsSection token={adminToken} /></Suspense>
+      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} /></Suspense>
+      case 'plugins':        return <PluginsSection token={adminToken} />
+      case 'mis_sync':       return <MisSyncSection token={adminToken} />
+      case 'calls_cfg':      return <CallsConfigSection token={adminToken} />
+      case 'push_notify':    return <PushSection token={adminToken} />
+      case 'webhooks':       return <Suspense fallback={<SectionLoader />}><WebhooksSection token={adminToken} /></Suspense>
+      case 'ads':            return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
+      case 'ai_analytics':   return (
+        <Suspense fallback={null}>
+          {isSuperAdmin ? <PlatformAISection token={adminToken} /> : <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />}
         </Suspense>
       )
-      case 'monitoring': return <MonitoringSection token={adminToken} />
-      case 'contacts': return (
-        <Suspense fallback={<SectionLoader />}>
-          <ContactsSection token={adminToken} />
-        </Suspense>
-      )
-      case 'reviews': return (
-        <Suspense fallback={<SectionLoader />}>
-          <ReviewsSection token={adminToken} />
-        </Suspense>
-      )
-      case 'modules_catalog': return (
-        <Suspense fallback={<SectionLoader />}>
-          <ModulesCatalogSection token={adminToken} />
-        </Suspense>
-      )
-      case 'plugins':   return <PluginsSection token={adminToken} />
-      case 'mis_sync':  return <MisSyncSection token={adminToken} />
-      case 'calls_cfg': return <CallsConfigSection token={adminToken} />
-      case 'push_notify': return <PushSection token={adminToken} />
-      case 'webhooks': return (
-        <Suspense fallback={<SectionLoader />}>
-          <WebhooksSection token={adminToken} />
-        </Suspense>
-      )
-      case 'ads': return (
-        <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
-          <AdsSection token={adminToken} />
-        </Suspense>
-      )
-      case 'ai_analytics': return (
-        <Suspense fallback={<div style={{padding:40,textAlign:'center',color:'#64748b'}}>Загрузка...</div>}>
-          {isSuperAdmin
-            ? <PlatformAISection token={adminToken} />
-            : <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />
-          }
-        </Suspense>
-      )
-      case 'super_admin': return (
-        <Suspense fallback={<SectionLoader />}>
-          <PlatformSection token={adminToken} />
-        </Suspense>
-      )
-      case 'branding': return (
-        <Suspense fallback={<SectionLoader />}>
-          <BrandingSection token={adminToken} />
-        </Suspense>
-      )
-      case 'cms': return (
-        <Suspense fallback={<SectionLoader />}>
-          <CMSPagesSection token={adminToken} />
-        </Suspense>
-      )
-      case 'acts': return (
-        <Suspense fallback={<SectionLoader />}>
-          <ActsSection token={adminToken} isSuperAdmin={isSuperAdmin} />
-        </Suspense>
-      )
-      default:          return null
+      case 'super_admin':    return <Suspense fallback={<SectionLoader />}><PlatformSection token={adminToken} /></Suspense>
+      case 'branding':       return <Suspense fallback={<SectionLoader />}><BrandingSection token={adminToken} /></Suspense>
+      case 'cms':            return <Suspense fallback={<SectionLoader />}><CMSPagesSection token={adminToken} /></Suspense>
+      case 'acts':           return <Suspense fallback={<SectionLoader />}><ActsSection token={adminToken} isSuperAdmin={isSuperAdmin} /></Suspense>
+      default:               return null
     }
   }
 
-  const handleNav = (key) => {
-    setActiveSection(key)
-    setSidebarOpen(false)
-  }
+  const handleNav = (key) => { setActiveSection(key); setMoreOpen(false) }
+
+  const activeNavItem = visibleNav.find(n => n.key === activeSection)
+  const userName  = user?.full_name || user?.username || 'Администратор'
+  const userInit  = userName[0].toUpperCase()
+  const roleLabel = user?.role === 'super_admin' ? 'Владелец платформы'
+    : user?.role === 'supervisor' ? 'Владелец франшизы'
+    : user?.role === 'manager'    ? 'Руководитель'
+    : user?.role === 'partner'    ? 'Партнёр'
+    : 'Администратор'
+
+  const brandName = branding?.brand_name || 'КлиникСеть'
+
+  // Нижняя навигация: 4 главных + "Ещё"
+  const BOTTOM_KEYS = ['home', 'analytics', 'billing', 'contacts']
+  const bottomItems = BOTTOM_KEYS.map(k => visibleNav.find(n => n.key === k)).filter(Boolean)
+  const moreItems   = visibleNav.filter(n => !BOTTOM_KEYS.includes(n.key))
 
   return (
-    <div className="flex min-h-screen bg-[#f7f9fb] dark:bg-gray-950 font-sans">
-      {/* Sidebar overlay (мобильный) */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
+    <div className="flex min-h-screen font-sans dark:bg-gray-950" style={{ background: '#F0F4F8' }}>
 
-      {/* ─── Sidebar (Stitch "Clinika Slate & Cobalt" style) ─── */}
-      <aside className={`
-        fixed top-0 left-0 h-full w-64 bg-[#1a2232] text-white z-30 flex flex-col
-        transition-transform duration-200 shadow-2xl
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0 md:static md:flex
-      `}>
+      {/* ════════ DESKTOP SIDEBAR ════════ */}
+      <aside className="hidden md:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen"
+        style={{ background: 'linear-gradient(180deg,#0a1628 0%,#0d2040 100%)' }}>
+
         {/* Логотип */}
-        <div className="px-6 py-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-white text-xl"
-              style={{ fontVariationSettings: "'FILL' 1" }}>health_and_safety</span>
+        <div className="px-5 pt-7 pb-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>health_and_safety</span>
           </div>
           <div>
-            <div className="text-lg font-bold leading-tight font-headline tracking-tight">{branding?.brand_name || "КлиникСеть"}</div>
-            <div className="text-[10px] text-slate-400 uppercase tracking-widest mt-0.5">Medical Fintech</div>
+            <div className="text-[15px] font-bold text-white leading-tight tracking-tight">{brandName}</div>
+            <div className="text-[10px] uppercase tracking-widest mt-0.5 font-semibold" style={{ color: '#1565c0' }}>Medical Fintech</div>
           </div>
         </div>
 
         {/* Навигация */}
-        <nav className="flex-1 px-2 flex flex-col gap-0.5 overflow-y-auto">
+        <nav className="flex-1 px-3 overflow-y-auto space-y-0.5 pb-4">
           {visibleNav.map(item => {
-            const badge = navBadge[item.key] || 0
             const isActive = activeSection === item.key
+            const badge    = navBadge[item.key] || 0
             return (
-              <button
-                key={item.key}
-                onClick={() => handleNav(item.key)}
-                className={`
-                  w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-left transition-all duration-150 mx-0
-                  ${isActive
-                    ? 'bg-[#1565c0]/20 text-white font-bold border-l-4 border-[#1565c0]'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5 font-medium'}
-                `}
-              >
-                <span className="material-symbols-outlined text-[20px] flex-shrink-0"
-                  style={isActive ? { fontVariationSettings: "'FILL' 1" } : {}}>
+              <button key={item.key} onClick={() => handleNav(item.key)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-all duration-150"
+                style={isActive ? {
+                  background: 'linear-gradient(90deg,rgba(21,101,192,0.3),rgba(21,101,192,0.1))',
+                  color: '#90caf9',
+                } : { color: '#8ba0b8' }}>
+                <span className="material-symbols-outlined text-[19px] flex-shrink-0"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                    color: isActive ? '#90caf9' : undefined }}>
                   {item.icon}
                 </span>
-                <span className="flex-1 leading-none">{item.label}</span>
+                <span className={'flex-1 leading-none font-' + (isActive ? 'semibold' : 'medium')}>{item.label}</span>
                 {badge > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  <span className="text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
+                    style={{ background: '#ef4444', color: '#fff' }}>
                     {badge > 99 ? '99+' : badge}
                   </span>
                 )}
+                {isActive && !badge && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#1565c0' }} />}
               </button>
             )
           })}
         </nav>
 
-        {/* Пользователь + выход */}
-        <div className="px-2 py-4 mt-auto border-t border-[#ffffff10]">
-          <div className="flex items-center gap-2.5 px-4 py-3 mb-1">
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-sm font-bold flex-shrink-0 text-white">
-              {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-white truncate leading-tight">
-                {user?.full_name || user?.username || 'Администратор'}
+        {/* Пользователь */}
+        <div className="px-3 pb-4 mt-auto">
+          <div className="rounded-2xl p-3 space-y-1" style={{ background: 'rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+                {userInit}
               </div>
-              <div className="text-[10px] text-slate-500 mt-0.5">{user?.role === "super_admin" ? "Владелец платформы" : user?.role === "supervisor" ? "Владелец франшизы" : user?.role === "manager" ? "Руководитель" : user?.role === "partner" ? "Партнёр" : "Администратор"}</div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-white truncate">{userName}</div>
+                <div className="text-[10px] mt-0.5" style={{ color: '#90caf9' }}>{roleLabel}</div>
+              </div>
             </div>
-          </div>
-          <button onClick={() => setHelpOpen(true)}
-            className="w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-3">
-            <span className="material-symbols-outlined text-[18px]">help</span>
-            Справка
-          </button>
-          <button onClick={onLogout}
-            className="w-full text-slate-400 hover:text-white hover:bg-white/5 rounded-lg px-4 py-2.5 text-sm transition flex items-center gap-3">
-            <span className="material-symbols-outlined text-[18px]">logout</span>
-            Выйти
-          </button>
-          <div className="px-4 py-2 flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[14px] text-slate-600">info</span>
-            <span className="text-xs text-slate-600">v1.0.0</span>
+            <div className="flex gap-1 pt-1">
+              <button onClick={() => setDark(d => !d)} title={dark ? 'Светлая тема' : 'Тёмная тема'}
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
+                <span className="material-symbols-outlined text-[15px]">{dark ? 'light_mode' : 'dark_mode'}</span>
+                {dark ? 'Светлая' : 'Тёмная'}
+              </button>
+              <button onClick={() => setHelpOpen(true)} title="Справка"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
+                <span className="material-symbols-outlined text-[15px]">help</span>
+                Справка
+              </button>
+              <button onClick={onLogout} title="Выйти"
+                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
+                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
+                <span className="material-symbols-outlined text-[15px]">logout</span>
+                Выйти
+              </button>
+            </div>
           </div>
         </div>
       </aside>
 
-      {/* ─── Основной контент ─── */}
-      <div className="flex-1 flex flex-col min-w-0 md:ml-0">
-        {/* Шапка мобильная */}
-        <header className="md:hidden bg-[#1a2232] text-white flex items-center gap-3 px-4 py-3 sticky top-0 z-10">
-          <button onClick={() => setSidebarOpen(true)} className="text-slate-400 hover:text-white transition" aria-label="Меню">
-            <span className="material-symbols-outlined">menu</span>
+      {/* ════════ MAIN AREA ════════ */}
+      <div className="flex-1 flex flex-col min-w-0">
+
+        {/* MOBILE TOP HEADER */}
+        <header className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-white/10"
+          style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)', backdropFilter: 'blur(12px)' }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#90caf9' }}>{brandName}</div>
+            <div className="text-white font-bold text-base leading-tight truncate">{activeNavItem?.label || 'Обзор'}</div>
+          </div>
+          {contactsBadge > 0 && (
+            <button onClick={() => handleNav('contacts')}
+              className="relative w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(239,68,68,0.15)' }}>
+              <span className="material-symbols-outlined text-[18px] text-red-400">mail</span>
+              <span className="absolute -top-0.5 -right-0.5 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                style={{ background: '#ef4444', color: '#fff' }}>
+                {contactsBadge > 9 ? '9+' : contactsBadge}
+              </span>
+            </button>
+          )}
+          <button onClick={() => setDark(d => !d)}
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <span className="material-symbols-outlined text-[18px] text-white">{dark ? 'light_mode' : 'dark_mode'}</span>
           </button>
-          <span className="font-headline font-bold text-sm tracking-tight">КлиникСеть</span>
-          <div className="ml-auto flex items-center gap-2">
-            <button onClick={() => setDark(d => !d)} className="text-slate-400 hover:text-white transition">
-              <span className="material-symbols-outlined text-lg">{dark ? 'light_mode' : 'dark_mode'}</span>
-            </button>
-            <button onClick={() => setHelpOpen(true)} className="text-slate-400 hover:text-white transition" title="Справка">
-              <span className="material-symbols-outlined text-lg">help</span>
-            </button>
-            <button onClick={onLogout} className="text-slate-400 hover:text-white transition" title="Выйти">
-              <span className="material-symbols-outlined text-lg">logout</span>
-            </button>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+            {userInit}
           </div>
         </header>
 
-        {/* Шапка десктоп — frosted glass */}
-        <header className="hidden md:flex items-center justify-between px-8 py-0 h-16
-          bg-white dark:bg-gray-900 border-b border-[#eceef0] dark:border-gray-800 sticky top-0 z-10">
-          <div className="flex items-center gap-2 text-ms-on-surface dark:text-white">
-            <span className="material-symbols-outlined text-ms-primary text-lg"
-              style={{ fontVariationSettings: "'FILL' 1" }}>
-              {NAV.find(n => n.key === activeSection)?.icon || 'dashboard'}
-            </span>
-            <h1 className="font-headline font-bold text-base tracking-tight">
-              {NAV.find(n => n.key === activeSection)?.label || 'Панель управления'}
-            </h1>
+        {/* DESKTOP TOP BAR */}
+        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white/80 dark:bg-gray-900/80 sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800"
+          style={{ backdropFilter: 'blur(12px)' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'linear-gradient(135deg,rgba(21,101,192,0.1),rgba(0,151,167,0.08))' }}>
+              <span className="material-symbols-outlined text-[18px]"
+                style={{ color: '#1565c0', fontVariationSettings:"'FILL' 1" }}>
+                {activeNavItem?.icon || 'dashboard'}
+              </span>
+            </div>
+            <h1 className="font-bold text-gray-900 dark:text-white text-lg tracking-tight">{activeNavItem?.label || 'Обзор'}</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button onClick={() => setDark(d => !d)}
-              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-              title={dark ? 'Светлая тема' : 'Тёмная тема'}>
-              <span className="material-symbols-outlined text-xl">{dark ? 'light_mode' : 'dark_mode'}</span>
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+              <span className="material-symbols-outlined text-[19px]">{dark ? 'light_mode' : 'dark_mode'}</span>
             </button>
-            <div className="h-6 w-px bg-ms-outline-variant/50" />
+            <button onClick={() => setHelpOpen(true)}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+              <span className="material-symbols-outlined text-[19px]">help</span>
+            </button>
+            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
             <div className="flex items-center gap-2.5">
-              <div className="text-right hidden lg:block">
-                <div className="text-sm font-semibold text-ms-on-surface dark:text-white leading-tight">
-                  {user?.full_name || user?.username || 'Администратор'}
-                </div>
-                <div className="text-[10px] text-ms-on-surface-variant dark:text-gray-400 uppercase tracking-wider">{user?.role === "super_admin" ? "Администратор платформы" : user?.role === "supervisor" ? "Владелец франшизы" : user?.role === "manager" ? "Руководитель клиники" : "Сотрудник"}</div>
+              <div className="text-right hidden sm:block">
+                <div className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</div>
+                <div className="text-[11px] text-gray-400">{roleLabel}</div>
               </div>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg, #006173 0%, #007c92 100%)' }}>
-                {(user?.full_name || user?.username || 'A')[0].toUpperCase()}
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
+                style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+                {userInit}
               </div>
             </div>
-            <div className="h-6 w-px bg-ms-outline-variant/50" />
-            <button onClick={() => setHelpOpen(true)}
-              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-              title="Справка">
-              <span className="material-symbols-outlined text-xl">help</span>
-            </button>
             <button onClick={onLogout}
-              className="p-2 rounded-full text-ms-on-surface-variant dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
-              title="Выйти">
-              <span className="material-symbols-outlined text-xl">logout</span>
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+              <span className="material-symbols-outlined text-[19px]">logout</span>
             </button>
           </div>
         </header>
 
-
-        {/* Контент страницы */}
-        <main className="flex-1 p-5 lg:p-8 max-w-6xl w-full mx-auto">
+        {/* PAGE CONTENT */}
+        <main className="flex-1 px-4 md:px-8 py-5 md:py-7 pb-24 md:pb-8 w-full max-w-6xl mx-auto dark:text-white">
           {renderSection()}
         </main>
       </div>
 
-      {/* Модал справки */}
+      {/* ════════ MOBILE BOTTOM NAV ════════ */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch"
+        style={{
+          background: 'rgba(10,22,40,0.97)',
+          backdropFilter: 'blur(20px)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.3)',
+        }}>
+        {bottomItems.map(item => {
+          const isActive = activeSection === item.key
+          const badge    = navBadge[item.key] || 0
+          return (
+            <button key={item.key} onClick={() => handleNav(item.key)}
+              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative">
+              {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background: '#90caf9' }} />}
+              <span className="relative">
+                <span className="material-symbols-outlined text-[22px] transition-all"
+                  style={{ color: isActive ? '#90caf9' : '#4a6080', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                  {item.icon}
+                </span>
+                {badge > 0 && (
+                  <span className="absolute -top-1 -right-1 text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                    style={{ background: '#ef4444', color: '#fff' }}>
+                    {badge > 9 ? '9+' : badge}
+                  </span>
+                )}
+              </span>
+              <span className="text-[10px] font-semibold leading-none" style={{ color: isActive ? '#90caf9' : '#4a6080' }}>
+                {item.label}
+              </span>
+            </button>
+          )
+        })}
+        <button onClick={() => setMoreOpen(true)}
+          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5">
+          <span className="material-symbols-outlined text-[22px]" style={{ color: '#4a6080' }}>more_horiz</span>
+          <span className="text-[10px] font-semibold leading-none" style={{ color: '#4a6080' }}>Ещё</span>
+        </button>
+      </nav>
+
+      {/* ════════ MOBILE "ЕЩЁ" DRAWER ════════ */}
+      {moreOpen && (
+        <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
+          <div className="relative rounded-t-3xl overflow-hidden"
+            style={{ background: 'linear-gradient(180deg,#0d2040,#0a1628)', maxHeight: '80vh' }}>
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+            <div className="flex items-center justify-between px-6 py-3 border-b border-white/10">
+              <span className="text-white font-bold text-base">Все разделы</span>
+              <button onClick={() => setMoreOpen(false)}
+                className="w-8 h-8 rounded-full flex items-center justify-center"
+                style={{ background: 'rgba(255,255,255,0.1)' }}>
+                <span className="material-symbols-outlined text-white text-[18px]">close</span>
+              </button>
+            </div>
+            <div className="overflow-y-auto px-4 py-4 grid grid-cols-3 gap-2"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
+              {moreItems.map(item => {
+                const isActive = activeSection === item.key
+                const badge    = navBadge[item.key] || 0
+                return (
+                  <button key={item.key} onClick={() => handleNav(item.key)}
+                    className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all relative"
+                    style={{
+                      background: isActive ? 'linear-gradient(135deg,rgba(21,101,192,0.3),rgba(21,101,192,0.1))' : 'rgba(255,255,255,0.06)',
+                      border: isActive ? '1px solid rgba(21,101,192,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                    }}>
+                    {badge > 0 && (
+                      <span className="absolute top-2 right-2 text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                        style={{ background: '#ef4444', color: '#fff' }}>
+                        {badge}
+                      </span>
+                    )}
+                    <span className="material-symbols-outlined text-[24px]"
+                      style={{ color: isActive ? '#90caf9' : '#8ba0b8', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                      {item.icon}
+                    </span>
+                    <span className="text-[11px] font-semibold text-center leading-tight"
+                      style={{ color: isActive ? '#90caf9' : '#8ba0b8' }}>
+                      {item.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
     </div>
   )

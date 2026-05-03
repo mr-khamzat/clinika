@@ -1,85 +1,80 @@
 /**
- * Личный кабинет врача
- * Доступен при role === 'doctor' через /clinika/admin
+ * Личный кабинет врача — Premium Mobile-First
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
-import useAuthStore from '../store/auth'
-import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { API_BASE } from '../config'
 
-const API = API_BASE
-
-function authH(token) {
-  return { Authorization: `Bearer ${token}` }
-}
-
-function apiFetch(method, url, token, data) {
-  return axios({ method, url: `${API}${url}`, headers: authH(token), data })
-}
+function authH(t) { return { Authorization: `Bearer ${t}` } }
+function apiFetch(m, u, t, d) { return axios({ method: m, url: `${API_BASE}${u}`, headers: authH(t), data: d }) }
 
 function Spinner() {
-  return <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" /></div>
-}
-
-function StatCard({ label, value, color = 'text-gray-800', icon }) {
   return (
-    <div className="rounded-2xl p-5 border" style={{ background: "#fff", borderColor: "#e0eaec" }}>
-      <div className="flex items-center gap-2 mb-1">
-        {icon && <span className="material-symbols-outlined text-teal-600 text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>{icon}</span>}
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-      </div>
-      <p className={`text-3xl font-extrabold ${color}`}>{value ?? '—'}</p>
+    <div className="flex justify-center py-16">
+      <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#0097A7', borderTopColor: 'transparent' }} />
     </div>
   )
 }
 
-// ─── Schedule Tab ───
+function EmptyState({ icon, text }) {
+  return (
+    <div className="flex flex-col items-center py-16 gap-3">
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,151,167,0.08)' }}>
+        <span className="material-symbols-outlined text-3xl" style={{ color: '#0097A7' }}>{icon}</span>
+      </div>
+      <p className="text-gray-400 text-sm text-center">{text}</p>
+    </div>
+  )
+}
+
 function ScheduleTab({ token, doctorId }) {
-  const [schedule, setSchedule] = useState(null)
-  const [loading, setLoading] = useState(true)
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
+  const [schedule, setSchedule] = useState(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     apiFetch('get', `/doctors/${doctorId}/slots?date=${date}`, token)
       .then(r => setSchedule(r.data))
       .catch(() => setSchedule(null))
       .finally(() => setLoading(false))
   }, [token, doctorId, date])
 
-  if (loading) return <Spinner />
-
   const slots = schedule?.slots || []
-  const booked = slots.filter(s => s.appointment_id)
-  const free = slots.filter(s => !s.appointment_id)
+  const booked = slots.filter(s => s.appointment_id).length
+  const free   = slots.filter(s => !s.appointment_id).length
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <input type="date" value={date} onChange={e => { setDate(e.target.value); setLoading(true) }}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-teal-500" />
-        <div className="flex gap-3">
-          <StatCard label="Запись" value={booked.length} color="text-blue-600" icon="event_available" />
-          <StatCard label="Свободно" value={free.length} color="text-emerald-600" icon="event_available" />
+    <div className="space-y-5">
+      {/* Date picker + stats */}
+      <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)' }}>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          className="w-full rounded-xl px-3 py-2.5 text-sm font-medium mb-4 focus:outline-none border-0"
+          style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', colorScheme: 'dark' }} />
+        <div className="grid grid-cols-2 gap-3">
+          {[{ v: booked, l: 'Занято', i: 'event_busy', c: '#90caf9' }, { v: free, l: 'Свободно', i: 'event_available', c: '#a5d6a7' }].map(x => (
+            <div key={x.l} className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
+              <span className="material-symbols-outlined text-2xl block mb-1" style={{ color: x.c, fontVariationSettings:"'FILL' 1" }}>{x.i}</span>
+              <div className="text-2xl font-bold text-white">{x.v}</div>
+              <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{x.l}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {slots.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center border border-gray-100">
-          <span className="material-symbols-outlined text-4xl text-gray-200 block mb-2">calendar_today</span>
-          <p className="text-gray-400">Расписание не настроено на эту дату</p>
-        </div>
+      {loading ? <Spinner /> : slots.length === 0 ? (
+        <EmptyState icon="calendar_today" text="Расписание не настроено на эту дату" />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {slots.map((slot, i) => (
-            <div key={i} className={`rounded-xl p-3 text-center border ${
-              slot.appointment_id
-                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-            }`}>
-              <p className="text-base font-bold">{slot.time}</p>
-              {slot.patient_name && <p className="text-xs mt-0.5 truncate">{slot.patient_name}</p>}
-              {!slot.appointment_id && <p className="text-xs opacity-60">Свободно</p>}
+            <div key={i} className="rounded-2xl p-3 text-center border"
+              style={slot.appointment_id
+                ? { background: 'rgba(21,101,192,0.08)', borderColor: 'rgba(21,101,192,0.2)', color: '#1565c0' }
+                : { background: 'rgba(0,151,167,0.06)', borderColor: 'rgba(0,151,167,0.2)', color: '#00796b' }}>
+              <div className="text-base font-bold">{slot.time}</div>
+              {slot.patient_name && <div className="text-xs mt-0.5 truncate opacity-80">{slot.patient_name}</div>}
+              {!slot.appointment_id && <div className="text-xs opacity-50 mt-0.5">Свободно</div>}
             </div>
           ))}
         </div>
@@ -88,219 +83,255 @@ function ScheduleTab({ token, doctorId }) {
   )
 }
 
-// ─── Appointments Tab ───
 function AppointmentsTab({ token, doctorId }) {
-  const [appointments, setAppointments] = useState([])
+  const [apts, setApts] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     apiFetch('get', `/appointments?doctor_id=${doctorId}&limit=50`, token)
-      .then(r => setAppointments(Array.isArray(r.data) ? r.data : r.data?.appointments || []))
-      .catch(() => setAppointments([]))
+      .then(r => setApts(Array.isArray(r.data) ? r.data : r.data?.appointments || []))
+      .catch(() => setApts([]))
       .finally(() => setLoading(false))
   }, [token, doctorId])
 
-  if (loading) return <Spinner />
-
   const STATUS = {
-    pending:   { label: 'Ожидает', bg: 'bg-yellow-100 text-yellow-700' },
-    confirmed: { label: 'Подтверждено', bg: 'bg-emerald-100 text-emerald-700' },
-    cancelled: { label: 'Отменено', bg: 'bg-red-100 text-red-600' },
-    completed: { label: 'Завершено', bg: 'bg-gray-100 text-gray-600' },
-    no_show:   { label: 'Не пришёл', bg: 'bg-orange-100 text-orange-700' },
+    pending:   { l: 'Ожидает',    bg: '#fff3e0', c: '#e65100' },
+    confirmed: { l: 'Подтверждён',bg: '#e8f5e9', c: '#2e7d32' },
+    cancelled: { l: 'Отменён',    bg: '#fce4ec', c: '#c62828' },
+    completed: { l: 'Завершён',   bg: '#f5f5f5', c: '#616161' },
+    no_show:   { l: 'Не пришёл', bg: '#fff8e1', c: '#f57f17' },
   }
 
+  if (loading) return <Spinner />
+  if (!apts.length) return <EmptyState icon="event_note" text="Записей нет" />
+
   return (
-    <div>
-      {appointments.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center border border-gray-100">
-          <span className="material-symbols-outlined text-4xl text-gray-200 block mb-2">person_off</span>
-          <p className="text-gray-400">Нет записей</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {appointments.map(a => {
-            const st = STATUS[a.status] || { label: a.status, bg: 'bg-gray-100 text-gray-600' }
-            return (
-              <div key={a.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="w-10 h-10 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
-                  <span className="material-symbols-outlined text-teal-600 text-lg">person</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800">{a.patient_name}</p>
-                  <p className="text-xs text-gray-400">{a.patient_phone} · {a.service_name || '—'}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-medium text-gray-700">{a.appointment_date} {a.appointment_time}</p>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${st.bg}`}>{st.label}</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+    <div className="space-y-2">
+      {apts.map(a => {
+        const st = STATUS[a.status] || { l: a.status, bg: '#f5f5f5', c: '#616161' }
+        return (
+          <div key={a.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(0,151,167,0.08)' }}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#0097A7', fontVariationSettings:"'FILL' 1" }}>person</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-gray-900 text-sm leading-tight">{a.patient_name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{a.patient_phone} · {a.service_name || '—'}</div>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <div className="text-xs font-medium text-gray-600">{a.appointment_date}</div>
+              <div className="text-xs font-bold text-gray-900">{a.appointment_time}</div>
+              <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1"
+                style={{ background: st.bg, color: st.c }}>{st.l}</span>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// ─── Referrals directed to this doctor's clinic ───
 function ReferralsTab({ token }) {
-  const [referrals, setReferrals] = useState([])
+  const [refs, setRefs] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     apiFetch('get', '/manager/referrals/?limit=50', token)
-      .then(r => setReferrals(Array.isArray(r.data) ? r.data : r.data?.referrals || []))
-      .catch(() => setReferrals([]))
+      .then(r => setRefs(Array.isArray(r.data) ? r.data : r.data?.referrals || []))
+      .catch(() => setRefs([]))
       .finally(() => setLoading(false))
   }, [token])
 
-  if (loading) return <Spinner />
-
   const STATUS = {
-    created:   { label: 'Активно', bg: 'bg-blue-100 text-blue-700' },
-    confirmed: { label: 'Выполнено', bg: 'bg-emerald-100 text-emerald-700' },
-    expired:   { label: 'Истекло', bg: 'bg-gray-100 text-gray-500' },
-    cancelled: { label: 'Отменено', bg: 'bg-red-100 text-red-600' },
-    cancel_requested: { label: 'На отмене', bg: 'bg-yellow-100 text-yellow-700' },
+    created:   { l: 'Активно',   bg: '#e3f2fd', c: '#1565c0' },
+    confirmed: { l: 'Выполнено', bg: '#e8f5e9', c: '#2e7d32' },
+    expired:   { l: 'Истекло',   bg: '#f5f5f5', c: '#757575' },
+    cancelled: { l: 'Отменено',  bg: '#fce4ec', c: '#c62828' },
+    cancel_requested: { l: 'На отмене', bg: '#fff3e0', c: '#e65100' },
   }
 
+  if (loading) return <Spinner />
+  if (!refs.length) return <EmptyState icon="assignment" text="Направлений нет" />
+
   return (
-    <div>
-      {referrals.length === 0 ? (
-        <div className="bg-white rounded-2xl p-10 text-center border border-gray-100">
-          <p className="text-gray-400">Нет направлений</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {referrals.slice(0, 30).map(r => {
-            const st = STATUS[r.status] || { label: r.status, bg: 'bg-gray-100 text-gray-600' }
-            return (
-              <div key={r.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-800">{r.patient_name}</p>
-                  <p className="text-xs text-gray-400">{r.service_name} · {r.to_clinic_name}</p>
-                  <p className="text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString('ru-RU')}</p>
-                </div>
-                <span className={`text-xs font-bold px-2 py-1 rounded-full flex-shrink-0 ${st.bg}`}>{st.label}</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
+    <div className="space-y-2">
+      {refs.slice(0, 50).map(r => {
+        const st = STATUS[r.status] || { l: r.status, bg: '#f5f5f5', c: '#616161' }
+        return (
+          <div key={r.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-gray-900 text-sm">{r.patient_name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{r.service_name}</div>
+              <div className="text-xs text-gray-400">{r.to_clinic_name} · {new Date(r.created_at).toLocaleDateString('ru')}</div>
+            </div>
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+              style={{ background: st.bg, color: st.c }}>{st.l}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
 
-// ─── Main DoctorLayout ───
 export default function DoctorLayout({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('referrals')
   const [doctorInfo, setDoctorInfo] = useState(null)
-  const [dark, setDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('adminTheme', dark ? 'dark' : 'light')
-  }, [dark])
-
-  useEffect(() => {
-    // Load doctor info linked to this user account
-    apiFetch('get', `/my-doctor`, adminToken)
-      .then(r => setDoctorInfo(r.data))
-      .catch(() => {})
+    apiFetch('get', '/my-doctor', adminToken).then(r => setDoctorInfo(r.data)).catch(() => {})
   }, [adminToken])
 
   const doctorId = doctorInfo?.id
+  const userName = user?.full_name || 'Врач'
+  const userInit = userName[0].toUpperCase()
   const todayStr = new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 
   const TABS = [
-    { key: 'schedule', label: 'Расписание', icon: 'calendar_month' },
-    { key: 'appointments', label: 'Записи', icon: 'event_note' },
-    { key: 'referrals', label: 'Направления', icon: 'assignment' },
+    { key: 'schedule',     label: 'Расписание',  icon: 'calendar_month' },
+    { key: 'appointments', label: 'Записи',       icon: 'event_note' },
+    { key: 'referrals',   label: 'Направления',  icon: 'assignment' },
   ]
+  const activeTab = TABS.find(t => t.key === tab)
 
   return (
-    <div className="flex min-h-screen font-sans" style={{ background: "#F0F5F6", minHeight: "100vh" }}>
-      {/* Sidebar */}
-      <aside className="hidden md:flex w-60 text-white flex-col" style={{ background: "#004D5F" }}>
-        <div className="px-6 py-6">
-          <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center mb-3">
-            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
+    <div className="flex min-h-screen font-sans" style={{ background: '#F0F4F8' }}>
+
+      {/* DESKTOP SIDEBAR */}
+      <aside className="hidden md:flex flex-col w-60 flex-shrink-0 sticky top-0 h-screen"
+        style={{ background: 'linear-gradient(180deg,#003d4d 0%,#004D5F 100%)' }}>
+        {/* Profile */}
+        <div className="px-5 pt-7 pb-5">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-bold text-white mb-3 shadow-lg"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#00c4d9)' }}>
+            {userInit}
           </div>
-          <p className="font-bold text-base leading-tight">{user?.full_name || 'Врач'}</p>
-          {doctorInfo?.specialty && <p className="text-slate-400 text-xs mt-0.5">{doctorInfo.specialty}</p>}
-          <p className="text-slate-500 text-xs mt-1">{todayStr}</p>
+          <div className="text-white font-bold text-[15px] leading-tight">{userName}</div>
+          {doctorInfo?.specialty && <div className="text-[12px] mt-0.5" style={{ color: '#00d4eb' }}>{doctorInfo.specialty}</div>}
+          <div className="text-[11px] mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>{todayStr}</div>
         </div>
-        <nav className="flex-1 px-2">
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-left transition mb-0.5
-                ${tab === t.key ? 'text-white font-bold border-l-4 border-[#0097A7]" style={{ background: "rgba(0,151,167,0.2)" }}' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
-              <span className="material-symbols-outlined text-[18px]"
-                style={tab === t.key ? { fontVariationSettings: "'FILL' 1" } : {}}>{t.icon}</span>
-              {t.label}
-            </button>
-          ))}
+        {/* Nav */}
+        <nav className="flex-1 px-3 space-y-0.5">
+          {TABS.map(t => {
+            const isActive = tab === t.key
+            return (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-left transition-all"
+                style={isActive ? {
+                  background: 'linear-gradient(90deg,rgba(0,151,167,0.25),rgba(0,151,167,0.08))',
+                  color: '#00d4eb',
+                } : { color: 'rgba(255,255,255,0.45)' }}>
+                <span className="material-symbols-outlined text-[19px]"
+                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                    color: isActive ? '#00d4eb' : undefined }}>
+                  {t.icon}
+                </span>
+                <span className={'font-' + (isActive ? 'semibold' : 'medium')}>{t.label}</span>
+              </button>
+            )
+          })}
         </nav>
-        <div className="px-4 pb-6 space-y-2">
-          <button onClick={() => setDark(d => !d)}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-slate-400 hover:text-white text-sm transition">
-            <span className="material-symbols-outlined text-[18px]">{dark ? 'light_mode' : 'dark_mode'}</span>
-            {dark ? 'Светлая тема' : 'Тёмная тема'}
-          </button>
+        {/* Footer */}
+        <div className="px-3 pb-4">
           <button onClick={onLogout}
-            className="w-full flex items-center gap-2 px-4 py-2 rounded-lg text-slate-400 hover:text-red-400 text-sm transition">
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition"
+            style={{ color: 'rgba(255,255,255,0.35)' }}>
             <span className="material-symbols-outlined text-[18px]">logout</span>
             Выйти
           </button>
         </div>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 p-6 overflow-y-auto">
-        {/* Mobile header */}
-        <div className="md:hidden flex items-center justify-between mb-4">
-          <div>
-            <p className="font-bold text-gray-800 dark:text-white">{user?.full_name}</p>
-            <p className="text-xs text-gray-400">{doctorInfo?.specialty}</p>
-          </div>
-          <button onClick={onLogout} className="text-sm text-red-500">Выйти</button>
-        </div>
+      {/* MAIN */}
+      <div className="flex-1 flex flex-col min-w-0">
 
-        {/* Mobile tabs */}
-        <div className="md:hidden flex gap-1 rounded-xl p-1 mb-4 border" style={{ background: "#fff", borderColor: "#e0eaec" }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition ${tab === t.key ? 'text-white' : 'text-gray-500'} style={{ background: tab === t.key ? '#0097A7' : 'transparent' }} : 'text-gray-500'}`}>
-              {t.label}
+        {/* MOBILE HEADER */}
+        <header className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-white/10"
+          style={{ background: 'linear-gradient(135deg,#003d4d,#004D5F)', backdropFilter: 'blur(12px)' }}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#00d4eb' }}>Кабинет врача</div>
+            <div className="text-white font-bold text-base leading-tight">{activeTab?.label}</div>
+          </div>
+          <button onClick={onLogout}
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <span className="material-symbols-outlined text-[18px] text-white">logout</span>
+          </button>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
+            {userInit}
+          </div>
+        </header>
+
+        {/* DESKTOP HEADER */}
+        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white/80 sticky top-0 z-10 border-b border-gray-100"
+          style={{ backdropFilter: 'blur(12px)' }}>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: 'rgba(0,151,167,0.1)' }}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: '#0097A7', fontVariationSettings:"'FILL' 1" }}>
+                {activeTab?.icon || 'stethoscope'}
+              </span>
+            </div>
+            <h1 className="font-bold text-gray-900 text-lg">{activeTab?.label}</h1>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <div className="text-right">
+              <div className="text-sm font-semibold text-gray-900">{userName}</div>
+              {doctorInfo?.specialty && <div className="text-[11px] text-gray-400">{doctorInfo.specialty}</div>}
+            </div>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white"
+              style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
+              {userInit}
+            </div>
+            <button onClick={onLogout}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-400 hover:bg-gray-100 transition">
+              <span className="material-symbols-outlined text-[19px]">logout</span>
             </button>
-          ))}
-        </div>
-
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-extrabold text-gray-800 dark:text-white">
-            {TABS.find(t => t.key === tab)?.label}
-          </h1>
-          {doctorInfo && (
-            <p className="text-sm text-gray-400 mt-0.5">
-              {doctorInfo.full_name} · {doctorInfo.specialty} · {doctorInfo.clinic_name}
-            </p>
-          )}
-        </div>
-
-        {!doctorId && tab !== 'referrals' && (
-          <div style={{ background: '#e0f7fa', border: '1px solid #80cbc4', borderRadius: 12, padding: '10px 16px', marginBottom: 16 }}>
-            <p style={{ fontSize: 13, color: '#004D5F', margin: 0 }}>
-              Расписание и записи доступны после привязки кабинета администратором. Для работы с направлениями переключитесь на вкладку «Направления».
-            </p>
           </div>
-        )}
+        </header>
 
-        {tab === 'schedule' && doctorId && <ScheduleTab token={adminToken} doctorId={doctorId} />}
-        {tab === 'appointments' && doctorId && <AppointmentsTab token={adminToken} doctorId={doctorId} />}
-        {tab === 'referrals' && <ReferralsTab token={adminToken} />}
-      </main>
+        {/* CONTENT */}
+        <main className="flex-1 px-4 md:px-8 py-5 pb-24 md:pb-8 max-w-3xl mx-auto w-full">
+          {!doctorId && tab !== 'referrals' && (
+            <div className="mb-4 rounded-2xl px-4 py-3 text-sm"
+              style={{ background: 'rgba(0,151,167,0.08)', border: '1px solid rgba(0,151,167,0.2)', color: '#005F6B' }}>
+              Расписание и записи доступны после привязки кабинета администратором.
+            </div>
+          )}
+          {tab === 'schedule'     && doctorId && <ScheduleTab token={adminToken} doctorId={doctorId} />}
+          {tab === 'appointments' && doctorId && <AppointmentsTab token={adminToken} doctorId={doctorId} />}
+          {tab === 'referrals'   && <ReferralsTab token={adminToken} />}
+        </main>
+      </div>
+
+      {/* MOBILE BOTTOM NAV */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex"
+        style={{
+          background: 'rgba(0,61,77,0.97)',
+          backdropFilter: 'blur(20px)',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          boxShadow: '0 -8px 32px rgba(0,0,0,0.3)',
+        }}>
+        {TABS.map(t => {
+          const isActive = tab === t.key
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative">
+              {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background: '#00d4eb' }} />}
+              <span className="material-symbols-outlined text-[22px]"
+                style={{ color: isActive ? '#00d4eb' : '#4a7080', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
+                {t.icon}
+              </span>
+              <span className="text-[10px] font-semibold leading-none"
+                style={{ color: isActive ? '#00d4eb' : '#4a7080' }}>
+                {t.label}
+              </span>
+            </button>
+          )
+        })}
+      </nav>
     </div>
   )
 }

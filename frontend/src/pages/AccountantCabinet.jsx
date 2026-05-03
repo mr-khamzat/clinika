@@ -2,19 +2,28 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
 
-function authH(token) { return { Authorization: `Bearer ${token}` } }
+function authH(t) { return { Authorization: `Bearer ${t}` } }
 
 const ACT_STATUS = {
-  draft: { label: 'Черновик', color: '#9e9e9e' },
-  generated: { label: 'Сформирован', color: '#1976d2' },
-  sent: { label: 'Отправлен', color: '#0097A7' },
-  signed: { label: 'Подписан', color: '#4caf50' },
-  paid: { label: 'Оплачен', color: '#2e7d32' },
-  overdue: { label: 'Просрочен', color: '#e53935' },
+  draft:     { label: 'Черновик',    bg: '#f5f5f5', c: '#757575' },
+  generated: { label: 'Сформирован', bg: '#e3f2fd', c: '#1565c0' },
+  sent:      { label: 'Отправлен',   bg: '#e0f7fa', c: '#006064' },
+  signed:    { label: 'Подписан',    bg: '#e8f5e9', c: '#2e7d32' },
+  paid:      { label: 'Оплачен',     bg: '#e8f5e9', c: '#1b5e20' },
+  overdue:   { label: 'Просрочен',   bg: '#fce4ec', c: '#b71c1c' },
+}
+
+function Spinner() {
+  return (
+    <div className="flex justify-center py-16">
+      <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
+        style={{ borderColor: '#0097A7', borderTopColor: 'transparent' }} />
+    </div>
+  )
 }
 
 export default function AccountantCabinet({ adminToken, user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('acts')
+  const [tab, setTab] = useState('acts')
   const [acts, setActs] = useState([])
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -22,165 +31,201 @@ export default function AccountantCabinet({ adminToken, user, onLogout }) {
   const [signerName, setSignerName] = useState(user?.full_name || '')
   const [msg, setMsg] = useState('')
 
-  useEffect(() => { loadData() }, [activeTab])
+  const userName = user?.full_name || 'Бухгалтер'
+  const userInit = userName[0].toUpperCase()
 
-  async function loadData() {
+  useEffect(() => {
     setLoading(true)
-    try {
-      if (activeTab === 'acts') {
-        const r = await axios.get(`${API_BASE}/acts/`, { headers: authH(adminToken) })
-        setActs(r.data)
-      } else if (activeTab === 'invoices') {
-        const r = await axios.get(`${API_BASE}/billing/invoices`, { headers: authH(adminToken) })
-        setInvoices(r.data?.invoices || r.data || [])
-      }
-    } catch {}
-    setLoading(false)
-  }
+    const load = tab === 'acts'
+      ? axios.get(`${API_BASE}/acts/`, { headers: authH(adminToken) }).then(r => setActs(r.data))
+      : axios.get(`${API_BASE}/billing/invoices`, { headers: authH(adminToken) }).then(r => setInvoices(r.data?.invoices || r.data || []))
+    load.catch(() => {}).finally(() => setLoading(false))
+  }, [tab, adminToken])
 
   async function signAct(actNumber) {
     if (!signerName.trim()) { setMsg('Введите ФИО подписанта'); return }
     try {
-      await axios.post(`${API_BASE}/acts/${actNumber}/sign`,
-        { signer_name: signerName },
-        { headers: authH(adminToken) }
-      )
-      setSignModal(null)
-      setMsg('Акт подписан ✓')
-      await loadData()
-    } catch (e) {
-      setMsg('Ошибка: ' + (e.response?.data?.detail || e.message))
-    }
+      await axios.post(`${API_BASE}/acts/${actNumber}/sign`, { signer_name: signerName }, { headers: authH(adminToken) })
+      setSignModal(null); setMsg('✓ Акт подписан')
+      const r = await axios.get(`${API_BASE}/acts/`, { headers: authH(adminToken) })
+      setActs(r.data)
+    } catch (e) { setMsg('Ошибка: ' + (e.response?.data?.detail || e.message)) }
     setTimeout(() => setMsg(''), 4000)
   }
 
   const TABS = [
-    { id: 'acts', label: 'Акты', icon: 'receipt_long' },
+    { id: 'acts',     label: 'Акты',  icon: 'receipt_long' },
     { id: 'invoices', label: 'Счета', icon: 'description' },
   ]
+  const activeTab = TABS.find(t => t.id === tab)
 
   return (
-    <div className="min-h-screen bg-[#f7f9fb] font-sans">
-      <header className="bg-[#1a2232] text-white flex items-center gap-3 px-6 py-4 shadow-lg">
-        <div className="w-10 h-10 rounded-full bg-teal-600 flex items-center justify-center font-bold text-lg">
-          {(user?.full_name || 'A')[0].toUpperCase()}
-        </div>
-        <div className="flex-1">
-          <div className="font-bold text-base leading-tight">{user?.full_name || 'Бухгалтер'}</div>
-          <div className="text-[11px] text-slate-400 uppercase tracking-widest">Accountant</div>
+    <div className="min-h-screen font-sans flex flex-col" style={{ background: '#F0F4F8' }}>
+
+      {/* HEADER */}
+      <header className="sticky top-0 z-20 flex items-center gap-3 px-5 py-3.5 border-b border-white/10"
+        style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)', backdropFilter: 'blur(12px)' }}>
+        <div className="flex-1 min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#90caf9' }}>КлиникСеть</div>
+          <div className="text-white font-bold text-base leading-tight">{activeTab?.label}</div>
         </div>
         <button onClick={onLogout}
-          className="text-slate-400 hover:text-white transition flex items-center gap-1 text-sm">
-          <span className="material-symbols-outlined text-lg">logout</span>
-          Выйти
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: 'rgba(255,255,255,0.08)' }}>
+          <span className="material-symbols-outlined text-[18px] text-white">logout</span>
         </button>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+          {userInit}
+        </div>
       </header>
 
-      <div className="bg-white border-b border-gray-200 px-6 flex gap-1">
+      {/* USER CARD */}
+      <div className="px-4 py-4" style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold text-white flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+            {userInit}
+          </div>
+          <div>
+            <div className="text-white font-bold">{userName}</div>
+            <div className="text-[11px] mt-0.5" style={{ color: '#90caf9' }}>Бухгалтер</div>
+          </div>
+        </div>
+      </div>
+
+      {/* TABS */}
+      <div className="px-4 py-3 flex gap-2">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition ${
-              activeTab === t.id
-                ? 'border-teal-600 text-teal-600'
-                : 'border-transparent text-gray-500 hover:text-gray-800'
-            }`}>
-            <span className="material-symbols-outlined text-lg">{t.icon}</span>
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all"
+            style={tab === t.id
+              ? { background: 'linear-gradient(135deg,#1565c0,#0097A7)', color: '#fff', boxShadow: '0 4px 12px rgba(21,101,192,0.3)' }
+              : { background: '#fff', color: '#6b7280', border: '1px solid #e5e7eb' }}>
+            <span className="material-symbols-outlined text-[18px]"
+              style={{ fontVariationSettings: tab === t.id ? "'FILL' 1" : "'FILL' 0" }}>
+              {t.icon}
+            </span>
             {t.label}
           </button>
         ))}
       </div>
 
+      {/* MSG */}
       {msg && (
-        <div className={`mx-6 mt-4 px-4 py-3 rounded-xl text-sm ${msg.startsWith('Ошибка') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+        <div className="mx-4 mb-2 px-4 py-3 rounded-2xl text-sm font-medium"
+          style={msg.startsWith('✓')
+            ? { background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9' }
+            : { background: '#fce4ec', color: '#c62828', border: '1px solid #f8bbd0' }}>
           {msg}
         </div>
       )}
 
-      <main className="max-w-5xl mx-auto p-6">
-        {loading && (
-          <div className="flex justify-center py-16">
-            <div className="w-10 h-10 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
+      {/* CONTENT */}
+      <main className="flex-1 px-4 pb-8">
+        {loading ? <Spinner /> : null}
 
-        {!loading && activeTab === 'acts' && (
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Акты оказанных услуг</h2>
-            {acts.length === 0 && <p className="text-gray-400 text-sm">Актов нет.</p>}
-            <div className="flex flex-col gap-3">
-              {acts.map(a => {
-                const st = ACT_STATUS[a.act_status] || { label: a.act_status, color: '#888' }
-                return (
-                  <div key={a.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
-                    <div className="flex-1">
-                      <div className="font-bold text-gray-800">{a.act_number || a.invoice_number}</div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {a.legal_entity_name || '—'} &nbsp;·&nbsp;
+        {/* ACTS */}
+        {!loading && tab === 'acts' && (
+          <div className="space-y-3">
+            {acts.length === 0 ? (
+              <div className="flex flex-col items-center py-16 gap-3">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(21,101,192,0.08)' }}>
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#1565c0' }}>receipt_long</span>
+                </div>
+                <p className="text-gray-400 text-sm">Актов нет</p>
+              </div>
+            ) : acts.map(a => {
+              const st = ACT_STATUS[a.act_status] || { label: a.act_status, bg: '#f5f5f5', c: '#616161' }
+              const canSign = ['generated', 'sent'].includes(a.act_status)
+              return (
+                <div key={a.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-gray-900">{a.act_number || a.invoice_number}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{a.legal_entity_name || '—'}</div>
+                    </div>
+                    <span className="text-[11px] font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+                      style={{ background: st.bg, color: st.c }}>
+                      {st.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xl font-extrabold text-gray-900">{Number(a.total || a.amount || 0).toLocaleString('ru')} ₽</div>
+                      <div className="text-xs text-gray-400 mt-0.5">
                         {a.period_start ? new Date(a.period_start).toLocaleDateString('ru') : '?'} — {a.period_end ? new Date(a.period_end).toLocaleDateString('ru') : '?'}
-                        &nbsp;·&nbsp; до {a.due_date ? new Date(a.due_date).toLocaleDateString('ru') : '?'}
+                        {a.due_date && ` · до ${new Date(a.due_date).toLocaleDateString('ru')}`}
                       </div>
-                      {a.notes && <div className="text-xs text-gray-500 mt-1">{a.notes}</div>}
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-gray-800 text-lg">{Number(a.total || a.amount || 0).toLocaleString('ru')} ₽</div>
-                      <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold mt-1"
-                        style={{ background: st.color + '22', color: st.color }}>
-                        {st.label}
-                      </span>
-                    </div>
-                    {['generated', 'sent'].includes(a.act_status) && (
+                    {canSign && (
                       <button onClick={() => { setSignModal(a.act_number); setSignerName(user?.full_name || '') }}
-                        className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-semibold hover:bg-blue-100 transition">
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white"
+                        style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+                        <span className="material-symbols-outlined text-[16px]">draw</span>
                         Подписать
                       </button>
                     )}
                   </div>
-                )
-              })}
-            </div>
+                  {a.notes && <div className="mt-2 text-xs text-gray-500 pt-2 border-t border-gray-50">{a.notes}</div>}
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {!loading && activeTab === 'invoices' && (
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 mb-4">Счета</h2>
-            {invoices.length === 0 && <p className="text-gray-400 text-sm">Счетов нет.</p>}
-            <div className="flex flex-col gap-3">
-              {invoices.map(inv => (
-                <div key={inv.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
-                  <div className="flex-1">
-                    <div className="font-bold text-gray-800">{inv.invoice_number}</div>
-                    <div className="text-xs text-gray-400 mt-1">
-                      {inv.period_start ? new Date(inv.period_start).toLocaleDateString('ru') : '?'} — {inv.period_end ? new Date(inv.period_end).toLocaleDateString('ru') : '?'}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-gray-800 text-lg">{Number(inv.amount || 0).toLocaleString('ru')} ₽</div>
-                    <span className="inline-block px-2.5 py-1 rounded-full text-xs font-semibold mt-1 bg-gray-100 text-gray-500">
-                      {inv.status}
-                    </span>
+        {/* INVOICES */}
+        {!loading && tab === 'invoices' && (
+          <div className="space-y-3">
+            {invoices.length === 0 ? (
+              <div className="flex flex-col items-center py-16 gap-3">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(0,151,167,0.08)' }}>
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#0097A7' }}>description</span>
+                </div>
+                <p className="text-gray-400 text-sm">Счетов нет</p>
+              </div>
+            ) : invoices.map(inv => (
+              <div key={inv.id} className="bg-white rounded-2xl p-4 border border-gray-100 shadow-sm flex items-center gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-gray-900">{inv.invoice_number}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {inv.period_start ? new Date(inv.period_start).toLocaleDateString('ru') : '?'} — {inv.period_end ? new Date(inv.period_end).toLocaleDateString('ru') : '?'}
                   </div>
                 </div>
-              ))}
-            </div>
+                <div className="text-right">
+                  <div className="text-xl font-extrabold text-gray-900">{Number(inv.amount || 0).toLocaleString('ru')} ₽</div>
+                  <span className="inline-block text-[11px] font-bold px-2.5 py-0.5 rounded-full mt-1"
+                    style={{ background: '#f5f5f5', color: '#757575' }}>{inv.status}</span>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </main>
 
-      {/* Sign modal */}
+      {/* SIGN MODAL */}
       {signModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Подписать акт {signModal}</h3>
-            <label className="block text-sm font-medium text-gray-600 mb-1">ФИО подписанта</label>
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSignModal(null)} />
+          <div className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl"
+            style={{ background: '#fff' }}>
+            <div className="w-10 h-1 rounded-full bg-gray-200 mx-auto mb-5 sm:hidden" />
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Подписать акт</h3>
+            <p className="text-sm text-gray-400 mb-4">{signModal}</p>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">ФИО подписанта</label>
             <input value={signerName} onChange={e => setSignerName(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm mb-4"
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm mb-5 focus:outline-none focus:border-blue-400"
               placeholder="Иванов Иван Иванович" />
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3">
               <button onClick={() => setSignModal(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl text-sm">Отмена</button>
+                className="flex-1 py-3 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200">
+                Отмена
+              </button>
               <button onClick={() => signAct(signModal)}
-                className="px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold">Подписать</button>
+                className="flex-1 py-3 rounded-xl text-sm font-semibold text-white shadow-sm"
+                style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
+                Подписать
+              </button>
             </div>
           </div>
         </div>
