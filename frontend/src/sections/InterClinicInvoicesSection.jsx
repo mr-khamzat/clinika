@@ -1,3 +1,5 @@
+import { lazy, Suspense } from 'react'
+import ActPrintModal from './ActPrintModal'
 import { useEffect, useState } from 'react'
 import api from '../api'
 
@@ -24,7 +26,7 @@ function Badge({ status }) {
   )
 }
 
-function InvoiceTable({ invoices, onAction, isSupervisor }) {
+function InvoiceTable({ invoices, onAction, onPrint, isSupervisor }) {
   if (!Array.isArray(invoices) || !invoices.length) return <p style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>Счетов нет</p>
   return (
     <div style={{ overflowX: 'auto' }}>
@@ -61,7 +63,8 @@ function InvoiceTable({ invoices, onAction, isSupervisor }) {
                       Оплачен
                     </button>
                   )}
-                  {inv.status !== 'paid' && inv.status !== 'cancelled' && onAction && (
+                  <button onClick={() => onPrint && onPrint(inv.id)} style={{ background: "#e0e7ff", color: "#4338ca", border: "none", borderRadius: 6, padding: "3px 8px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>📄 Акт</button>
+                  {inv.status !== "paid" && inv.status !== "cancelled" && onAction && (
                     <button onClick={() => onAction('cancel', inv.id)}
                       style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 12, cursor: 'pointer' }}>
                       ✕
@@ -77,13 +80,14 @@ function InvoiceTable({ invoices, onAction, isSupervisor }) {
   )
 }
 
-export default function InterClinicInvoicesSection({ isSupervisor = false }) {
+export default function InterClinicInvoicesSection({ isSupervisor = false, token }) {
   const [tab, setTab] = useState(isSupervisor ? 'all' : 'incoming')
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [clinics, setClinics] = useState([])
-  const [form, setForm] = useState({ recipient_clinic_id: '', amount: '', description: '', due_date: '' })
+  const [form, setForm] = useState({ recipient_clinic_id: "", amount: "", description: "", due_date: "" })
+  const [printInvoiceId, setPrintInvoiceId] = useState(null)
 
   const load = async (t) => {
     setLoading(true)
@@ -199,7 +203,8 @@ export default function InterClinicInvoicesSection({ isSupervisor = false }) {
 
       {loading
         ? <p style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: 24 }}>Загрузка...</p>
-        : <InvoiceTable invoices={invoices} onAction={handleAction} isSupervisor={isSupervisor} />
+        : <><InvoiceTable invoices={invoices} onAction={handleAction} onPrint={id => setPrintInvoiceId(id)} isSupervisor={isSupervisor} />
+        {printInvoiceId && token && <ActPrintModal invoiceId={printInvoiceId} token={token} onClose={() => setPrintInvoiceId(null)} />}</> 
       }
     </div>
   )

@@ -255,3 +255,169 @@ async def admin_all_clinic_invoices(
         raise HTTPException(403, "Только super_admin")
     invs = await ici_svc.list_all_platform(db, status=status, tenant_id=tenant_id, limit=limit, offset=offset)
     return await _enrich(db, invs)
+
+
+# ── Загрузка печати (stamp) тенанта ──────────────────────────────────────────
+import os, shutil
+from fastapi import UploadFile, File
+
+STAMP_DIR = "/app/uploads/stamps"
+
+@router.post("/stamp/upload")
+async def upload_stamp(
+    file: UploadFile = File(...),
+    current_user: User = Depends(_require_supervisor),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(400, "Тенант не определён")
+    if file.content_type not in ("image/png", "image/jpeg", "image/jpg"):
+        raise HTTPException(400, "Только PNG или JPEG")
+    os.makedirs(STAMP_DIR, exist_ok=True)
+    ext = "png" if "png" in (file.content_type or "") else "jpg"
+    filename = f"{current_user.tenant_id}.{ext}"
+    path = f"{STAMP_DIR}/{filename}"
+    with open(path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    stamp_url = f"/uploads/stamps/{filename}"
+    from app.models.tenant import Tenant
+    r = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = r.scalar_one_or_none()
+    if tenant:
+        tenant.stamp_url = stamp_url
+        await db.commit()
+    return {"ok": True, "stamp_url": stamp_url}
+
+
+# ── Получить данные акта (для печати) ─────────────────────────────────────────
+@router.get("/clinic-invoices/{invoice_id}/act")
+async def get_invoice_act(
+    invoice_id: uuid.UUID,
+    current_user: User = Depends(_require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
+    inv = r.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(404, "Счёт не найден")
+    if current_user.role != UserRole.SUPER_ADMIN:
+        if str(inv.issuer_tenant_id) != str(current_user.tenant_id) and \
+           str(inv.recipient_tenant_id) != str(current_user.tenant_id):
+            raise HTTPException(403, "Нет доступа")
+
+    from app.models.tenant import Tenant
+    from app.models.clinic import Clinic
+
+    # Реквизиты выставителя
+    issuer_tenant, recipient_tenant = None, None
+    issuer_clinic, recipient_clinic = None, None
+
+    if inv.issuer_tenant_id:
+        rt = await db.execute(select(Tenant).where(Tenant.id == inv.issuer_tenant_id))
+        issuer_tenant = rt.scalar_one_or_none()
+    if inv.recipient_tenant_id:
+        rt = await db.execute(select(Tenant).where(Tenant.id == inv.recipient_tenant_id))
+        recipient_tenant = rt.scalar_one_or_none()
+    if inv.issuer_clinic_id:
+        rc = await db.execute(select(Clinic).where(Clinic.id == inv.issuer_clinic_id))
+        issuer_clinic = rc.scalar_one_or_none()
+    if inv.recipient_clinic_id:
+        rc = await db.execute(select(Clinic).where(Clinic.id == inv.recipient_clinic_id))
+        recipient_clinic = rc.scalar_one_or_none()
+
+    def tenant_req(t):
+        if not t:
+            return {}
+        return {
+            "name": t.legal_name or t.name,
+            "inn": t.legal_inn,
+            "kpp": t.legal_kpp,
+            "ogrn": t.legal_ogrn,
+            "address": t.legal_address,
+            "phone": t.legal_phone,
+            "email": t.legal_email,
+            "bank_name": t.legal_bank_name,
+            "bank_account": t.legal_bank_account,
+            "bank_bik": t.legal_bank_bik,
+            "bank_corr": t.legal_bank_corr,
+            "signer_name": t.legal_signer_name,
+            "signer_pos": t.legal_signer_pos,
+            "stamp_url": t.stamp_url,
+        }
+
+    return {
+        "invoice": _ici_out(inv,
+            issuer_name=issuer_clinic.name if issuer_clinic else (issuer_tenant.name if issuer_tenant else None),
+            recipient_name=recipient_clinic.name if recipient_clinic else (recipient_tenant.name if recipient_tenant else None),
+        ),
+        "issuer": tenant_req(issuer_tenant),
+        "recipient": tenant_req(recipient_tenant),
+    }
+
+
+# ── Обновить реквизиты тенанта ────────────────────────────────────────────────
+from pydantic import BaseModel as PB
+class RequisitesBody(PB):
+    legal_kpp: str | None = None
+    legal_ogrn: str | None = None
+    legal_phone: str | None = None
+    legal_email: str | None = None
+    legal_bank_name: str | None = None
+    legal_bank_account: str | None = None
+    legal_bank_bik: str | None = None
+    legal_bank_corr: str | None = None
+    legal_signer_name: str | None = None
+    legal_signer_pos: str | None = None
+
+@router.patch("/requisites")
+async def update_requisites(
+    body: RequisitesBody,
+    current_user: User = Depends(_require_supervisor),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(400, "Тенант не определён")
+    from app.models.tenant import Tenant
+    r = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    tenant = r.scalar_one_or_none()
+    if not tenant:
+        raise HTTPException(404)
+    for field, val in body.model_dump(exclude_none=True).items():
+        setattr(tenant, field, val)
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Статические файлы печатей ─────────────────────────────────────────────────
+from fastapi.responses import FileResponse
+
+@router.get("/stamps/{filename}")
+async def get_stamp(filename: str, current_user: User = Depends(_require_manager)):
+    path = f"{STAMP_DIR}/{filename}"
+    if not os.path.exists(path):
+        raise HTTPException(404, "Печать не найдена")
+    return FileResponse(path)
+
+
+# ── Получить реквизиты текущего тенанта ───────────────────────────────────────
+@router.get('/requisites')
+async def get_requisites(
+    current_user: User = Depends(_require_supervisor),
+    db: AsyncSession = Depends(get_db),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(400, 'Тенант не определён')
+    from app.models.tenant import Tenant
+    r = await db.execute(select(Tenant).where(Tenant.id == current_user.tenant_id))
+    t = r.scalar_one_or_none()
+    if not t:
+        raise HTTPException(404)
+    return {
+        'legal_name': t.legal_name, 'legal_inn': t.legal_inn,
+        'legal_kpp': t.legal_kpp, 'legal_ogrn': t.legal_ogrn,
+        'legal_address': t.legal_address, 'legal_phone': t.legal_phone,
+        'legal_email': t.legal_email, 'legal_bank_name': t.legal_bank_name,
+        'legal_bank_account': t.legal_bank_account, 'legal_bank_bik': t.legal_bank_bik,
+        'legal_bank_corr': t.legal_bank_corr, 'legal_signer_name': t.legal_signer_name,
+        'legal_signer_pos': t.legal_signer_pos, 'stamp_url': t.stamp_url,
+    }
