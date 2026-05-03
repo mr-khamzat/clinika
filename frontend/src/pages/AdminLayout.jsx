@@ -14,6 +14,7 @@ const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection = lazy(() => import('../sections/ActsSection'))
 const ModulesCatalogSection = lazy(() => import('../sections/ModulesCatalogSection'))
 const ReviewsSection = lazy(() => import('../sections/ReviewsSection'))
+const ContactsSection = lazy(() => import('../sections/ContactsSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -88,6 +89,7 @@ const NAV = [
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
   { key: 'modules_catalog', label: 'Каталог модулей', icon: 'storefront' },
   { key: 'reviews', label: 'Отзывы', icon: 'rate_review' },
+  { key: 'contacts', label: 'Обращения', icon: 'mail' },
   { key: 'plugins',        label: 'Плагины',      icon: 'extension' },
   { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
@@ -7363,7 +7365,20 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
 
   // Бейдж-конфиг: раздел → значение счётчика
-  const navBadge = {}
+  const [contactsBadge, setContactsBadge] = useState(0)
+  useEffect(() => {
+    if (!adminToken) return
+    apiFetch('get', '/contact/admin/unread-count', adminToken)
+      .then(r => setContactsBadge(r.data?.count || 0))
+      .catch(() => {})
+    const iv = setInterval(() => {
+      apiFetch('get', '/contact/admin/unread-count', adminToken)
+        .then(r => setContactsBadge(r.data?.count || 0))
+        .catch(() => {})
+    }, 60000)
+    return () => clearInterval(iv)
+  }, [adminToken])
+  const navBadge = { contacts: contactsBadge }
 
   const isSuperAdmin = user?.is_superadmin || user?.role === "super_admin"
   const isSupervisor = user?.role === "supervisor"
@@ -7408,6 +7423,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         </Suspense>
       )
       case 'monitoring': return <MonitoringSection token={adminToken} />
+      case 'contacts': return (
+        <Suspense fallback={<SectionLoader />}>
+          <ContactsSection token={adminToken} />
+        </Suspense>
+      )
       case 'reviews': return (
         <Suspense fallback={<SectionLoader />}>
           <ReviewsSection token={adminToken} />

@@ -1,32 +1,98 @@
 """
 Контакт-форма с сайта.
-Уведомление идёт через NotifyPlugin → Telegram.
+Обращения сохраняются в БД и доступны в /admin.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-logger = logging.getLogger("contact")
-router = APIRouter(prefix="/contact", tags=["contact"])
+from app.database import get_db
+from app.models.contact_request import ContactRequest
+from app.core.deps import require_super_admin
+
+logger = logging.getLogger('contact')
+router = APIRouter(prefix='/contact', tags=['contact'])
 
 
 class ContactForm(BaseModel):
     phone: str
-    email: str = ""
+    email: str = ''
     message: str
-    name: str = ""
+    name: str = ''
 
 
-@router.post("/")
-async def send_contact(form: ContactForm):
-    from app.plugins.registry import plugin_registry
-    notify = plugin_registry.get("notify")
-    logger.info(f"[CONTACT] phone={form.phone}")
-    if notify:
-        await notify.notify_contact_form(
-            phone=form.phone,
-            email=form.email,
-            name=form.name,
-            message=form.message,
-        )
-    return {"ok": True}
+@router.post('/')
+async def send_contact(form: ContactForm, db: AsyncSession = Depends(get_db)):
+    req = ContactRequest(
+        name=form.name or None,
+        phone=form.phone,
+        email=form.email or None,
+        message=form.message,
+    )
+    db.add(req)
+    await db.commit()
+    logger.info(f'[CONTACT] saved phone={form.phone}')
+    return {'ok': True}
+
+
+@router.get('/admin/list', dependencies=[Depends(require_super_admin)])
+async def list_contacts(
+    unread_only: bool = Query(False),
+    limit: int = Query(50, le=200),
+    offset: int = Query(0),
+    db: AsyncSession = Depends(get_db),
+):
+    filters = []
+    if unread_only:
+        filters.append(ContactRequest.is_read == False)
+    total = (await db.execute(select(func.count(ContactRequest.id)).where(*filters))).scalar() or 0
+    rows = (await db.execute(
+        select(ContactRequest).where(*filters)
+        .order_by(ContactRequest.created_at.desc())
+        .limit(limit).offset(offset)
+    )).scalars().all()
+    return {
+        'total': total,
+        'items': [
+            {
+                'id': str(r.id),
+                'name': r.name,
+                'phone': r.phone,
+                'email': r.email,
+                'message': r.message,
+                'is_read': r.is_read,
+                'created_at': r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get('/admin/unread-count', dependencies=[Depends(require_super_admin)])
+async def unread_count(db: AsyncSession = Depends(get_db)):
+    count = (await db.execute(
+        select(func.count(ContactRequest.id)).where(ContactRequest.is_read == False)
+    )).scalar() or 0
+    return {'count': count}
+
+
+@router.patch('/admin/{contact_id}/read', dependencies=[Depends(require_super_admin)])
+async def mark_read(contact_id: str, db: AsyncSession = Depends(get_db)):
+    import uuid as _uuid
+    r = await db.get(ContactRequest, _uuid.UUID(contact_id))
+    if r:
+        r.is_read = True
+        await db.commit()
+    return {'ok': True}
+
+
+@router.delete('/admin/{contact_id}', dependencies=[Depends(require_super_admin)])
+async def delete_contact(contact_id: str, db: AsyncSession = Depends(get_db)):
+    import uuid as _uuid
+    r = await db.get(ContactRequest, _uuid.UUID(contact_id))
+    if r:
+        await db.delete(r)
+        await db.commit()
+    return {'ok': True}

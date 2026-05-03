@@ -662,7 +662,7 @@ export default function Landing() {
             <div className="grid md:grid-cols-4 gap-6">
               {[
                 { n:'01', icon:'person_add', color:'bg-[#0A2342]', title:'Создание направления', desc:'Сотрудник или партнёр создаёт направление — вводит данные пациента и выбирает услугу' },
-                { n:'02', icon:'qr_code', color:'bg-teal-600', title:'QR-код пациенту', desc:'Пациент получает QR-код в Telegram. Предъявляет при визите в клинику' },
+                { n:'02', icon:'qr_code', color:'bg-teal-600', title:'QR-код пациенту', desc:'Пациент получает QR-код на телефон. Предъявляет при визите в клинику' },
                 { n:'03', icon:'qr_code_scanner', color:'bg-indigo-600', title:'Сканирование на стойке', desc:'Администратор сканирует QR — визит подтверждается в системе и МИС одновременно' },
                 { n:'04', icon:'account_balance_wallet', color:'bg-emerald-600', title:'Автоначисление бонусов', desc:'Бонусы мгновенно начисляются всем: сотруднику, партнёру и руководителю' },
               ].map((s, i) => (
