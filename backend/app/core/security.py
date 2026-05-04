@@ -174,3 +174,30 @@ def decode_portal_token(token: str) -> dict:
         return payload
     except JWTError as e:
         raise ValueError(f"Invalid portal token: {e}")
+
+
+def make_patient_session_token(session_id: str, phone: str, tenant_id: str | None) -> str:
+    """Long-lived patient session JWT (1 год). Используется для авто-входа в /p без QR."""
+    payload = {
+        'sid': session_id,
+        'sub': phone,
+        'tid': tenant_id,
+        'exp': datetime.utcnow() + timedelta(days=365),
+        'iat': datetime.utcnow(),
+        'type': 'patient_session',
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.jwt_algorithm)
+
+
+def decode_patient_session_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.jwt_algorithm])
+        if payload.get('type') != 'patient_session':
+            raise ValueError('Not a patient_session token')
+        return payload
+    except JWTError as e:
+        raise ValueError(f'Invalid patient session token: {e}')
+
+
+def hash_session_secret(secret: str) -> str:
+    return hashlib.sha256(secret.encode()).hexdigest()

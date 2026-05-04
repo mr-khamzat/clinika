@@ -1,15 +1,21 @@
 """
 Public router for patient cabinet.
-Protected by patient_token (JWT, 90 days).
+Protected by patient_token (JWT, 90 days) for /{ref}, или patient_session_token (1 год) для /session.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from pydantic import BaseModel
+from datetime import datetime
 from app.database import get_db
 from app.models.referral import Referral, ReferralStatus
-from app.core.security import verify_patient_token
+from app.core.security import verify_patient_token, make_patient_token
 from app.utils.phone import normalize_phone
+from app.services.patient_session_service import (
+    create_session as _create_session,
+    restore_session as _restore_session,
+    revoke_session as _revoke_session,
+)
 import uuid
 
 
@@ -33,6 +39,116 @@ _code_deps = [_limit_code] if _limit_code else []
 class CodeSearchRequest(BaseModel):
     code: int
     phone: str
+
+
+class SessionRestoreRequest(BaseModel):
+    session_token: str
+
+
+class SessionLogoutRequest(BaseModel):
+    session_token: str
+
+
+async def _load_mis_data(db: AsyncSession, phone: str, tenant_id) -> dict:
+    """Подтянуть из МИС: профиль пациента + историю визитов по всем клиникам тенанта."""
+    out = {"mis_info": None, "mis_visits": [], "mis_analyses": []}
+    if not tenant_id:
+        return out
+    try:
+        from app.services.mis_client import find_patient_by_phone, _post as _mis_post
+        from app.services.settings_service import get_setting as _get_s
+        from app.models.clinic import Clinic as _ClinicM
+        from datetime import datetime as _dt, timedelta as _td
+
+        _api_url = await _get_s(db, "mis_api_url", "", tenant_id=tenant_id)
+        _api_key = await _get_s(db, "mis_api_key", "", tenant_id=tenant_id)
+
+        patient = await find_patient_by_phone(phone, api_url=_api_url, api_key=_api_key)
+        mis_patient_id = None
+        if patient:
+            mis_patient_id = patient.get("patient_id") or patient.get("id")
+            _fn = f"{patient.get('last_name', '')} {patient.get('first_name', '')}".strip()
+            if patient.get('third_name'):
+                _fn += f" {patient['third_name']}"
+            out["mis_info"] = {
+                "patient_id": mis_patient_id,
+                "card_number": patient.get("number"),
+                "birth_date": patient.get("birth_date"),
+                "age": patient.get("age"),
+                "gender": patient.get("gender"),
+                "has_account": patient.get("has_account", False),
+                "full_name": _fn or patient.get("full_name", ""),
+                "email": patient.get("email"),
+                "send_sms": patient.get("send_sms"),
+                "date_created": patient.get("date_created"),
+            }
+
+        if mis_patient_id:
+            _clinics_r = await db.execute(
+                select(_ClinicM).where(
+                    _ClinicM.tenant_id == tenant_id,
+                    _ClinicM.mis_id.isnot(None),
+                    _ClinicM.is_active == True,
+                )
+            )
+            _tenant_clinics = _clinics_r.scalars().all()
+            _date_to = _dt.now().strftime("%d.%m.%Y")
+            _date_from = (_dt.now() - _td(days=730)).strftime("%d.%m.%Y")
+            for _c in _tenant_clinics:
+                try:
+                    _res = await _mis_post(
+                        "getAppointments",
+                        api_url=_api_url, api_key=_api_key,
+                        clinic_id=_c.mis_id,
+                        date_from=_date_from,
+                        date_to=_date_to,
+                        patient_id=mis_patient_id,
+                    )
+                    _appts = _res.get("data") or []
+                    if isinstance(_appts, list):
+                        out["mis_visits"].extend(_appts)
+                except Exception:
+                    continue
+            out["mis_visits"].sort(key=lambda x: x.get("time_start", ""), reverse=True)
+            out["mis_visits"] = out["mis_visits"][:50]
+    except Exception:
+        pass
+    return out
+
+
+async def _load_referrals_for_phone(db: AsyncSession, phone: str, tenant_id, exclude_id: str | None = None) -> list[dict]:
+    """Все направления пациента (по нормализованному телефону, в рамках тенанта)."""
+    from app.models.clinic import Clinic
+    from app.models.service import Service
+    phone_n = normalize_phone(phone)
+    q = select(Referral).where(Referral.patient_phone == phone)
+    if tenant_id:
+        q = q.where(Referral.tenant_id == tenant_id)
+    q = q.order_by(Referral.created_at.desc()).limit(40)
+    rows = (await db.execute(q)).scalars().all()
+    out = []
+    for r in rows:
+        if normalize_phone(r.patient_phone) != phone_n:
+            continue
+        if exclude_id and str(r.id) == exclude_id:
+            continue
+        r_service = (await db.execute(select(Service).where(Service.id == r.service_id))).scalar_one_or_none()
+        r_clinic = (await db.execute(select(Clinic).where(Clinic.id == r.to_clinic_id))).scalar_one_or_none()
+        out.append({
+            **_format_referral(r, include_qr=True),
+            "service_name": r_service.name if r_service else "—",
+            "to_clinic_name": r_clinic.name if r_clinic else "—",
+        })
+    return out
+
+
+def _pick_active_referral(rows: list[Referral]) -> Referral | None:
+    """Из списка direction'ов выбрать активный (created/confirmed) самый свежий."""
+    active = [r for r in rows if r.status in (ReferralStatus.CREATED, ReferralStatus.CONFIRMED)]
+    if not active:
+        return None
+    active.sort(key=lambda r: r.created_at, reverse=True)
+    return active[0]
 
 
 async def _referral_or_404(referral_id: str, db: AsyncSession) -> Referral:
@@ -129,92 +245,8 @@ async def get_patient_referral(
     )
     service = (await db.execute(select(Service).where(Service.id == ref.service_id))).scalar_one_or_none()
 
-    # All referrals for this patient (by phone)
-    all_refs_result = await db.execute(
-        select(Referral)
-        .where(Referral.patient_phone == ref.patient_phone)
-        .order_by(Referral.created_at.desc())
-        .limit(20)
-    )
-    all_refs = all_refs_result.scalars().all()
-
-    other_refs = []
-    for r in all_refs:
-        if str(r.id) == referral_id:
-            continue
-        r_service = (await db.execute(select(Service).where(Service.id == r.service_id))).scalar_one_or_none()
-        r_clinic = (await db.execute(select(Clinic).where(Clinic.id == r.to_clinic_id))).scalar_one_or_none()
-        other_refs.append({
-            **_format_referral(r, include_qr=True),
-            "service_name": r_service.name if r_service else "—",
-            "to_clinic_name": r_clinic.name if r_clinic else "—",
-        })
-
-    # MIS patient data
-    mis_info = None
-    mis_visits = []
-    mis_analyses = []
-    mis_patient_id = None
-
-    try:
-        from app.services.mis_client import find_patient_by_phone, _post as _mis_post
-        from app.services.settings_service import get_setting as _get_s
-        from app.models.clinic import Clinic as _ClinicM
-        from datetime import datetime as _dt, timedelta as _td
-
-        # Настройки МИС тенанта
-        _api_url = await _get_s(db, "mis_api_url", "", tenant_id=ref.tenant_id) if ref.tenant_id else ""
-        _api_key = await _get_s(db, "mis_api_key", "", tenant_id=ref.tenant_id) if ref.tenant_id else ""
-
-        patient = await find_patient_by_phone(ref.patient_phone, api_url=_api_url, api_key=_api_key)
-        if patient:
-            mis_patient_id = patient.get("patient_id") or patient.get("id")
-            _fn = f"{patient.get('last_name', '')} {patient.get('first_name', '')}".strip()
-            if patient.get('third_name'):
-                _fn += f" {patient['third_name']}"
-            mis_info = {
-                "patient_id": mis_patient_id,
-                "card_number": patient.get("number"),
-                "birth_date": patient.get("birth_date"),
-                "age": patient.get("age"),
-                "gender": patient.get("gender"),
-                "has_account": patient.get("has_account", False),
-                "full_name": _fn or patient.get("full_name", ""),
-                "email": patient.get("email"),
-                "send_sms": patient.get("send_sms"),
-                "date_created": patient.get("date_created"),
-            }
-
-        # История визитов через getAppointments по всем клиникам тенанта
-        if mis_patient_id and ref.tenant_id:
-            _clinics_r = await db.execute(
-                select(_ClinicM).where(
-                    _ClinicM.tenant_id == ref.tenant_id,
-                    _ClinicM.mis_id.isnot(None),
-                    _ClinicM.is_active == True,
-                )
-            )
-            _tenant_clinics = _clinics_r.scalars().all()
-            _date_to  = _dt.now().strftime("%d.%m.%Y")
-            _date_from = (_dt.now() - _td(days=730)).strftime("%d.%m.%Y")
-            for _c in _tenant_clinics:
-                try:
-                    _res = await _mis_post(
-                        "getAppointments",
-                        api_url=_api_url, api_key=_api_key,
-                        clinic_id=_c.mis_id,
-                        date_from=_date_from,
-                        date_to=_date_to,
-                        patient_id=mis_patient_id,
-                    )
-                    _appts = _res.get("data") or []
-                    if isinstance(_appts, list):
-                        mis_visits.extend(_appts)
-                except Exception:
-                    continue
-            mis_visits.sort(key=lambda x: x.get("time_start", ""), reverse=True)
-    except Exception:
-        pass
+    other_refs = await _load_referrals_for_phone(db, ref.patient_phone, ref.tenant_id, exclude_id=referral_id)
+    mis = await _load_mis_data(db, ref.patient_phone, ref.tenant_id)
 
     return {
         "current": {
@@ -224,9 +256,7 @@ async def get_patient_referral(
             "from_clinic_name": from_clinic.name if from_clinic else None,
         },
         "other_referrals": other_refs,
-        "mis_info": mis_info,
-        "mis_visits": mis_visits[:50],
-        "mis_analyses": [],
+        **mis,
         "patient_token": t,
         "patient_phone": ref.patient_phone,
         "patient_name": ref.patient_name,
@@ -236,18 +266,25 @@ async def get_patient_referral(
 @router.post("/by-code", dependencies=_code_deps)
 async def get_by_short_code(
     body: CodeSearchRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.core.security import make_patient_token
-
     # Сначала ищем направление
     result = await db.execute(select(Referral).where(Referral.short_code == body.code))
     ref = result.scalar_one_or_none()
+    device = request.headers.get("user-agent", "")[:500] if request else None
     if ref:
         if normalize_phone(body.phone) != normalize_phone(ref.patient_phone):
             raise HTTPException(status_code=403, detail="Номер телефона не совпадает")
         token = make_patient_token(str(ref.id), ref.patient_phone)
-        return {"referral_id": str(ref.id), "patient_token": token, "found": True}
+        _, session_token = await _create_session(db, ref.patient_phone, ref.tenant_id, device_info=device)
+        await db.commit()
+        return {
+            "referral_id": str(ref.id),
+            "patient_token": token,
+            "session_token": session_token,
+            "found": True,
+        }
 
     # Потом ищем запись к приезжему врачу
     from app.models.doctor import Appointment as Apt
@@ -258,9 +295,99 @@ async def get_by_short_code(
         if normalize_phone(body.phone) != normalize_phone(apt.patient_phone):
             raise HTTPException(status_code=403, detail="Номер телефона не совпадает")
         token = make_appointment_token(str(apt.id), apt.patient_phone)
-        return {"referral_id": str(apt.id), "patient_token": token, "found": True, "type": "appointment"}
+        tenant_id = getattr(apt, "tenant_id", None)
+        _, session_token = await _create_session(db, apt.patient_phone, tenant_id, device_info=device)
+        await db.commit()
+        return {
+            "referral_id": str(apt.id),
+            "patient_token": token,
+            "session_token": session_token,
+            "found": True,
+            "type": "appointment",
+        }
 
     raise HTTPException(status_code=404, detail="Запись не найдена")
+
+
+# ── Patient session: long-lived автологин для PWA-ярлыка ─────────────────────
+
+@router.post("/session/restore", dependencies=_view_deps)
+async def restore_patient_session(
+    body: SessionRestoreRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Принять session_token, отдать данные кабинета (как /patient/{ref})."""
+    session = await _restore_session(db, body.session_token)
+    if not session:
+        raise HTTPException(status_code=401, detail="Session invalid or expired")
+
+    phone = session.phone
+    tenant_id = session.tenant_id
+
+    # Найти все направления пациента (для выбора активного и истории)
+    q = select(Referral).where(Referral.patient_phone == phone)
+    if tenant_id:
+        q = q.where(Referral.tenant_id == tenant_id)
+    q = q.order_by(Referral.created_at.desc()).limit(40)
+    refs = (await db.execute(q)).scalars().all()
+    active = _pick_active_referral(refs)
+
+    mis = await _load_mis_data(db, phone, tenant_id)
+    other_refs = await _load_referrals_for_phone(
+        db, phone, tenant_id, exclude_id=str(active.id) if active else None
+    )
+
+    payload = {
+        "current": None,
+        "other_referrals": other_refs,
+        **mis,
+        "patient_phone": phone,
+        "patient_name": active.patient_name if active else (mis.get("mis_info") or {}).get("full_name") or "",
+        "session_token": body.session_token,  # клиент ничего не сохраняет нового — токен тот же
+    }
+
+    if active:
+        from app.models.clinic import Clinic
+        from app.models.service import Service
+        to_clinic = (await db.execute(select(Clinic).where(Clinic.id == active.to_clinic_id))).scalar_one_or_none()
+        from_clinic = (
+            (await db.execute(select(Clinic).where(Clinic.id == active.from_clinic_id))).scalar_one_or_none()
+            if active.from_clinic_id else None
+        )
+        service = (await db.execute(select(Service).where(Service.id == active.service_id))).scalar_one_or_none()
+        token = make_patient_token(str(active.id), active.patient_phone)
+        payload["current"] = {
+            **_format_referral(active, include_qr=True),
+            "service_name": service.name if service else "—",
+            "to_clinic_name": to_clinic.name if to_clinic else "—",
+            "from_clinic_name": from_clinic.name if from_clinic else None,
+        }
+        payload["patient_token"] = token
+        payload["referral_id"] = str(active.id)
+
+    await db.commit()
+    return payload
+
+
+@router.post("/session/logout")
+async def logout_patient_session(
+    body: SessionLogoutRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Отозвать session_token при выходе из кабинета."""
+    from app.core.security import decode_patient_session_token
+    try:
+        payload = decode_patient_session_token(body.session_token)
+    except ValueError:
+        return {"ok": True}
+    sid = payload.get("sid")
+    if sid:
+        try:
+            await _revoke_session(db, uuid.UUID(sid))
+            await db.commit()
+        except Exception:
+            pass
+    return {"ok": True}
 
 
 # ── Кабинет пациента для записи к приезжему врачу ────────────────────────────
