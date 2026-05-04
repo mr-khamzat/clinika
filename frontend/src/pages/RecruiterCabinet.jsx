@@ -1,13 +1,11 @@
 /**
- * Кабинет рекрутера v2 — стиль КлиникСеть
- * Прямая регистрация врачей, % настройки, QR
+ * Кабинет рекрутера — premium mobile-first
  */
 import { useState, useEffect, useCallback } from 'react'
 import { API_BASE } from '../config'
 
 const PRIMARY = '#0097A7'
 const DARK    = '#004D5F'
-const BG      = '#F0F5F6'
 
 function apiFetch(token, path, opts = {}) {
   return fetch(API_BASE + path, {
@@ -18,26 +16,13 @@ function apiFetch(token, path, opts = {}) {
 
 function Spinner() {
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
-      <div style={{ width: 28, height: 28, border: `3px solid ${PRIMARY}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div className="flex justify-center py-12">
+      <div className="w-8 h-8 border-3 border-teal-500 border-t-transparent rounded-full animate-spin" style={{ borderWidth:3 }} />
     </div>
   )
 }
 
-function StatCard({ label, value, icon, color = PRIMARY }) {
-  return (
-    <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px', border: '1px solid #e0eaec', flex: 1, minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 18, color, fontVariationSettings: "'FILL' 1" }}>{icon}</span>
-        <span style={{ fontSize: 11, color: '#607d8b', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: DARK, lineHeight: 1 }}>{value ?? '—'}</div>
-    </div>
-  )
-}
-
-// ── QR Popup ─────────────────────────────────────────────────────────────────
+// ── QR Popup ──────────────────────────────────────────────────────
 function QRPopup({ data, onClose }) {
   const [copied, setCopied] = useState('')
   const copy = (text, key) => { navigator.clipboard.writeText(text); setCopied(key); setTimeout(() => setCopied(''), 2000) }
@@ -45,76 +30,67 @@ function QRPopup({ data, onClose }) {
   const printQR = () => {
     const w = window.open('', '_blank', 'width=500,height=700')
     if (!w) return
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>QR — ${data.doctor.full_name}</title>
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,'Inter',sans-serif;margin:0;padding:24px;background:#fff;color:#1a2332;text-align:center}
-.logo{color:#0097A7;font-size:18px;font-weight:800;margin-bottom:4px}
-.name{font-size:20px;font-weight:700;color:#004D5F;margin:16px 0 4px}
-.spec{font-size:13px;color:#607d8b;margin-bottom:16px}
-img{width:200px;height:200px;border-radius:12px;border:2px solid #e0eaec}
-.cred{background:#f0f9fa;border:1px solid #b2dfdb;border-radius:10px;padding:14px;margin:16px 0;text-align:left}
-.cred-row{display:flex;justify-content:space-between;margin:6px 0;font-size:13px}
-.cred-label{color:#607d8b}.cred-val{font-weight:700;color:#004D5F}
-.hint{font-size:11px;color:#90a4ae;margin-top:12px}
-@media print{body{background:white;-webkit-print-color-adjust:exact}}
-</style></head><body>
-<div class="logo">КлиникСеть</div>
-<div class="name">${data.doctor.full_name}</div>
-<div class="spec">${data.doctor.specialization || ''}</div>
-<img src="data:image/png;base64,${data.qr_code}" alt="QR">
-<div style="font-size:12px;color:#607d8b;margin-top:8px">Отсканируй QR для перехода на страницу входа</div>
-<div class="cred">
-  <div class="cred-row"><span class="cred-label">Логин:</span><span class="cred-val">${data.credentials.username}</span></div>
-  <div class="cred-row"><span class="cred-label">Пароль:</span><span class="cred-val">${data.credentials.password}</span></div>
-  <div class="cred-row"><span class="cred-label">Сайт:</span><span class="cred-val">${data.credentials.login_url}</span></div>
-</div>
-<div class="hint">⚠️ Логин и пароль меняются только через администратора</div>
-</body></html>`)
+    w.document.write(`<!DOCTYPE html><html><head><title>QR — ${data.full_name}</title><style>
+      body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#fff;font-family:sans-serif}
+      .card{text-align:center;padding:32px 24px;border:2px solid #e0eaec;border-radius:20px;max-width:380px}
+      img{width:220px;height:220px;border-radius:12px;margin:16px auto;display:block}
+      h2{font-size:20px;font-weight:800;color:#004D5F;margin:0 0 4px}
+      p{font-size:13px;color:#607d8b;margin:2px 0}
+      .code{font-size:28px;font-weight:900;color:#0097A7;letter-spacing:6px;margin:20px 0 8px;border:2px dashed #b2dfdb;border-radius:10px;padding:10px}
+      @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    </style></head><body>
+      <div class="card">
+        <h2>${data.full_name}</h2>
+        <p>${data.specialization || ''}</p>
+        ${data.qr_code ? `<img src="data:image/png;base64,${data.qr_code}" alt="QR" />` : ''}
+        <div class="code">${data.username}</div>
+        <p style="font-size:12px;color:#90a4ae;margin-top:8px">Используйте этот логин для входа</p>
+      </div>
+    </body></html>`)
     w.document.close()
-    setTimeout(() => w.print(), 400)
+    setTimeout(() => { w.print() }, 500)
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,77,95,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 20, padding: '20px', maxWidth: 400, width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>✅ Врач зарегистрирован</div>
-            <div style={{ fontSize: 12, color: '#607d8b' }}>{data.doctor.full_name}</div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: '#90a4ae', cursor: 'pointer' }}>✕</button>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
+      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-safe" style={{ paddingBottom:'calc(1.5rem + env(safe-area-inset-bottom))' }}>
+        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+        <div className="text-center mb-4">
+          <div className="text-lg font-bold text-gray-800 mb-1">Врач зарегистрирован!</div>
+          <div className="text-sm text-gray-500">{data.full_name}</div>
         </div>
-        <div style={{ textAlign: 'center', marginBottom: 14 }}>
+        {data.qr_code && (
           <img src={`data:image/png;base64,${data.qr_code}`} alt="QR"
-            style={{ width: 170, height: 170, borderRadius: 12, border: '2px solid #e0eaec' }} />
-          <div style={{ fontSize: 11, color: '#607d8b', marginTop: 6 }}>Врач сканирует QR → страница входа</div>
-        </div>
-        <div style={{ background: '#f0f9fa', border: '1px solid #b2dfdb', borderRadius: 10, padding: '12px 14px', marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#607d8b', textTransform: 'uppercase', marginBottom: 8 }}>Данные для входа</div>
-          {[
-            { label: 'Логин', value: data.credentials.username, key: 'login' },
-            { label: 'Пароль', value: data.credentials.password, key: 'pass' },
-            { label: 'Ссылка', value: data.credentials.login_url, key: 'url' },
-          ].map(row => (
-            <div key={row.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div>
-                <div style={{ fontSize: 10, color: '#90a4ae' }}>{row.label}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: DARK, wordBreak: 'break-all' }}>{row.value}</div>
+            className="w-44 h-44 mx-auto rounded-2xl mb-4" />
+        )}
+        <div className="bg-teal-50 rounded-2xl p-4 mb-4 text-center">
+          <p className="text-xs font-bold text-teal-600 uppercase tracking-wider mb-2">Данные для входа</p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
+              <span className="text-xs text-gray-500">Логин</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-gray-800 text-sm">{data.username}</span>
+                <button onClick={() => copy(data.username, 'user')}
+                  className="text-xs text-teal-600 font-semibold">{copied === 'user' ? '✓' : 'Копировать'}</button>
               </div>
-              <button onClick={() => copy(row.value, row.key)} style={{ background: copied === row.key ? '#e0f7fa' : '#fff', border: '1px solid #b2dfdb', borderRadius: 7, padding: '3px 8px', fontSize: 12, color: PRIMARY, cursor: 'pointer', marginLeft: 8 }}>
-                {copied === row.key ? '✓' : '📋'}
-              </button>
             </div>
-          ))}
+            {data.temp_password && (
+              <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
+                <span className="text-xs text-gray-500">Пароль</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-800 text-sm">{data.temp_password}</span>
+                  <button onClick={() => copy(data.temp_password, 'pass')}
+                    className="text-xs text-teal-600 font-semibold">{copied === 'pass' ? '✓' : 'Копировать'}</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 8, padding: '8px 12px', fontSize: 11, color: '#795548', marginBottom: 12 }}>
-          ⚠️ Логин и пароль можно изменить только через панель администратора
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={printQR} style={{ flex: 1, background: PRIMARY, color: '#fff', border: 'none', borderRadius: 10, padding: '10px 0', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            🖨 Распечатать QR
+        <div className="flex gap-3">
+          <button onClick={printQR} className="flex-1 py-3 rounded-xl text-white font-bold text-sm" style={{ background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
+            Распечатать QR
           </button>
-          <button onClick={onClose} style={{ flex: 1, background: '#f0f5f6', color: DARK, border: '1px solid #e0eaec', borderRadius: 10, padding: '10px 0', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-bold text-sm">
             Закрыть
           </button>
         </div>
@@ -123,142 +99,112 @@ img{width:200px;height:200px;border-radius:12px;border:2px solid #e0eaec}
   )
 }
 
-// ── Главная ───────────────────────────────────────────────────────────────────
-function DashboardTab({ stats, onNavigate }) {
-  if (!stats) return (
-    <div style={{ textAlign: 'center', padding: '40px 16px', color: '#90a4ae' }}>
-      <div style={{ width: 28, height: 28, border: `3px solid ${PRIMARY}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 12px' }} />
-      <div style={{ fontSize: 13 }}>Загрузка данных...</div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
-
-  const isEmpty = !stats.doctors_count && !stats.total_bonuses
-
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-        <StatCard label="Привлечено врачей" value={stats.doctors_count ?? 0} icon="groups" color={PRIMARY} />
-        <StatCard label="Мой %" value={(stats.my_percent ?? 0) + '%'} icon="percent" color="#43a047" />
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
-        <StatCard label="Всего бонусов" value={Number(stats.total_bonuses || 0).toLocaleString('ru') + ' ₽'} icon="payments" color="#f59e0b" />
-        <StatCard label="К выплате" value={Number(stats.pending_bonuses || 0).toLocaleString('ru') + ' ₽'} icon="account_balance_wallet" color="#ef5350" />
-      </div>
-
-      {isEmpty && (
-        <div style={{ background: '#e0f7fa', borderRadius: 12, padding: '14px 16px', marginBottom: 16, fontSize: 13, color: DARK }}>
-          👋 Добро пожаловать! Зарегистрируйте первого врача во вкладке «Регистрация»
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <button onClick={() => onNavigate('register')} style={{
-          background: `linear-gradient(135deg, ${PRIMARY}, ${DARK})`, color: '#fff',
-          border: 'none', borderRadius: 14, padding: '16px 8px', cursor: 'pointer', fontWeight: 700, fontSize: 13,
-        }}>
-          <span className="material-symbols-outlined" style={{ display: 'block', fontSize: 26, marginBottom: 6, fontVariationSettings: "'FILL' 1" }}>person_add</span>
-          Зарегистрировать врача
-        </button>
-        <button onClick={() => onNavigate('doctors')} style={{
-          background: '#fff', color: DARK, border: '1px solid #e0eaec',
-          borderRadius: 14, padding: '16px 8px', cursor: 'pointer', fontWeight: 600, fontSize: 13,
-        }}>
-          <span className="material-symbols-outlined" style={{ display: 'block', fontSize: 26, marginBottom: 6, color: PRIMARY, fontVariationSettings: "'FILL' 1" }}>group</span>
-          Мои врачи
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ── Регистрация врача ─────────────────────────────────────────────────────────
+// ── Register Form ─────────────────────────────────────────────────
 function RegisterTab({ token }) {
   const [clinics, setClinics] = useState([])
+  const [form, setForm] = useState({ full_name:'', email:'', phone_number:'', address:'', specialization:'', username:'', password:'', clinic_ids:[] })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
-  const [form, setForm] = useState({ full_name: '', email: '', phone_number: '', address: '', specialization: '', username: '', password: '', clinic_ids: [] })
-
-  useEffect(() => {
-    apiFetch(token, '/clinics/').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [token])
 
   const f = key => e => setForm(p => ({ ...p, [key]: e.target.value }))
-  const toggleClinic = id => setForm(p => ({ ...p, clinic_ids: p.clinic_ids.includes(id) ? p.clinic_ids.filter(c => c !== id) : [...p.clinic_ids, id] }))
+  const toggleClinic = id => setForm(p => ({ ...p, clinic_ids: p.clinic_ids.includes(id) ? p.clinic_ids.filter(x => x !== id) : [...p.clinic_ids, id] }))
+
+  useEffect(() => {
+    apiFetch(token, '/recruiter/clinics').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
+  }, [token])
 
   const submit = async e => {
-    e.preventDefault()
-    if (!form.full_name.trim()) { setError('Введите ФИО врача'); return }
-    if (!form.username.trim()) { setError('Введите логин'); return }
-    if (!form.password.trim() || form.password.length < 4) { setError('Пароль минимум 4 символа'); return }
-    setLoading(true); setError('')
+    e.preventDefault(); setLoading(true); setError('')
     try {
-      const r = await apiFetch(token, '/recruiter/register_doctor', { method: 'POST', body: JSON.stringify(form) })
+      const r = await apiFetch(token, '/recruiter/register-doctor', { method:'POST', body: JSON.stringify(form) })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || 'Ошибка регистрации')
+      if (!r.ok) throw new Error(data.detail || 'Ошибка')
       setResult(data)
-      setForm({ full_name: '', email: '', phone_number: '', address: '', specialization: '', username: '', password: '', clinic_ids: [] })
-    } catch (e) { setError(e.message) }
+      setForm({ full_name:'', email:'', phone_number:'', address:'', specialization:'', username:'', password:'', clinic_ids:[] })
+    } catch(e) { setError(e.message) }
     setLoading(false)
   }
-
-  const inp = { width: '100%', border: '1.5px solid #cdd8da', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff', boxSizing: 'border-box', color: '#1a2332' }
-  const lbl = { display: 'block', fontSize: 11, fontWeight: 700, color: '#546e7a', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.04em' }
-  const section = { background: '#fff', borderRadius: 14, border: '1px solid #e0eaec', padding: '16px', marginBottom: 10 }
-  const sectionTitle = { fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 12, borderBottom: '1px solid #f0f5f6', paddingBottom: 8 }
 
   return (
     <div>
       {result && <QRPopup data={result} onClose={() => setResult(null)} />}
       {error && (
-        <div style={{ background: '#ffeaea', border: '1px solid #ffcdd2', borderRadius: 10, padding: '10px 14px', marginBottom: 12, fontSize: 13, color: '#c62828', display: 'flex', justifyContent: 'space-between' }}>
-          {error}
-          <button onClick={() => setError('')} style={{ background: 'none', border: 'none', color: '#c62828', cursor: 'pointer', fontWeight: 700, padding: 0 }}>✕</button>
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4 flex justify-between items-center">
+          <span className="text-red-700 text-sm">{error}</span>
+          <button onClick={() => setError('')} className="text-red-400 ml-2">✕</button>
         </div>
       )}
-      <form onSubmit={submit}>
-        <div style={section}>
-          <div style={sectionTitle}>👤 Данные врача</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div><label style={lbl}>ФИО *</label><input value={form.full_name} onChange={f('full_name')} required placeholder="Иванов Иван Иванович" style={inp} /></div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div><label style={lbl}>Email</label><input type="email" value={form.email} onChange={f('email')} placeholder="doctor@mail.ru" style={inp} /></div>
-              <div><label style={lbl}>Телефон</label><input value={form.phone_number} onChange={f('phone_number')} placeholder="+7..." style={inp} /></div>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <h3 className="font-bold text-gray-800 mb-4 text-sm">Данные врача</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">ФИО *</label>
+              <input value={form.full_name} onChange={f('full_name')} required placeholder="Иванов Иван Иванович"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 transition" />
             </div>
-            <div><label style={lbl}>Специализация</label><input value={form.specialization} onChange={f('specialization')} placeholder="Терапевт, хирург..." style={inp} /></div>
-            <div><label style={lbl}>Адрес работы</label><input value={form.address} onChange={f('address')} placeholder="г. Грозный, ул. Примерная, д. 1" style={inp} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Email</label>
+                <input type="email" value={form.email} onChange={f('email')} placeholder="doctor@mail.ru"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Телефон</label>
+                <input value={form.phone_number} onChange={f('phone_number')} placeholder="+7..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Специализация</label>
+              <input value={form.specialization} onChange={f('specialization')} placeholder="Терапевт, хирург..."
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Адрес</label>
+              <input value={form.address} onChange={f('address')} placeholder="г. Грозный, ул. ..."
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+            </div>
           </div>
         </div>
 
-        <div style={section}>
-          <div style={sectionTitle}>🔑 Данные для входа</div>
-          <div style={{ background: '#fff8e1', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#795548' }}>
-            Передайте эти данные врачу лично. Изменить можно только через панель администратора.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div><label style={lbl}>Логин *</label><input value={form.username} onChange={f('username')} required placeholder="dr_ivanov" style={inp} /></div>
-            <div><label style={lbl}>Пароль *</label><input value={form.password} onChange={f('password')} required placeholder="минимум 4 символа" style={inp} /></div>
+        <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <h3 className="font-bold text-gray-800 mb-1 text-sm">Данные для входа</h3>
+          <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mb-4">Передайте логин и пароль врачу лично</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Логин *</label>
+              <input value={form.username} onChange={f('username')} required placeholder="dr_ivanov"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Пароль *</label>
+              <input value={form.password} onChange={f('password')} required placeholder="мин. 4 символа"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-teal-400 transition" />
+            </div>
           </div>
         </div>
 
         {clinics.length > 0 && (
-          <div style={section}>
-            <div style={sectionTitle}>🏥 Доступ к клиникам</div>
-            {clinics.map(c => (
-              <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '8px 10px', borderRadius: 8, marginBottom: 6, background: form.clinic_ids.includes(c.id) ? '#e0f7fa' : '#fafbfc', border: `1px solid ${form.clinic_ids.includes(c.id) ? PRIMARY : '#e0eaec'}` }}>
-                <input type="checkbox" checked={form.clinic_ids.includes(c.id)} onChange={() => toggleClinic(c.id)} style={{ accentColor: PRIMARY, width: 16, height: 16 }} />
-                <span style={{ fontSize: 14, color: '#1a2332', fontWeight: form.clinic_ids.includes(c.id) ? 600 : 400 }}>{c.name}</span>
-              </label>
-            ))}
+          <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+            <h3 className="font-bold text-gray-800 mb-4 text-sm">Доступ к клиникам</h3>
+            <div className="space-y-2">
+              {clinics.map(c => (
+                <label key={c.id}
+                  className={`flex items-center gap-3 cursor-pointer p-3 rounded-xl border-2 transition ${form.clinic_ids.includes(c.id) ? 'border-teal-400 bg-teal-50' : 'border-gray-100 bg-gray-50'}`}>
+                  <input type="checkbox" checked={form.clinic_ids.includes(c.id)} onChange={() => toggleClinic(c.id)}
+                    className="w-4 h-4 accent-teal-500" />
+                  <span className={`text-sm font-medium ${form.clinic_ids.includes(c.id) ? 'text-teal-700' : 'text-gray-700'}`}>{c.name}</span>
+                </label>
+              ))}
+            </div>
           </div>
         )}
 
-        <button type="submit" disabled={loading} style={{
-          width: '100%', background: loading ? '#b2dfdb' : `linear-gradient(135deg, ${PRIMARY}, ${DARK})`,
-          color: '#fff', border: 'none', borderRadius: 12, padding: '13px 0',
-          fontSize: 14, fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
-        }}>
+        <button type="submit" disabled={loading}
+          className="w-full h-13 rounded-2xl text-white font-bold text-sm disabled:opacity-60 transition active:scale-95"
+          style={{ height:52, background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
           {loading ? 'Регистрируем...' : '✓ Зарегистрировать и получить QR'}
         </button>
       </form>
@@ -266,56 +212,53 @@ function RegisterTab({ token }) {
   )
 }
 
-// ── Мои врачи ─────────────────────────────────────────────────────────────────
+// ── Doctors ───────────────────────────────────────────────────────
 function DoctorsTab({ token }) {
   const [doctors, setDoctors] = useState([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
 
   useEffect(() => {
     apiFetch(token, '/recruiter/doctors').then(r => r.json())
       .then(d => { setDoctors(Array.isArray(d) ? d : []); setLoading(false) })
-      .catch(() => { setError('Ошибка загрузки'); setLoading(false) })
+      .catch(() => setLoading(false))
   }, [token])
 
   if (loading) return <Spinner />
-  if (error) return <div style={{ textAlign: 'center', padding: 20, color: '#c62828', fontSize: 13 }}>{error}</div>
   if (!doctors.length) return (
-    <div style={{ textAlign: 'center', padding: '40px 16px', color: '#90a4ae' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 44, display: 'block', marginBottom: 10, fontVariationSettings: "'FILL' 1" }}>group</span>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Нет зарегистрированных врачей</div>
-      <div style={{ fontSize: 13 }}>Перейдите во вкладку «Регистрация»</div>
+    <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+      <span className="material-symbols-outlined text-5xl text-gray-300 block mb-3" style={{ fontVariationSettings:"'FILL' 1" }}>group</span>
+      <p className="font-semibold text-gray-600 mb-1">Нет врачей</p>
+      <p className="text-sm text-gray-400">Зарегистрируйте первого врача</p>
     </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div className="space-y-3">
       {doctors.map(d => (
-        <div key={d.id} style={{ background: '#fff', borderRadius: 14, border: '1px solid #e0eaec', padding: '14px 16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 15, color: DARK }}>{d.full_name}</div>
-              {d.specialization && <div style={{ fontSize: 12, color: PRIMARY, fontWeight: 500, marginTop: 2 }}>{d.specialization}</div>}
+        <div key={d.id} className="bg-white rounded-2xl p-4" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-800 text-sm truncate">{d.full_name}</p>
+              {d.specialization && <p className="text-xs font-medium mt-0.5" style={{ color:PRIMARY }}>{d.specialization}</p>}
             </div>
-            <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 20, background: d.is_active ? '#e0f7fa' : '#ffeaea', color: d.is_active ? PRIMARY : '#c62828' }}>
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ml-2 flex-shrink-0 ${d.is_active ? 'bg-teal-100 text-teal-700' : 'bg-red-100 text-red-600'}`}>
               {d.is_active ? 'Активен' : 'Неактивен'}
             </span>
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-            {d.phone_number && <span style={{ fontSize: 12, color: '#607d8b' }}>📞 {d.phone_number}</span>}
-            {d.email && <span style={{ fontSize: 12, color: '#607d8b' }}>✉️ {d.email}</span>}
-            {d.address && <span style={{ fontSize: 12, color: '#607d8b' }}>📍 {d.address}</span>}
+          <div className="flex flex-wrap gap-2 mb-2">
+            {d.phone_number && <span className="text-xs text-gray-500">📞 {d.phone_number}</span>}
+            {d.email && <span className="text-xs text-gray-500">✉️ {d.email}</span>}
           </div>
           {d.clinics?.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {d.clinics.map(c => (
-                <span key={c.id} style={{ fontSize: 11, background: '#e0f7fa', color: DARK, padding: '2px 10px', borderRadius: 20, fontWeight: 600 }}>{c.name}</span>
+                <span key={c.id} className="text-xs bg-teal-50 text-teal-700 px-2.5 py-0.5 rounded-full font-semibold">{c.name}</span>
               ))}
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#90a4ae', paddingTop: 8, borderTop: '1px solid #f0f5f6' }}>
-            <span style={{ color: DARK }}>Логин: <strong>{d.username || '—'}</strong></span>
-            <span style={{ color: '#43a047', fontWeight: 600 }}>{Number(d.bonuses_earned).toLocaleString('ru')} ₽</span>
+          <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-xs text-gray-500">
+            <span>Логин: <strong className="text-gray-700">{d.username || '—'}</strong></span>
+            <span className="font-bold text-green-600">{Number(d.bonuses_earned || 0).toLocaleString('ru')} ₽</span>
           </div>
         </div>
       ))}
@@ -323,7 +266,7 @@ function DoctorsTab({ token }) {
   )
 }
 
-// ── Бонусы ────────────────────────────────────────────────────────────────────
+// ── Bonuses ───────────────────────────────────────────────────────
 function BonusesTab({ token }) {
   const [bonuses, setBonuses] = useState([])
   const [loading, setLoading] = useState(true)
@@ -336,23 +279,23 @@ function BonusesTab({ token }) {
 
   if (loading) return <Spinner />
   if (!bonuses.length) return (
-    <div style={{ textAlign: 'center', padding: '40px 16px', color: '#90a4ae' }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 44, display: 'block', marginBottom: 10, fontVariationSettings: "'FILL' 1" }}>payments</span>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Бонусов пока нет</div>
-      <div style={{ fontSize: 13 }}>Они появятся когда врачи начнут создавать направления</div>
+    <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+      <span className="material-symbols-outlined text-5xl text-gray-300 block mb-3" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
+      <p className="font-semibold text-gray-600 mb-1">Бонусов пока нет</p>
+      <p className="text-sm text-gray-400">Они появятся когда врачи начнут создавать направления</p>
     </div>
   )
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="space-y-3">
       {bonuses.map(b => (
-        <div key={b.id} style={{ background: '#fff', borderRadius: 12, border: '1px solid #e0eaec', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div key={b.id} className="bg-white rounded-2xl p-4 flex items-center justify-between" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: DARK }}>{Number(b.amount).toLocaleString('ru')} ₽</div>
-            <div style={{ fontSize: 12, color: '#607d8b', marginTop: 2 }}>{b.doctor_name} · {b.percent_applied}%</div>
-            <div style={{ fontSize: 11, color: '#b0bec5', marginTop: 2 }}>{new Date(b.created_at).toLocaleDateString('ru')}</div>
+            <p className="text-base font-bold text-gray-800">{Number(b.amount).toLocaleString('ru')} ₽</p>
+            <p className="text-xs text-gray-500 mt-0.5">{b.doctor_name} · {b.percent_applied}%</p>
+            <p className="text-xs text-gray-300 mt-0.5">{new Date(b.created_at).toLocaleDateString('ru')}</p>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 12px', borderRadius: 20, background: b.status === 'paid' ? '#e8f5e9' : '#fff8e1', color: b.status === 'paid' ? '#2e7d32' : '#f57f17' }}>
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${b.status === 'paid' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
             {b.status === 'paid' ? '✓ Выплачен' : '⏳ Начислен'}
           </span>
         </div>
@@ -361,63 +304,94 @@ function BonusesTab({ token }) {
   )
 }
 
-// ── % Настройки ───────────────────────────────────────────────────────────────
+// ── Percent ───────────────────────────────────────────────────────
 function PercentTab({ stats }) {
   const myPercent = stats?.my_percent ?? 0
-
   return (
-    <div>
-      <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e0eaec', padding: '16px', marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: DARK, marginBottom: 12, borderBottom: '1px solid #f0f5f6', paddingBottom: 8 }}>
-          📊 Мой процент вознаграждения
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-          <div style={{ width: 80, height: 80, borderRadius: '50%', background: `conic-gradient(${PRIMARY} ${myPercent * 3.6}deg, #e0eaec 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, color: DARK }}>
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+        <h3 className="font-bold text-gray-800 text-sm mb-4">Мой процент вознаграждения</h3>
+        <div className="flex items-center gap-5 mb-5">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background:`conic-gradient(${PRIMARY} ${myPercent * 3.6}deg, #e0eaec 0deg)` }}>
+            <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center font-black text-lg" style={{ color:DARK }}>
               {myPercent}%
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: DARK }}>Ваш процент: {myPercent}%</div>
-            <div style={{ fontSize: 12, color: '#607d8b', marginTop: 4, lineHeight: 1.5 }}>
-              С каждого подтверждённого направления, созданного привлечёнными вами врачами, вы получаете {myPercent}% от суммы бонуса врача.
+            <p className="font-bold text-gray-800 text-sm">Ваш процент: {myPercent}%</p>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">С каждого подтверждённого направления вы получаете {myPercent}% от бонуса врача</p>
+          </div>
+        </div>
+        <div className="bg-teal-50 rounded-2xl p-4 space-y-3">
+          {[
+            { step:'1', text:'Врач создаёт направление' },
+            { step:'2', text:'Клиника подтверждает визит' },
+            { step:'3', text:'Врач получает бонус' },
+            { step:'4', text:`Вы получаете ${myPercent}% от бонуса` },
+          ].map(s => (
+            <div key={s.step} className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0" style={{ background:PRIMARY }}>{s.step}</div>
+              <p className="text-sm text-gray-700">{s.text}</p>
             </div>
-          </div>
-        </div>
-
-        <div style={{ background: '#f0f9fa', borderRadius: 10, padding: '12px 14px' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: DARK, marginBottom: 8 }}>Как начисляется вознаграждение:</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              { step: '1', text: 'Врач создаёт направление на услугу' },
-              { step: '2', text: 'Клиника подтверждает визит пациента' },
-              { step: '3', text: 'Врач получает бонус за направление' },
-              { step: '4', text: `Вы получаете ${myPercent}% от бонуса врача` },
-            ].map(s => (
-              <div key={s.step} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <div style={{ width: 22, height: 22, borderRadius: '50%', background: PRIMARY, color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{s.step}</div>
-                <div style={{ fontSize: 13, color: '#1a2332', paddingTop: 2 }}>{s.text}</div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
-
-      <div style={{ background: '#fff8e1', border: '1px solid #ffe082', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#795548' }}>
-        💡 Для изменения процента обратитесь к менеджеру франшизы.
-      </div>
-
       {myPercent === 0 && (
-        <div style={{ background: '#ffeaea', border: '1px solid #ffcdd2', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#c62828', marginTop: 10 }}>
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700">
           ⚠️ Ваш процент не установлен. Обратитесь к менеджеру для настройки.
         </div>
       )}
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-700">
+        💡 Для изменения процента обратитесь к менеджеру франшизы.
+      </div>
     </div>
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+// ── Dashboard ─────────────────────────────────────────────────────
+function DashboardTab({ stats, onNavigate }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label:'Врачей привлечено', value:stats?.doctors_count,   icon:'group',    color:PRIMARY,    bg:'#e0f7fa' },
+          { label:'Всего заработано',  value:stats?.total_bonuses != null ? `${Number(stats.total_bonuses).toLocaleString('ru')} ₽` : null, icon:'payments', color:'#16A34A', bg:'#e8f5e9' },
+          { label:'К выплате',         value:stats?.pending_bonuses != null ? `${Number(stats.pending_bonuses).toLocaleString('ru')} ₽` : null, icon:'pending', color:'#d97706', bg:'#fff8e1' },
+          { label:'Мой %',             value:stats?.my_percent != null ? `${stats.my_percent}%` : null, icon:'percent', color:'#7c3aed', bg:'#f3e8ff' },
+        ].map(c => (
+          <div key={c.label} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:c.bg }}>
+              <span className="material-symbols-outlined text-xl" style={{ color:c.color, fontVariationSettings:"'FILL' 1" }}>{c.icon}</span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium leading-tight">{c.label}</p>
+              <p className="text-lg font-black text-gray-800">{c.value ?? (stats ? '0' : '—')}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <button onClick={() => onNavigate('register')}
+          className="bg-white rounded-2xl p-4 text-center active:scale-95 transition-transform" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center" style={{ background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
+            <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>person_add</span>
+          </div>
+          <p className="text-sm font-semibold text-gray-700">Зарегистрировать врача</p>
+        </button>
+        <button onClick={() => onNavigate('doctors')}
+          className="bg-white rounded-2xl p-4 text-center active:scale-95 transition-transform" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
+            <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>group</span>
+          </div>
+          <p className="text-sm font-semibold text-gray-700">Мои врачи</p>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main ──────────────────────────────────────────────────────────
 export default function RecruiterCabinet({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('dashboard')
   const [stats, setStats] = useState(null)
@@ -428,65 +402,61 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
     apiFetch(adminToken, '/recruiter/stats')
       .then(r => r.ok ? r.json() : Promise.reject(r.status))
       .then(d => setStats(d))
-      .catch(() => { setStats({ doctors_count: 0, total_bonuses: 0, pending_bonuses: 0, paid_bonuses: 0, my_percent: 0 }); setStatsError(true) })
+      .catch(() => { setStats({ doctors_count:0, total_bonuses:0, pending_bonuses:0, paid_bonuses:0, my_percent:0 }); setStatsError(true) })
   }, [adminToken])
 
   useEffect(() => { loadStats() }, [loadStats])
 
   const TABS = [
-    { key: 'dashboard', label: 'Главная',     icon: 'home' },
-    { key: 'register',  label: 'Регистрация', icon: 'person_add' },
-    { key: 'doctors',   label: 'Врачи',       icon: 'group' },
-    { key: 'bonuses',   label: 'Бонусы',      icon: 'payments' },
-    { key: 'percent',   label: 'Мой %',       icon: 'percent' },
+    { key:'dashboard', label:'Главная',      icon:'home'       },
+    { key:'register',  label:'Регистрация',  icon:'person_add' },
+    { key:'doctors',   label:'Врачи',        icon:'group'      },
+    { key:'bonuses',   label:'Бонусы',       icon:'payments'   },
+    { key:'percent',   label:'Мой %',        icon:'percent'    },
   ]
 
   return (
-    <div style={{ minHeight: '100vh', background: BG, fontFamily: "'Inter', sans-serif" }}>
-      <style>{`* { box-sizing: border-box; } input:focus { border-color: ${PRIMARY} !important; box-shadow: 0 0 0 3px rgba(0,151,167,0.1); } @keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div className="min-h-screen bg-[#f7f9fb]" style={{ fontFamily:"'Inter',sans-serif" }}>
 
-      {/* Header */}
-      <div style={{ background: DARK, padding: '12px 16px', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: '#fff', fontVariationSettings: "'FILL' 1" }}>person</span>
-            </div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#fff', lineHeight: 1.2 }}>{user?.full_name || 'Рекрутер'}</div>
-              <div style={{ fontSize: 11, color: '#80cfd6' }}>Кабинет рекрутера</div>
-            </div>
+      {/* Gradient Header */}
+      <div className="relative overflow-hidden px-4 pt-12 pb-6"
+        style={{ background:'linear-gradient(135deg,#004D5F 0%,#0097A7 100%)' }}>
+        <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/5 pointer-events-none" />
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)' }}>
+            <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>person_search</span>
           </div>
-          <button onClick={onLogout} style={{ background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: 8, padding: '6px 12px', color: '#fff', fontSize: 12, cursor: 'pointer' }}>
-            Выйти
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-base truncate">{user?.full_name || 'Рекрутер'}</p>
+            <p className="text-white/70 text-xs">Кабинет рекрутера</p>
+          </div>
+          <button onClick={onLogout} className="p-2 rounded-xl" style={{ background:'rgba(255,255,255,0.12)' }}>
+            <span className="material-symbols-outlined text-white/80 text-lg">logout</span>
           </button>
         </div>
-      </div>
-
-      {/* Nav */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e0eaec', position: 'sticky', top: 60, zIndex: 99 }}>
-        <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
-              flex: '1 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-              padding: '9px 10px 7px', border: 'none', background: 'none', cursor: 'pointer',
-              borderBottom: tab === t.key ? `2.5px solid ${PRIMARY}` : '2.5px solid transparent',
-              color: tab === t.key ? PRIMARY : '#90a4ae',
-              fontWeight: tab === t.key ? 700 : 400, fontSize: 10, whiteSpace: 'nowrap',
-            }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 19, fontVariationSettings: "'FILL' 1" }}>{t.icon}</span>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        {stats && (
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {[
+              { label:'Врачей', value:stats.doctors_count ?? 0 },
+              { label:'Мой %',  value:`${stats.my_percent ?? 0}%` },
+              { label:'₽',      value:Number(stats.total_bonuses ?? 0).toLocaleString('ru') },
+            ].map(s => (
+              <div key={s.label} className="rounded-xl p-2 text-center" style={{ background:'rgba(255,255,255,0.12)' }}>
+                <p className="text-white font-black text-lg leading-none">{s.value}</p>
+                <p className="text-white/60 text-xs mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '14px 14px 40px' }}>
+      <div className="px-4 py-4 pb-28">
         {statsError && (
-          <div style={{ background: '#fff3f3', borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#c62828', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            Не удалось загрузить статистику
-            <button onClick={loadStats} style={{ background: 'none', border: 'none', color: PRIMARY, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Повторить</button>
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4 flex justify-between items-center">
+            <span className="text-red-700 text-sm">Не удалось загрузить статистику</span>
+            <button onClick={loadStats} className="text-teal-600 text-sm font-semibold">Повторить</button>
           </div>
         )}
         {tab === 'dashboard' && <DashboardTab stats={stats} onNavigate={setTab} />}
@@ -494,6 +464,21 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {tab === 'doctors'   && <DoctorsTab token={adminToken} />}
         {tab === 'bonuses'   && <BonusesTab token={adminToken} />}
         {tab === 'percent'   && <PercentTab stats={stats} />}
+      </div>
+
+      {/* Bottom Navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-50"
+        style={{ paddingBottom:'env(safe-area-inset-bottom)', background:'rgba(255,255,255,0.95)', backdropFilter:'blur(20px)', borderTop:'1px solid rgba(0,0,0,0.06)' }}>
+        <div className="flex">
+          {TABS.map(item => (
+            <button key={item.key} onClick={() => setTab(item.key)}
+              className="flex-1 flex flex-col items-center pt-2 pb-1 gap-0.5 relative">
+              {tab === item.key && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:PRIMARY }} />}
+              <span className="material-symbols-outlined text-2xl" style={{ color:tab === item.key ? PRIMARY : '#9ca3af', fontVariationSettings:tab === item.key ? "'FILL' 1" : "'FILL' 0" }}>{item.icon}</span>
+              <span className="text-xs font-semibold" style={{ color:tab === item.key ? PRIMARY : '#9ca3af' }}>{item.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   )

@@ -48,12 +48,12 @@ function Err({ msg }) {
 }
 function StatCard({ icon, label, value, color, bg, onClick }) {
   return (
-    <div onClick={onClick} className={`bg-white rounded-2xl p-5 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md transition' : ''}`}>
+    <div onClick={onClick} className={`bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm ${onClick ? 'cursor-pointer hover:shadow-md transition' : ''}`}>
       <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: bg }}>
         <span className="material-symbols-outlined text-xl" style={{ color, fontVariationSettings: "'FILL' 1" }}>{icon}</span>
       </div>
-      <div className="text-2xl font-bold text-gray-800 leading-tight">{value}</div>
-      <div className="text-xs text-gray-500 mt-1">{label}</div>
+      <div className="text-2xl font-bold text-gray-800 dark:text-gray-100 leading-tight">{value}</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{label}</div>
     </div>
   )
 }
@@ -3430,6 +3430,13 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
   const [moreOpen, setMoreOpen] = useState(false)
   const [activeModules, setActiveModules] = useState(null)
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('adminTheme') === 'dark')
+  const toggleDark = () => {
+    const next = !isDark
+    setIsDark(next)
+    document.documentElement.classList.toggle('dark', next)
+    localStorage.setItem('adminTheme', next ? 'dark' : 'light')
+  }
 
   useEffect(() => {
     if (!adminToken) return
@@ -3489,8 +3496,42 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
   const moreItems   = visibleNav.filter(n => !BOTTOM_KEYS.includes(n.key))
 
   return (
-    <div className="flex min-h-screen font-sans" style={{ background: '#F0F4F8' }}>
-
+    <div className="flex min-h-screen font-sans bg-[#F0F4F8] dark:bg-gray-900 sv-cabinet">
+      <style id="sv-dark-css">{`
+        html.dark .sv-cabinet .bg-white { background-color: #1e293b !important; }
+        html.dark .sv-cabinet .bg-gray-50 { background-color: #1a2740 !important; }
+        html.dark .sv-cabinet .bg-gray-100 { background-color: #1e293b !important; }
+        html.dark .sv-cabinet .text-gray-900 { color: #f1f5f9 !important; }
+        html.dark .sv-cabinet .text-gray-800 { color: #f1f5f9 !important; }
+        html.dark .sv-cabinet .text-gray-700 { color: #94a3b8 !important; }
+        html.dark .sv-cabinet .text-gray-600 { color: #94a3b8 !important; }
+        html.dark .sv-cabinet .text-gray-500 { color: #64748b !important; }
+        html.dark .sv-cabinet .text-gray-400 { color: #475569 !important; }
+        html.dark .sv-cabinet .border-gray-100 { border-color: #334155 !important; }
+        html.dark .sv-cabinet .border-gray-200 { border-color: #334155 !important; }
+        html.dark .sv-cabinet .border-b { border-color: #334155 !important; }
+        html.dark .sv-cabinet .border-t { border-color: #334155 !important; }
+        html.dark .sv-cabinet .shadow-sm { box-shadow: 0 1px 4px rgba(0,0,0,.5) !important; }
+        html.dark .sv-cabinet .bg-red-50 { background-color: rgba(239,68,68,.1) !important; }
+        html.dark .sv-cabinet .border-red-200 { border-color: rgba(239,68,68,.3) !important; }
+        html.dark .sv-cabinet .text-red-600 { color: #f87171 !important; }
+        html.dark .sv-cabinet .bg-amber-100 { background-color: rgba(245,158,11,.15) !important; }
+        html.dark .sv-cabinet .text-amber-700 { color: #fbbf24 !important; }
+        html.dark .sv-cabinet .bg-green-50 { background-color: rgba(16,185,129,.1) !important; }
+        html.dark .sv-cabinet .bg-green-100 { background-color: rgba(16,185,129,.1) !important; }
+        html.dark .sv-cabinet .text-green-600 { color: #4ade80 !important; }
+        html.dark .sv-cabinet .text-green-700 { color: #4ade80 !important; }
+        html.dark .sv-cabinet .bg-blue-50 { background-color: rgba(59,130,246,.1) !important; }
+        html.dark .sv-cabinet .bg-blue-100 { background-color: rgba(59,130,246,.1) !important; }
+        html.dark .sv-cabinet .text-blue-700 { color: #60a5fa !important; }
+        html.dark .sv-cabinet input { background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important; }
+        html.dark .sv-cabinet select { background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important; }
+        html.dark .sv-cabinet textarea { background: #1e293b !important; color: #f1f5f9 !important; border-color: #475569 !important; }
+        html.dark .sv-cabinet thead tr { background-color: #1a2740 !important; }
+        html.dark .sv-cabinet tbody tr { border-color: #334155 !important; }
+        html.dark .sv-cabinet label { color: #94a3b8 !important; }
+      `}</style>
+      
       {/* ════════════════════════════════════════
           DESKTOP SIDEBAR
           ════════════════════════════════════════ */}
@@ -3565,6 +3606,11 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
               {activeNav?.label || 'Обзор'}
             </div>
           </div>
+          <button onClick={toggleDark}
+            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: 'rgba(255,255,255,0.08)' }}>
+            <span className="material-symbols-outlined text-[18px] text-white">{isDark ? 'light_mode' : 'dark_mode'}</span>
+          </button>
           <button onClick={onLogout}
             className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'rgba(255,255,255,0.08)' }}>
@@ -3593,6 +3639,11 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
               <div className="text-sm font-semibold text-gray-800 leading-tight">{userName}</div>
               <div className="text-[11px] text-gray-400">Владелец франшизы</div>
             </div>
+            <button onClick={toggleDark}
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-white/10 transition"
+              title={isDark ? 'Светлая тема' : 'Тёмная тема'}>
+              <span className="material-symbols-outlined text-[19px]">{isDark ? 'light_mode' : 'dark_mode'}</span>
+            </button>
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
               style={{ background: 'linear-gradient(135deg,#0097A7,#005F6B)' }}>
               {userInit}

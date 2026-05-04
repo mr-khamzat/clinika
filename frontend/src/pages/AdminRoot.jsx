@@ -34,6 +34,11 @@ export default function AdminRoot() {
   const [checking, setChecking] = useState(!!adminToken)
 
   useEffect(() => {
+    const theme = localStorage.getItem('adminTheme')
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [])
+
+  useEffect(() => {
     if (!adminToken) {
       setChecking(false)
       return
