@@ -143,46 +143,85 @@ function googleCalendarUrl(apt) {
   return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
-// PDF "чека" визита (jsPDF подгружается динамически — экономим bundle)
-async function downloadVisitPdf(visit, patient) {
+// "Чек" визита — открываем красивую HTML-страницу для печати/сохранения в PDF
+// (window.print() поддерживает любые шрифты браузера, включая кириллицу).
+function downloadVisitPdf(visit, patient) {
   try {
-    const { jsPDF } = await import('jspdf')
-    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-    const margin = 40
-    let y = margin
-    doc.setFont('helvetica','bold'); doc.setFontSize(16)
-    doc.text(visit.clinic || 'Клиника', margin, y); y += 22
-    doc.setFont('helvetica','normal'); doc.setFontSize(11)
-    doc.text(`Пациент: ${patient || '—'}`, margin, y); y += 16
-    doc.text(`Дата визита: ${visit.time_start || '—'}`, margin, y); y += 16
-    if (visit.doctor) { doc.text(`Врач: ${visit.doctor}`, margin, y); y += 16 }
-    y += 8
-    doc.setDrawColor(200); doc.line(margin, y, 555, y); y += 16
-    doc.setFont('helvetica','bold'); doc.text('Услуга', margin, y); doc.text('Цена, ₽', 470, y, { align: 'right' }); y += 14
-    doc.setFont('helvetica','normal')
-    let total = 0
     const services = Array.isArray(visit.services) ? visit.services : []
-    services.forEach(s => {
-      const title = String(s.title || '—')
-      const price = parseFloat(s.value || s.price || 0) || 0
-      total += price
-      // wrap длинных названий
-      const lines = doc.splitTextToSize(title, 380)
-      lines.forEach((line, i) => {
-        doc.text(line, margin, y)
-        if (i === 0) doc.text(price.toLocaleString('ru-RU'), 470, y, { align: 'right' })
-        y += 14
-        if (y > 780) { doc.addPage(); y = margin }
-      })
-    })
-    if (!services.length && visit.sum_value) total = visit.sum_value
-    y += 6
-    doc.setDrawColor(200); doc.line(margin, y, 555, y); y += 16
-    doc.setFont('helvetica','bold')
-    doc.text(`Итого: ${(total || visit.sum_value || 0).toLocaleString('ru-RU')} ₽`, 470, y, { align: 'right' })
-    doc.save(`visit-${(visit.time_start||'').replace(/[ :.]/g,'_')}.pdf`)
+    let computed = 0
+    services.forEach(s => { computed += parseFloat(s.value || s.price || 0) || 0 })
+    const total = computed || visit.sum_value || 0
+    const esc = (s) => String(s ?? '—').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]))
+    const rows = services.map(s => `
+      <tr>
+        <td>${esc(s.title || '—')}${s.code ? `<div class="muted">Код: ${esc(s.code)}</div>` : ''}${s.profession_title ? `<div class="muted">${esc(s.profession_title)}</div>` : ''}</td>
+        <td class="num">${(s.count || 1)} шт.</td>
+        <td class="num">${(parseFloat(s.value || s.price || 0) || 0).toLocaleString('ru-RU')} ₽</td>
+      </tr>`).join('')
+
+    const html = `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Чек визита</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 32px; color: #1f2937; }
+  .head { border-bottom: 2px solid #0097A7; padding-bottom: 16px; margin-bottom: 20px; }
+  h1 { margin: 0 0 6px; font-size: 22px; color: #0A2342; }
+  .meta { font-size: 13px; color: #6b7280; line-height: 1.6; }
+  .meta b { color: #1f2937; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th { text-align: left; padding: 10px 8px; border-bottom: 1px solid #d1d5db; font-size: 12px; text-transform: uppercase; color: #6b7280; letter-spacing: 0.5px; }
+  td { padding: 12px 8px; border-bottom: 1px solid #e5e7eb; font-size: 13px; vertical-align: top; }
+  td.num { text-align: right; white-space: nowrap; }
+  .muted { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+  .total { margin-top: 20px; padding: 16px; background: #f0f9ff; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; }
+  .total span { font-size: 14px; color: #6b7280; }
+  .total b { font-size: 20px; color: #0097A7; }
+  .foot { margin-top: 32px; padding-top: 16px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; text-align: center; }
+  @media print { body { padding: 16px; } .noprint { display: none !important; } }
+  .actions { margin-bottom: 20px; display: flex; gap: 8px; }
+  .btn { padding: 10px 18px; background: #0097A7; color: #fff; border: 0; border-radius: 8px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .btn-secondary { background: #e5e7eb; color: #1f2937; }
+</style></head>
+<body>
+  <div class="actions noprint">
+    <button class="btn" onclick="window.print()">📄 Сохранить как PDF / Распечатать</button>
+    <button class="btn btn-secondary" onclick="window.close()">Закрыть</button>
+  </div>
+  <div class="head">
+    <h1>${esc(visit.clinic || 'Клиника')}</h1>
+    <div class="meta">
+      <b>Пациент:</b> ${esc(patient || '—')}<br>
+      <b>Дата визита:</b> ${esc(visit.time_start || '—')}<br>
+      ${visit.doctor ? `<b>Врач:</b> ${esc(visit.doctor)}<br>` : ''}
+    </div>
+  </div>
+  ${services.length > 0 ? `
+  <table>
+    <thead><tr><th>Услуга</th><th class="num">Кол-во</th><th class="num">Цена</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>` : '<p style="color:#9ca3af;">Услуги не указаны</p>'}
+  <div class="total">
+    <span>Итого к оплате:</span>
+    <b>${total.toLocaleString('ru-RU')} ₽</b>
+  </div>
+  <div class="foot">Документ сформирован из личного кабинета пациента</div>
+  <script>
+    // Если печать вызвана автоматически — закрыть окно после её завершения
+    window.addEventListener('afterprint', () => setTimeout(() => window.close(), 300))
+  </script>
+</body></html>`
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const w = window.open(url, '_blank')
+    if (!w) {
+      alert('Разрешите всплывающие окна для скачивания чека')
+      URL.revokeObjectURL(url)
+      return
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   } catch (e) {
-    alert('Не удалось сгенерировать PDF')
+    alert('Не удалось открыть чек')
   }
 }
 
@@ -2579,15 +2618,27 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
 
   async function add() {
     setErr('')
-    if (!phone || phone.length < 7) { setErr('Введите телефон'); return }
+    const digits = (phone || '').replace(/\D/g, '')
+    if (digits.length < 10) { setErr('Введите номер телефона полностью (10–11 цифр)'); return }
+    if (!name.trim()) { setErr('Введите имя'); return }
     setBusy(true)
     try {
       const session = localStorage.getItem('clinika_patient_session')
-      await axios.post(`${API}/patient/family/add`, { phone, name, relation }, { params: { t: session } })
+      if (!session) { setErr('Сессия истекла, перезайдите в кабинет'); setBusy(false); return }
+      await axios.post(`${API}/patient/family/add`,
+        { phone: phone.trim(), name: name.trim(), relation: relation.trim() || null },
+        { params: { t: session } }
+      )
       setShowAdd(false); setPhone('+7'); setName(''); setRelation('')
       onChanged && onChanged()
     } catch (e) {
-      setErr(e.response?.data?.detail || 'Не удалось добавить')
+      const status = e.response?.status
+      const detail = e.response?.data?.detail
+      if (status === 409) setErr('Этот человек уже в вашем списке')
+      else if (status === 401) setErr('Сессия истекла, перезайдите')
+      else if (status === 400) setErr(detail || 'Некорректные данные')
+      else setErr(detail || `Ошибка ${status || ''}: не удалось добавить`)
+      console.warn('[family/add] error', status, detail, e)
     } finally { setBusy(false) }
   }
 
