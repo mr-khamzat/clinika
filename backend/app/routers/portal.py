@@ -14,7 +14,11 @@ router = APIRouter(prefix="/portal", tags=["patient-portal"])
 
 
 @router.get("/manifest.json", include_in_schema=False)
-async def portal_manifest(slug: str = Query(""), db: AsyncSession = Depends(get_db)):
+async def portal_manifest(
+    slug: str = Query(""),
+    s: str = Query("", description="session_token to embed into start_url"),
+    db: AsyncSession = Depends(get_db),
+):
     name = "Личный кабинет"
     theme_color = "#0097A7"
     if slug:
@@ -32,11 +36,15 @@ async def portal_manifest(slug: str = Query(""), db: AsyncSession = Depends(get_
         except Exception:
             pass
     short_name = name[:12] if len(name) > 12 else name
+    if slug:
+        start_url = f"/{slug}/p?s={s}" if s else f"/{slug}/p"
+    else:
+        start_url = "/"
     manifest = {
         "name": name,
         "short_name": short_name,
         "description": "Личный кабинет пациента",
-        "start_url": f"/{slug}/p" if slug else "/",
+        "start_url": start_url,
         "scope": f"/{slug}/" if slug else "/",
         "display": "standalone",
         "background_color": "#F0F4F8",

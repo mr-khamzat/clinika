@@ -29,36 +29,24 @@ if (typeof document !== 'undefined' && SLUG) {
   }
 }
 
-// Динамически генерирует manifest.json как Blob с актуальным start_url
-// (включает session_token чтобы PWA-ярлык на iOS сразу автологинился).
+// Перенацеливает <link rel="manifest"> на серверный manifest с session_token
+// в start_url. iOS Safari читает manifest при «Add to Home Screen» → ярлык
+// получит ссылку вида /{slug}/p?s={session}, и при открытии в standalone-mode
+// (где LocalStorage отдельный) PatientCabinet заавтологинится по ?s.
 function updateManifestStartUrl(sessionToken) {
   if (typeof document === 'undefined' || !SLUG) return
   try {
-    const startUrl = sessionToken
-      ? `/${SLUG}/p?s=${encodeURIComponent(sessionToken)}`
-      : `/${SLUG}/p`
-    const manifest = {
-      name: 'Личный кабинет',
-      short_name: 'Кабинет',
-      description: 'Личный кабинет пациента',
-      start_url: startUrl,
-      scope: `/${SLUG}/`,
-      display: 'standalone',
-      background_color: '#F0F4F8',
-      theme_color: '#0A2342',
-      orientation: 'portrait-primary',
-    }
-    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })
-    const url = URL.createObjectURL(blob)
     let link = document.querySelector('link[rel="manifest"]')
     if (!link) {
       link = document.createElement('link')
       link.rel = 'manifest'
       document.head.appendChild(link)
     }
-    if (link.dataset.blobUrl) URL.revokeObjectURL(link.dataset.blobUrl)
-    link.href = url
-    link.dataset.blobUrl = url
+    const params = new URLSearchParams({ slug: SLUG })
+    if (sessionToken) params.set('s', sessionToken)
+    // Уникальный ts ломает iOS-кеш предыдущего манифеста
+    params.set('v', String(Date.now()))
+    link.href = `${API_BASE}/portal/manifest.json?${params.toString()}`
   } catch {}
 }
 
