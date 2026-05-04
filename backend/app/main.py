@@ -28,6 +28,7 @@ from app.routers.presence import router as presence_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
+from app.routers.patient_chat import router as patient_chat_router
 from app.routers.portal import router as portal_router
 from app.routers.push import router as push_router
 from app.routers.webhooks import router as webhooks_router
@@ -147,6 +148,18 @@ async def process_webhook_queue_job():
     finally:
         await r.aclose()
 
+
+async def appointment_reminders_job():
+    """APScheduler: push-напоминания пациентам о записи (каждые 30 минут)."""
+    import logging
+    try:
+        from app.jobs.appointment_reminders import run_appointment_reminders
+        sent = await run_appointment_reminders()
+        if sent:
+            logging.getLogger('scheduler').info(f'appointment_reminders: sent {sent}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'appointment_reminders: {e}')
+
 log = get_logger("clinika")
 
 @asynccontextmanager
@@ -184,6 +197,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
     scheduler.add_job(daily_invoices_job, 'cron', hour=0, minute=0, id='daily_invoices', replace_existing=True)
+    scheduler.add_job(appointment_reminders_job, 'interval', minutes=30, id='appointment_reminders', replace_existing=True)
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
@@ -508,6 +522,7 @@ app.include_router(wiki_router)
 app.include_router(reviews_router)
 app.include_router(ici_router)
 app.include_router(patient_router)
+app.include_router(patient_chat_router)
 app.include_router(portal_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)

@@ -77,6 +77,115 @@ function fmtMis(str) {
   return tp ? `${+d} ${m[+mo-1]} ${y}, ${tp}` : `${+d} ${m[+mo-1]} ${y}`
 }
 
+// ── Утилиты для премиум-фич ──────────────────────────────────────────────────
+function digitsOnly(s) { return String(s||'').replace(/\D/g,'') }
+function buildTel(phone) { return phone ? `tel:${String(phone).replace(/\s/g,'')}` : '' }
+function buildWhatsApp(phone) {
+  const d = digitsOnly(phone); if (!d) return ''
+  return `https://wa.me/${d}`
+}
+function buildMapUrl(addr, lat, lng) {
+  if (lat && lng) return `https://yandex.ru/maps/?ll=${lng},${lat}&pt=${lng},${lat}&z=16`
+  return `https://yandex.ru/maps/?text=${encodeURIComponent(addr||'')}`
+}
+function hoursUntil(dateIso, hhmm) {
+  if (!dateIso) return Infinity
+  try {
+    const t = (hhmm||'00:00').slice(0,5)
+    const dt = new Date(`${dateIso}T${t}:00`)
+    return (dt.getTime() - Date.now()) / 3600000
+  } catch { return Infinity }
+}
+
+// ICS-файл (Add to Calendar) — генерируется на клиенте, скачивается через Blob
+function downloadIcs(apt) {
+  const date = apt.appointment_date
+  const start = (apt.start_time||'').slice(0,5)
+  const end = (apt.end_time||start||'').slice(0,5)
+  if (!date || !start) return
+  const dt = (d, t) => `${d.replace(/-/g,'')}T${t.replace(':','')}00`
+  const uid = `apt-${apt.id}@clinika`
+  const summary = `Приём: ${apt.doctor_name || 'Врач'}`
+  const loc = [apt.clinic_name, apt.clinic_address].filter(Boolean).join(', ')
+  const desc = apt.short_code ? `Код визита: ${apt.short_code}` : ''
+  const ics = [
+    'BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Clinika//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${dt(new Date().toISOString().slice(0,10), new Date().toISOString().slice(11,16))}`,
+    `DTSTART:${dt(date, start)}`,
+    `DTEND:${dt(date, end || start)}`,
+    `SUMMARY:${summary}`,
+    `LOCATION:${loc}`,
+    `DESCRIPTION:${desc}`,
+    'END:VEVENT','END:VCALENDAR',
+  ].join('\r\n')
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url; a.download = `appointment-${apt.id}.ics`
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 500)
+}
+
+function googleCalendarUrl(apt) {
+  const date = apt.appointment_date
+  const start = (apt.start_time||'').slice(0,5)
+  const end = (apt.end_time||start||'').slice(0,5)
+  if (!date || !start) return '#'
+  const dt = (d, t) => `${d.replace(/-/g,'')}T${t.replace(':','')}00`
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: `Приём: ${apt.doctor_name || 'Врач'}`,
+    dates: `${dt(date,start)}/${dt(date, end || start)}`,
+    details: apt.short_code ? `Код визита: ${apt.short_code}` : '',
+    location: [apt.clinic_name, apt.clinic_address].filter(Boolean).join(', '),
+  })
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
+}
+
+// PDF "чека" визита (jsPDF подгружается динамически — экономим bundle)
+async function downloadVisitPdf(visit, patient) {
+  try {
+    const { jsPDF } = await import('jspdf')
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+    const margin = 40
+    let y = margin
+    doc.setFont('helvetica','bold'); doc.setFontSize(16)
+    doc.text(visit.clinic || 'Клиника', margin, y); y += 22
+    doc.setFont('helvetica','normal'); doc.setFontSize(11)
+    doc.text(`Пациент: ${patient || '—'}`, margin, y); y += 16
+    doc.text(`Дата визита: ${visit.time_start || '—'}`, margin, y); y += 16
+    if (visit.doctor) { doc.text(`Врач: ${visit.doctor}`, margin, y); y += 16 }
+    y += 8
+    doc.setDrawColor(200); doc.line(margin, y, 555, y); y += 16
+    doc.setFont('helvetica','bold'); doc.text('Услуга', margin, y); doc.text('Цена, ₽', 470, y, { align: 'right' }); y += 14
+    doc.setFont('helvetica','normal')
+    let total = 0
+    const services = Array.isArray(visit.services) ? visit.services : []
+    services.forEach(s => {
+      const title = String(s.title || '—')
+      const price = parseFloat(s.value || s.price || 0) || 0
+      total += price
+      // wrap длинных названий
+      const lines = doc.splitTextToSize(title, 380)
+      lines.forEach((line, i) => {
+        doc.text(line, margin, y)
+        if (i === 0) doc.text(price.toLocaleString('ru-RU'), 470, y, { align: 'right' })
+        y += 14
+        if (y > 780) { doc.addPage(); y = margin }
+      })
+    })
+    if (!services.length && visit.sum_value) total = visit.sum_value
+    y += 6
+    doc.setDrawColor(200); doc.line(margin, y, 555, y); y += 16
+    doc.setFont('helvetica','bold')
+    doc.text(`Итого: ${(total || visit.sum_value || 0).toLocaleString('ru-RU')} ₽`, 470, y, { align: 'right' })
+    doc.save(`visit-${(visit.time_start||'').replace(/[ :.]/g,'_')}.pdf`)
+  } catch (e) {
+    alert('Не удалось сгенерировать PDF')
+  }
+}
+
 const STATUS_CFG = {
   created:          { label: 'Активно',      dot: '#3B82F6', bg: 'rgba(59,130,246,.1)',  text: '#1D4ED8' },
   confirmed:        { label: 'Подтверждено', dot: '#10B981', bg: 'rgba(16,185,129,.1)',  text: '#065F46' },
@@ -349,8 +458,9 @@ function fmtMisDate(str) {
 }
 const VISIT_COLORS = { completed: '#10B981', upcoming: '#3B82F6', refused: '#EF4444' }
 
-function VisitCard({ visit }) {
+function VisitCard({ visit, patientName }) {
   const [open, setOpen] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
   const services = Array.isArray(visit.services) ? visit.services : []
   const first = services[0]?.title || '—'
   const doctor = visit.doctor || '—'
@@ -359,6 +469,7 @@ function VisitCard({ visit }) {
   const vc = VISIT_STATUS[status] || { label: status, color: '#9CA3AF' }
   const total = visit.sum_value || 0
   const isFirst = visit.is_first_clinic || visit.is_first
+  const canPdf = (services.length > 0) || total > 0
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
@@ -409,6 +520,16 @@ function VisitCard({ visit }) {
           ))}
         </div>
       )}
+      {canPdf && (
+        <div className="px-4 pb-3 -mt-1">
+          <button onClick={async () => { if (pdfBusy) return; setPdfBusy(true); await downloadVisitPdf(visit, patientName); setPdfBusy(false) }}
+            className="w-full h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold transition-all active:scale-[.97]"
+            style={{ background:'#F1F5F9', color:'#1E293B', border:'1px solid #E2E8F0' }}>
+            <span className="material-symbols-outlined text-base">download</span>
+            {pdfBusy ? 'Готовим PDF...' : 'Скачать чек (PDF)'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -423,13 +544,32 @@ function fmtAptDate(iso) {
   return `${d.getDate()} ${m[d.getMonth()]}, ${w[d.getDay()]}`
 }
 
-function AppointmentCard({ apt, onQr }) {
+function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
   const status = String(apt.status || '').toLowerCase()
   const cfg = status === 'confirmed'
     ? { label: 'Подтверждена', dot: '#10B981', bg: 'rgba(16,185,129,.1)', text: '#065F46' }
     : { label: 'Ожидает',      dot: '#F59E0B', bg: 'rgba(245,158,11,.1)', text: '#92400E' }
   const startHHMM = (apt.start_time || '').slice(0,5)
   const endHHMM   = (apt.end_time   || '').slice(0,5)
+  const tooLate = hoursUntil(apt.appointment_date, apt.start_time) < 6
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCal, setShowCal] = useState(false)
+
+  async function doCancel() {
+    if (!apt.patient_token) { alert('Токен записи отсутствует'); return }
+    setCancelling(true)
+    try {
+      await axios.post(`${API}/patient/appointment/${apt.id}/cancel`, { reason: 'Отменено пациентом' }, { params:{ t: apt.patient_token } })
+      setConfirming(false)
+      onCancelled && onCancelled(apt.id)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Не удалось отменить')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   return (
     <div className="bg-white rounded-2xl overflow-hidden card-in" style={{ border:'1px solid rgba(0,0,0,.05)', boxShadow:'0 2px 12px rgba(0,0,0,.05)' }}>
       <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
@@ -485,104 +625,417 @@ function AppointmentCard({ apt, onQr }) {
             </span>
           )}
         </div>
+
+        {/* Контакты клиники в один клик — адаптив 1/3 кнопки в ряд */}
+        {(apt.clinic_phone || apt.clinic_address || apt.clinic_latitude) && (
+          <div className="grid grid-cols-3 gap-1.5 pt-2">
+            {apt.clinic_phone && (
+              <a href={buildTel(apt.clinic_phone)}
+                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#E0F7FA', color:'#00838F' }}>
+                <span className="material-symbols-outlined text-base">call</span>
+                <span className="hidden sm:inline">Позвонить</span>
+              </a>
+            )}
+            {apt.clinic_phone && (
+              <a href={buildWhatsApp(apt.clinic_phone)} target="_blank" rel="noreferrer"
+                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#E8F5E9', color:'#2E7D32' }}>
+                <span className="material-symbols-outlined text-base">chat</span>
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+            )}
+            {(apt.clinic_address || apt.clinic_latitude) && (
+              <a href={buildMapUrl(apt.clinic_address, apt.clinic_latitude, apt.clinic_longitude)} target="_blank" rel="noreferrer"
+                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#FFF3E0', color:'#E65100' }}>
+                <span className="material-symbols-outlined text-base">map</span>
+                <span className="hidden sm:inline">Маршрут</span>
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Кнопки управления: календарь / перенос / отмена — только для активных */}
+        {(status === 'pending' || status === 'confirmed') && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-2">
+            <div className="relative">
+              <button onClick={() => setShowCal(v => !v)}
+                className="w-full h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+                style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
+                <span className="material-symbols-outlined text-base">event_available</span>
+                В календарь
+              </button>
+              {showCal && (
+                <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+                  <button onClick={() => { downloadIcs(apt); setShowCal(false) }}
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">
+                    .ics (Apple/Outlook)
+                  </button>
+                  <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)}
+                    className="w-full block text-left px-3 py-2 text-xs hover:bg-gray-50 border-t border-gray-50">
+                    Google Calendar
+                  </a>
+                </div>
+              )}
+            </div>
+            <button onClick={() => onRescheduleStart && onRescheduleStart(apt)} disabled={tooLate}
+              title={tooLate ? 'Позвоните в клинику' : 'Перенести запись'}
+              className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+              style={{ background:'#fff', borderColor:'#E5E7EB', color: tooLate ? '#9CA3AF' : '#1565C0', cursor: tooLate ? 'not-allowed' : 'pointer', opacity: tooLate ? .65 : 1 }}>
+              <span className="material-symbols-outlined text-base">update</span>
+              Перенести
+            </button>
+            <button onClick={() => !tooLate && setConfirming(true)} disabled={tooLate}
+              title={tooLate ? 'Позвоните в клинику' : 'Отменить запись'}
+              className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+              style={{ background:'#fff', borderColor:'#FECACA', color: tooLate ? '#9CA3AF' : '#DC2626', cursor: tooLate ? 'not-allowed' : 'pointer', opacity: tooLate ? .65 : 1 }}>
+              <span className="material-symbols-outlined text-base">close</span>
+              Отменить
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Confirm-модалка отмены */}
+      {confirming && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={() => !cancelling && setConfirming(false)}>
+          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 text-base mb-1">Отменить запись?</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)}{startHHMM ? `, ${startHHMM}` : ''}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirming(false)} disabled={cancelling}
+                className="h-11 rounded-xl border text-sm font-semibold"
+                style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
+                Передумал
+              </button>
+              <button onClick={doCancel} disabled={cancelling}
+                className="h-11 rounded-xl text-sm font-bold text-white"
+                style={{ background: cancelling ? '#FCA5A5' : '#DC2626' }}>
+                {cancelling ? 'Отмена...' : 'Да, отменить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Support Tab ───────────────────────────────────────────────────────────────
-function SupportTab({ phone }) {
+// ── AptControls: блок управления (календарь / перенос / отмена) ─────────────
+function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCal, setShowCal] = useState(false)
+
+  async function doCancel() {
+    if (!apt.patient_token) { alert('Токен записи отсутствует'); return }
+    setCancelling(true)
+    try {
+      await axios.post(`${API}/patient/appointment/${apt.id}/cancel`, { reason: 'Отменено пациентом' }, { params:{ t: apt.patient_token } })
+      setConfirming(false)
+      onCancelled && onCancelled(apt.id)
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Не удалось отменить')
+    } finally { setCancelling(false) }
+  }
+
+  return (
+    <>
+      <div className="bg-white rounded-2xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ border:'1px solid rgba(0,0,0,.06)' }}>
+        <div className="relative">
+          <button onClick={() => setShowCal(v => !v)}
+            className="w-full h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold border transition-all active:scale-[.97]"
+            style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
+            <span className="material-symbols-outlined text-base">event_available</span>
+            В календарь
+          </button>
+          {showCal && (
+            <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+              <button onClick={() => { downloadIcs(apt); setShowCal(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">.ics (Apple/Outlook)</button>
+              <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)} className="w-full block text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-50">Google Calendar</a>
+            </div>
+          )}
+        </div>
+        <button onClick={() => onRescheduleStart && onRescheduleStart(apt)} disabled={tooLate}
+          title={tooLate ? 'Позвоните в клинику' : 'Перенести запись'}
+          className="h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold border transition-all active:scale-[.97]"
+          style={{ background:'#fff', borderColor:'#E5E7EB', color: tooLate ? '#9CA3AF' : '#1565C0', opacity: tooLate ? .65 : 1, cursor: tooLate ? 'not-allowed' : 'pointer' }}>
+          <span className="material-symbols-outlined text-base">update</span>
+          Перенести
+        </button>
+        <button onClick={() => !tooLate && setConfirming(true)} disabled={tooLate}
+          title={tooLate ? 'Позвоните в клинику' : 'Отменить запись'}
+          className="h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold border transition-all active:scale-[.97]"
+          style={{ background:'#fff', borderColor:'#FECACA', color: tooLate ? '#9CA3AF' : '#DC2626', opacity: tooLate ? .65 : 1, cursor: tooLate ? 'not-allowed' : 'pointer' }}>
+          <span className="material-symbols-outlined text-base">close</span>
+          Отменить
+        </button>
+      </div>
+
+      {confirming && (
+        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={() => !cancelling && setConfirming(false)}>
+          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 text-base mb-1">Отменить запись?</h3>
+            <p className="text-sm text-gray-500 mb-4">{apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)} {(apt.start_time||'').slice(0,5)}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setConfirming(false)} disabled={cancelling}
+                className="h-11 rounded-xl border text-sm font-semibold" style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
+                Передумал
+              </button>
+              <button onClick={doCancel} disabled={cancelling}
+                className="h-11 rounded-xl text-sm font-bold text-white" style={{ background: cancelling ? '#FCA5A5' : '#DC2626' }}>
+                {cancelling ? 'Отмена...' : 'Да, отменить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Chat Tab (вариант D — гибрид AI + регистратура) ──────────────────────────
+// Аналог SupportTab, но через /patient/chat — AI-ассистент + админ.
+function ChatTab({ phone, sessionToken }) {
+  const [chat, setChat] = useState(null)        // { id, mode, ai_messages_today, ai_daily_limit, ... }
   const [msgs, setMsgs] = useState([])
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
   const bottomRef = useRef(null)
+  const inputRef = useRef(null)
 
-  const load = useCallback(async () => {
-    if (!phone) return
+  // Загрузка / обновление истории. Polling каждые 5 сек.
+  const loadList = useCallback(async () => {
+    if (!sessionToken) { setLoading(false); return }
     try {
-      const r = await axios.get(`${API}/support/patient/thread`, { params: { phone } })
-      setMsgs(Array.isArray(r.data) ? r.data : [])
-    } catch {}
-    setLoading(false)
-  }, [phone])
+      const r = await axios.get(`${API}/patient/chat`, { params: { t: sessionToken } })
+      const list = Array.isArray(r.data?.chats) ? r.data.chats : []
+      if (list.length === 0) {
+        setChat(null); setMsgs([]); setLoading(false); return
+      }
+      const latest = list[0]
+      const r2 = await axios.get(`${API}/patient/chat/${latest.id}/messages`, { params: { t: sessionToken } })
+      setChat(r2.data?.chat || latest)
+      setMsgs(Array.isArray(r2.data?.messages) ? r2.data.messages : [])
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Не удалось загрузить чат')
+    } finally {
+      setLoading(false)
+    }
+  }, [sessionToken])
 
-  useEffect(() => { load(); const id = setInterval(load, 6000); return () => clearInterval(id) }, [load])
-  useEffect(() => { setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50) }, [msgs])
+  useEffect(() => {
+    loadList()
+    const id = setInterval(loadList, 5000)  // ловим ответы админа
+    return () => clearInterval(id)
+  }, [loadList])
+  useEffect(() => {
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+  }, [msgs])
 
+  // Отправка сообщения
   const send = async (e) => {
-    e.preventDefault()
-    if (!text.trim() || sending) return
-    const t = text.trim(); setText(''); setSending(true)
-    try { await axios.post(`${API}/support/patient/send`, { phone, text: t }); await load() }
-    catch { setText(t) }
-    setSending(false)
+    e?.preventDefault?.()
+    const t = (text || '').trim()
+    if (!t || sending || !sessionToken) return
+    setText(''); setSending(true); setError('')
+    const optimistic = {
+      id: 'tmp-' + Date.now(),
+      sender: 'patient',
+      text: t,
+      created_at: new Date().toISOString(),
+      _pending: true,
+    }
+    setMsgs(prev => [...prev, optimistic])
+    try {
+      const body = { text: t }
+      if (chat?.id) body.chat_id = chat.id
+      const r = await axios.post(`${API}/patient/chat/send`, body, { params: { t: sessionToken } })
+      const newOnes = Array.isArray(r.data?.new_messages) ? r.data.new_messages : []
+      setMsgs(prev => {
+        const cleaned = prev.filter(m => m.id !== optimistic.id)
+        return [...cleaned, ...newOnes]
+      })
+      if (r.data?.chat) setChat(r.data.chat)
+    } catch (err) {
+      setMsgs(prev => prev.filter(m => m.id !== optimistic.id))
+      setText(t)
+      setError(err?.response?.data?.detail || 'Не удалось отправить сообщение')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  // Явная просьба пациента «передать живому администратору»
+  const requestManual = async () => {
+    if (!chat?.id || !sessionToken) return
+    try {
+      const r = await axios.post(`${API}/patient/chat/${chat.id}/manual`, {}, { params: { t: sessionToken } })
+      if (r.data?.chat) setChat(r.data.chat)
+      const newOnes = Array.isArray(r.data?.new_messages) ? r.data.new_messages : []
+      if (newOnes.length) setMsgs(prev => [...prev, ...newOnes])
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Не удалось переключить чат')
+    }
+  }
+
+  const isManual = chat?.mode === 'manual'
+  const limit = chat?.ai_daily_limit || 20
+  const used = chat?.ai_messages_today || 0
+  const limitExceeded = !isManual && used >= limit
+  const fmtTime = (iso) => {
+    if (!iso) return ''
+    try {
+      const d = new Date(iso)
+      return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+    } catch { return '' }
   }
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100svh - 180px)' }}>
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4 p-4 rounded-2xl" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.2)' }}>
+      {/* Header — адаптив для mobile (360px) и tablet */}
+      <div className="flex items-center gap-3 mb-3 p-3 sm:p-4 rounded-2xl" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
           <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
         </div>
-        <div>
-          <p className="font-bold text-white text-sm">Служба поддержки</p>
-          <p className="text-blue-100 text-xs">Отвечаем в рабочее время</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-white text-sm truncate">Чат клиники</p>
+          <p className="text-blue-100 text-[11px] truncate">
+            {isManual ? 'Отвечает администратор' : 'AI-ассистент 24/7'}
+          </p>
         </div>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-          <span className="text-emerald-300 text-xs font-semibold">Онлайн</span>
+          <span className="text-emerald-200 text-[11px] font-semibold hidden sm:inline">
+            {isManual ? 'Передан админу' : 'Онлайн'}
+          </span>
         </div>
       </div>
 
+      {/* Плашки статуса */}
+      {isManual && (
+        <div className="mb-2 px-3 py-2 rounded-xl text-xs flex items-start gap-2"
+          style={{ background: '#FFF7ED', border: '1px solid #FED7AA', color: '#9A3412' }}>
+          <span className="material-symbols-outlined text-base flex-shrink-0" style={{ marginTop: 1 }}>schedule</span>
+          <span>Ваш вопрос ждёт ответа администратора. Обычно отвечаем в рабочее время в течение нескольких минут.</span>
+        </div>
+      )}
+      {!isManual && limitExceeded && (
+        <div className="mb-2 px-3 py-2 rounded-xl text-xs flex items-start gap-2"
+          style={{ background: '#FEF3C7', border: '1px solid #FDE68A', color: '#92400E' }}>
+          <span className="material-symbols-outlined text-base flex-shrink-0" style={{ marginTop: 1 }}>info</span>
+          <span>Лимит автоответов исчерпан до завтра. Можете продолжить — администратор ответит вам в этом же чате.</span>
+        </div>
+      )}
+      {error && (
+        <div className="mb-2 px-3 py-2 rounded-xl text-xs flex items-start gap-2"
+          style={{ background: '#FEE2E2', border: '1px solid #FECACA', color: '#991B1B' }}>
+          <span className="material-symbols-outlined text-base flex-shrink-0">error</span>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Список сообщений */}
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto space-y-2 pb-2">
+        <div className="flex-1 overflow-y-auto space-y-2 pb-2 -mx-1 px-1">
           {msgs.length === 0 && (
-            <div className="flex flex-col items-center py-12 text-center">
-              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
+            <div className="flex flex-col items-center py-10 sm:py-12 text-center">
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-3 sm:mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
                 <span className="material-symbols-outlined text-blue-400 text-3xl">chat_bubble</span>
               </div>
-              <p className="text-gray-500 font-semibold text-sm">Начните диалог</p>
-              <p className="text-gray-400 text-xs mt-1">Мы ответим на ваши вопросы</p>
+              <p className="text-gray-600 font-semibold text-sm">Начните диалог с клиникой</p>
+              <p className="text-gray-400 text-xs mt-1 max-w-xs px-4">
+                Спросите про услуги, цены, расписание врачей. AI-ассистент ответит сразу.
+              </p>
             </div>
           )}
-          {msgs.map((m, i) => (
-            <div key={i} className={`flex ${m.sender === 'patient' ? 'justify-end' : 'justify-start'}`}>
-              {m.sender !== 'patient' && (
-                <div className="w-7 h-7 rounded-full flex items-center justify-center mr-2 mt-1 flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-                  <span className="material-symbols-outlined text-white text-xs" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
+          {msgs.map((m, i) => {
+            const isPatient = m.sender === 'patient'
+            const isAdmin = m.sender === 'admin'
+            const isAssistant = m.sender === 'assistant'
+            return (
+              <div key={m.id || i} className={`flex ${isPatient ? 'justify-end' : 'justify-start'}`}>
+                {!isPatient && (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center mr-2 mt-1 flex-shrink-0"
+                    style={{
+                      background: isAdmin
+                        ? 'linear-gradient(135deg,#16A34A,#15803D)'
+                        : 'linear-gradient(135deg,#0097A7,#1565C0)',
+                    }}>
+                    <span className="material-symbols-outlined text-white text-xs" style={{ fontVariationSettings:"'FILL' 1" }}>
+                      {isAdmin ? 'badge' : 'smart_toy'}
+                    </span>
+                  </div>
+                )}
+                <div style={{
+                  maxWidth: '82%',
+                  padding: '8px 12px',
+                  borderRadius: isPatient ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                  background: isPatient
+                    ? 'linear-gradient(135deg,#1565C0,#0097A7)'
+                    : (isAdmin ? '#F0FDF4' : 'white'),
+                  boxShadow: '0 2px 8px rgba(0,0,0,.06)',
+                  border: !isPatient ? '1px solid ' + (isAdmin ? '#BBF7D0' : 'rgba(0,0,0,.06)') : 'none',
+                  opacity: m._pending ? 0.7 : 1,
+                }}>
+                  <p className="text-sm whitespace-pre-wrap break-words" style={{ color: isPatient ? 'white' : '#1F2937' }}>
+                    {m.text}
+                  </p>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <span className="text-[10px]" style={{ color: isPatient ? 'rgba(255,255,255,.7)' : '#9CA3AF' }}>
+                      {isAssistant && '🤖 Авто-ответ'}
+                      {isAdmin && '👤 Администратор'}
+                    </span>
+                    <span className="text-[10px]" style={{ color: isPatient ? 'rgba(255,255,255,.6)' : '#9CA3AF' }}>
+                      {fmtTime(m.created_at)}
+                    </span>
+                  </div>
                 </div>
-              )}
-              <div style={{
-                maxWidth: '78%',
-                padding: '10px 14px',
-                borderRadius: m.sender === 'patient' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                background: m.sender === 'patient' ? 'linear-gradient(135deg,#1565C0,#0097A7)' : 'white',
-                boxShadow: '0 2px 8px rgba(0,0,0,.08)',
-                border: m.sender !== 'patient' ? '1px solid rgba(0,0,0,.06)' : 'none',
-              }}>
-                <p className="text-sm" style={{ color: m.sender === 'patient' ? 'white' : '#1F2937' }}>{m.text || m.content}</p>
-                <p className="text-[10px] mt-1" style={{ color: m.sender === 'patient' ? 'rgba(255,255,255,.6)' : '#9CA3AF' }}>{fmt(m.created_at)}</p>
               </div>
-            </div>
-          ))}
+            )
+          })}
           <div ref={bottomRef} />
         </div>
       )}
 
+      {/* Кнопка «Нужен живой ответ?» (если ветка ещё AI) */}
+      {!isManual && !loading && (
+        <div className="pb-1">
+          <button onClick={requestManual} type="button"
+            className="w-full h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold transition-all active:scale-[.98]"
+            style={{ background: '#FFF7ED', color: '#9A3412', border: '1px solid #FED7AA' }}>
+            <span className="material-symbols-outlined text-[16px]">support_agent</span>
+            Нужен живой ответ?
+          </button>
+        </div>
+      )}
+
+      {/* Поле ввода — адаптив (h-11 на mobile, h-12 на tablet) */}
       <form onSubmit={send} className="flex gap-2 pt-2">
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="Сообщение..."
-          className="flex-1 h-12 px-4 rounded-2xl text-sm focus:outline-none"
+        <input ref={inputRef}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          placeholder={isManual ? 'Сообщение администратору...' : 'Спросите про услуги, врачей...'}
+          disabled={sending}
+          className="flex-1 h-11 sm:h-12 px-3 sm:px-4 rounded-2xl text-sm focus:outline-none disabled:opacity-60"
           style={{ background: 'white', border: '1.5px solid rgba(0,0,0,.08)', boxShadow: '0 2px 8px rgba(0,0,0,.04)' }} />
         <button type="submit" disabled={!text.trim() || sending}
-          className="w-12 h-12 rounded-2xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95"
+          className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center disabled:opacity-40 transition-all active:scale-95 flex-shrink-0"
           style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>send</span>
+          {sending ? (
+            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>send</span>
+          )}
         </button>
       </form>
     </div>
@@ -925,6 +1378,126 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
   )
 }
 
+// ── Перенос записи: модалка с выбором нового слота к тому же врачу ──────────
+function RescheduleModal({ apt, primary, onClose, onDone }) {
+  // Подгружаем доступность по тому же doctor_id что и в записи
+  const dates = Array.from({length:14},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return d })
+  const [selDate, setSelDate] = useState(null)
+  const [slots, setSlots] = useState([])
+  const [slotsLoading, setSL] = useState(false)
+  const [selSlot, setSlot] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [availMap, setAvailMap] = useState(null)
+  const [availLoading, setAvLoad] = useState(true)
+
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      setAvLoad(true)
+      try {
+        const today = new Date()
+        const to = new Date(); to.setDate(to.getDate() + 13)
+        const r = await axios.get(`${API}/public/${SLUG}/doctors/${apt.doctor_id}/availability`, {
+          params: { from: isoDate(today), to: isoDate(to) },
+        })
+        if (!alive) return
+        const map = {}; (r.data?.days||[]).forEach(d => { map[d.date] = d })
+        setAvailMap(map)
+      } catch { if (alive) setAvailMap({}) }
+      finally { if (alive) setAvLoad(false) }
+    })()
+    return () => { alive = false }
+  }, [apt.doctor_id])
+
+  async function pickDate(d) {
+    const key = isoDate(d)
+    if (availMap && (!availMap[key] || !availMap[key].free_slots)) return
+    setSelDate(d); setSlot(null); setSlots([]); setSL(true)
+    try {
+      const r = await axios.get(`${API}/public/${SLUG}/doctors/${apt.doctor_id}/slots`, { params:{ date: key } })
+      const list = Array.isArray(r.data) ? r.data.filter(s => s.available !== false) : []
+      setSlots(list)
+    } catch { setSlots([]) } finally { setSL(false) }
+  }
+
+  async function submit() {
+    if (!selSlot) { setErr('Выберите время'); return }
+    if (!apt.patient_token) { setErr('Токен записи отсутствует — войдите заново по QR'); return }
+    setBusy(true); setErr('')
+    try {
+      const r = await axios.post(
+        `${API}/patient/appointment/${apt.id}/reschedule`,
+        { appointment_date: isoDate(selDate), start_time: selSlot },
+        { params: { t: apt.patient_token } }
+      )
+      onDone && onDone(r.data)
+      onClose && onClose()
+    } catch (e) {
+      const code = e.response?.status
+      setErr(e.response?.data?.detail || (code === 409 ? 'Слот уже занят, выберите другое время' : 'Не удалось перенести'))
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-gray-900 text-base">Перенос записи</h3>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">{apt.doctor_name} · {apt.clinic_name}</p>
+
+        <p style={{ fontSize:13, fontWeight:600, color:'#1A2B3C', marginBottom:8 }}>Выберите новую дату:</p>
+        {availLoading ? (
+          <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка расписания...</p>
+        ) : (
+          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:6, marginBottom:14, scrollbarWidth:'none' }}>
+            {dates.map(d => {
+              const key = isoDate(d)
+              const info = availMap?.[key]
+              const free = info?.free_slots || 0
+              const enabled = free > 0
+              const isSel = selDate && isoDate(selDate) === key
+              return (
+                <button key={d.toISOString()} onClick={() => pickDate(d)} disabled={!enabled}
+                  style={{ flexShrink:0, minWidth:54, padding:'8px 6px', borderRadius:10, border:`1.5px solid ${isSel?primary:(enabled?'#E5E7EB':'#F3F4F6')}`, background:isSel?primary+'18':(enabled?'#fff':'#F9FAFB'), cursor:enabled?'pointer':'not-allowed', textAlign:'center', opacity:enabled?1:.55 }}>
+                  <div style={{ fontWeight:600, fontSize:12, color:isSel?primary:(enabled?'#1A2B3C':'#9CA3AF') }}>
+                    {d.getDate()} {MONTHS_R[d.getMonth()]}
+                  </div>
+                  <div style={{ fontSize:10, color:'#9CA3AF' }}>{DAYS_R[d.getDay()]}</div>
+                  {enabled && <div style={{ fontSize:9, color: isSel?primary:'#10B981', fontWeight:700, marginTop:2 }}>{free}</div>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {selDate && (
+          slotsLoading
+            ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка слотов...</p>
+            : slots.length===0
+              ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Нет свободных слотов</p>
+              : <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+                  {slots.map(s => (
+                    <button key={s.start_time} onClick={() => setSlot(s.start_time)}
+                      style={{ padding:'9px 4px', borderRadius:8, border:`1.5px solid ${selSlot===s.start_time?primary:'#E5E7EB'}`, background:selSlot===s.start_time?primary+'18':'#fff', color:selSlot===s.start_time?primary:'#1A2B3C', fontWeight:selSlot===s.start_time?700:400, cursor:'pointer', fontSize:13 }}>
+                      {s.start_time}
+                    </button>
+                  ))}
+                </div>
+        )}
+        {err && <p style={{ color:'#EF4444', fontSize:13, marginBottom:8 }}>{err}</p>}
+        <button onClick={submit} disabled={!selSlot || busy}
+          className="w-full h-12 rounded-2xl text-sm font-bold text-white transition-all"
+          style={{ background:`linear-gradient(135deg,${primary},#1565C0)`, opacity: (!selSlot || busy) ? .55 : 1 }}>
+          {busy ? 'Переносим...' : (selSlot ? `Перенести на ${selSlot}` : 'Выберите время')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Полноэкранный профиль врача ─────────────────────────────────────────────
 function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory, onClose }) {
   const [profile, setProfile] = useState(null)
@@ -1212,6 +1785,11 @@ export default function PatientCabinet() {
   const [searchQ, setSearchQ] = useState('')
   const [bannerAds, setBannerAds] = useState([])
   const [bannerIdx, setBannerIdx] = useState(0)
+  // ── Премиум-фичи ──
+  const [reschedAptId, setReschedAptId] = useState(null) // открытая модалка переноса
+  const [familyOpen, setFamilyOpen] = useState(false)
+  const [familyList, setFamilyList] = useState([])
+  const [activeProfilePhone, setActiveProfilePhone] = useState(null) // телефон активного профиля
 
   useEffect(() => {
     registerSW()
@@ -1338,6 +1916,46 @@ export default function PatientCabinet() {
     setShowLogin(false); loadData(refId, token)
   }
 
+  // Универсальный reload — работает и в session-режиме, и в legacy (token+ref)
+  const reloadCabinet = useCallback(async () => {
+    const session = localStorage.getItem(SESSION_KEY)
+    if (session) { await restoreFromSession(session); return }
+    const refId = localStorage.getItem(REF_KEY)
+    const tk = localStorage.getItem(TOKEN_KEY)
+    if (refId && tk) { await loadData(refId, tk) }
+  }, [])
+
+  // ── Семейный аккаунт: загрузка списка ──
+  const loadFamily = useCallback(async () => {
+    const session = localStorage.getItem(SESSION_KEY)
+    if (!session) { setFamilyList([]); return }
+    try {
+      const r = await axios.get(`${API}/patient/family`, { params: { t: session } })
+      setFamilyList(Array.isArray(r.data) ? r.data : [])
+    } catch { setFamilyList([]) }
+  }, [])
+
+  useEffect(() => { if (data) loadFamily() }, [data, loadFamily])
+
+  const switchProfile = async (memberPhone, shortCode) => {
+    const session = localStorage.getItem(SESSION_KEY)
+    if (!session) { alert('Только из session-режима. Войдите по коду заново.'); return }
+    try {
+      const r = await axios.post(`${API}/patient/session/switch`, { phone: memberPhone, short_code: shortCode }, { params: { t: session } })
+      const newSession = r.data.session_token
+      if (newSession) {
+        localStorage.setItem(SESSION_KEY, newSession)
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REF_KEY)
+        setActiveProfilePhone(memberPhone)
+        setFamilyOpen(false)
+        await restoreFromSession(newSession)
+      }
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Не удалось переключиться')
+    }
+  }
+
   const handlePushToggle = async () => {
     if (pushEnabled) return
     setPushLoading(true)
@@ -1442,6 +2060,19 @@ export default function PatientCabinet() {
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: 'rgba(16,185,129,.25)' }}>
                   <span className="material-symbols-outlined text-emerald-300 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>
                 </div>
+              )}
+              {(typeof window !== 'undefined' && localStorage.getItem(SESSION_KEY)) && (
+                <button onClick={() => setFamilyOpen(true)} title="Семья"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90 relative"
+                  style={{ background: 'rgba(255,255,255,.15)' }}>
+                  <span className="material-symbols-outlined text-white text-xl">group</span>
+                  {familyList.length > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+                      style={{ background:'#10B981', color:'#fff' }}>
+                      {familyList.length}
+                    </span>
+                  )}
+                </button>
               )}
               <button onClick={handleLogout}
                 className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
@@ -1598,6 +2229,51 @@ export default function PatientCabinet() {
                 <p className="text-5xl font-black" style={{ color: '#e65100', letterSpacing: 12 }}>{data.short_code}</p>
               </div>
             )}
+
+            {/* Контакты клиники */}
+            {(data.clinic_phone || data.clinic_address || data.clinic_latitude) && (
+              <div className="rounded-2xl p-3 bg-white" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Связь с клиникой</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {data.clinic_phone && (
+                    <a href={buildTel(data.clinic_phone)} className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background:'#E0F7FA', color:'#00838F' }}>
+                      <span className="material-symbols-outlined text-base">call</span> Позвонить
+                    </a>
+                  )}
+                  {data.clinic_phone && (
+                    <a href={buildWhatsApp(data.clinic_phone)} target="_blank" rel="noreferrer" className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background:'#E8F5E9', color:'#2E7D32' }}>
+                      <span className="material-symbols-outlined text-base">chat</span> WhatsApp
+                    </a>
+                  )}
+                  {(data.clinic_address || data.clinic_latitude) && (
+                    <a href={buildMapUrl(data.clinic_address, data.clinic_latitude, data.clinic_longitude)} target="_blank" rel="noreferrer" className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background:'#FFF3E0', color:'#E65100' }}>
+                      <span className="material-symbols-outlined text-base">map</span> Маршрут
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Управление: календарь / перенос / отмена (только для активных) */}
+            {(data.status === 'pending' || data.status === 'confirmed') && (() => {
+              const aptObj = {
+                id: data.id, patient_token: data.patient_token,
+                doctor_id: data.doctor_id, doctor_name: data.doctor_name, specialty: data.specialty,
+                clinic_id: data.clinic_id, clinic_name: data.clinic_name,
+                clinic_address: data.clinic_address, clinic_phone: data.clinic_phone,
+                clinic_latitude: data.clinic_latitude, clinic_longitude: data.clinic_longitude,
+                appointment_date: data.appointment_date,
+                start_time: data.start_time, end_time: data.end_time,
+                status: data.status, short_code: data.short_code,
+                qr_code: data.qr_code,
+              }
+              const tooLate = hoursUntil(data.appointment_date, data.start_time) < 6
+              return (
+                <AptControls apt={aptObj} tooLate={tooLate}
+                  onCancelled={reloadCabinet}
+                  onRescheduleStart={(a) => setReschedAptId(a)} />
+              )
+            })()}
           </div>
         )}
 
@@ -1617,11 +2293,36 @@ export default function PatientCabinet() {
                 </div>
                 <div className="space-y-3">
                   {appointments.map(a => (
-                    <AppointmentCard key={a.id} apt={a} onQr={setFullscreenQr} />
+                    <AppointmentCard key={a.id} apt={a}
+                      onQr={setFullscreenQr}
+                      onCancelled={reloadCabinet}
+                      onRescheduleStart={(apt) => setReschedAptId(apt)} />
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Подготовка к приёму — карточка показывается если в активной записи (<24h)
+                есть prep_instructions у услуги, или у активного направления */}
+            {(() => {
+              // приоритет: ближайшая активная Appointment с привязкой к направлению (через service)
+              // Здесь упрощаем: показываем prep из current?.service_prep_instructions
+              const prep = current?.service_prep_instructions
+              if (!prep) return null
+              return (
+                <div className="rounded-3xl p-5" style={{ background:'linear-gradient(135deg,#FEF3C7,#FDE68A)', border:'1px solid #FCD34D' }}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'rgba(217,119,6,.15)' }}>
+                      <span className="material-symbols-outlined text-amber-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>info</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-amber-900 text-sm">Подготовка к приёму</p>
+                      <p className="text-amber-800 text-sm mt-1 leading-relaxed whitespace-pre-wrap">{prep}</p>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Active QR — show current referral's QR prominently */}
             {current?.status === 'created' && current?.qr_code && (
@@ -1644,6 +2345,36 @@ export default function PatientCabinet() {
                   </div>
                   <span className="material-symbols-outlined text-white/60 text-xl ml-auto">chevron_right</span>
                 </button>
+              </div>
+            )}
+
+            {/* Контакты клиники активного направления — один клик */}
+            {current?.status === 'created' && (current?.to_clinic_phone || current?.to_clinic_address || current?.to_clinic_latitude) && (
+              <div className="rounded-2xl p-3 bg-white" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Связь с клиникой</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {current.to_clinic_phone && (
+                    <a href={buildTel(current.to_clinic_phone)}
+                      className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold"
+                      style={{ background:'#E0F7FA', color:'#00838F' }}>
+                      <span className="material-symbols-outlined text-base">call</span> Позвонить
+                    </a>
+                  )}
+                  {current.to_clinic_phone && (
+                    <a href={buildWhatsApp(current.to_clinic_phone)} target="_blank" rel="noreferrer"
+                      className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold"
+                      style={{ background:'#E8F5E9', color:'#2E7D32' }}>
+                      <span className="material-symbols-outlined text-base">chat</span> WhatsApp
+                    </a>
+                  )}
+                  {(current.to_clinic_address || current.to_clinic_latitude) && (
+                    <a href={buildMapUrl(current.to_clinic_address, current.to_clinic_latitude, current.to_clinic_longitude)} target="_blank" rel="noreferrer"
+                      className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold"
+                      style={{ background:'#FFF3E0', color:'#E65100' }}>
+                      <span className="material-symbols-outlined text-base">map</span> Маршрут
+                    </a>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1685,9 +2416,26 @@ export default function PatientCabinet() {
                     История <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
                 </div>
-                <VisitCard visit={mis_visits[0]} />
+                <VisitCard visit={mis_visits[0]} patientName={patient_name} />
               </div>
             )}
+
+            {/*
+              ── TODO: Лекарства/назначения из МИС ──
+              МИС-API Renovatio метода для получения назначений пациента не предоставляет
+              (нет ни getPatientPrescriptions, ни эквивалента). Когда такой endpoint появится —
+              сюда подставлять данные из data.mis_prescriptions (бэкенд: _load_mis_data).
+              Сейчас — закомментированный блок-заглушка ниже.
+            */}
+            {/*
+            <div className="bg-white rounded-3xl p-5" style={{ border:'1px solid rgba(0,0,0,.06)', boxShadow:'0 2px 12px rgba(0,0,0,.04)' }}>
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-base" style={{ color:'#0097A7' }}>medication</span>
+                <h2 className="font-bold text-gray-800 text-sm">Мои назначения</h2>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">Скоро появится: список лекарств с инструкциями, выписанных врачом</p>
+            </div>
+            */}
 
             {/* Empty state */}
             {allRefs.length === 0 && mis_visits.length === 0 && appointments.length === 0 && (
@@ -1744,7 +2492,7 @@ export default function PatientCabinet() {
                   <p className="text-emerald-700 text-xs font-semibold">Данные из медицинской системы клиники</p>
                 </div>
                 <div className="space-y-3">
-                  {mis_visits.map((v, i) => <VisitCard key={i} visit={v} />)}
+                  {mis_visits.map((v, i) => <VisitCard key={i} visit={v} patientName={patient_name} />)}
                 </div>
                 {bannerAds.length > 0 && (
                   <div className="mt-5">
@@ -1770,7 +2518,7 @@ export default function PatientCabinet() {
         {/* ── SUPPORT ── */}
         {tab === 'support' && !data?.type && (
           <div className="tab-enter">
-            <SupportTab phone={patient_phone} token={localStorage.getItem(TOKEN_KEY)} />
+            <ChatTab phone={patient_phone} sessionToken={localStorage.getItem(SESSION_KEY)} />
           </div>
         )}
       </div>
@@ -1794,6 +2542,168 @@ export default function PatientCabinet() {
             )
           })}
         </div>
+      </div>
+
+      {/* Перенос записи */}
+      {reschedAptId && (
+        <RescheduleModal apt={reschedAptId} primary="#0097A7"
+          onClose={() => setReschedAptId(null)}
+          onDone={() => { setReschedAptId(null); reloadCabinet() }} />
+      )}
+
+      {/* Семейный аккаунт */}
+      {familyOpen && (
+        <FamilyModal
+          ownerName={patient_name} ownerPhone={patient_phone}
+          members={familyList}
+          onClose={() => setFamilyOpen(false)}
+          onChanged={loadFamily}
+          onSwitch={switchProfile} />
+      )}
+    </div>
+  )
+}
+
+// ── Семейный аккаунт: модалка ────────────────────────────────────────────────
+function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwitch }) {
+  const [phone, setPhone] = useState('+7')
+  const [name, setName] = useState('')
+  const [relation, setRelation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [switchTarget, setSwitchTarget] = useState(null)
+  const [shortCode, setShortCode] = useState('')
+
+  async function add() {
+    setErr('')
+    if (!phone || phone.length < 7) { setErr('Введите телефон'); return }
+    setBusy(true)
+    try {
+      const session = localStorage.getItem('clinika_patient_session')
+      await axios.post(`${API}/patient/family/add`, { phone, name, relation }, { params: { t: session } })
+      setShowAdd(false); setPhone('+7'); setName(''); setRelation('')
+      onChanged && onChanged()
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Не удалось добавить')
+    } finally { setBusy(false) }
+  }
+
+  async function remove(id) {
+    if (!window.confirm('Удалить из списка?')) return
+    try {
+      const session = localStorage.getItem('clinika_patient_session')
+      await axios.delete(`${API}/patient/family/${id}`, { params: { t: session } })
+      onChanged && onChanged()
+    } catch {}
+  }
+
+  async function doSwitch() {
+    const code = parseInt(shortCode, 10)
+    if (!code) { setErr('Введите код'); return }
+    setBusy(true); setErr('')
+    try {
+      await onSwitch(switchTarget.phone, code)
+    } catch (e) {
+      setErr('Не удалось переключиться')
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold text-gray-900 text-base">Семья</h3>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+        </div>
+
+        {/* Owner */}
+        <div className="rounded-2xl p-3 mb-3" style={{ background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
+          <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide">Текущий профиль</p>
+          <p className="text-sm font-bold text-gray-800 mt-0.5">{ownerName || ownerPhone}</p>
+          <p className="text-xs text-gray-500">{ownerPhone}</p>
+        </div>
+
+        {/* List */}
+        {members.length === 0 ? (
+          <p className="text-center text-sm text-gray-400 py-4">Семейный список пуст</p>
+        ) : (
+          <div className="space-y-2 mb-3">
+            {members.map(m => (
+              <div key={m.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background:'#fff', border:'1px solid #E5E7EB' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm flex-shrink-0" style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+                  {(m.name || m.phone || '?').slice(0,2).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-gray-800 truncate">{m.name || m.phone}</p>
+                  <p className="text-xs text-gray-500 truncate">{m.relation || '—'} · {m.phone}</p>
+                </div>
+                <button onClick={() => { setSwitchTarget(m); setShortCode(''); setErr('') }}
+                  className="h-8 px-3 rounded-lg text-xs font-bold"
+                  style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', color:'#fff' }}>
+                  Войти
+                </button>
+                <button onClick={() => remove(m.id)} className="text-gray-300 text-lg leading-none" title="Удалить">×</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add form */}
+        {showAdd ? (
+          <div className="rounded-2xl p-3 space-y-2 mb-3" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
+            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7..."
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Имя"
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+            <input value={relation} onChange={e => setRelation(e.target.value)} placeholder="Кто (Супруг, Ребёнок, ...)"
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+            {err && <p className="text-xs text-red-500">{err}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setShowAdd(false)} disabled={busy}
+                className="h-10 rounded-xl border text-sm font-semibold" style={{ borderColor:'#E5E7EB' }}>
+                Отмена
+              </button>
+              <button onClick={add} disabled={busy}
+                className="h-10 rounded-xl text-sm font-bold text-white"
+                style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', opacity: busy ? .6 : 1 }}>
+                {busy ? '...' : 'Добавить'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setShowAdd(true)}
+            className="w-full h-11 rounded-2xl text-sm font-bold mb-3"
+            style={{ background:'#fff', border:'1.5px dashed #BAE6FD', color:'#0369A1' }}>
+            + Добавить члена семьи
+          </button>
+        )}
+
+        {/* Switch confirm — нужен short_code (proof of access) */}
+        {switchTarget && (
+          <div className="rounded-2xl p-3 space-y-2" style={{ background:'#FFFBEB', border:'1px solid #FDE68A' }}>
+            <p className="text-xs font-bold text-amber-800">Переключение на: {switchTarget.name || switchTarget.phone}</p>
+            <p className="text-xs text-amber-700">
+              Чтобы войти в этот профиль, введите 5-значный код активного направления или записи этого пациента
+              (его можно увидеть на бумажном направлении или в SMS).
+            </p>
+            <input value={shortCode} onChange={e => setShortCode(e.target.value.replace(/\D/g,''))} placeholder="Код"
+              maxLength={5} inputMode="numeric"
+              className="w-full h-10 px-3 rounded-xl border border-amber-300 text-base font-bold tracking-widest text-center" />
+            {err && <p className="text-xs text-red-500">{err}</p>}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setSwitchTarget(null)} disabled={busy}
+                className="h-10 rounded-xl border text-sm font-semibold" style={{ borderColor:'#FDE68A', background:'#fff' }}>
+                Отмена
+              </button>
+              <button onClick={doSwitch} disabled={busy || !shortCode}
+                className="h-10 rounded-xl text-sm font-bold text-white"
+                style={{ background:'#D97706', opacity: busy || !shortCode ? .6 : 1 }}>
+                {busy ? '...' : 'Войти'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

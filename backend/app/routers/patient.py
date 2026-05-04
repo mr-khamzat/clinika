@@ -2,11 +2,12 @@
 Public router for patient cabinet.
 Protected by patient_token (JWT, 90 days) for /{ref}, или patient_session_token (1 год) для /session.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta, date as _date, time as _time
+from typing import Optional
 from app.database import get_db
 from app.models.referral import Referral, ReferralStatus
 from app.core.security import verify_patient_token, make_patient_token
@@ -20,6 +21,10 @@ import uuid
 
 
 router = APIRouter(prefix="/patient", tags=["patient"])
+
+# Минимальное окно (часы) до приёма, в течение которого пациент уже не может
+# отменить запись через кабинет (только через клинику).
+MIN_CANCEL_HOURS = 6
 
 
 def _get_limiter(times: int, seconds: int):
@@ -160,6 +165,10 @@ async def _load_appointments_for_phone(db: AsyncSession, phone: str, tenant_id) 
             "specialty": doctor.specialty if doctor else None,
             "clinic_id": str(apt.clinic_id),
             "clinic_name": clinic.name if clinic else "—",
+            "clinic_address": clinic.address if clinic else None,
+            "clinic_phone": clinic.phone if clinic else None,
+            "clinic_latitude": clinic.latitude if clinic else None,
+            "clinic_longitude": clinic.longitude if clinic else None,
             "appointment_date": apt.appointment_date.isoformat() if apt.appointment_date else None,
             "start_time": str(apt.start_time)[:5] if apt.start_time else None,
             "end_time":   str(apt.end_time)[:5]   if apt.end_time   else None,
@@ -192,7 +201,12 @@ async def _load_referrals_for_phone(db: AsyncSession, phone: str, tenant_id, exc
         out.append({
             **_format_referral(r, include_qr=True),
             "service_name": r_service.name if r_service else "—",
+            "service_prep_instructions": (r_service.prep_instructions if r_service else None) if r_service else None,
             "to_clinic_name": r_clinic.name if r_clinic else "—",
+            "to_clinic_address": r_clinic.address if r_clinic else None,
+            "to_clinic_phone": r_clinic.phone if r_clinic else None,
+            "to_clinic_latitude": r_clinic.latitude if r_clinic else None,
+            "to_clinic_longitude": r_clinic.longitude if r_clinic else None,
         })
     return out
 
@@ -272,8 +286,15 @@ async def get_patient_referral(
                 "start_time": str(apt.start_time),
                 "end_time": str(apt.end_time),
                 "status": apt.status.value if hasattr(apt.status, "value") else str(apt.status),
+                "doctor_id": str(apt.doctor_id),
                 "doctor_name": doctor.full_name if doctor else "—",
+                "specialty": doctor.specialty if doctor else None,
+                "clinic_id": str(apt.clinic_id),
                 "clinic_name": clinic.name if clinic else "—",
+                "clinic_address": clinic.address if clinic else None,
+                "clinic_phone": clinic.phone if clinic else None,
+                "clinic_latitude": clinic.latitude if clinic else None,
+                "clinic_longitude": clinic.longitude if clinic else None,
                 "short_code": apt.short_code,
                 "qr_code": apt.qr_code,
                 "patient_token": t,
@@ -308,7 +329,12 @@ async def get_patient_referral(
         "current": {
             **_format_referral(ref, include_qr=True),
             "service_name": service.name if service else "—",
+            "service_prep_instructions": service.prep_instructions if service else None,
             "to_clinic_name": to_clinic.name if to_clinic else "—",
+            "to_clinic_address": to_clinic.address if to_clinic else None,
+            "to_clinic_phone": to_clinic.phone if to_clinic else None,
+            "to_clinic_latitude": to_clinic.latitude if to_clinic else None,
+            "to_clinic_longitude": to_clinic.longitude if to_clinic else None,
             "from_clinic_name": from_clinic.name if from_clinic else None,
         },
         "other_referrals": other_refs,
@@ -418,7 +444,12 @@ async def restore_patient_session(
         payload["current"] = {
             **_format_referral(active, include_qr=True),
             "service_name": service.name if service else "—",
+            "service_prep_instructions": service.prep_instructions if service else None,
             "to_clinic_name": to_clinic.name if to_clinic else "—",
+            "to_clinic_address": to_clinic.address if to_clinic else None,
+            "to_clinic_phone": to_clinic.phone if to_clinic else None,
+            "to_clinic_latitude": to_clinic.latitude if to_clinic else None,
+            "to_clinic_longitude": to_clinic.longitude if to_clinic else None,
             "from_clinic_name": from_clinic.name if from_clinic else None,
         }
         payload["patient_token"] = token
@@ -533,8 +564,15 @@ async def get_patient_appointment(
         "start_time": str(apt.start_time),
         "end_time": str(apt.end_time),
         "status": apt.status.value if hasattr(apt.status, "value") else str(apt.status),
+        "doctor_id": str(apt.doctor_id),
         "doctor_name": doctor.full_name if doctor else "—",
+        "specialty": doctor.specialty if doctor else None,
+        "clinic_id": str(apt.clinic_id),
         "clinic_name": clinic.name if clinic else "—",
+        "clinic_address": clinic.address if clinic else None,
+        "clinic_phone": clinic.phone if clinic else None,
+        "clinic_latitude": clinic.latitude if clinic else None,
+        "clinic_longitude": clinic.longitude if clinic else None,
         "short_code": apt.short_code,
         "qr_code": apt.qr_code,
     }
@@ -566,3 +604,319 @@ async def get_appointment_by_code(
         "patient_token": token,
         "found": True,
     }
+
+
+# ── Отмена записи пациентом ──────────────────────────────────────────────────
+
+class CancelBody(BaseModel):
+    reason: Optional[str] = None
+
+
+def _hours_until(apt) -> float:
+    """Часов до начала приёма (отрицательно — уже прошло)."""
+    try:
+        dt = datetime.combine(apt.appointment_date, apt.start_time)
+        return (dt - datetime.utcnow()).total_seconds() / 3600.0
+    except Exception:
+        return 0.0
+
+
+@router.post("/appointment/{apt_id}/cancel")
+async def patient_cancel_appointment(
+    apt_id: str,
+    t: str = Query(..., description="Appointment JWT token"),
+    body: CancelBody | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Пациент сам отменяет свою запись (через QR-токен или session)."""
+    from app.models.doctor import Appointment as Apt, AppointmentStatus
+    from app.core.security import verify_appointment_token
+
+    try:
+        aid = uuid.UUID(apt_id)
+    except ValueError:
+        raise HTTPException(404, "Запись не найдена")
+
+    apt = await db.get(Apt, aid)
+    if not apt:
+        raise HTTPException(404, "Запись не найдена")
+
+    if not verify_appointment_token(str(apt.id), apt.patient_phone, t):
+        raise HTTPException(403, "Токен недействителен или истёк")
+
+    if apt.status == AppointmentStatus.CANCELLED:
+        return {"id": str(apt.id), "status": "cancelled"}
+
+    if apt.status not in (AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED):
+        raise HTTPException(400, "Эту запись уже нельзя отменить")
+
+    # Окно отмены — за 6 часов до приёма (настраивается константой)
+    if _hours_until(apt) < MIN_CANCEL_HOURS:
+        raise HTTPException(
+            status_code=400,
+            detail="Слишком поздно для отмены, позвоните в клинику",
+        )
+
+    apt.status = AppointmentStatus.CANCELLED
+    apt.cancel_reason = (body.reason if body else None) or "Отменено пациентом"
+    apt.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"id": str(apt.id), "status": "cancelled"}
+
+
+# ── Перенос записи (атомарно: новая → отмена старой) ─────────────────────────
+
+class RescheduleBody(BaseModel):
+    appointment_date: str   # YYYY-MM-DD
+    start_time: str         # HH:MM
+
+
+@router.post("/appointment/{apt_id}/reschedule")
+async def patient_reschedule_appointment(
+    apt_id: str,
+    body: RescheduleBody,
+    t: str = Query(..., description="Appointment JWT token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Пациент переносит свою запись на новый слот к тому же врачу."""
+    from app.models.doctor import Appointment as Apt, AppointmentStatus, Doctor
+    from app.models.clinic import Clinic
+    from app.core.security import verify_appointment_token, make_appointment_token
+    from app.services.scheduling_service import book_slot
+    from app.services.qr_service import generate_qr_image_base64
+    import random
+
+    try:
+        aid = uuid.UUID(apt_id)
+    except ValueError:
+        raise HTTPException(404, "Запись не найдена")
+
+    apt = await db.get(Apt, aid)
+    if not apt:
+        raise HTTPException(404, "Запись не найдена")
+
+    if not verify_appointment_token(str(apt.id), apt.patient_phone, t):
+        raise HTTPException(403, "Токен недействителен или истёк")
+
+    if apt.status not in (AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED):
+        raise HTTPException(400, "Эту запись уже нельзя перенести")
+
+    if _hours_until(apt) < MIN_CANCEL_HOURS:
+        raise HTTPException(400, "Слишком поздно для переноса, позвоните в клинику")
+
+    try:
+        h, m = body.start_time.split(":")
+        new_st = _time(int(h), int(m))
+        new_date = datetime.strptime(body.appointment_date, "%Y-%m-%d").date()
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Неверный формат даты/времени")
+
+    # Создаём новую запись (book_slot валидирует свободность слота → 409)
+    new_apt = await book_slot(
+        db,
+        doctor_id=apt.doctor_id,
+        appointment_date=new_date,
+        start_time=new_st,
+        patient_phone=apt.patient_phone,
+        patient_name=apt.patient_name,
+        referral_id=apt.referral_id,
+        notes=apt.notes,
+        tenant_id=apt.tenant_id,
+    )
+    # Генерируем уникальный short_code
+    for _ in range(20):
+        code = random.randint(10000, 99999)
+        ex = (await db.execute(
+            select(Apt).where(Apt.short_code == code)
+        )).scalar_one_or_none()
+        if not ex:
+            new_apt.short_code = code
+            break
+    new_apt.qr_code = generate_qr_image_base64(str(new_apt.id))
+
+    # Атомарно: гасим старую
+    apt.status = AppointmentStatus.CANCELLED
+    apt.cancel_reason = "Перенесено пациентом"
+    apt.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(new_apt)
+
+    new_token = make_appointment_token(str(new_apt.id), new_apt.patient_phone)
+
+    doctor = await db.get(Doctor, new_apt.doctor_id)
+    clinic = await db.get(Clinic, new_apt.clinic_id)
+
+    return {
+        "id": str(new_apt.id),
+        "doctor_name": doctor.full_name if doctor else "—",
+        "specialty": doctor.specialty if doctor else None,
+        "clinic_name": clinic.name if clinic else "—",
+        "appointment_date": new_apt.appointment_date.isoformat(),
+        "start_time": str(new_apt.start_time)[:5],
+        "end_time": str(new_apt.end_time)[:5],
+        "short_code": new_apt.short_code,
+        "qr_code": new_apt.qr_code,
+        "patient_token": new_token,
+        "old_id": str(apt.id),
+    }
+
+
+# ── Семейный аккаунт ─────────────────────────────────────────────────────────
+
+class FamilyAddBody(BaseModel):
+    phone: str
+    name: Optional[str] = None
+    relation: Optional[str] = None
+
+
+class FamilySwitchBody(BaseModel):
+    phone: str
+    short_code: int   # код активного направления / записи члена семьи (proof)
+
+
+async def _session_or_401(db: AsyncSession, t: str):
+    """Достать активную PatientSession по токену (или 401)."""
+    session = await _restore_session(db, t)
+    if not session:
+        raise HTTPException(401, "Session invalid or expired")
+    return session
+
+
+@router.get("/family")
+async def family_list(
+    t: str = Query(..., description="patient_session_token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список членов семьи, привязанных к owner_phone сессии."""
+    from app.models.patient_family import PatientFamilyMember
+    session = await _session_or_401(db, t)
+    rows = (await db.execute(
+        select(PatientFamilyMember)
+        .where(PatientFamilyMember.owner_phone == normalize_phone(session.phone))
+        .order_by(PatientFamilyMember.created_at)
+    )).scalars().all()
+    await db.commit()
+    return [
+        {
+            "id": str(m.id),
+            "phone": m.member_phone,
+            "name": m.member_name,
+            "relation": m.relation,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in rows
+    ]
+
+
+@router.post("/family/add")
+async def family_add(
+    body: FamilyAddBody,
+    t: str = Query(..., description="patient_session_token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Добавить члена семьи. Без верификации — verify будет на switch."""
+    from app.models.patient_family import PatientFamilyMember
+    session = await _session_or_401(db, t)
+    owner_n = normalize_phone(session.phone)
+    member_n = normalize_phone(body.phone)
+    if member_n == owner_n:
+        raise HTTPException(400, "Нельзя добавить себя")
+
+    # Уникальный (owner, member)
+    exists = (await db.execute(
+        select(PatientFamilyMember).where(
+            PatientFamilyMember.owner_phone == owner_n,
+            PatientFamilyMember.member_phone == member_n,
+        )
+    )).scalar_one_or_none()
+    if exists:
+        raise HTTPException(409, "Уже добавлен")
+
+    m = PatientFamilyMember(
+        owner_phone=owner_n,
+        member_phone=member_n,
+        member_name=(body.name or "").strip() or None,
+        relation=(body.relation or "").strip() or None,
+        tenant_id=session.tenant_id,
+    )
+    db.add(m)
+    await db.commit()
+    await db.refresh(m)
+    return {
+        "id": str(m.id),
+        "phone": m.member_phone,
+        "name": m.member_name,
+        "relation": m.relation,
+    }
+
+
+@router.delete("/family/{member_id}")
+async def family_delete(
+    member_id: str,
+    t: str = Query(..., description="patient_session_token"),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.models.patient_family import PatientFamilyMember
+    session = await _session_or_401(db, t)
+    try:
+        mid = uuid.UUID(member_id)
+    except ValueError:
+        raise HTTPException(404, "Член семьи не найден")
+    m = await db.get(PatientFamilyMember, mid)
+    if not m or normalize_phone(m.owner_phone) != normalize_phone(session.phone):
+        raise HTTPException(404, "Член семьи не найден")
+    await db.delete(m)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/session/switch")
+async def session_switch(
+    body: FamilySwitchBody,
+    request: Request,
+    t: str = Query(..., description="patient_session_token (текущая сессия owner)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Переключиться на профиль члена семьи. Безопасность: требуется подтверждение
+    через short_code активного направления / записи целевого профиля.
+    """
+    from app.models.patient_family import PatientFamilyMember
+    from app.models.doctor import Appointment as Apt
+
+    session = await _session_or_401(db, t)
+    owner_n = normalize_phone(session.phone)
+    target_n = normalize_phone(body.phone)
+
+    # Проверяем, что target есть в семейном списке owner'а
+    fm = (await db.execute(
+        select(PatientFamilyMember).where(
+            PatientFamilyMember.owner_phone == owner_n,
+            PatientFamilyMember.member_phone == target_n,
+        )
+    )).scalar_one_or_none()
+    if not fm:
+        raise HTTPException(403, "Этот номер не в вашем семейном списке")
+
+    # Проверяем short_code: либо это направление target'а, либо его запись
+    proof_ok = False
+    proof_tenant = session.tenant_id
+
+    ref = (await db.execute(select(Referral).where(Referral.short_code == body.short_code))).scalar_one_or_none()
+    if ref and normalize_phone(ref.patient_phone) == target_n:
+        proof_ok = True
+        proof_tenant = ref.tenant_id
+    if not proof_ok:
+        apt = (await db.execute(select(Apt).where(Apt.short_code == body.short_code))).scalar_one_or_none()
+        if apt and normalize_phone(apt.patient_phone) == target_n:
+            proof_ok = True
+            proof_tenant = getattr(apt, "tenant_id", None)
+
+    if not proof_ok:
+        raise HTTPException(403, "Код подтверждения неверный")
+
+    device = request.headers.get("user-agent", "")[:500] if request else None
+    _, new_session = await _create_session(db, target_n, proof_tenant, device_info=device)
+    await db.commit()
+    return {"session_token": new_session}

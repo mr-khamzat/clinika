@@ -64,3 +64,14 @@ from app.models.cms import TenantCmsPage
 from app.models.review import Review
 from app.models.inter_clinic_invoice import InterClinicInvoice
 from app.models.contact_request import ContactRequest
+
+# Семейный аккаунт пациента
+from app.models.patient_family import PatientFamilyMember
+
+# Чат пациента (вариант D — AI + регистратура)
+from app.models.patient_chat import (
+    PatientChat,
+    PatientChatMessage,
+    PatientChatMode,
+    PatientChatSender,
+)

@@ -25,6 +25,8 @@ class Service(Base):
     original_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     preparation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Инструкция «Подготовка к приёму» — редактируется клиникой, не перезаписывается МИС
+    prep_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     lab: Mapped[str | None] = mapped_column(String(200), nullable=True)
     duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
 

@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, date, time
 from sqlalchemy import String, Boolean, Integer, ForeignKey, Date, Time, Text, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
 from app.database import Base
 
@@ -104,6 +104,10 @@ class Appointment(Base):
     qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_code: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True, index=True)
     patient_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Журнал отправленных push-напоминаний: {"24h": True, "2h": True}
+    reminders_sent: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False, server_default="{}")
+    # Причина отмены (опционально)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
