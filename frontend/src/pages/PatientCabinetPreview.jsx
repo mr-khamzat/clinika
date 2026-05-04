@@ -619,6 +619,18 @@ function ChatTab({ sessionToken }) {
     } catch { return '' }
   }
 
+  if (!sessionToken) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Чат недоступен</div>
+        <p style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+          Для работы с чатом нужна активная сессия. Войдите по коду направления или отсканируйте QR.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="card" style={{ padding: 0, display: 'flex', flexDirection: 'column', minHeight: 480, height: 'calc(100vh - 220px)' }}>
       <div className="bot-hd" style={{ padding: '14px 18px' }}>
@@ -690,6 +702,7 @@ function Sidebar({ route, setRoute, onLogout, badges }) {
   const NAV = [
     { id: 'home', label: 'Главная', ico: '⌂' },
     { id: 'booking', label: 'Запись к врачу', ico: '＋' },
+    { id: 'doctors', label: 'Врачи', ico: '✦' },
     { id: 'appointments', label: 'Мои приёмы', ico: '☰', badge: badges.appointments },
     { id: 'history', label: 'История', ico: '⚯' },
     { id: 'chat', label: 'Чат', ico: '◯', badge: badges.chat },
@@ -929,6 +942,7 @@ function NextApptCard({ apt, onQr, onReschedule, onCancelled }) {
         <div className="appt-date">
           <div className="appt-date-day">{day}</div>
           <div className="appt-date-mon">{mon}</div>
+          {dow && <div className="appt-date-dow">{dow}</div>}
           <div className="appt-date-time">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</div>
         </div>
         <div className="appt-info">
@@ -978,6 +992,329 @@ function NextApptCard({ apt, onQr, onReschedule, onCancelled }) {
 }
 
 // ── BookingPage (4 шага) ─────────────────────────────────────────────────────
+// ── Stars ────────────────────────────────────────────────────────────────────
+function StarsRating({ rating, size=14 }) {
+  const r = rating || 0
+  return (
+    <span style={{ display:'inline-flex', gap:1 }}>
+      {[1,2,3,4,5].map(i => {
+        const fill = Math.min(1, Math.max(0, r - i + 1))
+        return (
+          <span key={i} style={{ position:'relative', fontSize:size, lineHeight:1 }}>
+            <span style={{ color:'var(--bg-3)' }}>★</span>
+            <span style={{ position:'absolute', left:0, top:0, overflow:'hidden', width:`${fill*100}%`, color:'var(--gold)' }}>★</span>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
+function StarSelect({ value, onChange }) {
+  const [hover, setHover] = useState(0)
+  return (
+    <div style={{ display:'flex', gap:6 }}>
+      {[1,2,3,4,5].map(i => (
+        <span key={i}
+          onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
+          onClick={() => onChange(i)}
+          style={{ fontSize:32, color: i<=(hover||value)?'var(--gold)':'var(--bg-3)', cursor:'pointer', transition:'color .15s' }}>
+          ★
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ReviewFormModal({ doctorId, tenantId, onClose, onDone }) {
+  const [rating, setRating] = useState(0)
+  const [comment, setComment] = useState('')
+  const [name, setName] = useState('')
+  const [anon, setAnon] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [ok, setOk] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function submit() {
+    if (!rating) { setErr('Поставьте оценку'); return }
+    setSaving(true); setErr('')
+    try {
+      await axios.post(`${API}/reviews`, {
+        doctor_id: doctorId, tenant_id: tenantId, rating,
+        comment: comment.trim()||null,
+        patient_name: anon?null:(name.trim()||'Пациент'),
+        is_anonymous: anon,
+      })
+      setOk(true)
+      setTimeout(() => { onDone && onDone() }, 1500)
+    } catch(e) { setErr(e.response?.data?.detail||'Ошибка отправки') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className="cp-modal-overlay" onClick={onClose}>
+      <div className="cp-modal" style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+        <h3>Оставить отзыв</h3>
+        {ok ? (
+          <div style={{ textAlign:'center', padding:'20px 0' }}>
+            <div style={{ fontSize:42, marginBottom:8 }}>🙏</div>
+            <p style={{ fontWeight:600, marginBottom:4 }}>Спасибо за отзыв!</p>
+            <p style={{ fontSize:13, color:'var(--fg-3)' }}>Появится после проверки</p>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom:14 }}>
+              <p style={{ fontSize:13, color:'var(--fg-3)', marginBottom:10 }}>Ваша оценка:</p>
+              <StarSelect value={rating} onChange={setRating} />
+            </div>
+            <textarea value={comment} onChange={e=>setComment(e.target.value)} rows={4} placeholder="Расскажите о визите..."
+              style={{ width:'100%', padding:'12px', background:'var(--bg-1)', color:'var(--fg)', border:'1px solid var(--border)', borderRadius:10, fontSize:14, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }} />
+            <div style={{ display:'flex', gap:10, marginTop:10, alignItems:'center' }}>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ваше имя" disabled={anon}
+                style={{ flex:1, padding:'10px 12px', background:'var(--bg-1)', color:'var(--fg)', border:'1px solid var(--border)', borderRadius:10, fontSize:13, opacity:anon?0.4:1 }} />
+              <label style={{ display:'flex', gap:6, alignItems:'center', fontSize:12, color:'var(--fg-3)', cursor:'pointer', whiteSpace:'nowrap' }}>
+                <input type="checkbox" checked={anon} onChange={e=>setAnon(e.target.checked)} />
+                Анонимно
+              </label>
+            </div>
+            {err && <p style={{ color:'var(--bad)', fontSize:13, marginTop:8 }}>{err}</p>}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:14 }}>
+              <button onClick={onClose} className="btn btn-secondary">Отмена</button>
+              <button onClick={submit} disabled={saving||!rating} className="btn btn-primary">
+                {saving?'Отправка...':'Отправить'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DoctorProfileModal({ doc, tenantId, onClose, onBookFrom }) {
+  const [profile, setProfile] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [reviewOpen, setReviewOpen] = useState(false)
+
+  useEffect(() => {
+    axios.get(`${API}/public/${SLUG}/doctors/${doc.id}/profile`)
+      .then(r => setProfile(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [doc.id])
+
+  return (
+    <div className="cp-modal-overlay" onClick={onClose}>
+      <div className="cp-modal" style={{ maxWidth: 640, width: '95%', maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--fg-3)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 20 }}>
+          {doc.photo_url ? (
+            <img src={doc.photo_url} alt={doc.full_name} style={{ width: 88, height: 88, borderRadius: 16, objectFit: 'cover', border: '1px solid var(--border)' }} />
+          ) : (
+            <div style={{ width: 88, height: 88, borderRadius: 16, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, fontWeight: 600 }}>
+              {getInitials(doc.full_name)}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ marginBottom: 4 }}>{doc.full_name}</h3>
+            <p style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, marginBottom: 6 }}>{doc.specialty || 'Врач'}</p>
+            <p style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+              {doc.experience_years ? `Стаж ${doc.experience_years} лет · ` : ''}{doc.clinic_name || ''}
+            </p>
+            {doc.avg_rating > 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <StarsRating rating={doc.avg_rating} size={14} />
+                <b style={{ fontSize: 14 }}>{doc.avg_rating}</b>
+                <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>({doc.review_count || 0})</span>
+              </div>
+            ) : <span style={{ fontSize: 12, color: 'var(--fg-4)' }}>Нет оценок</span>}
+          </div>
+        </div>
+
+        {doc.bio && (
+          <div style={{ marginBottom: 18, padding: '14px 16px', background: 'var(--bg-1)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>Биография</div>
+            <p style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.6 }}>{doc.bio}</p>
+          </div>
+        )}
+
+        {loading && <div style={{ textAlign: 'center', padding: 20, color: 'var(--fg-3)' }}>Загрузка отзывов...</div>}
+
+        {!loading && profile && (
+          <>
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16, alignItems: 'center', padding: '14px 16px', background: 'var(--bg-1)', borderRadius: 10, border: '1px solid var(--border)' }}>
+              <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                <div style={{ fontSize: 36, fontWeight: 700, color: 'var(--gold)', lineHeight: 1 }}>{profile.avg_rating || '—'}</div>
+                <StarsRating rating={profile.avg_rating} size={13} />
+                <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 4 }}>{profile.total_reviews || 0} отзывов</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                {[5,4,3,2,1].map(s => {
+                  const cnt = profile.rating_breakdown?.[s] || 0
+                  const total = profile.total_reviews || 0
+                  const pct = total > 0 ? Math.round(cnt / total * 100) : 0
+                  return (
+                    <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, color: 'var(--fg-4)', width: 8, textAlign: 'right' }}>{s}</span>
+                      <span style={{ fontSize: 10, color: 'var(--gold)' }}>★</span>
+                      <div style={{ flex: 1, height: 5, background: 'var(--bg-3)', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: 'var(--gold)', borderRadius: 3 }} />
+                      </div>
+                      <span style={{ fontSize: 11, color: 'var(--fg-4)', width: 22 }}>{cnt}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gap: 10, marginBottom: 18 }}>
+              {(profile.reviews || []).map(r => (
+                <div key={r.id} style={{ padding: '12px 14px', background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{r.is_anonymous ? 'Анонимно' : (r.patient_name || 'Пациент')}</span>
+                    <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>{r.created_at ? new Date(r.created_at).toLocaleDateString('ru-RU') : ''}</span>
+                  </div>
+                  <StarsRating rating={r.rating} size={12} />
+                  {r.comment && <p style={{ marginTop: 6, fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.5 }}>{r.comment}</p>}
+                </div>
+              ))}
+              {(!profile.reviews || profile.reviews.length === 0) && (
+                <p style={{ textAlign: 'center', color: 'var(--fg-4)', fontSize: 13, padding: 12 }}>Пока нет отзывов</p>
+              )}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: doc.has_schedule ? '1fr 1fr' : '1fr', gap: 8, position: 'sticky', bottom: 0, paddingTop: 12, background: 'var(--surface)' }}>
+          <button onClick={() => setReviewOpen(true)} className="btn btn-secondary">Оставить отзыв</button>
+          {doc.has_schedule && (
+            <button onClick={() => { onClose(); onBookFrom && onBookFrom(doc) }} className="btn btn-primary">Записаться</button>
+          )}
+        </div>
+
+        {reviewOpen && (
+          <ReviewFormModal doctorId={doc.id} tenantId={tenantId} onClose={() => setReviewOpen(false)} onDone={() => setReviewOpen(false)} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DoctorsPage({ onGo }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [specFilter, setSpec] = useState('')
+  const [profileDoc, setProfileDoc] = useState(null)
+  const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    axios.get(`${API}/public/${SLUG}/clinic`)
+      .then(r => setData(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return (
+    <>
+      <div className="page-head"><div><div className="page-title">Врачи</div></div></div>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: 60 }}><div className="cp-spinner" /></div>
+    </>
+  )
+  if (!data) return (
+    <>
+      <div className="page-head"><div><div className="page-title">Врачи</div></div></div>
+      <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--fg-3)' }}>Не удалось загрузить список</div>
+    </>
+  )
+
+  const { specialties = [], doctors = [] } = data
+  let filtered = specFilter ? doctors.filter(d => d.specialty === specFilter) : doctors
+  if (search) {
+    const q = search.toLowerCase()
+    filtered = filtered.filter(d => (d.full_name || '').toLowerCase().includes(q) || (d.specialty || '').toLowerCase().includes(q))
+  }
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.has_schedule !== b.has_schedule) return b.has_schedule ? 1 : -1
+    return (b.avg_rating || 0) - (a.avg_rating || 0)
+  })
+  const tenantId = data.tenant?.id
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div className="page-title">Врачи</div>
+          <div className="page-sub">{doctors.length} специалистов · нажмите на врача для деталей</div>
+        </div>
+      </div>
+
+      <input type="text" placeholder="Поиск по имени или специальности..." value={search} onChange={e => setSearch(e.target.value)}
+        style={{ width: '100%', marginBottom: 14, padding: '12px 16px', background: 'var(--bg-2)', color: 'var(--fg)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 14, boxSizing: 'border-box' }} />
+
+      {specialties.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 14 }}>
+          {['', ...specialties].map(s => (
+            <button key={s || 'all'} onClick={() => setSpec(s)}
+              className={`chip${specFilter === s ? ' chip-accent' : ''}`}
+              style={{ flexShrink: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {s || 'Все специальности'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {sorted.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--fg-3)' }}>Врачей не найдено</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 10 }}>
+          {sorted.map(doc => (
+            <button key={doc.id} onClick={() => setProfileDoc(doc)}
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: 16, cursor: 'pointer', textAlign: 'left', transition: 'all .15s', display: 'flex', gap: 14, alignItems: 'flex-start' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-hi)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'var(--surface)'}>
+              {doc.photo_url ? (
+                <img src={doc.photo_url} alt={doc.full_name} style={{ width: 56, height: 56, borderRadius: 12, objectFit: 'cover', flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 56, height: 56, borderRadius: 12, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600, flexShrink: 0 }}>
+                  {getInitials(doc.full_name)}
+                </div>
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--fg)', marginBottom: 2 }}>{doc.full_name}</div>
+                <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 500, marginBottom: 4 }}>{doc.specialty || 'Врач'}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-4)', marginBottom: 6 }}>
+                  {doc.experience_years ? `Стаж ${doc.experience_years} лет · ` : ''}{doc.clinic_name || ''}
+                </div>
+                {doc.avg_rating > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <StarsRating rating={doc.avg_rating} size={13} />
+                    <b style={{ fontSize: 12.5 }}>{doc.avg_rating}</b>
+                    <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>· {doc.review_count || 0}</span>
+                  </div>
+                ) : <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>Нет оценок</span>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                {doc.has_schedule ? (
+                  <span className="chip chip-good" style={{ fontSize: 10 }}>Принимает</span>
+                ) : (
+                  <span className="chip" style={{ fontSize: 10 }}>Нет расписания</span>
+                )}
+                <span style={{ fontSize: 18, color: 'var(--fg-4)' }}>›</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {profileDoc && (
+        <DoctorProfileModal doc={profileDoc} tenantId={tenantId} onClose={() => setProfileDoc(null)}
+          onBookFrom={() => onGo && onGo('booking')} />
+      )}
+    </>
+  )
+}
+
 function BookingPage({ patientName, patientPhone, onGo }) {
   const [step, setStep] = useState(0)
   const [doctors, setDoctors] = useState([])
@@ -1423,33 +1760,7 @@ function AppointmentsPage({ data, onQr, onReschedule, onCancelled }) {
           </div>
         ) : (
           <div className="timeline">
-            {history.map((v, i) => {
-              const dp = (v.time_start || '').split(' ')[0] || ''
-              const [d, mo, y] = dp.split('.')
-              const services = Array.isArray(v.services) ? v.services : []
-              const first = services[0]?.title || '—'
-              return (
-                <div key={i} className="tl-item">
-                  <div className="tl-date">
-                    <b>{d || '—'}.{mo || ''}</b>
-                    <span>{y || ''}</span>
-                  </div>
-                  <div>
-                    <div className="tl-title">{first}</div>
-                    <div className="tl-meta">{v.doctor || '—'} · {v.clinic || '—'}</div>
-                    {v.sum_value > 0 && (
-                      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>
-                        {v.sum_value.toLocaleString('ru-RU')} ₽
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {services.length > 1 && <span className="chip">{services.length} услуг</span>}
-                    {v.is_first && <span className="chip chip-accent">1-й визит</span>}
-                  </div>
-                </div>
-              )
-            })}
+            {history.map((v, i) => <VisitTlItem key={i} v={v} />)}
           </div>
         )
       )}
@@ -1482,6 +1793,65 @@ function AppointmentsPage({ data, onQr, onReschedule, onCancelled }) {
 }
 
 // ── HistoryPage (timeline-стиль для МИС-визитов) ─────────────────────────────
+function VisitTlItem({ v }) {
+  const [open, setOpen] = useState(false)
+  const dp = (v.time_start || '').split(' ')[0] || ''
+  const tp = (v.time_start || '').split(' ')[1] || ''
+  const [d, mo, y] = dp.split('.')
+  const services = Array.isArray(v.services) ? v.services : []
+  const first = services[0]?.title || '—'
+  const status = v.status || ''
+  const cl = status === 'completed' ? 'chip-good' : (status === 'refused' ? 'chip-bad' : 'chip-accent')
+  const lbl = status === 'completed' ? 'Завершён' : (status === 'refused' ? 'Отменён' : 'Активен')
+  const expandable = services.length > 0
+
+  return (
+    <div className="tl-item" style={{ cursor: expandable ? 'pointer' : 'default' }} onClick={() => expandable && setOpen(o => !o)}>
+      <div className="tl-date">
+        <b>{d || '—'}.{mo || ''}</b>
+        <span>{y || ''}</span>
+        {tp && <span style={{ display: 'block', fontSize: 11, color: 'var(--fg-4)', marginTop: 4 }}>{tp}</span>}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div className="tl-title">{first}</div>
+        <div className="tl-meta">{v.doctor || '—'}{v.clinic ? ` · ${v.clinic}` : ''}</div>
+        {v.sum_value > 0 && (
+          <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>
+            {v.sum_value.toLocaleString('ru-RU')} ₽
+          </div>
+        )}
+        {expandable && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-3)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>{open ? '▴ скрыть услуги' : `▾ показать ${services.length} ${services.length === 1 ? 'услугу' : 'услуг'}`}</span>
+          </div>
+        )}
+        {open && services.length > 0 && (
+          <div onClick={e => e.stopPropagation()} style={{ marginTop: 12, padding: '12px 14px', borderRadius: 10, background: 'var(--bg-1)', border: '1px solid var(--border)', display: 'grid', gap: 8 }}>
+            {services.map((s, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, paddingBottom: 8, borderBottom: i < services.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: 'var(--fg)', lineHeight: 1.4 }}>{s.title || '—'}</div>
+                  {s.profession_title && <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 2 }}>{s.profession_title}</div>}
+                  {s.code && <div style={{ fontSize: 10, color: 'var(--fg-4)', marginTop: 2, fontFamily: 'SF Mono, Consolas, monospace' }}>{s.code}</div>}
+                </div>
+                {(s.value || s.price) && (
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', whiteSpace: 'nowrap' }}>
+                    {parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+        <span className={`chip ${cl}`}>{lbl}</span>
+        {v.is_first && <span className="chip chip-accent">1-й визит</span>}
+      </div>
+    </div>
+  )
+}
+
 function HistoryPage({ data }) {
   const isApt = data?.type === 'appointment'
   const visits = isApt ? [] : (data?.mis_visits || [])
@@ -1503,46 +1873,7 @@ function HistoryPage({ data }) {
         </div>
       ) : (
         <div className="timeline">
-          {visits.map((v, i) => {
-            const dp = (v.time_start || '').split(' ')[0] || ''
-            const [d, mo, y] = dp.split('.')
-            const services = Array.isArray(v.services) ? v.services : []
-            const first = services[0]?.title || '—'
-            const status = v.status || ''
-            const cl = status === 'completed' ? 'chip-good' : (status === 'refused' ? 'chip-bad' : 'chip-accent')
-            const lbl = status === 'completed' ? 'Завершён' : (status === 'refused' ? 'Отменён' : 'Активен')
-            return (
-              <div key={i} className="tl-item">
-                <div className="tl-date">
-                  <b>{d || '—'}.{mo || ''}</b>
-                  <span>{y || ''}</span>
-                  {(v.time_start || '').split(' ')[1] && (
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--fg-4)', marginTop: 4 }}>
-                      {(v.time_start || '').split(' ')[1]}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <div className="tl-title">{first}</div>
-                  <div className="tl-meta">{v.doctor || '—'}{v.clinic ? ` · ${v.clinic}` : ''}</div>
-                  {services.length > 1 && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-3)' }}>
-                      Ещё услуг: {services.length - 1}
-                    </div>
-                  )}
-                  {v.sum_value > 0 && (
-                    <div style={{ marginTop: 6, fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>
-                      {v.sum_value.toLocaleString('ru-RU')} ₽
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-                  <span className={`chip ${cl}`}>{lbl}</span>
-                  {v.is_first && <span className="chip chip-accent">1-й визит</span>}
-                </div>
-              </div>
-            )
-          })}
+          {visits.map((v, i) => <VisitTlItem key={i} v={v} />)}
         </div>
       )}
     </>
@@ -1861,7 +2192,7 @@ export default function PatientCabinetPreview() {
   const MOBILE_TABS = [
     { id: 'home', label: 'Главная', ico: '⌂' },
     { id: 'booking', label: 'Запись', ico: '＋' },
-    { id: 'appointments', label: 'Приёмы', ico: '☰' },
+    { id: 'doctors', label: 'Врачи', ico: '✦' },
     { id: 'chat', label: 'Чат', ico: '◯' },
     { id: 'profile', label: 'Я', ico: '☉' },
   ]

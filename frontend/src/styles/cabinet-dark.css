@@ -400,16 +400,18 @@
   display: flex; gap: 18px;
 }
 .cabinet-preview .appt-date {
-  width: 64px; flex-shrink: 0;
+  width: 110px; flex-shrink: 0;
   text-align: center;
-  padding: 12px 0;
-  border-radius: 11px;
+  padding: 18px 8px;
+  border-radius: 14px;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
 }
-.cabinet-preview .appt-date-day { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); }
-.cabinet-preview .appt-date-mon { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-top: -2px; }
-.cabinet-preview .appt-date-time { font-size: 11.5px; color: var(--fg-2); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--accent-line); font-weight: 500; }
+.cabinet-preview .appt-date-day { font-size: 44px; font-weight: 700; letter-spacing: -0.03em; color: var(--accent); line-height: 1; }
+.cabinet-preview .appt-date-mon { font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; margin-top: 2px; }
+.cabinet-preview .appt-date-dow { font-size: 11px; color: var(--fg-3); text-transform: capitalize; margin-top: 4px; font-weight: 500; }
+.cabinet-preview .appt-date-time { font-size: 13.5px; color: var(--fg); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--accent-line); font-weight: 600; letter-spacing: 0.02em; }
 .cabinet-preview .appt-info { flex: 1; min-width: 0; }
 .cabinet-preview .appt-info h4 { font-size: 16px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
 .cabinet-preview .appt-meta { color: var(--fg-3); font-size: 12.5px; margin-bottom: 4px; }

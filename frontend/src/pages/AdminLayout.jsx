@@ -7388,14 +7388,17 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       .catch(() => {})
   }, [adminToken])
 
-  // Платформенные секции (super_admin без SLUG) — изолированы от операционки клиник
+  // Платформенные секции (super_admin без SLUG) — изолированы от операционки клиник.
+  // ai_analytics включает настройки моделей AI (только super_admin видит SettingsTab).
+  // patient_chats возвращены на платформу — super_admin видит чаты всех тенантов.
   const PLATFORM_ONLY_KEYS = new Set([
     'home', 'super_admin', 'billing_ledger', 'audit', 'monitoring',
     'modules_catalog', 'contacts', 'wiki', 'webhooks', 'ai_analytics',
+    'patient_chats',
   ])
   // Операционные секции — НЕ показывать платформенному super_admin без SLUG
   const TENANT_OPERATIONAL_KEYS = new Set([
-    'doctors', 'patient_chats', 'mis_sync', 'plugins', 'calls_cfg',
+    'doctors', 'mis_sync', 'plugins', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
     'ads', 'analytics',
   ])
