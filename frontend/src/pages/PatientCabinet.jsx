@@ -935,12 +935,20 @@ function ChatTab({ phone, sessionToken }) {
     } catch { return '' }
   }
 
+  // Авто-фокус на чат при открытии вкладки — поле ввода и сообщения должны быть видны без скролла
+  useEffect(() => {
+    setTimeout(() => {
+      const root = document.getElementById('chat-tab-root')
+      if (root) root.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 100)
+  }, [])
+
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100svh - 180px)' }}>
-      {/* Header — адаптив для mobile (360px) и tablet */}
-      <div className="flex items-center gap-3 mb-3 p-3 sm:p-4 rounded-2xl" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
-          <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
+    <div id="chat-tab-root" className="flex flex-col" style={{ height: 'min(70vh, calc(100svh - 200px))', minHeight: 380 }}>
+      {/* Header — компактный на mobile */}
+      <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3 p-2 sm:p-4 rounded-2xl flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.2)' }}>
+          <span className="material-symbols-outlined text-white text-lg sm:text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>support_agent</span>
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-white text-sm truncate">Чат клиники</p>
@@ -1569,17 +1577,21 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
     <div style={{ position:'fixed', inset:0, zIndex:300, background:'#F0F4F8', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
       <style>{`@keyframes docProfIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      {/* Header с back-button */}
-      <div style={{ position:'sticky', top:0, zIndex:5, background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', paddingTop:'env(safe-area-inset-top,0px)' }}>
-        <div style={{ display:'flex', alignItems:'center', padding:'12px 14px', gap:8 }}>
-          <button onClick={onClose}
-            style={{ width:38, height:38, borderRadius:12, background:'rgba(255,255,255,.16)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:22 }}>arrow_back</span>
+      {/* Header с back-button — z-index приоритетный, чтобы кнопка была кликабельна на мобильнике */}
+      <div style={{ position:'sticky', top:0, zIndex:50, background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', paddingTop:'env(safe-area-inset-top,0px)', boxShadow:'0 2px 12px rgba(0,0,0,.15)' }}>
+        <div style={{ display:'flex', alignItems:'center', padding:'10px 12px', gap:10 }}>
+          <button onClick={onClose} aria-label="Назад"
+            style={{ width:44, height:44, minWidth:44, borderRadius:14, background:'rgba(255,255,255,.22)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:24 }}>arrow_back</span>
           </button>
           <div style={{ flex:1, minWidth:0 }}>
             <p style={{ margin:0, fontSize:11, color:'rgba(255,255,255,.7)', fontWeight:600, letterSpacing:.5, textTransform:'uppercase' }}>Профиль врача</p>
             <p style={{ margin:0, fontSize:14, color:'#fff', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{d.full_name}</p>
           </div>
+          <button onClick={onClose} aria-label="Закрыть"
+            style={{ width:40, height:40, borderRadius:12, background:'rgba(255,255,255,.18)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:22 }}>close</span>
+          </button>
         </div>
       </div>
 
@@ -2735,10 +2747,11 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
         {/* Switch confirm — нужен short_code (proof of access) */}
         {switchTarget && (
           <div className="rounded-2xl p-3 space-y-2" style={{ background:'#FFFBEB', border:'1px solid #FDE68A' }}>
-            <p className="text-xs font-bold text-amber-800">Переключение на: {switchTarget.name || switchTarget.phone}</p>
-            <p className="text-xs text-amber-700">
-              Чтобы войти в этот профиль, введите 5-значный код активного направления или записи этого пациента
-              (его можно увидеть на бумажном направлении или в SMS).
+            <p className="text-xs font-bold text-amber-800">Войти в профиль: {switchTarget.name || switchTarget.phone}</p>
+            <p className="text-xs text-amber-700 leading-relaxed">
+              Это защитная проверка — введите <b>5-значный код любого направления</b> этого пациента
+              (можно посмотреть на бумажном направлении, в QR-карточке клиники, или в его собственном кабинете).
+              Подойдёт даже код от уже завершённого визита.
             </p>
             <input value={shortCode} onChange={e => setShortCode(e.target.value.replace(/\D/g,''))} placeholder="Код"
               maxLength={5} inputMode="numeric"
