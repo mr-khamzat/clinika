@@ -12,7 +12,7 @@
  * ========================================
  */
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import useAuthStore from './store/auth'
 import { authTelegram, getMe } from './api'
 import Layout from './components/Layout'
@@ -231,6 +231,17 @@ export default function App() {
   // Публичная страница клиники (рейтинг врачей)
   if (SLUG && path.startsWith('/' + SLUG + '/clinic')) {
     return <ClinicPage />
+  }
+
+  // Preview-версия кабинета пациента (новый премиум-дизайн) — параллельный URL /p-new
+  // Загружается лениво — стили cabinet-dark.css не попадают в основной bundle.
+  if (SLUG && (path === '/' + SLUG + '/p-new' || path.startsWith('/' + SLUG + '/p-new/'))) {
+    const PatientCabinetPreview = lazy(() => import('./pages/PatientCabinetPreview'))
+    return (
+      <Suspense fallback={<div style={{ background: '#161a1f', minHeight: '100vh' }} />}>
+        <PatientCabinetPreview />
+      </Suspense>
+    )
   }
 
   // Личный кабинет пациента — публичный
