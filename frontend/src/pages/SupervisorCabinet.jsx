@@ -7,6 +7,7 @@ const ActsSection     = lazy(() => import('../sections/ActsSection'))
 const ReviewsSection  = lazy(() => import('../sections/ReviewsSection'))
 const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
 const RequisitesSection = lazy(() => import('../sections/RequisitesSection'))
+const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -62,6 +63,7 @@ function StatCard({ icon, label, value, color, bg, onClick }) {
 const NAV = [
   { key: 'home',       label: 'Обзор',        icon: 'dashboard' },
   { key: 'staff',      label: 'Персонал',     icon: 'group' },
+  { key: 'doctors',    label: 'Врачи',        icon: 'stethoscope' },
   { key: 'clinics',    label: 'Клиники',      icon: 'local_hospital' },
   { key: 'referrals',  label: 'Направления',  icon: 'moving' },
   { key: 'services',   label: 'Услуги',       icon: 'medical_services' },
@@ -3444,6 +3446,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
     switch (activeSection) {
       case 'home':      return <HomeDashboard token={adminToken} onNavigate={handleNav} />
       case 'staff':     return <StaffSection token={adminToken} />
+      case 'doctors':   return <Suspense fallback={null}><DoctorsSection token={adminToken} /></Suspense>
       case 'clinics':   return <ClinicsSection token={adminToken} />
       case 'referrals': return <ReferralsSection token={adminToken} />
       case 'services':  return <ServicesSection token={adminToken} />
