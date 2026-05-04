@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
 
@@ -157,6 +157,8 @@ function ReviewsTab({ adminToken }) {
   )
 }
 
+const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
+
 export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('overview')
   const [analytics, setAnalytics] = useState(null)
@@ -164,6 +166,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
 
   const TABS = [
     { id:'overview',  label:'Обзор',    icon:'dashboard'            },
+    { id:'doctors',   label:'Врачи',    icon:'stethoscope'          },
     { id:'analytics', label:'Аналитика',icon:'bar_chart'            },
     { id:'reviews',   label:'Отзывы',   icon:'rate_review'          },
     { id:'royalty',   label:'Роялти',   icon:'account_balance_wallet'},
@@ -249,6 +252,12 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
               <p className="text-gray-400 text-sm text-center py-8">Нет данных аналитики</p>
             )}
           </div>
+        )}
+
+        {tab === 'doctors' && (
+          <Suspense fallback={<div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>}>
+            <DoctorsSection token={adminToken} />
+          </Suspense>
         )}
 
         {tab === 'reviews' && <ReviewsTab adminToken={adminToken} />}

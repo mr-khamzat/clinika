@@ -7388,6 +7388,18 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       .catch(() => {})
   }, [adminToken])
 
+  // Платформенные секции (super_admin без SLUG) — изолированы от операционки клиник
+  const PLATFORM_ONLY_KEYS = new Set([
+    'home', 'super_admin', 'billing_ledger', 'audit', 'monitoring',
+    'modules_catalog', 'contacts', 'wiki', 'webhooks', 'ai_analytics',
+  ])
+  // Операционные секции — НЕ показывать платформенному super_admin без SLUG
+  const TENANT_OPERATIONAL_KEYS = new Set([
+    'doctors', 'patient_chats', 'mis_sync', 'plugins', 'calls_cfg',
+    'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
+    'ads', 'analytics',
+  ])
+
   const visibleNav = NAV.filter(item => {
     if (SLUG) {
       if (item.key === 'super_admin') return false
@@ -7396,7 +7408,12 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
       return true
     }
-    if (isSuperAdmin || isSupervisor) return true
+    // Платформенный уровень (без SLUG)
+    if (isSuperAdmin) {
+      // Платформенные секции — показывать; операционные — скрывать
+      return !TENANT_OPERATIONAL_KEYS.has(item.key)
+    }
+    if (isSupervisor) return true
     const m = activeModules
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
     if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
