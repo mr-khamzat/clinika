@@ -14,14 +14,27 @@ if (typeof window !== 'undefined' && SLUG) {
   try { localStorage.setItem(SLUG_KEY, SLUG) } catch {}
 }
 
-// Подключаем PWA-манифест и meta-теги один раз при загрузке страницы /p
+// Подключаем PWA-манифест синхронно (до load) с актуальными параметрами:
+//   ?t={patient_token} — если пациент пришёл по QR, бекенд сразу создаст session
+//                        и впишет её в start_url. Иначе iOS закеширует manifest
+//                        со старым start_url=/{slug}/p (без сессии).
+//   ?s={session_token} — при повторных заходах из LS.
 if (typeof document !== 'undefined' && SLUG) {
-  if (!document.querySelector('link[rel="manifest"]')) {
+  try {
+    const old = document.querySelector('link[rel="manifest"]')
+    if (old) old.parentNode.removeChild(old)
+    const params = new URLSearchParams({ slug: SLUG })
+    const urlT = new URLSearchParams(window.location.search).get('t')
+    const urlS = new URLSearchParams(window.location.search).get('s')
+    const lsS = (() => { try { return localStorage.getItem('clinika_patient_session') } catch { return null } })()
+    if (urlS) params.set('s', urlS)
+    else if (lsS) params.set('s', lsS)
+    else if (urlT) params.set('t', urlT)
     const link = document.createElement('link')
     link.rel = 'manifest'
-    link.href = `${API_BASE}/portal/manifest.json?slug=${SLUG}`
+    link.href = `${API_BASE}/portal/manifest.json?${params.toString()}`
     document.head.appendChild(link)
-  }
+  } catch {}
   if (!document.querySelector('meta[name="apple-mobile-web-app-capable"]')) {
     const m1 = document.createElement('meta'); m1.name = 'apple-mobile-web-app-capable'; m1.content = 'yes'; document.head.appendChild(m1)
     const m2 = document.createElement('meta'); m2.name = 'apple-mobile-web-app-status-bar-style'; m2.content = 'black-translucent'; document.head.appendChild(m2)
