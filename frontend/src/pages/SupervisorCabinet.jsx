@@ -2532,7 +2532,7 @@ function ServicesSection({ token }) {
             Категории МИС ({allCats.length})
           </p>
           {loadingCats ? <Spinner /> : (
-            <div className="space-y-2" key={loadTick}>
+            <div className="space-y-2" key={rev}>
               {allCats.map(cat => (
                 <CatAccordion key={cat.category} cat={cat} token={token} categories={catNames} />
               ))}
