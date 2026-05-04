@@ -120,6 +120,57 @@ async def _load_mis_data(db: AsyncSession, phone: str, tenant_id) -> dict:
     return out
 
 
+async def _load_appointments_for_phone(db: AsyncSession, phone: str, tenant_id) -> list[dict]:
+    """
+    Все активные записи пациента к врачу (PENDING/CONFIRMED) — по нормализованному
+    телефону, в рамках тенанта. Сортировка по дате (свежие сверху). Каждый item:
+        {id, doctor_id, doctor_name, specialty, clinic_id, clinic_name,
+         appointment_date, start_time, end_time, status, short_code, qr_code,
+         patient_token}
+    """
+    from app.models.doctor import Appointment as _Apt, AppointmentStatus as _AS, Doctor as _Doc
+    from app.models.clinic import Clinic as _Cl
+    from app.core.security import make_appointment_token as _mk_apt_t
+
+    phone_n = normalize_phone(phone)
+
+    q = select(_Apt).where(
+        _Apt.status.in_([_AS.PENDING, _AS.CONFIRMED]),
+    )
+    if tenant_id:
+        q = q.where(_Apt.tenant_id == tenant_id)
+    q = q.order_by(_Apt.appointment_date.desc(), _Apt.start_time.desc()).limit(50)
+    rows = (await db.execute(q)).scalars().all()
+
+    out: list[dict] = []
+    for apt in rows:
+        # фильтр по нормализованному телефону
+        if normalize_phone(apt.patient_phone) != phone_n:
+            continue
+        doctor = (await db.execute(select(_Doc).where(_Doc.id == apt.doctor_id))).scalar_one_or_none()
+        clinic = (await db.execute(select(_Cl).where(_Cl.id == apt.clinic_id))).scalar_one_or_none()
+        try:
+            token = _mk_apt_t(str(apt.id), apt.patient_phone)
+        except Exception:
+            token = None
+        out.append({
+            "id": str(apt.id),
+            "doctor_id": str(apt.doctor_id),
+            "doctor_name": doctor.full_name if doctor else "—",
+            "specialty": doctor.specialty if doctor else None,
+            "clinic_id": str(apt.clinic_id),
+            "clinic_name": clinic.name if clinic else "—",
+            "appointment_date": apt.appointment_date.isoformat() if apt.appointment_date else None,
+            "start_time": str(apt.start_time)[:5] if apt.start_time else None,
+            "end_time":   str(apt.end_time)[:5]   if apt.end_time   else None,
+            "status": apt.status.value if hasattr(apt.status, "value") else str(apt.status),
+            "short_code": apt.short_code,
+            "qr_code": apt.qr_code,
+            "patient_token": token,
+        })
+    return out
+
+
 async def _load_referrals_for_phone(db: AsyncSession, phone: str, tenant_id, exclude_id: str | None = None) -> list[dict]:
     """Все направления пациента (по нормализованному телефону, в рамках тенанта)."""
     from app.models.clinic import Clinic
@@ -251,6 +302,7 @@ async def get_patient_referral(
 
     other_refs = await _load_referrals_for_phone(db, ref.patient_phone, ref.tenant_id, exclude_id=referral_id)
     mis = await _load_mis_data(db, ref.patient_phone, ref.tenant_id)
+    appointments = await _load_appointments_for_phone(db, ref.patient_phone, ref.tenant_id)
 
     return {
         "current": {
@@ -261,6 +313,7 @@ async def get_patient_referral(
         },
         "other_referrals": other_refs,
         **mis,
+        "appointments": appointments,
         "patient_token": t,
         "patient_phone": ref.patient_phone,
         "patient_name": ref.patient_name,
@@ -340,11 +393,13 @@ async def restore_patient_session(
     other_refs = await _load_referrals_for_phone(
         db, phone, tenant_id, exclude_id=str(active.id) if active else None
     )
+    appointments = await _load_appointments_for_phone(db, phone, tenant_id)
 
     payload = {
         "current": None,
         "other_referrals": other_refs,
         **mis,
+        "appointments": appointments,
         "patient_phone": phone,
         "patient_name": active.patient_name if active else (mis.get("mis_info") or {}).get("full_name") or "",
         "session_token": body.session_token,  # клиент ничего не сохраняет нового — токен тот же

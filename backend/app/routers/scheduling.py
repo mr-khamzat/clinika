@@ -2,11 +2,15 @@
 Роутер расписания врачей: /doctors/* и /appointments/*
 Требует feature "scheduling" (план enterprise).
 """
+import os
+import shutil
+import time as _time
 import uuid
 from datetime import date, time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +36,7 @@ class DoctorCreate(BaseModel):
     photo_url: Optional[str] = None
     bio: Optional[str] = None
     slot_duration: int = 30
+    experience_years: Optional[int] = None
 
 class DoctorUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -39,6 +44,8 @@ class DoctorUpdate(BaseModel):
     photo_url: Optional[str] = None
     bio: Optional[str] = None
     slot_duration: Optional[int] = None
+    experience_years: Optional[int] = None
+    clinic_id: Optional[uuid.UUID] = None
     is_active: Optional[bool] = None
 
 class DoctorOut(BaseModel):
@@ -49,6 +56,7 @@ class DoctorOut(BaseModel):
     photo_url: Optional[str]
     bio: Optional[str]
     slot_duration: int
+    experience_years: Optional[int] = None
     is_active: bool
     class Config: from_attributes = True
 
@@ -143,6 +151,108 @@ async def update_doctor(
     await db.commit()
     await db.refresh(doctor)
     return doctor
+
+
+# ── Фото врача (загрузка / удаление / отдача файла) ──────────────────────────
+
+DOCTOR_PHOTO_DIR = "/app/uploads/doctors"
+_ALLOWED_PHOTO_TYPES = {
+    "image/jpeg": "jpg",
+    "image/jpg":  "jpg",
+    "image/png":  "png",
+    "image/webp": "webp",
+}
+_MAX_PHOTO_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+def _find_existing_photo(doctor_id: uuid.UUID) -> Optional[str]:
+    """Найти файл фото врача в любом из поддерживаемых расширений."""
+    if not os.path.isdir(DOCTOR_PHOTO_DIR):
+        return None
+    for ext in ("jpg", "jpeg", "png", "webp"):
+        path = os.path.join(DOCTOR_PHOTO_DIR, f"{doctor_id}.{ext}")
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+@router.post("/doctors/{doctor_id}/photo", dependencies=_FEAT)
+async def upload_doctor_photo(
+    doctor_id: uuid.UUID,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Загрузить фото врача (multipart). Принимает jpeg/png/webp ≤ 5 MB."""
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(404, "Врач не найден")
+
+    # Проверка MIME-типа
+    ctype = (file.content_type or "").lower()
+    if ctype not in _ALLOWED_PHOTO_TYPES:
+        raise HTTPException(400, "Допустимые форматы: JPEG, PNG, WEBP")
+    ext = _ALLOWED_PHOTO_TYPES[ctype]
+
+    # Читаем содержимое и проверяем размер
+    contents = await file.read()
+    if len(contents) > _MAX_PHOTO_SIZE:
+        raise HTTPException(400, "Размер файла превышает 5 МБ")
+    if not contents:
+        raise HTTPException(400, "Пустой файл")
+
+    # Удаляем старый файл (если есть с другим расширением)
+    old_path = _find_existing_photo(doctor_id)
+    if old_path and not old_path.endswith(f".{ext}"):
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+
+    # Сохраняем новый
+    os.makedirs(DOCTOR_PHOTO_DIR, exist_ok=True)
+    target_path = os.path.join(DOCTOR_PHOTO_DIR, f"{doctor_id}.{ext}")
+    with open(target_path, "wb") as f:
+        f.write(contents)
+
+    ts = int(_time.time())
+    photo_url = f"/uploads/doctors/{doctor_id}.{ext}?v={ts}"
+    doctor.photo_url = photo_url
+    await db.commit()
+    return {"photo_url": photo_url}
+
+
+@router.delete("/doctors/{doctor_id}/photo", dependencies=_FEAT)
+async def delete_doctor_photo(
+    doctor_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить фото врача (файл + photo_url)."""
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(404, "Врач не найден")
+    path = _find_existing_photo(doctor_id)
+    if path:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    doctor.photo_url = None
+    await db.commit()
+    return {"ok": True}
+
+
+@router.get("/uploads/doctors/{filename}")
+async def serve_doctor_photo(filename: str):
+    """Отдача файла фото врача (публичный endpoint, без auth — фото публичны)."""
+    # защита от path-traversal
+    if "/" in filename or ".." in filename or "\\" in filename:
+        raise HTTPException(400, "Некорректное имя файла")
+    path = os.path.join(DOCTOR_PHOTO_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(404, "Фото не найдено")
+    return FileResponse(path)
 
 
 # ── Расписание врача (шаблон) ──────────────────────────────────────────────

@@ -413,6 +413,83 @@ function VisitCard({ visit }) {
   )
 }
 
+// ── Appointment Card (запись к врачу) ────────────────────────────────────────
+function fmtAptDate(iso) {
+  if (!iso) return '—'
+  const m = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
+  const w = ['вс','пн','вт','ср','чт','пт','сб']
+  const d = new Date(iso + 'T00:00')
+  if (isNaN(d.getTime())) return iso
+  return `${d.getDate()} ${m[d.getMonth()]}, ${w[d.getDay()]}`
+}
+
+function AppointmentCard({ apt, onQr }) {
+  const status = String(apt.status || '').toLowerCase()
+  const cfg = status === 'confirmed'
+    ? { label: 'Подтверждена', dot: '#10B981', bg: 'rgba(16,185,129,.1)', text: '#065F46' }
+    : { label: 'Ожидает',      dot: '#F59E0B', bg: 'rgba(245,158,11,.1)', text: '#92400E' }
+  const startHHMM = (apt.start_time || '').slice(0,5)
+  const endHHMM   = (apt.end_time   || '').slice(0,5)
+  return (
+    <div className="bg-white rounded-2xl overflow-hidden card-in" style={{ border:'1px solid rgba(0,0,0,.05)', boxShadow:'0 2px 12px rgba(0,0,0,.05)' }}>
+      <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
+        style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)' }}>
+        <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full" style={{ background:'rgba(255,255,255,.08)' }} />
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 relative" style={{ background:'rgba(255,255,255,.2)' }}>
+          <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
+        </div>
+        <div className="flex-1 min-w-0 relative">
+          <p className="text-white font-bold text-sm leading-tight truncate">{apt.doctor_name || 'Врач'}</p>
+          <p className="text-white/70 text-xs truncate mt-0.5">{apt.specialty || apt.clinic_name || '—'}</p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0"
+          style={{ background:cfg.bg, color:cfg.text }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background:cfg.dot }} />
+          {cfg.label}
+        </span>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px] text-gray-400">calendar_today</span>
+            <span className="font-semibold text-gray-700">{fmtAptDate(apt.appointment_date)}</span>
+          </span>
+          {(startHHMM || endHHMM) && (
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px] text-gray-400">schedule</span>
+              <span className="font-semibold text-gray-700">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</span>
+            </span>
+          )}
+          {apt.clinic_name && (
+            <span className="flex items-center gap-1 min-w-0">
+              <span className="material-symbols-outlined text-[14px] text-gray-400">location_on</span>
+              <span className="truncate">{apt.clinic_name}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          {apt.qr_code ? (
+            <button onClick={() => onQr(apt.qr_code)}
+              className="flex-1 h-9 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[.98]"
+              style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', color:'white', boxShadow:'0 3px 10px rgba(0,151,167,.25)' }}>
+              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+              Показать QR
+            </button>
+          ) : (
+            <span className="text-xs text-gray-400">QR недоступен</span>
+          )}
+          {apt.short_code && (
+            <span className="px-2.5 py-1.5 rounded-lg text-xs font-bold tracking-widest flex-shrink-0"
+              style={{ background:'#fff8e1', color:'#e65100', border:'1px solid #ffe082' }}>
+              {apt.short_code}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Support Tab ───────────────────────────────────────────────────────────────
 function SupportTab({ phone }) {
   const [msgs, setMsgs] = useState([])
@@ -667,12 +744,48 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
   const [booking, setBooking] = useState(false)
   const [done, setDone] = useState(null)
   const [err, setErr] = useState('')
+  // Доступность по дням: { 'YYYY-MM-DD': {free_slots, has_schedule} }
+  const [availMap, setAvailMap] = useState(null) // null = ещё не загружено
+  const [availLoading, setAvLoad] = useState(true)
+  const [hasAnySchedule, setHasAnySchedule] = useState(true)
+
+  // При открытии модала тянем availability на 14 дней
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      setAvLoad(true)
+      try {
+        const today = new Date()
+        const to = new Date(); to.setDate(to.getDate() + 13)
+        const r = await axios.get(`${API}/public/${SLUG}/doctors/${doctor.id}/availability`, {
+          params: { from: isoDate(today), to: isoDate(to) },
+        })
+        if (!alive) return
+        const map = {}
+        ;(r.data?.days || []).forEach(d => { map[d.date] = d })
+        setAvailMap(map)
+        setHasAnySchedule(!!r.data?.has_any_schedule)
+      } catch {
+        if (!alive) return
+        setAvailMap({})
+        setHasAnySchedule(false)
+      } finally {
+        if (alive) setAvLoad(false)
+      }
+    })()
+    return () => { alive = false }
+  }, [doctor.id])
 
   async function pickDate(d) {
+    const key = isoDate(d)
+    // запрещаем выбирать дни без свободных слотов
+    if (availMap && (!availMap[key] || !availMap[key].free_slots)) return
     setSelDate(d); setSlot(null); setSlots([]); setSL(true)
     try {
-      const r = await axios.get(`${API}/public/${SLUG}/doctors/${doctor.id}/slots`, { params:{ date: isoDate(d) } })
-      setSlots(r.data)
+      const r = await axios.get(`${API}/public/${SLUG}/doctors/${doctor.id}/slots`, { params:{ date: key } })
+      // фильтруем только реально свободные
+      const list = Array.isArray(r.data) ? r.data.filter(s => s.available !== false) : []
+      setSlots(list)
     } catch { setSlots([]) }
     finally { setSL(false) }
   }
@@ -708,6 +821,28 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
     </div>
   )
 
+  // Если у врача вообще нет расписания
+  if (!availLoading && !hasAnySchedule) return (
+    <div>
+      <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:16, padding:'12px', background:'#F8FAFF', borderRadius:12 }}>
+        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={44} primary={primary} />
+        <div>
+          <div style={{ fontWeight:700, fontSize:14, color:'#1A2B3C' }}>{doctor.full_name}</div>
+          <div style={{ fontSize:12, color:'#6B7280' }}>{doctor.specialty}</div>
+        </div>
+      </div>
+      <div style={{ textAlign:'center', padding:'24px 12px' }}>
+        <div style={{ fontSize:42, marginBottom:8 }}>📅</div>
+        <p style={{ fontWeight:700, color:'#1A2B3C', fontSize:15, margin:'0 0 4px' }}>У врача пока нет расписания</p>
+        <p style={{ fontSize:13, color:'#6B7280', margin:0 }}>Запишитесь позже — расписание появится в кабинете</p>
+        <button onClick={onClose}
+          style={{ marginTop:18, padding:'11px 24px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer' }}>
+          Закрыть
+        </button>
+      </div>
+    </div>
+  )
+
   return (
     <div>
       <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:16, padding:'12px', background:'#F8FAFF', borderRadius:12 }}>
@@ -718,15 +853,49 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
         </div>
       </div>
       <p style={{ fontSize:13, fontWeight:600, color:'#1A2B3C', marginBottom:10 }}>Выберите дату:</p>
-      <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:6, marginBottom:14, scrollbarWidth:'none' }}>
-        {dates.map(d => (
-          <button key={d.toISOString()} onClick={() => pickDate(d)}
-            style={{ flexShrink:0, minWidth:54, padding:'8px 6px', borderRadius:10, border:`1.5px solid ${selDate&&isoDate(d)===isoDate(selDate)?primary:'#E5E7EB'}`, background:selDate&&isoDate(d)===isoDate(selDate)?primary+'18':'#fff', cursor:'pointer', textAlign:'center' }}>
-            <div style={{ fontWeight:600, fontSize:12, color:selDate&&isoDate(d)===isoDate(selDate)?primary:'#1A2B3C' }}>{d.getDate()} {MONTHS_R[d.getMonth()]}</div>
-            <div style={{ fontSize:10, color:'#9CA3AF' }}>{DAYS_R[d.getDay()]}</div>
-          </button>
-        ))}
-      </div>
+
+      {availLoading ? (
+        <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка расписания...</p>
+      ) : (
+        <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:6, marginBottom:14, scrollbarWidth:'none' }}>
+          {dates.map(d => {
+            const key = isoDate(d)
+            const info = availMap?.[key]
+            const free = info?.free_slots || 0
+            const enabled = free > 0
+            const isSel = selDate && isoDate(selDate) === key
+            return (
+              <button key={d.toISOString()} onClick={() => pickDate(d)} disabled={!enabled}
+                style={{
+                  flexShrink:0, minWidth:54, padding:'8px 6px', borderRadius:10,
+                  border:`1.5px solid ${isSel?primary:(enabled?'#E5E7EB':'#F3F4F6')}`,
+                  background:isSel?primary+'18':(enabled?'#fff':'#F9FAFB'),
+                  cursor:enabled?'pointer':'not-allowed',
+                  textAlign:'center',
+                  opacity:enabled?1:.55,
+                  position:'relative',
+                }}>
+                <div style={{ fontWeight:600, fontSize:12, color:isSel?primary:(enabled?'#1A2B3C':'#9CA3AF') }}>
+                  {d.getDate()} {MONTHS_R[d.getMonth()]}
+                </div>
+                <div style={{ fontSize:10, color:'#9CA3AF' }}>{DAYS_R[d.getDay()]}</div>
+                {enabled && (
+                  <div style={{ fontSize:9, color: isSel?primary:'#10B981', fontWeight:700, marginTop:2 }}>
+                    {free} {free === 1 ? 'слот' : (free < 5 ? 'слота' : 'слотов')}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {!availLoading && availMap && Object.values(availMap).every(d => !d.free_slots) && (
+        <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>
+          На ближайшие 2 недели свободных слотов нет
+        </p>
+      )}
+
       {selDate && (
         slotsLoading
           ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка слотов...</p>
@@ -756,27 +925,175 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
   )
 }
 
+// ── Полноэкранный профиль врача ─────────────────────────────────────────────
+function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory, onClose }) {
+  const [profile, setProfile] = useState(null)
+  const [profLoading, setPL] = useState(true)
+  const [bookOpen, setBookOpen] = useState(false)
+  const [revOpen, setRevOpen] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    setPL(true)
+    axios.get(`${API}/public/${SLUG}/doctors/${doc.id}/profile`)
+      .then(r => { if (alive) setProfile(r.data) })
+      .catch(() => { if (alive) setProfile(null) })
+      .finally(() => { if (alive) setPL(false) })
+    // блокируем прокрутку body на время модалки
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { alive = false; document.body.style.overflow = prev }
+  }, [doc.id])
+
+  // данные врача — приоритет detailed, fallback на исходную карточку
+  const d = profile?.doctor || doc
+  const avg = profile?.avg_rating ?? doc.avg_rating
+  const totalReviews = profile?.total_reviews ?? doc.review_count ?? 0
+  const reviews = profile?.reviews || []
+  const breakdown = profile?.rating_breakdown || {}
+  const hasSchedule = (profile?.doctor?.has_schedule) ?? doc.has_schedule
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:300, background:'#F0F4F8', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
+      <style>{`@keyframes docProfIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
+
+      {/* Header с back-button */}
+      <div style={{ position:'sticky', top:0, zIndex:5, background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', paddingTop:'env(safe-area-inset-top,0px)' }}>
+        <div style={{ display:'flex', alignItems:'center', padding:'12px 14px', gap:8 }}>
+          <button onClick={onClose}
+            style={{ width:38, height:38, borderRadius:12, background:'rgba(255,255,255,.16)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:22 }}>arrow_back</span>
+          </button>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ margin:0, fontSize:11, color:'rgba(255,255,255,.7)', fontWeight:600, letterSpacing:.5, textTransform:'uppercase' }}>Профиль врача</p>
+            <p style={{ margin:0, fontSize:14, color:'#fff', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{d.full_name}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Контент */}
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 14px 110px', maxWidth:560, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
+        {/* Карточка с фото и основной инфой */}
+        <div style={{ background:'#fff', borderRadius:24, padding:20, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
+          <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+            {/* Большое фото / placeholder */}
+            {d.photo_url ? (
+              <img src={d.photo_url} alt={d.full_name}
+                style={{ width:96, height:96, borderRadius:24, objectFit:'cover', flexShrink:0, boxShadow:'0 4px 14px rgba(0,0,0,.1)' }} />
+            ) : (
+              <div style={{ width:96, height:96, borderRadius:24, background:`linear-gradient(135deg,${primary},#1565C0)`, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:32, flexShrink:0, boxShadow:'0 4px 14px rgba(0,0,0,.1)' }}>
+                {(d.full_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+              </div>
+            )}
+            <div style={{ flex:1, minWidth:0 }}>
+              <h2 style={{ margin:'0 0 4px', fontSize:18, fontWeight:800, color:'#1A2B3C', lineHeight:1.25 }}>{d.full_name}</h2>
+              <p style={{ margin:'0 0 6px', fontSize:14, color:primary, fontWeight:700 }}>{d.specialty || 'Врач'}</p>
+              {d.experience_years && (
+                <p style={{ margin:'0 0 4px', fontSize:12, color:'#6B7280' }}>
+                  <span style={{ fontWeight:600, color:'#1A2B3C' }}>Стаж:</span> {d.experience_years} лет
+                </p>
+              )}
+              {d.clinic_name && (
+                <p style={{ margin:0, fontSize:12, color:'#9CA3AF' }}>{d.clinic_name}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Рейтинг крупно */}
+          {avg ? (
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:14, paddingTop:14, borderTop:'1px solid #F3F4F6' }}>
+              <div style={{ fontSize:32, fontWeight:800, color:'#1A2B3C', lineHeight:1 }}>{avg}</div>
+              <div>
+                <Stars rating={avg} size={16} />
+                <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{totalReviews} {totalReviews===1?'отзыв':(totalReviews<5?'отзыва':'отзывов')}</div>
+              </div>
+            </div>
+          ) : (
+            <p style={{ margin:'14px 0 0', paddingTop:14, borderTop:'1px solid #F3F4F6', fontSize:12, color:'#9CA3AF' }}>Пока нет оценок</p>
+          )}
+        </div>
+
+        {/* Биография — полностью без обрезки */}
+        {d.bio && (
+          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
+            <h3 style={{ margin:'0 0 8px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>О враче</h3>
+            <p style={{ margin:0, fontSize:14, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{d.bio}</p>
+          </div>
+        )}
+
+        {d.education && (
+          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
+            <h3 style={{ margin:'0 0 8px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Образование</h3>
+            <p style={{ margin:0, fontSize:14, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{d.education}</p>
+          </div>
+        )}
+
+        {/* Распределение оценок */}
+        {totalReviews > 0 && (
+          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Оценки</h3>
+            {[5,4,3,2,1].map(s => <RatingBar key={s} star={s} count={breakdown[s]||0} total={totalReviews} primary={primary} />)}
+          </div>
+        )}
+
+        {/* Список отзывов */}
+        <div style={{ background:'#fff', borderRadius:24, padding:'4px 18px 14px', boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)' }}>
+          <h3 style={{ margin:'14px 0 6px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Отзывы пациентов</h3>
+          {profLoading && <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка...</p>}
+          {!profLoading && reviews.length === 0 && (
+            <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'14px 0' }}>Отзывов пока нет</p>
+          )}
+          {reviews.map(r => (
+            <div key={r.id} style={{ padding:'12px 0', borderTop:'1px solid #F0F1F5' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                <span style={{ fontWeight:600, fontSize:13, color:'#1A2B3C' }}>{r.is_anonymous ? 'Анонимно' : (r.patient_name || 'Пациент')}</span>
+                <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmt(r.created_at)}</span>
+              </div>
+              <Stars rating={r.rating} size={13} />
+              {r.comment && <p style={{ margin:'6px 0 0', fontSize:13, color:'#374151', lineHeight:1.55 }}>{r.comment}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Плавающие кнопки внизу */}
+      <div style={{ position:'fixed', left:0, right:0, bottom:0, padding:'10px 14px', paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 10px)', background:'rgba(255,255,255,.96)', backdropFilter:'blur(12px)', borderTop:'1px solid rgba(0,0,0,.06)', boxShadow:'0 -4px 20px rgba(0,0,0,.06)', zIndex:6 }}>
+        <div style={{ maxWidth:560, margin:'0 auto', display:'flex', gap:8 }}>
+          <button onClick={() => setRevOpen(true)}
+            style={{ flex:1, padding:'13px', background:'#fff', color:primary, border:`1.5px solid ${primary}`, borderRadius:14, fontSize:14, fontWeight:700, cursor:'pointer' }}>
+            ✍️ Отзыв
+          </button>
+          {hasSchedule && (
+            <button onClick={() => setBookOpen(true)}
+              style={{ flex:2, padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:14, fontSize:14, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 14px rgba(0,151,167,.3)' }}>
+              Записаться к врачу
+            </button>
+          )}
+        </div>
+      </div>
+
+      <SheetModal open={bookOpen} onClose={() => setBookOpen(false)} title="Запись к врачу">
+        <QuickBook doctor={d} primary={primary} patientName={patientName} patientPhone={patientPhone}
+          onClose={() => setBookOpen(false)} onBooked={onRefreshHistory} />
+      </SheetModal>
+      <SheetModal open={revOpen} onClose={() => setRevOpen(false)} title="Оставить отзыв">
+        <ReviewForm doctorId={d.id} tenantId={tenantId} primary={primary}
+          onClose={() => setRevOpen(false)} onDone={() => setRevOpen(false)} />
+      </SheetModal>
+    </div>
+  )
+}
+
 function DoctorCard({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory }) {
   const [bookOpen, setBookOpen] = useState(false)
   const [revOpen, setRevOpen] = useState(false)
-  const [expanded, setExpanded] = useState(false)
-  const [profile, setProfile] = useState(null)
-  const [profLoading, setPL] = useState(false)
-
-  async function expandReviews() {
-    setExpanded(v=>!v)
-    if (profile||profLoading) return
-    setPL(true)
-    try {
-      const r = await axios.get(`${API}/public/${SLUG}/doctors/${doc.id}/profile`)
-      setProfile(r.data)
-    } catch {}
-    finally { setPL(false) }
-  }
+  const [profileOpen, setProfileOpen] = useState(false)
 
   return (
     <div style={{ background:'#fff', borderRadius:18, border:'1px solid #EAECF0', overflow:'hidden', marginBottom:12, boxShadow:'0 2px 10px rgba(0,0,0,.05)' }}>
-      <div style={{ padding:'18px 16px 14px' }}>
+      {/* Кликабельная область — открывает полный профиль */}
+      <button type="button" onClick={() => setProfileOpen(true)}
+        style={{ display:'block', width:'100%', padding:'18px 16px 14px', background:'transparent', border:'none', textAlign:'left', cursor:'pointer' }}>
         <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
           <DocAvatar name={doc.full_name} photo={doc.photo_url} size={60} primary={primary} />
           <div style={{ flex:1, minWidth:0 }}>
@@ -793,62 +1110,33 @@ function DoctorCard({ doc, tenantId, primary, patientName, patientPhone, onRefre
               </div>
             ) : <span style={{ fontSize:12, color:'#C4C9D4' }}>Нет оценок</span>}
           </div>
+          <span className="material-symbols-outlined" style={{ color:'#C4C9D4', fontSize:22 }}>chevron_right</span>
         </div>
         {doc.bio && (
           <p style={{ margin:'12px 0 0', fontSize:13, color:'#6B7280', lineHeight:1.6, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
             {doc.bio}
           </p>
         )}
-      </div>
+      </button>
 
       <div style={{ display:'flex', borderTop:'1px solid #F3F4F6' }}>
         {doc.has_schedule && (
-          <button onClick={() => setBookOpen(true)}
+          <button onClick={(e) => { e.stopPropagation(); setBookOpen(true) }}
             style={{ flex:2, padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:.3 }}>
             Записаться
           </button>
         )}
-        <button onClick={() => setRevOpen(true)}
+        <button onClick={(e) => { e.stopPropagation(); setRevOpen(true) }}
           style={{ flex:1, padding:'13px', border:'none', borderLeft: doc.has_schedule ? '1px solid rgba(255,255,255,.15)' : '1px solid #F3F4F6', color: doc.has_schedule ? 'rgba(255,255,255,.85)' : '#6B7280', fontSize:12, cursor:'pointer', background: doc.has_schedule ? 'transparent' : '#FAFBFF' }}>
           ✍️ Отзыв
         </button>
-        {doc.review_count>0 && (
-          <button onClick={expandReviews}
-            style={{ padding:'13px 14px', background:'none', border:'none', borderLeft:'1px solid #F3F4F6', color:'#9CA3AF', fontSize:12, cursor:'pointer' }}>
-            {expanded?'▲':`▼ ${doc.review_count}`}
-          </button>
-        )}
       </div>
 
-      {expanded && (
-        <div style={{ padding:'14px 16px', background:'#FAFBFF', borderTop:'1px solid #F3F4F6' }}>
-          {profLoading && <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13 }}>Загрузка...</p>}
-          {profile && (
-            <>
-              <div style={{ display:'flex', gap:16, marginBottom:14, alignItems:'center' }}>
-                <div style={{ textAlign:'center', flexShrink:0 }}>
-                  <div style={{ fontSize:38, fontWeight:800, color:'#1A2B3C', lineHeight:1 }}>{profile.avg_rating||'—'}</div>
-                  <Stars rating={profile.avg_rating} size={14} />
-                  <div style={{ fontSize:11, color:'#9CA3AF', marginTop:3 }}>{profile.total_reviews} отзывов</div>
-                </div>
-                <div style={{ flex:1 }}>
-                  {[5,4,3,2,1].map(s => <RatingBar key={s} star={s} count={profile.rating_breakdown?.[s]||0} total={profile.total_reviews} primary={primary} />)}
-                </div>
-              </div>
-              {profile.reviews.map(r => (
-                <div key={r.id} style={{ padding:'10px 0', borderTop:'1px solid #F0F1F5' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:3 }}>
-                    <span style={{ fontWeight:600, fontSize:13, color:'#1A2B3C' }}>{r.is_anonymous?'Анонимно':(r.patient_name||'Пациент')}</span>
-                    <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmt(r.created_at)}</span>
-                  </div>
-                  <Stars rating={r.rating} size={12} />
-                  {r.comment && <p style={{ margin:'6px 0 0', fontSize:13, color:'#374151', lineHeight:1.5 }}>{r.comment}</p>}
-                </div>
-              ))}
-              {profile.total_reviews===0 && <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13 }}>Нет отзывов</p>}
-            </>
-          )}
-        </div>
+      {profileOpen && (
+        <DoctorProfileModal doc={doc} tenantId={tenantId} primary={primary}
+          patientName={patientName} patientPhone={patientPhone}
+          onRefreshHistory={onRefreshHistory}
+          onClose={() => setProfileOpen(false)} />
       )}
 
       <SheetModal open={bookOpen} onClose={() => setBookOpen(false)} title="Запись к врачу">
@@ -1096,7 +1384,7 @@ export default function PatientCabinet() {
   if (!data) return null
 
   const isApt = data?.type === 'appointment'
-  const { current, other_referrals = [], mis_info, mis_visits = [], patient_name: _pname, patient_phone: _pphone } = isApt ? {} : data
+  const { current, other_referrals = [], mis_info, mis_visits = [], appointments = [], patient_name: _pname, patient_phone: _pphone } = isApt ? {} : data
   const patient_name  = isApt ? data.patient_name  : _pname
   const patient_phone = isApt ? data.patient_phone : _pphone
   const allRefs = isApt ? [] : [current, ...other_referrals].filter(Boolean)
@@ -1315,6 +1603,26 @@ export default function PatientCabinet() {
 
         {tab === 'home' && !isApt && (
           <div className="space-y-5 tab-enter">
+            {/* Записи к врачу — поверх всего на главной */}
+            {appointments.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-bold text-gray-800 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base" style={{ color:'#0097A7', fontVariationSettings:"'FILL' 1" }}>event</span>
+                    Мои записи к врачу
+                  </h2>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background:'rgba(0,151,167,.1)', color:'#0097A7' }}>
+                    {appointments.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {appointments.map(a => (
+                    <AppointmentCard key={a.id} apt={a} onQr={setFullscreenQr} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Active QR — show current referral's QR prominently */}
             {current?.status === 'created' && current?.qr_code && (
               <div className="rounded-3xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#0097A7 0%,#1565C0 100%)', boxShadow: '0 8px 32px rgba(0,151,167,.3)' }}>
@@ -1382,7 +1690,7 @@ export default function PatientCabinet() {
             )}
 
             {/* Empty state */}
-            {allRefs.length === 0 && mis_visits.length === 0 && (
+            {allRefs.length === 0 && mis_visits.length === 0 && appointments.length === 0 && (
               <div className="bg-white rounded-3xl p-8 text-center" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
                 <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
                   <span className="material-symbols-outlined text-blue-400 text-3xl">medical_services</span>

@@ -107,6 +107,66 @@ async def public_get_slots(
     return await get_available_slots(db, did, target)
 
 
+@router.get("/{slug}/doctors/{doctor_id}/availability")
+async def public_get_availability(
+    slug: str,
+    doctor_id: str,
+    from_: Optional[str] = Query(None, alias="from", description="YYYY-MM-DD (по умолчанию: сегодня)"),
+    to: Optional[str] = Query(None, description="YYYY-MM-DD (по умолчанию: today + 14)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Доступность врача в диапазоне дат: на каждый день — кол-во свободных слотов
+    и флаг has_schedule. По умолчанию диапазон: сегодня..сегодня+14.
+    Возвращает: [{date: 'YYYY-MM-DD', free_slots: int, has_schedule: bool}, ...]
+    """
+    await _get_tenant(slug, db)
+    try:
+        did = uuid.UUID(doctor_id)
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Неверный ID врача")
+
+    from datetime import date as _date, timedelta as _td
+    today = _date.today()
+    try:
+        d_from = datetime.strptime(from_, "%Y-%m-%d").date() if from_ else today
+        d_to   = datetime.strptime(to,    "%Y-%m-%d").date() if to    else (today + _td(days=14))
+    except (ValueError, AttributeError):
+        raise HTTPException(400, "Неверный формат даты")
+
+    if d_from < today:
+        d_from = today
+    if d_to < d_from:
+        d_to = d_from
+    # ограничим до 60 дней — защита от перебора
+    if (d_to - d_from).days > 60:
+        d_to = d_from + _td(days=60)
+
+    # Проверим, есть ли у врача вообще активное расписание
+    from app.models.doctor import DoctorSchedule as _DS
+    has_any = bool((await db.execute(
+        select(_DS.id).where(_DS.doctor_id == did, _DS.is_active == True).limit(1)
+    )).scalar_one_or_none())
+
+    out = []
+    cur = d_from
+    while cur <= d_to:
+        slots = await get_available_slots(db, did, cur)
+        free = sum(1 for s in slots if s.get("available"))
+        # has_schedule на конкретную дату — был ли шаблон под этот день недели
+        out.append({
+            "date": cur.isoformat(),
+            "free_slots": free,
+            "has_schedule": len(slots) > 0,
+        })
+        cur += _td(days=1)
+
+    return {
+        "has_any_schedule": has_any,
+        "days": out,
+    }
+
+
 class BookRequest(BaseModel):
     doctor_id: uuid.UUID
     appointment_date: str   # "YYYY-MM-DD"
