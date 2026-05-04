@@ -29,6 +29,39 @@ if (typeof document !== 'undefined' && SLUG) {
   }
 }
 
+// Динамически генерирует manifest.json как Blob с актуальным start_url
+// (включает session_token чтобы PWA-ярлык на iOS сразу автологинился).
+function updateManifestStartUrl(sessionToken) {
+  if (typeof document === 'undefined' || !SLUG) return
+  try {
+    const startUrl = sessionToken
+      ? `/${SLUG}/p?s=${encodeURIComponent(sessionToken)}`
+      : `/${SLUG}/p`
+    const manifest = {
+      name: 'Личный кабинет',
+      short_name: 'Кабинет',
+      description: 'Личный кабинет пациента',
+      start_url: startUrl,
+      scope: `/${SLUG}/`,
+      display: 'standalone',
+      background_color: '#F0F4F8',
+      theme_color: '#0A2342',
+      orientation: 'portrait-primary',
+    }
+    const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' })
+    const url = URL.createObjectURL(blob)
+    let link = document.querySelector('link[rel="manifest"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'manifest'
+      document.head.appendChild(link)
+    }
+    if (link.dataset.blobUrl) URL.revokeObjectURL(link.dataset.blobUrl)
+    link.href = url
+    link.dataset.blobUrl = url
+  } catch {}
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(iso) {
   if (!iso) return '—'
@@ -953,11 +986,29 @@ export default function PatientCabinet() {
     setLoading(false); setShowLogin(true)
   }, [])
 
+  const ensureSession = async (token) => {
+    if (localStorage.getItem(SESSION_KEY)) {
+      updateManifestStartUrl(localStorage.getItem(SESSION_KEY))
+      try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(localStorage.getItem(SESSION_KEY))}`) } catch {}
+      return
+    }
+    try {
+      const r = await axios.post(`${API}/patient/session/from-token`, { patient_token: token })
+      const s = r.data.session_token
+      if (s) {
+        localStorage.setItem(SESSION_KEY, s)
+        updateManifestStartUrl(s)
+        try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(s)}`) } catch {}
+      }
+    } catch {}
+  }
+
   const loadData = async (refId, token) => {
     setLoading(true); setError('')
     try {
       const r = await axios.get(`${API}/patient/${refId}?t=${token}`)
       setData(r.data)
+      ensureSession(token)
     } catch (e) {
       const msg = e.response?.data?.detail || 'Ошибка загрузки'
       setError(msg)
@@ -980,6 +1031,8 @@ export default function PatientCabinet() {
         localStorage.setItem(TOKEN_KEY, r.data.patient_token)
         localStorage.setItem(REF_KEY, r.data.referral_id)
       }
+      updateManifestStartUrl(sessionToken)
+      try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(sessionToken)}`) } catch {}
     } catch (e) {
       if (e.response?.status === 401) {
         localStorage.removeItem(SESSION_KEY)

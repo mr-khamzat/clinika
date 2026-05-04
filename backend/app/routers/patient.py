@@ -49,6 +49,10 @@ class SessionLogoutRequest(BaseModel):
     session_token: str
 
 
+class SessionFromTokenRequest(BaseModel):
+    patient_token: str
+
+
 async def _load_mis_data(db: AsyncSession, phone: str, tenant_id) -> dict:
     """Подтянуть из МИС: профиль пациента + историю визитов по всем клиникам тенанта."""
     out = {"mis_info": None, "mis_visits": [], "mis_analyses": []}
@@ -367,6 +371,54 @@ async def restore_patient_session(
 
     await db.commit()
     return payload
+
+
+@router.post("/session/from-token", dependencies=_view_deps)
+async def session_from_token(
+    body: SessionFromTokenRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Из валидного patient_token (QR-вход) создать long-lived session для PWA."""
+    from app.core.security import decode_patient_token as _decode
+    try:
+        payload = _decode(body.patient_token)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Token invalid")
+    phone = payload.get("sub")
+    ref_id = payload.get("ref") or payload.get("apt")
+    ttype = payload.get("type")
+    if not phone or not ref_id:
+        raise HTTPException(status_code=401, detail="Token invalid")
+
+    tenant_id = None
+    if ttype == "patient":
+        try:
+            ref = await db.get(Referral, uuid.UUID(ref_id))
+            if ref:
+                if not verify_patient_token(str(ref.id), ref.patient_phone, body.patient_token):
+                    raise HTTPException(status_code=401, detail="Token invalid")
+                tenant_id = ref.tenant_id
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Token invalid")
+    elif ttype == "appointment":
+        from app.models.doctor import Appointment as Apt
+        from app.core.security import verify_appointment_token
+        try:
+            apt = await db.get(Apt, uuid.UUID(ref_id))
+            if apt:
+                if not verify_appointment_token(str(apt.id), apt.patient_phone, body.patient_token):
+                    raise HTTPException(status_code=401, detail="Token invalid")
+                tenant_id = getattr(apt, "tenant_id", None)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Token invalid")
+    else:
+        raise HTTPException(status_code=401, detail="Token invalid")
+
+    device = request.headers.get("user-agent", "")[:500] if request else None
+    _, session_token = await _create_session(db, phone, tenant_id, device_info=device)
+    await db.commit()
+    return {"session_token": session_token}
 
 
 @router.post("/session/logout")
