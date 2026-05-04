@@ -1877,14 +1877,16 @@ export default function PatientCabinet() {
       setData(r.data)
       ensureSession(token)
     } catch (e) {
-      const msg = e.response?.data?.detail || 'Ошибка загрузки'
-      setError(msg)
-      if (e.response?.status === 403) {
+      const status = e.response?.status
+      // 403 (просрочен/невалидный токен), 404 (направление удалено), 410 — фолбэк на session
+      if (status === 403 || status === 404 || status === 410) {
         localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REF_KEY)
-        // Попробуем session-фолбэк, если есть
         const s = localStorage.getItem(SESSION_KEY)
         if (s) { restoreFromSession(s); return }
+        setError('')
         setShowLogin(true)
+      } else {
+        setError(e.response?.data?.detail || 'Ошибка загрузки')
       }
     } finally { setLoading(false) }
   }
