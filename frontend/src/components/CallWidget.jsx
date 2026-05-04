@@ -53,9 +53,9 @@ export default function CallWidget() {
       .catch(() => {})
   }, [token])
 
-  // ── WebSocket ─────────────────────────────────────────────────────────────
+  // ── WebSocket — подключаем всегда для presence, не только при telephony ──
   useEffect(() => {
-    if (!caps.enabled || !user?.id || !token) return
+    if (!user?.id || !token) return
     const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
@@ -135,7 +135,7 @@ export default function CallWidget() {
       clearInterval(pingRef.current)
       ws.close(); wsRef.current = null
     }
-  }, [caps.enabled, user?.id])
+  }, [user?.id])
 
   const loadContacts = useCallback(() => {
     axios.get(API_BASE + '/presence/users', { headers: h })
@@ -254,7 +254,7 @@ export default function CallWidget() {
     setCamOn(v => !v)
   }
 
-  if (!caps.enabled) return null
+  if (!token || !user) return null  // не показываем без авторизации
 
   const isVideo = (active || outgoing || incoming)?.call_type === 'video'
   const callActive = !!(active || outgoing)
@@ -449,8 +449,8 @@ export default function CallWidget() {
         </>
       )}
 
-      {/* ── Плавающая кнопка ─────────────────────────────────────────────── */}
-      <button
+      {/* ── Плавающая кнопка (только при активном модуле звонков) ─────── */}
+      {caps.enabled && <button
         onClick={() => setOpen(o => !o)}
         className="fixed bottom-40 right-4 z-40 w-14 h-14 text-white rounded-full flex items-center justify-center transition-all duration-150 active:scale-95"
         style={{ background:'linear-gradient(135deg,#0097A7,#006173)', boxShadow:'0 8px 24px rgba(0,151,167,0.4)' }}
@@ -466,7 +466,7 @@ export default function CallWidget() {
         <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>
           {callActive ? 'call' : open ? 'close' : 'call'}
         </span>
-      </button>
+      </button>}
 
       <style>{`
         @keyframes slideUp { from { transform:translateY(20px);opacity:0 } to { transform:translateY(0);opacity:1 } }

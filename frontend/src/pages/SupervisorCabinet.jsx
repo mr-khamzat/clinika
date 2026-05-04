@@ -100,6 +100,8 @@ function ExtDoctorsSection({ token }) {
   const [search,   setSearch]   = useState('')
   const [saving,   setSaving]   = useState(false)
   const [msg,      setMsg]      = useState('')
+  const [deleteDocId, setDeleteDocId] = useState(null)
+  const [deletingDoc,  setDeletingDoc]  = useState(false)
 
   const [mainTab, setMainTab] = useState("doctors")
   const [allApts, setAllApts] = useState([])
@@ -219,6 +221,11 @@ function ExtDoctorsSection({ token }) {
     setToggling(doc.id)
     await axios.patch(API_BASE + `/manager/recruiter-doctors/${doc.id}/toggle-active`, {}, hdr).catch(() => {})
     load(); setToggling(null)
+  }
+  const deleteDoctor = async () => {
+    setDeletingDoc(true)
+    await axios.delete(API_BASE + `/manager/all-external-doctors/${deleteDocId}`, hdr).catch(() => {})
+    setDeleteDocId(null); setDeletingDoc(false); load()
   }
 
   const toggleSuspend = async (doc) => {
@@ -883,6 +890,10 @@ function ExtDoctorsSection({ token }) {
                     className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition disabled:opacity-50 ${doc.is_active ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' : 'bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100'}`}>
                     {toggling === doc.id ? '...' : doc.is_active ? '🚫 Заблокировать' : '✓ Активировать'}
                   </button>
+                  <button onClick={() => setDeleteDocId(doc.id)}
+                    className="rounded-lg px-2.5 py-1.5 text-xs font-semibold border border-red-300 bg-red-50 text-red-700 hover:bg-red-100 transition ml-auto">
+                    🗑 Удалить
+                  </button>
                 </div>
               </div>
             )
@@ -890,6 +901,22 @@ function ExtDoctorsSection({ token }) {
         </div>
       )}
       </>)}
+
+      {/* Delete doctor confirmation modal */}
+      {deleteDocId && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="font-bold text-base text-gray-800 dark:text-gray-100 mb-2">Удалить врача?</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">Это действие необратимо. Все данные врача будут удалены.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteDocId(null)} className="flex-1 bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 rounded-xl py-2.5 font-semibold text-sm hover:bg-gray-200 dark:hover:bg-slate-600 transition">Отмена</button>
+              <button onClick={deleteDoctor} disabled={deletingDoc} className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-xl py-2.5 font-bold text-sm transition disabled:opacity-50">
+                {deletingDoc ? 'Удаление...' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1143,7 +1170,16 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
   })
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const a = api(token)
+
+  const deleteStaff = async () => {
+    setDeleting(true)
+    await a.delete(`/manager/admins/${existing.id}?hard=true`).catch(() => {})
+    setDeleting(false)
+    onDone()
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -1234,6 +1270,21 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
             </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
+            {existing && !deleteConfirm && (
+              <button type="button" onClick={() => setDeleteConfirm(true)}
+                className="px-4 py-2.5 text-sm font-semibold text-red-600 hover:text-red-700 transition">🗑 Удалить</button>
+            )}
+            {existing && deleteConfirm && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-red-600">Удалить безвозвратно?</span>
+                <button type="button" onClick={deleteStaff} disabled={deleting}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-red-500 text-white hover:bg-red-600 disabled:opacity-50 transition">
+                  {deleting ? '...' : 'Да'}
+                </button>
+                <button type="button" onClick={() => setDeleteConfirm(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 hover:bg-gray-200 transition">Нет</button>
+              </div>
+            )}
             <button type="button" onClick={onClose}
               className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 transition">Отмена</button>
             <button type="submit" disabled={loading}
@@ -2386,25 +2437,30 @@ function ServicesSection({ token }) {
   const [searchResults, setSearchResults] = useState(null)
   const [searching, setSearching] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: '', code: '', category: '', bonus_amount: '', original_price: '' })
+  const [form, setForm] = useState({ name: '', code: '', category: '', bonus_amount: '', original_price: '', clinic_id: '' })
   const [saving, setSaving] = useState(false)
   const [rev, setRev] = useState(0)
+  const [clinicsList, setClinicsList] = useState([])
+  const [filterClinic, setFilterClinic] = useState('')
 
   const reload = useCallback(async () => {
     setBonused(null); setLoadingCats(true)
     try {
-      const [br, cr] = await Promise.all([
-        a.get('/manager/services/', { has_bonus: true }),
-        a.get('/manager/services/categories'),
+      const clinicParams = filterClinic ? { clinic_id: filterClinic } : {}
+      const [br, cr, clr] = await Promise.all([
+        a.get('/manager/services/', { has_bonus: true, ...clinicParams }),
+        a.get('/manager/services/categories', clinicParams),
+        a.get('/manager/clinics/'),
       ])
       setBonused(Array.isArray(br.data) ? br.data : [])
       const cats = Array.isArray(cr.data) ? cr.data : []
       setAllCats(cats)
       setCatNames(cats.map(c => c.category).filter(Boolean))
+      setClinicsList(Array.isArray(clr.data) ? clr.data : [])
     } catch (_) { setBonused([]); setAllCats([]) } finally { setLoadingCats(false) }
-  }, [token])
+  }, [token, filterClinic])
 
-  useEffect(() => { reload() }, [token, rev])
+  useEffect(() => { reload() }, [token, rev, filterClinic])
 
   useEffect(() => {
     if (!search.trim()) { setSearchResults(null); return }
@@ -2428,16 +2484,17 @@ function ServicesSection({ token }) {
         category: form.category || null,
         bonus_amount: parseFloat(form.bonus_amount) || 0,
         original_price: form.original_price ? parseFloat(form.original_price) : null,
+        clinic_id: form.clinic_id || null,
       })
       setShowCreate(false)
-      setForm({ name: '', code: '', category: '', bonus_amount: '', original_price: '' })
+      setForm({ name: '', code: '', category: '', bonus_amount: '', original_price: '', clinic_id: '' })
       setRev(r => r + 1)
     } catch (ex) { alert(ex?.response?.data?.detail || 'Ошибка') } finally { setSaving(false) }
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Услуги</h2>
           {!loadingCats && allCats.length > 0 && (
@@ -2451,6 +2508,16 @@ function ServicesSection({ token }) {
           Добавить
         </button>
       </div>
+      {clinicsList.length > 1 && (
+        <div className="mb-4 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[16px] text-gray-400">local_hospital</span>
+          <select value={filterClinic} onChange={e => setFilterClinic(e.target.value)}
+            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-[#0097A7]">
+            <option value="">Все клиники</option>
+            {clinicsList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* Блок "С бонусом" */}
       <div className="mb-6">
@@ -2583,6 +2650,16 @@ function ServicesSection({ token }) {
                     className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]" />
                 </div>
               </div>
+              {clinicsList.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Клиника</label>
+                  <select value={form.clinic_id} onChange={e => setForm(p => ({ ...p, clinic_id: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#0097A7]">
+                    <option value="">— Все клиники —</option>
+                    {clinicsList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 text-sm text-gray-600">Отмена</button>
                 <button type="submit" disabled={saving}

@@ -209,6 +209,10 @@ async def get_all_presence(
     if current_user.tenant_id:
         q = q.where(UserModel.tenant_id == current_user.tenant_id)
 
+    # Исключаем роли, которые не участвуют в звонках
+    EXCLUDED_FROM_CALLS = [UserRole.SUPER_ADMIN, UserRole.VISITING_DOCTOR, UserRole.EXTERNAL_DOCTOR]
+    q = q.where(UserModel.role.not_in(EXCLUDED_FROM_CALLS))
+
     # Врач видит только свою клинику
     if current_user.role == UserRole.ADMIN and current_user.clinic_id:
         q = q.where(UserModel.clinic_id == current_user.clinic_id)

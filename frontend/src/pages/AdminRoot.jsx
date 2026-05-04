@@ -14,6 +14,7 @@ import PatientCabinet from './PatientCabinet'
 import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
 import AccountantCabinet from './AccountantCabinet'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import CallWidget from '../components/CallWidget'
 
 // Проверяем — вдруг это страница принятия приглашения: /invite/{token}
 function getInviteToken() {
@@ -81,6 +82,20 @@ export default function AdminRoot() {
     localStorage.removeItem('clinika_admin_token_' + SLUG)
     window.location.href = '/' + SLUG + '/'
   }
+
+  // ── Presence WebSocket — всегда подключаем для отслеживания онлайн статуса
+  useEffect(() => {
+    const NO_PRESENCE = ['visiting_doctor', 'external_doctor', 'patient']
+    if (!adminToken || !user?.id || NO_PRESENCE.includes(user.role)) return
+    const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}`
+    const ws = new WebSocket(wsUrl)
+    let ping
+    ws.onopen = () => {
+      axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: { Authorization: `Bearer ${adminToken}` } }).catch(() => {})
+      ping = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'heartbeat' })) }, 30000)
+    }
+    return () => { clearInterval(ping); ws.close() }
+  }, [adminToken, user?.id])
 
   if (checking) {
     return (

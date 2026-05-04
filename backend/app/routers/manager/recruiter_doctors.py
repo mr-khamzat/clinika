@@ -411,3 +411,18 @@ async def get_recruiter_doctors(
             "created_at":   doc.created_at.isoformat(),
         })
     return out
+
+
+@router.delete("/all-external-doctors/{doctor_id}", status_code=204)
+async def delete_external_doctor(
+    doctor_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    doctor = await db.get(User, doctor_id)
+    if not doctor or doctor.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Врач не найден")
+    if doctor.role not in (UserRole.VISITING_DOCTOR, UserRole.EXTERNAL_DOCTOR):
+        raise HTTPException(status_code=400, detail="Можно удалять только внешних/приезжих врачей")
+    await db.delete(doctor)
+    await db.commit()
