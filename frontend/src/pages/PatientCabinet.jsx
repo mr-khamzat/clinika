@@ -6,6 +6,13 @@ const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
 const REF_KEY     = 'clinika_patient_ref'
 const SESSION_KEY = 'clinika_patient_session'
+const SLUG_KEY    = 'clinika_patient_slug'
+
+// Сохраняем slug при каждом заходе в кабинет — это позволяет корню /
+// сделать редирект сюда, если PWA-ярлык открылся в корневом scope.
+if (typeof window !== 'undefined' && SLUG) {
+  try { localStorage.setItem(SLUG_KEY, SLUG) } catch {}
+}
 
 // Подключаем PWA-манифест и meta-теги один раз при загрузке страницы /p
 if (typeof document !== 'undefined' && SLUG) {
@@ -1015,6 +1022,7 @@ export default function PatientCabinet() {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REF_KEY)
     localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(SLUG_KEY)
     setData(null); setShowLogin(true)
   }
 

@@ -199,8 +199,17 @@ function MiniApp() {
 export default function App() {
   const path = window.location.pathname
 
-  // Корневой лендинг (/) — показываем Landing без slug-роутинга
+  // Корневой лендинг (/) — показываем Landing без slug-роутинга.
+  // Но если на устройстве сохранён вход пациента (PWA-ярлык открылся на корне) —
+  // моментальный редирект в его кабинет.
   if (path === '/' || path === '') {
+    const slug = typeof localStorage !== 'undefined' ? localStorage.getItem('clinika_patient_slug') : null
+    const session = typeof localStorage !== 'undefined' ? localStorage.getItem('clinika_patient_session') : null
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('clinika_patient_token') : null
+    if (slug && (session || token)) {
+      window.location.replace('/' + slug + '/p')
+      return null
+    }
     return <Landing />
   }
 
