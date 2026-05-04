@@ -158,6 +158,314 @@ function ReviewsTab({ adminToken }) {
 }
 
 const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
+const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
+
+// ── Таб «Мои тенанты» — управление тенантами внутри своей франшизы ─────────
+const EMPTY_TENANT = {
+  name: '',
+  slug: '',
+  plan: 'trial',
+  admin_full_name: '',
+  admin_login: '',
+  admin_password: '',
+}
+
+const PLAN_LABELS = {
+  trial:        'Trial',
+  basic:        'Basic',
+  pro:          'Pro',
+  professional: 'Professional',
+  enterprise:   'Enterprise',
+}
+
+function MyTenantsTab({ adminToken }) {
+  const [me, setMe]               = useState(null)
+  const [tenants, setTenants]     = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [showForm, setShowForm]   = useState(false)
+  const [form, setForm]           = useState(EMPTY_TENANT)
+  const [saving, setSaving]       = useState(false)
+  const [created, setCreated]     = useState(null) // данные созданного тенанта
+  const [details, setDetails]     = useState(null) // детальный просмотр
+  const [msg, setMsg]             = useState('')
+  const [msgType, setMsgType]     = useState('ok')
+
+  const showMsg = (text, type = 'ok') => {
+    setMsg(text); setMsgType(type)
+    setTimeout(() => setMsg(''), 4500)
+  }
+
+  const slugify = (s) =>
+    (s || '').toLowerCase()
+      .replace(/[^a-z0-9а-я]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50)
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [meR, tR] = await Promise.all([
+        axios.get(`${API_BASE}/franchise-owner/me`, { headers: authH(adminToken) }).catch(() => ({ data: null })),
+        axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(adminToken) }).catch(() => ({ data: [] })),
+      ])
+      setMe(meR.data)
+      setTenants(Array.isArray(tR.data) ? tR.data : [])
+    } catch {
+      setTenants([])
+    }
+    setLoading(false)
+  }, [adminToken])
+
+  useEffect(() => { loadAll() }, [loadAll])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const submit = async (e) => {
+    e?.preventDefault?.()
+    if (!form.name.trim() || !form.slug.trim() || !form.admin_full_name.trim() || !form.admin_login.trim()) {
+      showMsg('Заполните обязательные поля', 'err'); return
+    }
+    setSaving(true)
+    try {
+      const r = await axios.post(`${API_BASE}/franchise-owner/tenants`, {
+        name: form.name.trim(),
+        slug: form.slug.trim(),
+        plan: form.plan,
+        admin_full_name: form.admin_full_name.trim(),
+        admin_login: form.admin_login.trim(),
+        admin_password: form.admin_password.trim() || null,
+      }, { headers: authH(adminToken) })
+      setCreated(r.data)
+      setForm(EMPTY_TENANT)
+      setShowForm(false)
+      await loadAll()
+      showMsg('Тенант создан')
+    } catch (e) {
+      showMsg('Ошибка: ' + (e.response?.data?.detail || e.message), 'err')
+    }
+    setSaving(false)
+  }
+
+  const TENANT_PORTAL_URL = (slug) => `${window.location.origin}/${slug}/admin`
+
+  return (
+    <div className="space-y-4">
+      {/* Сводка */}
+      {me && (
+        <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center"
+              style={{ background:(me.brand_color || '#7c3aed') + '22' }}>
+              <span className="material-symbols-outlined text-2xl"
+                style={{ color:me.brand_color || '#7c3aed', fontVariationSettings:"'FILL' 1" }}>store</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-gray-900 truncate">{me.name}</p>
+              <p className="text-xs text-gray-400">/{me.slug}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-extrabold text-gray-900">{me.tenant_count ?? 0}</p>
+              <p className="text-xs text-gray-400">тенантов</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {msg && (
+        <div className={`px-4 py-3 rounded-xl text-sm font-medium ${
+          msgType === 'ok' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+          {msg}
+        </div>
+      )}
+
+      {/* Кнопка добавления */}
+      <button onClick={() => { setShowForm(true); setCreated(null); setForm(EMPTY_TENANT) }}
+        className="w-full flex items-center justify-center gap-2 bg-violet-600 text-white py-3 rounded-2xl font-semibold hover:bg-violet-700 transition">
+        <span className="material-symbols-outlined">add_business</span>
+        Добавить тенант
+      </button>
+
+      {/* Список тенантов */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="w-10 h-10 border-4 border-violet-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (tenants || []).length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+          <span className="material-symbols-outlined text-5xl text-gray-300 block mb-2"
+            style={{ fontVariationSettings:"'FILL' 1" }}>business</span>
+          <p className="text-gray-500 font-semibold mb-1">Нет тенантов</p>
+          <p className="text-gray-400 text-sm">Создайте первый тенант своей франшизы</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {tenants.map(t => {
+            const isActive = t.is_active
+            const isTrial = t.subscription_status === 'trial'
+            const statusBg = isTrial ? 'bg-amber-50 text-amber-700' :
+              (t.subscription_status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')
+            return (
+              <div key={t.id} className="bg-white rounded-2xl p-4"
+                style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: isActive ? '#7c3aed22' : '#f3f4f6' }}>
+                    <span className="material-symbols-outlined"
+                      style={{ color: isActive ? '#7c3aed' : '#9ca3af', fontVariationSettings:"'FILL' 1" }}>
+                      corporate_fare
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`font-bold ${isActive ? 'text-gray-900' : 'text-gray-400 line-through'}`}>{t.name}</p>
+                      <span className="text-xs text-gray-400 truncate">/{t.slug}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
+                      {t.plan && <span className="font-bold text-violet-600 uppercase">{PLAN_LABELS[t.plan] || t.plan}</span>}
+                      <span className={`font-semibold px-2 py-0.5 rounded-full ${statusBg}`}>
+                        {isTrial ? 'Trial' : (t.subscription_status || 'нет')}
+                      </span>
+                      <span className="text-gray-400">
+                        {t.created_at ? new Date(t.created_at).toLocaleDateString('ru-RU') : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <button onClick={() => setDetails(t)}
+                    className="p-2 rounded-xl hover:bg-gray-100">
+                    <span className="material-symbols-outlined text-gray-500">chevron_right</span>
+                  </button>
+                </div>
+                {t.mrr ? (
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="text-gray-400">MRR</span>
+                    <span className="font-bold text-gray-700">{Number(t.mrr).toLocaleString('ru')} ₽/мес</span>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Модалка создания тенанта ───────────────────────────────────── */}
+      {showForm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Новый тенант</h2>
+              <button onClick={() => setShowForm(false)} className="p-1 text-gray-400">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={submit} className="flex flex-col gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Название тенанта *</label>
+                <input type="text" value={form.name}
+                  onChange={e => { set('name', e.target.value); if (!form.slug) set('slug', slugify(e.target.value)) }}
+                  required className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Slug (URL) *</label>
+                <input type="text" value={form.slug}
+                  onChange={e => set('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                  required pattern="^[a-z0-9-]+$"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Тариф</label>
+                <select value={form.plan} onChange={e => set('plan', e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm">
+                  <option value="trial">Trial</option>
+                  <option value="basic">Basic</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Администратор тенанта</p>
+                <input type="text" placeholder="ФИО *" required value={form.admin_full_name}
+                  onChange={e => set('admin_full_name', e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm" />
+                <input type="text" placeholder="Логин *" required value={form.admin_login}
+                  onChange={e => set('admin_login', e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono" />
+                <input type="text" placeholder="Пароль (или сгенерировать)" value={form.admin_password}
+                  onChange={e => set('admin_password', e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono" />
+              </div>
+
+              <div className="flex gap-2 mt-2">
+                <button type="submit" disabled={saving}
+                  className="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-xl font-semibold disabled:opacity-50">
+                  {saving ? 'Создание…' : 'Создать тенант'}
+                </button>
+                <button type="button" onClick={() => setShowForm(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600">
+                  Отмена
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Уведомление о созданном тенанте — пароль показывается единожды */}
+      {created && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <span className="material-symbols-outlined text-emerald-600">check_circle</span>
+              </div>
+              <p className="font-bold text-gray-900">Тенант создан</p>
+            </div>
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs space-y-1 mb-4">
+              <p className="font-bold text-amber-800">⚠ Сохраните данные доступа — показываются один раз</p>
+              <p className="text-amber-700 font-mono">URL: {created.admin_panel || `${window.location.origin}/${created.slug}/admin`}</p>
+              <p className="text-amber-700 font-mono">Логин: {created.admin_username}</p>
+              <p className="text-amber-700 font-mono">Пароль: {created.admin_password}</p>
+            </div>
+            <button onClick={() => setCreated(null)}
+              className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2.5 rounded-xl font-semibold">
+              Понятно
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Детальный просмотр тенанта */}
+      {details && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Тенант</h2>
+              <button onClick={() => setDetails(null)} className="p-1 text-gray-400">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">Название</span><span className="font-semibold">{details.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Slug</span><span className="font-mono">{details.slug}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Тариф</span><span className="font-bold text-violet-600 uppercase">{PLAN_LABELS[details.plan] || details.plan}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Статус</span><span>{details.subscription_status || '—'}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">MRR</span><span>{Number(details.mrr || 0).toLocaleString('ru')} ₽</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Создан</span><span>{details.created_at ? new Date(details.created_at).toLocaleDateString('ru-RU') : '—'}</span></div>
+            </div>
+            <a href={TENANT_PORTAL_URL(details.slug)} target="_blank" rel="noopener noreferrer"
+              className="mt-5 w-full flex items-center justify-center gap-2 bg-violet-600 text-white py-2.5 rounded-xl font-semibold">
+              <span className="material-symbols-outlined">open_in_new</span>
+              Перейти в /{details.slug}/admin
+            </a>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('overview')
@@ -165,11 +473,13 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   const [loading, setLoading] = useState(true)
 
   const TABS = [
-    { id:'overview',  label:'Обзор',    icon:'dashboard'            },
-    { id:'doctors',   label:'Врачи',    icon:'stethoscope'          },
-    { id:'analytics', label:'Аналитика',icon:'bar_chart'            },
-    { id:'reviews',   label:'Отзывы',   icon:'rate_review'          },
-    { id:'royalty',   label:'Роялти',   icon:'account_balance_wallet'},
+    { id:'overview',  label:'Обзор',     icon:'dashboard'            },
+    { id:'tenants',   label:'Тенанты',   icon:'business'             },
+    { id:'doctors',   label:'Врачи',     icon:'stethoscope'          },
+    { id:'analytics', label:'Аналитика', icon:'bar_chart'            },
+    { id:'reviews',   label:'Отзывы',    icon:'rate_review'          },
+    { id:'knowledge', label:'База AI',   icon:'library_books'        },
+    { id:'royalty',   label:'Роялти',    icon:'account_balance_wallet'},
   ]
 
   useEffect(() => {
@@ -202,7 +512,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       {/* Content */}
       <div className="px-4 py-4 pb-28">
 
-        {loading && tab !== 'reviews' && (
+        {loading && tab !== 'reviews' && tab !== 'tenants' && (
           <div className="flex justify-center py-16">
             <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
           </div>
@@ -254,6 +564,8 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
           </div>
         )}
 
+        {tab === 'tenants' && <MyTenantsTab adminToken={adminToken} />}
+
         {tab === 'doctors' && (
           <Suspense fallback={<div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>}>
             <DoctorsSection token={adminToken} />
@@ -261,6 +573,12 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
         )}
 
         {tab === 'reviews' && <ReviewsTab adminToken={adminToken} />}
+
+        {tab === 'knowledge' && (
+          <Suspense fallback={<div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>}>
+            <AIKnowledgeSection token={adminToken} />
+          </Suspense>
+        )}
 
         {!loading && tab === 'royalty' && (
           <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>

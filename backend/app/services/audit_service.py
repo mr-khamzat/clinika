@@ -79,6 +79,17 @@ async def write(
     Записать событие в аудит-журнал.
     db.flush() вызывается внутри — commit делает вызывающий код.
     """
+    ip = _ip(request)
+
+    # Гео-IP: graceful degradation — любая ошибка / отсутствие mmdb -> None.
+    geo: dict | None = None
+    if ip:
+        try:
+            from app.services import geoip_service
+            geo = await geoip_service.lookup(ip)
+        except Exception:
+            geo = None
+
     entry = AuditEntry(
         action=action,
         actor_id=actor_id,
@@ -88,9 +99,15 @@ async def write(
         before=before if isinstance(before, (dict, type(None))) else {"value": str(before)},
         after=after if isinstance(after, (dict, type(None))) else {"value": str(after)},
         comment=comment,
-        ip_address=_ip(request),
+        ip_address=ip,
         user_agent=_ua(request),
         tenant_id=tenant_id,
+        geo_country      = (geo or {}).get("country"),
+        geo_country_name = (geo or {}).get("country_name"),
+        geo_region       = (geo or {}).get("region"),
+        geo_city         = (geo or {}).get("city"),
+        geo_lat          = (geo or {}).get("lat"),
+        geo_lon          = (geo or {}).get("lon"),
     )
     db.add(entry)
     await db.flush()

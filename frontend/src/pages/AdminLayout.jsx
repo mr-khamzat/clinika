@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react
 // ── Лениво загружаемые секции (каждая в своём файле) ──────────────────────
 // Добавляй новые секции здесь, не трогая существующий код
 const PlatformSection = lazy(() => import('../sections/PlatformSection'))
+const FranchisesSection = lazy(() => import('../sections/FranchisesSection'))
 const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
 const WikiSection = lazy(() => import('../sections/WikiSection'))
@@ -18,6 +19,10 @@ const ReviewsSection = lazy(() => import('../sections/ReviewsSection'))
 const ContactsSection = lazy(() => import('../sections/ContactsSection'))
 const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 const PatientChatsSection = lazy(() => import('../sections/PatientChatsSection'))
+const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
+const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSection'))
+const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
+const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -81,11 +86,13 @@ function SectionLoader() {
 
 const NAV = [
   { key: 'home',           label: 'Обзор',        icon: 'dashboard' },
-  { key: 'super_admin',    label: 'Франшизы',     icon: 'store' },
+  { key: 'super_admin',    label: 'Тенанты',      icon: 'corporate_fare' },
+  { key: 'franchises',     label: 'Франшизы',     icon: 'store' },
   { key: 'billing',        label: 'Биллинг',      icon: 'receipt_long' },
   { key: 'billing_ledger', label: 'Фин. реестр',  icon: 'account_balance_wallet' },
   { key: 'analytics',      label: 'Аналитика',    icon: 'bar_chart' },
   { key: 'ai_analytics',   label: 'AI-анализ',    icon: 'auto_awesome' },
+  { key: 'ai_knowledge',   label: 'База знаний AI', icon: 'library_books' },
   { key: 'audit',          label: 'Аудит',        icon: 'manage_search' },
   { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
@@ -104,6 +111,9 @@ const NAV = [
   { key: 'branding',   label: 'Брендинг',      icon: 'palette' },
   { key: 'cms',        label: 'CMS Страницы',  icon: 'web' },
   { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
+  { key: 'platform_billing',   label: 'Биллинг платформы',   icon: 'paid' },
+  { key: 'platform_analytics', label: 'Аналитика платформы', icon: 'insights' },
+  { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -4637,14 +4647,38 @@ function AnalyticsDrillSection({ token }) {
 }
 
 // ---------------------------------------------------------------------------
+// AuditSection helpers — гео-IP отображение (флаг + город + карта)
+// ---------------------------------------------------------------------------
+// ISO-2 страна -> emoji флаг (regional indicator letters)
+function flagFromCountry(code) {
+  if (!code || typeof code !== 'string' || code.length !== 2) return ''
+  const cc = code.toUpperCase()
+  const A = 0x1F1E6
+  const Acode = 'A'.charCodeAt(0)
+  const ch1 = cc.charCodeAt(0); const ch2 = cc.charCodeAt(1)
+  if (ch1 < Acode || ch1 > Acode + 25 || ch2 < Acode || ch2 > Acode + 25) return ''
+  return String.fromCodePoint(A + (ch1 - Acode)) + String.fromCodePoint(A + (ch2 - Acode))
+}
+
+// Сборка читаемой строки локации: "Грозный, Чеченская Республика"
+function formatGeoLocation(entry) {
+  const parts = []
+  if (entry?.geo_city) parts.push(entry.geo_city)
+  if (entry?.geo_region && entry.geo_region !== entry?.geo_city) parts.push(entry.geo_region)
+  if (!parts.length && entry?.geo_country_name) parts.push(entry.geo_country_name)
+  return parts.join(', ')
+}
+
+// ---------------------------------------------------------------------------
 // AuditSection — журнал аудита
 // ---------------------------------------------------------------------------
 function AuditSection({ token }) {
   const [log, setLog] = useState([])
   const [loading, setLoading] = useState(true)
   const [actions, setActions] = useState([])
-  const [filter, setFilter] = useState({ action: '', entity_type: '', days: 30 })
+  const [filter, setFilter] = useState({ action: '', entity_type: '', days: 30, country: '' })
   const [page, setPage] = useState(0)
+  const [expandedId, setExpandedId] = useState(null) // id строки с раскрытыми деталями
   const LIMIT = 30
 
   const load = async () => {
@@ -4659,6 +4693,7 @@ function AuditSection({ token }) {
       // фильтрация на клиенте если нужно
       if (filter.action) items = items.filter(e => e.action?.includes(filter.action))
       if (filter.entity_type) items = items.filter(e => e.entity_type === filter.entity_type)
+      if (filter.country) items = items.filter(e => (e.geo_country || '') === filter.country)
       setLog(items)
     } catch(e) {
       // fallback to audit/log
@@ -4671,9 +4706,36 @@ function AuditSection({ token }) {
     finally { setLoading(false) }
   }
 
+  // Загружаем список действий один раз — выпадающий список фильтра
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await apiFetch('get', '/audit/actions', token)
+        const list = Array.isArray(r.data) ? r.data : (r.data?.actions || [])
+        if (!cancelled) setActions(list)
+      } catch {
+        if (!cancelled) setActions([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [token])
+
   useEffect(() => { load() }, [filter, page])
 
   const ENTITY_TYPES = ['user', 'bonus', 'ledger', 'settings', 'referral']
+
+  // Список уникальных стран в текущей выборке — для фильтра
+  const countriesInLog = (() => {
+    const seen = new Map()
+    for (const e of log) {
+      const code = e?.geo_country
+      if (code && !seen.has(code)) {
+        seen.set(code, e?.geo_country_name || code)
+      }
+    }
+    return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1], 'ru'))
+  })()
 
   return (
     <div className="space-y-6">
@@ -4694,6 +4756,13 @@ function AuditSection({ token }) {
           <option value="">Все сущности</option>
           {ENTITY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select value={filter.country} onChange={e => { setFilter(f => ({ ...f, country: e.target.value })); setPage(0) }}
+          className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
+          <option value="">Все страны</option>
+          {countriesInLog.map(([code, name]) => (
+            <option key={code} value={code}>{flagFromCountry(code)} {name}</option>
+          ))}
+        </select>
         <select value={filter.days} onChange={e => { setFilter(f => ({ ...f, days: e.target.value })); setPage(0) }}
           className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white">
           <option value={7}>7 дней</option>
@@ -4713,7 +4782,7 @@ function AuditSection({ token }) {
                   <th className="px-4 py-3 text-left">Действие</th>
                   <th className="px-4 py-3 text-left">Сущность</th>
                   <th className="px-4 py-3 text-left">Актор</th>
-                  <th className="px-4 py-3 text-left">IP</th>
+                  <th className="px-4 py-3 text-left">IP / Локация</th>
                   <th className="px-4 py-3 text-left">Изменения</th>
                 </tr>
               </thead>
@@ -4721,32 +4790,86 @@ function AuditSection({ token }) {
                 {log.length === 0 && (
                   <tr><td colSpan={6} className="text-center py-8 text-gray-400">Нет записей</td></tr>
                 )}
-                {log.map(e => (
-                  <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition align-top">
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-                      {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-1">
-                        <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
-                          {e.action}
-                        </span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-fit ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
-                          {e.source === 'audit' ? '📋 аудит' : '📝 активность'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
-                      <span className="font-medium">{e.entity_type}</span>
-                      {e.entity_id && <span className="text-gray-400"> #{e.entity_id}</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-xs">{e.actor_name || `ID ${e.actor_id}`}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs font-mono">{e.ip_address || e.ip || '—'}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
-                      {e.after && <pre className="bg-gray-50 dark:bg-gray-900 rounded p-1 text-xs overflow-x-auto max-h-20 max-w-xs">{JSON.stringify(e.after, null, 1)}</pre>}
-                    </td>
-                  </tr>
-                ))}
+                {log.flatMap(e => {
+                  const ip = e.ip_address || e.ip
+                  const flag = flagFromCountry(e.geo_country)
+                  const loc = formatGeoLocation(e)
+                  const hasGeo = !!(e.geo_lat && e.geo_lon)
+                  const isOpen = expandedId === e.id
+                  const canExpand = !!(ip || hasGeo)
+                  const baseKey = `${e.source || 'audit'}-${e.id}`
+                  const out = [
+                    <tr
+                      key={baseKey}
+                      onClick={() => canExpand && setExpandedId(isOpen ? null : e.id)}
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition align-top ${canExpand ? 'cursor-pointer' : ''}`}
+                    >
+                      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                        {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
+                            {e.action}
+                          </span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-fit ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
+                            {e.source === 'audit' ? 'аудит' : 'активность'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">
+                        <span className="font-medium">{e.entity_type}</span>
+                        {e.entity_id && <span className="text-gray-400"> #{e.entity_id}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700 dark:text-gray-300 text-xs">{e.actor_name || `ID ${e.actor_id}`}</td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-gray-500 dark:text-gray-400 font-mono flex items-center gap-1">
+                            {flag && <span className="text-base leading-none" title={e.geo_country_name || e.geo_country}>{flag}</span>}
+                            <span>{ip || '—'}</span>
+                          </span>
+                          {loc && (
+                            <span className="text-gray-400 dark:text-gray-500 text-[11px]">{loc}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
+                        {e.after && <pre className="bg-gray-50 dark:bg-gray-900 rounded p-1 text-xs overflow-x-auto max-h-20 max-w-xs">{JSON.stringify(e.after, null, 1)}</pre>}
+                      </td>
+                    </tr>
+                  ]
+                  if (isOpen) {
+                    out.push(
+                      <tr key={`${baseKey}-details`} className="bg-gray-50/50 dark:bg-gray-900/30">
+                        <td colSpan={6} className="px-4 py-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="text-xs space-y-1">
+                              <div className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Гео-данные</div>
+                              <div><span className="text-gray-500">Страна:</span> {flag} {e.geo_country_name || e.geo_country || '—'}</div>
+                              <div><span className="text-gray-500">Регион:</span> {e.geo_region || '—'}</div>
+                              <div><span className="text-gray-500">Город:</span> {e.geo_city || '—'}</div>
+                              <div><span className="text-gray-500">Координаты:</span> {hasGeo ? `${e.geo_lat}, ${e.geo_lon}` : '—'}</div>
+                              <div><span className="text-gray-500">User-Agent:</span> <span className="font-mono break-all">{e.user_agent || '—'}</span></div>
+                            </div>
+                            {hasGeo && (
+                              <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
+                                <iframe
+                                  title={`map-${e.id}`}
+                                  src={`https://yandex.ru/map-widget/v1/?ll=${e.geo_lon},${e.geo_lat}&z=12&pt=${e.geo_lon},${e.geo_lat},pm2rdm`}
+                                  width="100%"
+                                  height="220"
+                                  frameBorder="0"
+                                  loading="lazy"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  }
+                  return out
+                })}
               </tbody>
             </table>
           </div>
@@ -7394,7 +7517,9 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const PLATFORM_ONLY_KEYS = new Set([
     'home', 'super_admin', 'billing_ledger', 'audit', 'monitoring',
     'modules_catalog', 'contacts', 'wiki', 'webhooks', 'ai_analytics',
+    'ai_knowledge',
     'patient_chats',
+    'platform_billing', 'platform_analytics', 'payment_gateways',
   ])
   // Операционные секции — НЕ показывать платформенному super_admin без SLUG
   const TENANT_OPERATIONAL_KEYS = new Set([
@@ -7449,10 +7574,15 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           {isSuperAdmin ? <PlatformAISection token={adminToken} /> : <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />}
         </Suspense>
       )
+      case 'ai_knowledge':   return <Suspense fallback={<SectionLoader />}><AIKnowledgeSection token={adminToken} /></Suspense>
       case 'super_admin':    return <Suspense fallback={<SectionLoader />}><PlatformSection token={adminToken} /></Suspense>
+      case 'franchises':     return <Suspense fallback={<SectionLoader />}><FranchisesSection token={adminToken} /></Suspense>
       case 'branding':       return <Suspense fallback={<SectionLoader />}><BrandingSection token={adminToken} /></Suspense>
       case 'cms':            return <Suspense fallback={<SectionLoader />}><CMSPagesSection token={adminToken} /></Suspense>
       case 'acts':           return <Suspense fallback={<SectionLoader />}><ActsSection token={adminToken} isSuperAdmin={isSuperAdmin} /></Suspense>
+      case 'platform_billing':   return <Suspense fallback={<SectionLoader />}><PlatformBillingSection token={adminToken} /></Suspense>
+      case 'platform_analytics': return <Suspense fallback={<SectionLoader />}><PlatformAnalyticsSection token={adminToken} /></Suspense>
+      case 'payment_gateways':   return <Suspense fallback={<SectionLoader />}><PaymentGatewaysSection token={adminToken} /></Suspense>
       default:               return null
     }
   }

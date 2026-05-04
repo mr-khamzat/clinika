@@ -66,6 +66,7 @@ def _serialize_message(m: PatientChatMessage) -> dict:
         "text": m.text,
         "is_cached": bool(m.is_cached),
         "handed_off": bool(m.handed_off),
+        "source": getattr(m, "source", None),
         "admin_user_id": str(m.admin_user_id) if m.admin_user_id else None,
         "created_at": m.created_at.isoformat() if m.created_at else None,
     }
@@ -308,6 +309,7 @@ async def patient_send_message(
         handed_off=handoff,
         tokens_in=result.get("tokens_in"),
         tokens_out=result.get("tokens_out"),
+        source=result.get("source") or "llm",
     )
     db.add(msg_ai)
     _update_chat_meta(chat, answer_text)

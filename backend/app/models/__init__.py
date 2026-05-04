@@ -12,6 +12,7 @@ from app.models.invitation import Invitation
 from app.models.discount import Discount, DiscountType
 from app.models.support import SupportMessage
 from app.models.tenant import Tenant, TenantLicense, TenantBranding, TenantModule, TenantPlugin
+from app.models.franchise import Franchise
 from app.models.city import City
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
 from app.models.ledger import LedgerEntry
@@ -30,6 +31,7 @@ __all__ = [
     "Bonus", "BonusStatus", "BonusType", "SystemSettings",
     "KpiTarget", "ActivityLog", "Invitation", "Discount", "DiscountType",
     "SupportMessage", "Tenant", "TenantLicense", "TenantBranding", "TenantModule", "TenantPlugin",
+    "Franchise",
     "LedgerEntry", "AuditEntry", "Subscription", "Invoice", "Payment",
     "RefreshToken", "ConsentRecord",
     "PluginCatalog", "PluginFeature", "TenantPluginFeature", "BillingEvent", "ClinicVisibility",
@@ -50,6 +52,9 @@ from app.models.billing import TenantPluginSubscription, PluginSubStatus
 from app.models.doctor_clinic_access import DoctorClinicAccess
 from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus
 from app.models.ai_history import AIAnalysisHistory
+
+# База знаний AI (FAQ — снижает расход токенов LLM)
+from app.models.ai_knowledge import AIKnowledgeEntry
 
 from app.models.commercial import CommercialModule, TenantModuleSubscription, TenantIntegration
 

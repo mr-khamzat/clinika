@@ -15,6 +15,7 @@ from app.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant, TenantLicense, TenantBranding, TenantModule, TenantPlugin
+from app.models.franchise import Franchise
 from app.models.billing import Subscription, SubStatus
 from app.models.clinic import Clinic
 from app.models.referral import Referral
@@ -867,3 +868,752 @@ async def get_tenant_credentials(
         "url": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}",
         "admin_panel": f"https://xn--e1afagcdp8ak4h.xn--p1ai/{t.slug}/admin",
     }
+
+
+# ── Платформенные секции для super_admin ─────────────────────────────────────
+# Эти эндпоинты агрегируют данные ПО ВСЕМ ТЕНАНТАМ (без tenant_id фильтра)
+# Используются в PlatformBillingSection / PlatformAnalyticsSection / PaymentGatewaysSection.
+
+@router.get("/billing/overview")
+async def platform_billing_overview(
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Платформенная сводка биллинга: MRR, ARR, инвойсы, churn, ARPU."""
+    from datetime import timedelta
+    from app.models.billing import Invoice, InvoiceStatus
+
+    # MRR: сумма amount_per_period активных подписок (нормализованная к месяцу).
+    # Для annual делим на 12.
+    subs_r = await db.execute(
+        select(Subscription.billing_cycle, Subscription.amount_per_period)
+        .where(Subscription.status == SubStatus.ACTIVE)
+    )
+    mrr = 0.0
+    active_subs = 0
+    for cycle, amt in subs_r.fetchall():
+        amt_f = float(amt or 0)
+        active_subs += 1
+        if cycle == "annual":
+            mrr += amt_f / 12.0
+        else:
+            mrr += amt_f
+    arr = mrr * 12.0
+
+    # ARPU = MRR / active_subs
+    arpu = (mrr / active_subs) if active_subs > 0 else 0.0
+
+    # Invoices summary
+    total_inv_r = await db.execute(select(func.count(Invoice.id)))
+    total_invoices = total_inv_r.scalar() or 0
+
+    paid_inv_r = await db.execute(
+        select(func.count(Invoice.id)).where(Invoice.status == InvoiceStatus.PAID)
+    )
+    paid_invoices = paid_inv_r.scalar() or 0
+
+    overdue_inv_r = await db.execute(
+        select(func.count(Invoice.id)).where(Invoice.status == InvoiceStatus.OVERDUE)
+    )
+    overdue_invoices = overdue_inv_r.scalar() or 0
+
+    # Churn: cancelled последние 30 дней / active
+    since = datetime.utcnow() - timedelta(days=30)
+    cancelled_r = await db.execute(
+        select(func.count(Subscription.id)).where(
+            Subscription.status == SubStatus.CANCELLED,
+            Subscription.cancelled_at >= since,
+        )
+    )
+    cancelled_30d = cancelled_r.scalar() or 0
+    churn_rate = (cancelled_30d / active_subs * 100.0) if active_subs > 0 else 0.0
+
+    return {
+        "mrr": round(mrr, 2),
+        "arr": round(arr, 2),
+        "arpu": round(arpu, 2),
+        "active_subscriptions": active_subs,
+        "total_invoices": total_invoices,
+        "paid_invoices": paid_invoices,
+        "overdue_invoices": overdue_invoices,
+        "cancelled_30d": cancelled_30d,
+        "churn_rate": round(churn_rate, 2),
+    }
+
+
+@router.get("/billing/subscriptions")
+async def platform_billing_subscriptions(
+    status: Optional[str] = None,
+    days: Optional[int] = None,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Все подписки тенантов с join на tenant.name. Фильтры: status, days (по created_at)."""
+    from datetime import timedelta
+
+    q = (
+        select(Subscription, Tenant.name, Tenant.slug)
+        .join(Tenant, Tenant.id == Subscription.tenant_id)
+        .order_by(Subscription.created_at.desc())
+    )
+    if status:
+        q = q.where(Subscription.status == status)
+    if days:
+        since = datetime.utcnow() - timedelta(days=int(days))
+        q = q.where(Subscription.created_at >= since)
+
+    rows = (await db.execute(q)).fetchall()
+    out = []
+    for sub, t_name, t_slug in rows:
+        out.append({
+            "id": str(sub.id),
+            "tenant_id": str(sub.tenant_id),
+            "tenant_name": t_name,
+            "tenant_slug": t_slug,
+            "plan": sub.plan,
+            "billing_cycle": sub.billing_cycle,
+            "status": sub.status,
+            "amount_per_period": float(sub.amount_per_period or 0),
+            "current_period_start": sub.current_period_start.isoformat() if sub.current_period_start else None,
+            "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+            "trial_ends_at": sub.trial_ends_at.isoformat() if sub.trial_ends_at else None,
+            "cancelled_at": sub.cancelled_at.isoformat() if sub.cancelled_at else None,
+            "created_at": sub.created_at.isoformat(),
+        })
+    return {"items": out, "count": len(out)}
+
+
+@router.get("/billing/invoices")
+async def platform_billing_invoices(
+    status: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Все инвойсы платформы с join на tenant.name."""
+    from app.models.billing import Invoice
+
+    q = (
+        select(Invoice, Tenant.name, Tenant.slug)
+        .join(Tenant, Tenant.id == Invoice.tenant_id)
+        .order_by(Invoice.created_at.desc())
+    )
+    if status:
+        q = q.where(Invoice.status == status)
+    if from_date:
+        try:
+            d_from = datetime.fromisoformat(from_date)
+            q = q.where(Invoice.created_at >= d_from)
+        except Exception:
+            pass
+    if to_date:
+        try:
+            d_to = datetime.fromisoformat(to_date)
+            q = q.where(Invoice.created_at <= d_to)
+        except Exception:
+            pass
+
+    rows = (await db.execute(q.limit(500))).fetchall()
+    out = []
+    for inv, t_name, t_slug in rows:
+        # Пытаемся вытащить план из связанной подписки (lazy)
+        plan = None
+        try:
+            sub_r = await db.execute(select(Subscription.plan).where(Subscription.id == inv.subscription_id))
+            plan = sub_r.scalar()
+        except Exception:
+            pass
+        out.append({
+            "id": str(inv.id),
+            "invoice_number": inv.invoice_number,
+            "tenant_id": str(inv.tenant_id),
+            "tenant_name": t_name,
+            "tenant_slug": t_slug,
+            "plan": plan,
+            "amount": float(inv.amount or 0),
+            "status": inv.status,
+            "period_start": inv.period_start.isoformat() if inv.period_start else None,
+            "period_end": inv.period_end.isoformat() if inv.period_end else None,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
+            "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
+            "created_at": inv.created_at.isoformat(),
+        })
+    return {"items": out, "count": len(out)}
+
+
+@router.get("/billing/payments")
+async def platform_billing_payments(
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Все платежи платформы (последние 500)."""
+    from app.models.billing import Payment
+
+    q = (
+        select(Payment, Tenant.name, Tenant.slug)
+        .join(Tenant, Tenant.id == Payment.tenant_id)
+        .order_by(Payment.created_at.desc())
+        .limit(500)
+    )
+    rows = (await db.execute(q)).fetchall()
+    out = []
+    for p, t_name, t_slug in rows:
+        out.append({
+            "id": str(p.id),
+            "tenant_id": str(p.tenant_id),
+            "tenant_name": t_name,
+            "tenant_slug": t_slug,
+            "amount": float(p.amount or 0),
+            "status": p.status,
+            "method": p.method,
+            "gateway": p.gateway,
+            "transaction_id": p.transaction_id,
+            "processed_at": p.processed_at.isoformat() if p.processed_at else None,
+            "created_at": p.created_at.isoformat(),
+        })
+    return {"items": out, "count": len(out)}
+
+
+@router.get("/analytics/platform")
+async def platform_analytics(
+    days: int = 30,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Платформенные KPI: новые тенанты, активные/total, отток, среднее, гео-распределение."""
+    from datetime import timedelta
+    from app.models.user import User as UserModel
+
+    since = datetime.utcnow() - timedelta(days=days)
+
+    # Тенанты
+    total_tenants = (await db.execute(select(func.count(Tenant.id)))).scalar() or 0
+    active_tenants = (await db.execute(
+        select(func.count(Tenant.id)).where(Tenant.is_active == True)
+    )).scalar() or 0
+    new_tenants = (await db.execute(
+        select(func.count(Tenant.id)).where(Tenant.created_at >= since)
+    )).scalar() or 0
+
+    # Отток: cancelled подписки за период
+    churned = (await db.execute(
+        select(func.count(Subscription.id)).where(
+            Subscription.status == SubStatus.CANCELLED,
+            Subscription.cancelled_at >= since,
+        )
+    )).scalar() or 0
+
+    # Среднее количество клиник на тенант
+    clinics_total = (await db.execute(
+        select(func.count(Clinic.id)).where(Clinic.is_active == True)
+    )).scalar() or 0
+    avg_clinics_per_tenant = round(clinics_total / active_tenants, 2) if active_tenants > 0 else 0
+
+    # Среднее количество direction-ов на клинику
+    # direction = категория услуг (Service.category или Service.parent_id NULL)
+    avg_directions_per_clinic = 0
+    try:
+        from app.models.service import Service
+        # количество уникальных direction (category) на клинику
+        dirs_r = await db.execute(
+            select(func.count(func.distinct(Service.category)))
+            .where(Service.is_active == True)
+        )
+        total_dirs = dirs_r.scalar() or 0
+        if clinics_total > 0:
+            avg_directions_per_clinic = round(total_dirs / clinics_total, 2)
+    except Exception:
+        pass
+
+    # Гео-распределение: топ-городов из audit_log по super_admin/franchise_owner входам
+    geo_distribution = []
+    try:
+        from app.models.audit import AuditEntry
+        geo_q = (
+            select(
+                AuditEntry.geo_country,
+                AuditEntry.geo_country_name,
+                AuditEntry.geo_city,
+                func.count(AuditEntry.id).label("hits"),
+            )
+            .where(
+                AuditEntry.geo_country.isnot(None),
+                AuditEntry.created_at >= since,
+            )
+            .group_by(AuditEntry.geo_country, AuditEntry.geo_country_name, AuditEntry.geo_city)
+            .order_by(func.count(AuditEntry.id).desc())
+            .limit(20)
+        )
+        rows = (await db.execute(geo_q)).fetchall()
+        geo_distribution = [
+            {
+                "country": r.geo_country,
+                "country_name": r.geo_country_name,
+                "city": r.geo_city,
+                "hits": int(r.hits),
+            }
+            for r in rows
+        ]
+    except Exception:
+        geo_distribution = []
+
+    # Top тенанты по выручке (за период) — через invoices.paid
+    top_revenue = []
+    try:
+        from app.models.billing import Invoice, InvoiceStatus
+        rev_q = (
+            select(
+                Invoice.tenant_id,
+                Tenant.name,
+                Tenant.slug,
+                func.sum(Invoice.amount).label("revenue"),
+            )
+            .join(Tenant, Tenant.id == Invoice.tenant_id)
+            .where(
+                Invoice.status == InvoiceStatus.PAID,
+                Invoice.paid_at >= since,
+            )
+            .group_by(Invoice.tenant_id, Tenant.name, Tenant.slug)
+            .order_by(func.sum(Invoice.amount).desc())
+            .limit(10)
+        )
+        rows = (await db.execute(rev_q)).fetchall()
+        top_revenue = [
+            {
+                "tenant_id": str(r.tenant_id),
+                "tenant_name": r.name,
+                "slug": r.slug,
+                "revenue": float(r.revenue or 0),
+            }
+            for r in rows
+        ]
+    except Exception:
+        top_revenue = []
+
+    # Динамика подписок: новые подписки по дням
+    sub_dynamics = []
+    try:
+        # количество созданных подписок по дням
+        dyn_q = (
+            select(
+                func.date_trunc('day', Subscription.created_at).label("day"),
+                func.count(Subscription.id).label("count"),
+            )
+            .where(Subscription.created_at >= since)
+            .group_by(func.date_trunc('day', Subscription.created_at))
+            .order_by(func.date_trunc('day', Subscription.created_at))
+        )
+        rows = (await db.execute(dyn_q)).fetchall()
+        sub_dynamics = [
+            {"day": r.day.isoformat() if r.day else None, "count": int(r.count)}
+            for r in rows
+        ]
+    except Exception:
+        sub_dynamics = []
+
+    return {
+        "period_days": days,
+        "tenants_total": total_tenants,
+        "tenants_active": active_tenants,
+        "tenants_new": new_tenants,
+        "churned": churned,
+        "avg_clinics_per_tenant": avg_clinics_per_tenant,
+        "avg_directions_per_clinic": avg_directions_per_clinic,
+        "geo_distribution": geo_distribution,
+        "top_revenue": top_revenue,
+        "subscription_dynamics": sub_dynamics,
+    }
+
+
+# ── Платёжные шлюзы ──────────────────────────────────────────────────────────
+
+class PaymentGatewayUpdate(BaseModel):
+    public_key: Optional[str] = None
+    secret_key: Optional[str] = None
+    options: Optional[dict] = None
+
+
+_PAYMENT_PROVIDERS = ("stripe", "yookassa")
+
+
+@router.get("/payment-gateways")
+async def list_payment_gateways(
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список платёжных шлюзов с признаком наличия ключей."""
+    from app.services.settings_service import get_setting
+
+    out = []
+    for provider in _PAYMENT_PROVIDERS:
+        pub = await get_setting(db, f"payment_gateway_{provider}_public_key", "")
+        sec = await get_setting(db, f"payment_gateway_{provider}_secret_key", "")
+        opts = await get_setting(db, f"payment_gateway_{provider}_options", "")
+        out.append({
+            "provider": provider,
+            "configured": bool(pub or sec),
+            "public_key_present": bool(pub),
+            "secret_key_present": bool(sec),
+            # сам public_key не скрываем — он публичный
+            "public_key": pub or "",
+            "options": opts or "",
+        })
+    return out
+
+
+@router.post("/payment-gateways/{provider}")
+async def update_payment_gateway(
+    provider: str,
+    body: PaymentGatewayUpdate,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сохранить ключи платёжного шлюза в system_settings."""
+    if provider not in _PAYMENT_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Неизвестный провайдер")
+
+    from app.services.settings_service import set_setting
+
+    if body.public_key is not None:
+        await set_setting(db, f"payment_gateway_{provider}_public_key", body.public_key or "")
+    if body.secret_key is not None:
+        await set_setting(db, f"payment_gateway_{provider}_secret_key", body.secret_key or "")
+    if body.options is not None:
+        import json
+        await set_setting(db, f"payment_gateway_{provider}_options", json.dumps(body.options or {}))
+
+    return {"status": "ok", "provider": provider}
+
+
+# ── Эндпоинты: Пользователи (super_admin) ────────────────────────────────────
+# Минимальный CRUD пользователей платформы для управления владельцами франшиз.
+
+class PlatformUserCreate(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=200)
+    username: str = Field(..., min_length=3, max_length=100)
+    password: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
+    role: str = Field("franchise_owner")
+
+
+@router.get("/users")
+async def list_platform_users(
+    role: Optional[str] = None,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список пользователей платформы. С фильтром по role (например ?role=franchise_owner)."""
+    q = select(User).where(User.is_active == True)
+    if role:
+        q = q.where(User.role == role)
+    q = q.order_by(User.full_name)
+    rows = (await db.execute(q)).scalars().all()
+    return [
+        {
+            "id": str(u.id),
+            "username": u.username,
+            "full_name": u.full_name,
+            "email": u.email,
+            "phone_number": u.phone_number,
+            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+            "tenant_id": str(u.tenant_id) if u.tenant_id else None,
+        }
+        for u in rows
+    ]
+
+
+@router.post("/users", status_code=201)
+async def create_platform_user(
+    body: PlatformUserCreate,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создаёт пользователя платформенного уровня (без tenant_id)."""
+    import secrets, string
+    from app.core.security import hash_password
+
+    # Уникальность username
+    dup = await db.execute(select(User).where(User.username == body.username))
+    if dup.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Логин уже занят")
+
+    raw_password = body.password
+    if not raw_password:
+        alphabet = string.ascii_letters + string.digits + "!@#$%"
+        raw_password = "".join(secrets.choice(alphabet) for _ in range(12))
+
+    # Маппим строку роли в enum
+    try:
+        role_enum = UserRole(body.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Неизвестная роль: {body.role}")
+
+    u = User(
+        username=body.username,
+        password_hash=hash_password(raw_password),
+        full_name=body.full_name,
+        email=body.email,
+        phone_number=body.phone_number,
+        role=role_enum,
+        is_active=True,
+        tenant_id=None,
+    )
+    db.add(u)
+    await db.commit()
+    await db.refresh(u)
+
+    return {
+        "id": str(u.id),
+        "username": u.username,
+        "full_name": u.full_name,
+        "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+        "password": raw_password,  # показываем единожды
+    }
+
+
+# ── Эндпоинты: Франшизы (super_admin) ────────────────────────────────────────
+# Иерархия: Платформа → Франшиза → Тенант → Клиника.
+# super_admin создаёт франшизу + назначает владельца. Дальше владелец сам
+# создаёт тенантов внутри своей франшизы (POST /franchise-owner/tenants).
+
+class FranchiseCreateRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=200)
+    slug: str = Field(..., min_length=2, max_length=50, pattern=r"^[a-z0-9-]+$")
+    owner_user_id: uuid.UUID
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    brand_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class FranchiseUpdateRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=200)
+    slug: Optional[str] = Field(None, min_length=2, max_length=50, pattern=r"^[a-z0-9-]+$")
+    owner_user_id: Optional[uuid.UUID] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    brand_color: Optional[str] = None
+    logo_url: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+def _serialize_franchise(f: Franchise, owner: Optional[User], tenant_count: int, mrr_sum: float) -> dict:
+    """Единое представление франшизы для API."""
+    return {
+        "id": str(f.id),
+        "name": f.name,
+        "slug": f.slug,
+        "owner_user_id": str(f.owner_user_id) if f.owner_user_id else None,
+        "owner_full_name": owner.full_name if owner else None,
+        "owner_username": owner.username if owner else None,
+        "contact_email": f.contact_email,
+        "contact_phone": f.contact_phone,
+        "brand_color": f.brand_color,
+        "logo_url": f.logo_url,
+        "notes": f.notes,
+        "is_active": f.is_active,
+        "tenant_count": tenant_count,
+        "mrr_sum": mrr_sum,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+        "updated_at": f.updated_at.isoformat() if f.updated_at else None,
+    }
+
+
+@router.get("/franchises")
+async def list_franchises(
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список всех франшиз с агрегатами: tenant_count и mrr_sum."""
+    result = await db.execute(select(Franchise).order_by(Franchise.created_at.desc()))
+    franchises = result.scalars().all()
+
+    out = []
+    for f in franchises:
+        owner = None
+        if f.owner_user_id:
+            owner_r = await db.execute(select(User).where(User.id == f.owner_user_id))
+            owner = owner_r.scalar_one_or_none()
+
+        # Кол-во тенантов франшизы (только активные)
+        tc_r = await db.execute(
+            select(func.count(Tenant.id)).where(Tenant.franchise_id == f.id)
+        )
+        tenant_count = tc_r.scalar() or 0
+
+        # Суммарный MRR по активным подпискам тенантов франшизы
+        mrr_r = await db.execute(
+            select(func.coalesce(func.sum(Subscription.amount_per_period), 0))
+            .join(Tenant, Tenant.id == Subscription.tenant_id)
+            .where(
+                Tenant.franchise_id == f.id,
+                Subscription.status == SubStatus.ACTIVE,
+            )
+        )
+        mrr_sum = float(mrr_r.scalar() or 0)
+
+        out.append(_serialize_franchise(f, owner, tenant_count, mrr_sum))
+
+    return out
+
+
+@router.get("/franchises/{franchise_id}")
+async def get_franchise(
+    franchise_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детали одной франшизы."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+    owner = None
+    if f.owner_user_id:
+        owner = (await db.execute(select(User).where(User.id == f.owner_user_id))).scalar_one_or_none()
+    tc = (await db.execute(
+        select(func.count(Tenant.id)).where(Tenant.franchise_id == f.id)
+    )).scalar() or 0
+    mrr = float((await db.execute(
+        select(func.coalesce(func.sum(Subscription.amount_per_period), 0))
+        .join(Tenant, Tenant.id == Subscription.tenant_id)
+        .where(Tenant.franchise_id == f.id, Subscription.status == SubStatus.ACTIVE)
+    )).scalar() or 0)
+    return _serialize_franchise(f, owner, tc, mrr)
+
+
+@router.post("/franchises", status_code=201)
+async def create_franchise(
+    body: FranchiseCreateRequest,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создать новую франшизу + назначить владельца (повышаем role до franchise_owner)."""
+    # Проверяем уникальность slug
+    exists = await db.execute(select(Franchise).where(Franchise.slug == body.slug))
+    if exists.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Slug уже занят")
+
+    # Проверяем владельца
+    owner_r = await db.execute(select(User).where(User.id == body.owner_user_id))
+    owner = owner_r.scalar_one_or_none()
+    if not owner:
+        raise HTTPException(status_code=404, detail="Пользователь-владелец не найден")
+
+    # Если ещё не franchise_owner — повышаем
+    if owner.role != UserRole.FRANCHISE_OWNER:
+        owner.role = UserRole.FRANCHISE_OWNER
+
+    f = Franchise(
+        name=body.name,
+        slug=body.slug,
+        owner_user_id=owner.id,
+        contact_email=body.contact_email,
+        contact_phone=body.contact_phone,
+        brand_color=body.brand_color,
+        logo_url=body.logo_url,
+        notes=body.notes,
+        is_active=True,
+    )
+    db.add(f)
+    await db.commit()
+    await db.refresh(f)
+    return _serialize_franchise(f, owner, 0, 0.0)
+
+
+@router.patch("/franchises/{franchise_id}")
+async def update_franchise(
+    franchise_id: uuid.UUID,
+    body: FranchiseUpdateRequest,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Редактировать франшизу."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+
+    if body.slug is not None and body.slug != f.slug:
+        dup = await db.execute(select(Franchise).where(Franchise.slug == body.slug, Franchise.id != f.id))
+        if dup.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Slug уже занят")
+        f.slug = body.slug
+
+    if body.name is not None: f.name = body.name
+    if body.contact_email is not None: f.contact_email = body.contact_email
+    if body.contact_phone is not None: f.contact_phone = body.contact_phone
+    if body.brand_color is not None: f.brand_color = body.brand_color
+    if body.logo_url is not None: f.logo_url = body.logo_url
+    if body.notes is not None: f.notes = body.notes
+    if body.is_active is not None: f.is_active = body.is_active
+
+    if body.owner_user_id is not None and body.owner_user_id != f.owner_user_id:
+        owner_r = await db.execute(select(User).where(User.id == body.owner_user_id))
+        owner = owner_r.scalar_one_or_none()
+        if not owner:
+            raise HTTPException(status_code=404, detail="Новый владелец не найден")
+        if owner.role != UserRole.FRANCHISE_OWNER:
+            owner.role = UserRole.FRANCHISE_OWNER
+        f.owner_user_id = owner.id
+
+    f.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(f)
+
+    owner = None
+    if f.owner_user_id:
+        owner = (await db.execute(select(User).where(User.id == f.owner_user_id))).scalar_one_or_none()
+    return _serialize_franchise(f, owner, 0, 0.0)
+
+
+@router.delete("/franchises/{franchise_id}")
+async def delete_franchise(
+    franchise_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить франшизу. Связанные тенанты остаются, но franchise_id обнуляется (ON DELETE SET NULL)."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+    await db.delete(f)
+    await db.commit()
+    return {"status": "deleted", "franchise_id": str(franchise_id)}
+
+
+@router.get("/franchises/{franchise_id}/tenants")
+async def list_franchise_tenants(
+    franchise_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список тенантов конкретной франшизы."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+
+    rows = await db.execute(
+        select(Tenant).where(Tenant.franchise_id == franchise_id).order_by(Tenant.created_at.desc())
+    )
+    out = []
+    for t in rows.scalars().all():
+        lic = (await db.execute(select(TenantLicense).where(TenantLicense.tenant_id == t.id))).scalar_one_or_none()
+        sub = (await db.execute(
+            select(Subscription).where(Subscription.tenant_id == t.id)
+            .order_by(Subscription.created_at.desc()).limit(1)
+        )).scalar_one_or_none()
+        out.append({
+            "id": str(t.id),
+            "name": t.name,
+            "slug": t.slug,
+            "is_active": t.is_active,
+            "plan": lic.plan if lic else None,
+            "subscription_status": sub.status if sub else None,
+            "mrr": float(sub.amount_per_period) if sub else 0.0,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+    return out
+

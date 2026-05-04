@@ -356,11 +356,34 @@ async def chat_with_ai(
             "ai_unavailable": False,
             "tokens_in": None,
             "tokens_out": None,
+            "source": None,
         }
 
     tenant_id = chat.tenant_id
 
-    # 2) Кэш (только для коротких вопросов; учитываем тенант)
+    # 2) База знаний (FAQ) — экономим токены LLM на типовых вопросах.
+    # Проверяем ДО Redis-кэша и ДО запроса к OpenAI. Лимит дневных AI-ответов
+    # такие ответы НЕ расходуют — это локальный поиск.
+    try:
+        from app.services.ai_knowledge_service import find_match
+        kb_match = await find_match(db, tenant_id, user_text, threshold=0.5)
+    except Exception as e:
+        logger.warning(f"ai_knowledge.find_match failed: {e}")
+        kb_match = None
+
+    if kb_match is not None:
+        return {
+            "answer": kb_match.answer,
+            "is_cached": False,
+            "handoff": False,
+            "limit_exceeded": False,
+            "ai_unavailable": False,
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "source": "knowledge",
+        }
+
+    # 3) Кэш (только для коротких вопросов; учитываем тенант)
     if user_text and len(user_text.strip()) <= 300:
         cached = await _cache_get(tenant_id, user_text)
         if cached:
@@ -372,9 +395,10 @@ async def chat_with_ai(
                 "ai_unavailable": False,
                 "tokens_in": 0,
                 "tokens_out": 0,
+                "source": "cache",
             }
 
-    # 3) Загружаем конфиг провайдера AI
+    # 4) Загружаем конфиг провайдера AI
     try:
         from app.routers.ai import _load_config, _openai_call, _get_provider_settings
         config = _load_config()
@@ -390,6 +414,7 @@ async def chat_with_ai(
                 "ai_unavailable": True,
                 "tokens_in": None,
                 "tokens_out": None,
+                "source": "fallback",
             }
     except Exception as e:
         logger.warning(f"AI module unavailable: {e}")
@@ -397,9 +422,10 @@ async def chat_with_ai(
             "answer": None, "is_cached": False, "handoff": False,
             "limit_exceeded": False, "ai_unavailable": True,
             "tokens_in": None, "tokens_out": None,
+            "source": "fallback",
         }
 
-    # 4) Системный промпт + история
+    # 5) Системный промпт + история
     system_prompt = await build_system_prompt(db, tenant_id)
     history = await _last_messages_for_context(db, chat.id, limit=CONTEXT_MESSAGES_LIMIT)
 
@@ -407,7 +433,7 @@ async def chat_with_ai(
     messages.extend(history)
     messages.append({"role": "user", "content": user_text})
 
-    # 5) Запрос
+    # 6) Запрос
     try:
         answer = await _openai_call(messages, config, max_tokens=400)
     except Exception as e:
@@ -416,6 +442,7 @@ async def chat_with_ai(
             "answer": None, "is_cached": False, "handoff": True,
             "limit_exceeded": False, "ai_unavailable": True,
             "tokens_in": None, "tokens_out": None,
+            "source": "fallback",
         }
 
     answer = (answer or "").strip()
@@ -424,14 +451,15 @@ async def chat_with_ai(
             "answer": None, "is_cached": False, "handoff": True,
             "limit_exceeded": False, "ai_unavailable": True,
             "tokens_in": None, "tokens_out": None,
+            "source": "fallback",
         }
 
     handoff = should_handoff(answer)
 
-    # 6) Засчитываем потраченный AI-ответ
+    # 7) Засчитываем потраченный AI-ответ
     chat.ai_messages_today += 1
 
-    # 7) Сохраняем в кэш только короткие success-ответы (без handoff)
+    # 8) Сохраняем в кэш только короткие success-ответы (без handoff)
     if not handoff and user_text and len(user_text.strip()) <= 300 and len(answer) <= 1500:
         await _cache_set(tenant_id, user_text, answer)
 
@@ -443,4 +471,5 @@ async def chat_with_ai(
         "ai_unavailable": False,
         "tokens_in": None,
         "tokens_out": None,
+        "source": "llm",
     }

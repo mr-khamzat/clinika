@@ -1,0 +1,59 @@
+# ===== БЛОК: Модель Franchise =====
+# Франшиза — промежуточный уровень между Платформой и Тенантами.
+# Один владелец (User с role=franchise_owner) может управлять несколькими тенантами,
+# объединёнными в одну франшизу (общий бренд, цвет, контакты).
+#
+# Иерархия:
+#   Платформа (super_admin)
+#     └─ Franchise (создаёт super_admin)
+#          └─ Tenant.franchise_id (создаёт franchise_owner внутри своей франшизы)
+#               └─ Clinic
+#
+# Пример: «Клиника Сеть Юг» (Franchise) → 3 тенанта (Краснодар, Сочи, Ростов).
+
+import uuid
+from datetime import datetime
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.database import Base
+
+
+class Franchise(Base):
+    """Сущность «Франшиза» — группа тенантов под управлением одного franchise_owner."""
+
+    __tablename__ = "franchises"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # slug — короткий идентификатор для URL/админки
+    slug: Mapped[str] = mapped_column(String(50), unique=True, index=True, nullable=False)
+    # Владелец франшизы — User с role=franchise_owner
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Контактные данные франшизы
+    contact_email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    contact_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Брендирование на уровне франшизы
+    brand_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    # Связь: одна франшиза может содержать множество тенантов
+    tenants: Mapped[list["Tenant"]] = relationship(
+        "Tenant", back_populates="franchise", foreign_keys="Tenant.franchise_id"
+    )

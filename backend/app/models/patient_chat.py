@@ -108,6 +108,8 @@ class PatientChatMessage(Base):
     is_cached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     handed_off: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # AI пометил как «не знаю»
     is_read_by_patient: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Источник ответа: 'llm' | 'knowledge' | 'cache' | 'fallback'
+    source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     admin_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

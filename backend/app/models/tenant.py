@@ -19,6 +19,13 @@ class Tenant(Base):
     domain: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     franchise_owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Принадлежность тенанта к франшизе. NULL — независимый тенант, созданный платформой.
+    franchise_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("franchises.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     legal_name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     legal_inn: Mapped[str | None] = mapped_column(String(20), nullable=True)
     legal_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -41,6 +48,10 @@ class Tenant(Base):
     )
     branding: Mapped["TenantBranding | None"] = relationship(
         "TenantBranding", back_populates="tenant", uselist=False, cascade="all, delete-orphan"
+    )
+    # Связь с франшизой (если тенант принадлежит к одной)
+    franchise: Mapped["Franchise | None"] = relationship(
+        "Franchise", back_populates="tenants", foreign_keys=[franchise_id]
     )
 
 

@@ -29,17 +29,24 @@ _mgr  = Depends(require_manager)
 
 def _entry_out(e: AuditEntry) -> dict:
     return {
-        "id":          str(e.id),
-        "action":      e.action,
-        "entity_type": e.entity_type,
-        "entity_id":   str(e.entity_id) if e.entity_id else None,
-        "actor_id":    str(e.actor_id) if e.actor_id else None,
-        "actor_name":  e.actor_name,
-        "before":      e.before,
-        "after":       e.after,
-        "comment":     e.comment,
-        "ip_address":  e.ip_address,
-        "created_at":  e.created_at.isoformat(),
+        "id":               str(e.id),
+        "action":           e.action,
+        "entity_type":      e.entity_type,
+        "entity_id":        str(e.entity_id) if e.entity_id else None,
+        "actor_id":         str(e.actor_id) if e.actor_id else None,
+        "actor_name":       e.actor_name,
+        "before":           e.before,
+        "after":             e.after,
+        "comment":          e.comment,
+        "ip_address":       e.ip_address,
+        # Гео-IP (могут быть None если mmdb отсутствует или приватный IP)
+        "geo_country":      e.geo_country,
+        "geo_country_name": e.geo_country_name,
+        "geo_region":       e.geo_region,
+        "geo_city":         e.geo_city,
+        "geo_lat":          float(e.geo_lat) if e.geo_lat is not None else None,
+        "geo_lon":          float(e.geo_lon) if e.geo_lon is not None else None,
+        "created_at":       e.created_at.isoformat(),
     }
 
 
@@ -163,6 +170,12 @@ async def get_audit_feed(
             "before": e.before,
             "after": e.after,
             "ip_address": e.ip_address,
+            "geo_country":      e.geo_country,
+            "geo_country_name": e.geo_country_name,
+            "geo_region":       e.geo_region,
+            "geo_city":         e.geo_city,
+            "geo_lat":          float(e.geo_lat) if e.geo_lat is not None else None,
+            "geo_lon":          float(e.geo_lon) if e.geo_lon is not None else None,
             "comment": e.comment,
             "created_at": e.created_at.isoformat(),
         }
@@ -187,6 +200,12 @@ async def get_audit_feed(
             "before": None,
             "after": None,
             "ip_address": None,
+            "geo_country":      None,
+            "geo_country_name": None,
+            "geo_region":       None,
+            "geo_city":         None,
+            "geo_lat":          None,
+            "geo_lon":          None,
             "comment": None,
             "created_at": e.created_at.isoformat(),
         }

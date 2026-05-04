@@ -4,8 +4,9 @@
 Этап 8 SaaS-трансформации.
 """
 import uuid
+from decimal import Decimal
 from datetime import datetime
-from sqlalchemy import String, DateTime, ForeignKey, Text
+from sqlalchemy import String, DateTime, ForeignKey, Text, Numeric
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
@@ -33,6 +34,13 @@ class AuditEntry(Base):
     # Контекст запроса
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Гео-IP (заполняется через geoip_service.lookup, может быть None)
+    geo_country:      Mapped[str | None]     = mapped_column(String(2),     nullable=True, index=True)
+    geo_country_name: Mapped[str | None]     = mapped_column(String(80),    nullable=True)
+    geo_region:       Mapped[str | None]     = mapped_column(String(120),   nullable=True)
+    geo_city:         Mapped[str | None]     = mapped_column(String(120),   nullable=True)
+    geo_lat:          Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    geo_lon:          Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
     # Метаданные
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
