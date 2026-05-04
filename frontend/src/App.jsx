@@ -43,6 +43,7 @@ import { PLATFORM_MODE } from './config'
 import PatientCabinet from './pages/PatientCabinet'
 import OnlineBooking from './pages/OnlineBooking'
 import PatientPortal from './pages/PatientPortal'
+import UniversalPatientPortal from './pages/UniversalPatientPortal'
 import ClinicPage from './pages/ClinicPage'
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
@@ -223,6 +224,11 @@ export default function App() {
   // Публичная страница клиники (рейтинг врачей)
   if (SLUG && path.startsWith('/' + SLUG + '/clinic')) {
     return <ClinicPage />
+  }
+
+  // Универсальный вход пациента (без slug): /portal
+  if (path === '/portal' || path.startsWith('/portal/')) {
+    return <UniversalPatientPortal />
   }
 
   // Личный кабинет пациента Portal v2 — с аккаунтом

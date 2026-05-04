@@ -1,78 +1,50 @@
 /**
- * Service Worker — Clinika Patient Cabinet
- * Handles: Push notifications, offline cache
+ * Service Worker — Clinika Portal
+ * Push notifications + offline
  */
 
-const CACHE_NAME = 'clinika-v1';
-const OFFLINE_URLS = ['/clinika/', '/clinika/index.html'];
+const CACHE_NAME = 'clinika-portal-v2';
 
-// Install: cache essential pages
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache =>
-      cache.addAll(OFFLINE_URLS).catch(() => {})
-    )
-  );
-  self.skipWaiting();
-});
-
-// Activate: clean old caches
+self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Push event: show notification
+// Push: показываем уведомление
 self.addEventListener('push', event => {
   let payload = { title: 'КлиникСеть', body: 'Новое уведомление', data: {} };
   if (event.data) {
-    try { payload = JSON.parse(event.data.text()); } catch {}
+    try { payload = { ...payload, ...JSON.parse(event.data.text()) }; } catch {}
   }
-
   const opts = {
     body: payload.body,
-    icon: '/clinika/icon-192.png',
-    badge: '/clinika/icon-192.png',
+    icon: '/favicon.svg',
+    badge: '/favicon.svg',
     vibrate: [200, 100, 200],
     data: payload.data || {},
-    actions: [
-      { action: 'open', title: 'Открыть кабинет' },
-      { action: 'close', title: 'Закрыть' },
-    ],
+    tag: payload.tag || 'clinika-notify',
+    renotify: true,
     requireInteraction: false,
   };
-
   event.waitUntil(
-    self.registration.showNotification(payload.title || 'КлиникСеть', opts)
+    self.registration.showNotification(payload.title, opts)
   );
 });
 
-// Notification click: open the app
+// Клик: открываем нужный URL
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   if (event.action === 'close') return;
-
+  const url = event.notification.data?.url || '/portal';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(cls => {
-      const url = event.notification.data?.url || '/clinika/';
-      const existing = cls.find(c => c.url.includes('/clinika/'));
-      if (existing) {
-        existing.focus();
-        existing.navigate(url);
-      } else {
-        clients.openWindow(url);
-      }
+      const existing = cls.find(c => c.url.includes(url) || c.url.includes('/portal'));
+      if (existing) { existing.focus(); return; }
+      clients.openWindow(url);
     })
   );
-});
-
-// Background sync for offline actions
-self.addEventListener('sync', event => {
-  if (event.tag === 'sync-referrals') {
-    // future: sync offline actions
-  }
 });

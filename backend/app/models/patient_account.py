@@ -20,6 +20,7 @@ class PatientAccount(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
 
 class PatientOTP(Base):

@@ -8,6 +8,35 @@ import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
 
 const API = API_BASE
+
+// ── Push helpers ─────────────────────────────────────────────────────────────
+function arrayBufferToBase64(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+}
+
+async function subscribePush(phone, apiBase) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+    const reg = await navigator.serviceWorker.register('/sw.js')
+    await navigator.serviceWorker.ready
+    const vapidRes = await axios.get(`${apiBase}/push/vapid-key`)
+    const vapidKey = vapidRes.data.public_key
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: vapidKey,
+    })
+    const k = sub.getKey('p256dh')
+    const a = sub.getKey('auth')
+    await axios.post(`${apiBase}/push/subscribe`, {
+      endpoint: sub.endpoint,
+      p256dh: arrayBufferToBase64(k),
+      auth: arrayBufferToBase64(a),
+      patient_phone: phone,
+    })
+  } catch(e) {
+    // Push недоступен или запрещён — не ломаем приложение
+  }
+}
 const STORAGE_KEY = 'clinika_portal_token'
 const MONTHS = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек']
 const DAYS = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб']
@@ -508,6 +537,114 @@ function DoctorsTab({ token, primary, tenantId, onRefreshHistory }) {
   )
 }
 
+// ── Секция уведомлений ───────────────────────────────────────────────────────
+function PushSection({ token, primary, phone, apiBase }) {
+  const [status, setStatus] = useState(
+    'Notification' in window ? Notification.permission : 'unsupported'
+  )
+  const [loading, setLoading] = useState(false)
+
+  async function enable() {
+    setLoading(true)
+    try {
+      const perm = await Notification.requestPermission()
+      setStatus(perm)
+      if (perm === 'granted') {
+        await subscribePush(phone, apiBase)
+      }
+    } catch {}
+    finally { setLoading(false) }
+  }
+
+  if (status === 'unsupported') return null
+
+  return (
+    <div style={{ background:'#fff', borderRadius:18, border:'1px solid #EAECF0', overflow:'hidden', marginBottom:14 }}>
+      <div style={{ padding:'16px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div>
+          <p style={{ margin:0, fontWeight:700, fontSize:14, color:'#1A2B3C' }}>🔔 Уведомления</p>
+          <p style={{ margin:'3px 0 0', fontSize:12, color: status==='granted' ? '#10B981' : '#9CA3AF' }}>
+            {status==='granted' ? 'Включены' : status==='denied' ? 'Заблокированы в браузере' : 'Выключены'}
+          </p>
+        </div>
+        {status !== 'granted' && status !== 'denied' && (
+          <button onClick={enable} disabled={loading}
+            style={{ padding:'8px 16px', background:`${primary}14`, border:`1.5px solid ${primary}`, borderRadius:10, fontSize:13, fontWeight:600, color:primary, cursor:'pointer', opacity:loading?0.6:1 }}>
+            {loading ? '...' : 'Включить'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Секция смены пароля ─────────────────────────────────────────────────────
+function PasswordSection({ token, primary, hasPassword, onUpdate }) {
+  const [open, setOpen] = useState(false)
+  const [oldPw, setOldPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [ok, setOk] = useState(false)
+  const [err, setErr] = useState('')
+
+  async function save() {
+    setSaving(true); setOk(false); setErr('')
+    try {
+      if (hasPassword) {
+        await axios.post(, { old_password: oldPw, new_password: newPw }, { headers: { Authorization:  } })
+      } else {
+        await axios.post(, { password: newPw }, { headers: { Authorization:  } })
+      }
+      setOk(true); setOldPw(''); setNewPw(''); setOpen(false)
+      onUpdate && onUpdate({ has_password: true })
+    } catch(e) { setErr(e.response?.data?.detail || 'Ошибка') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ background:'#fff', borderRadius:18, border:'1px solid #EAECF0', overflow:'hidden', marginBottom:14 }}>
+      <div style={{ padding:'16px' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div>
+            <p style={{ margin:0, fontWeight:700, fontSize:14, color:'#1A2B3C' }}>🔒 Пароль</p>
+            <p style={{ margin:'3px 0 0', fontSize:12, color: hasPassword ? '#10B981' : '#9CA3AF' }}>
+              {hasPassword ? 'Установлен — можно входить без SMS' : 'Не установлен'}
+            </p>
+          </div>
+          <button onClick={() => { setOpen(v=>!v); setErr(''); setOk(false) }}
+            style={{ padding:'8px 16px', background: open ? '#F3F4F6' : , border:, borderRadius:10, fontSize:13, fontWeight:600, color: open ? '#9CA3AF' : primary, cursor:'pointer' }}>
+            {open ? 'Отмена' : hasPassword ? 'Сменить' : 'Установить'}
+          </button>
+        </div>
+
+        {open && (
+          <div style={{ marginTop:14 }}>
+            {hasPassword && (
+              <div style={{ marginBottom:10 }}>
+                <label style={{ display:'block', fontSize:12, fontWeight:600, color:'#9CA3AF', marginBottom:5, textTransform:'uppercase', letterSpacing:.5 }}>Текущий пароль</label>
+                <input type='password' value={oldPw} onChange={e=>setOldPw(e.target.value)} placeholder='Текущий пароль'
+                  style={{ width:'100%', padding:'12px 14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:14, outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
+              </div>
+            )}
+            <div style={{ marginBottom:10 }}>
+              <label style={{ display:'block', fontSize:12, fontWeight:600, color:'#9CA3AF', marginBottom:5, textTransform:'uppercase', letterSpacing:.5 }}>Новый пароль</label>
+              <input type='password' value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder='Мин. 8 символов, буквы и цифры'
+                style={{ width:'100%', padding:'12px 14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:14, outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
+              <p style={{ margin:'5px 0 0', fontSize:11, color:'#C4C9D4' }}>Минимум 8 символов, буквы и цифры</p>
+            </div>
+            {ok && <p style={{ color:'#10B981', fontSize:13, marginBottom:8, fontWeight:600 }}>✓ {hasPassword ? 'Пароль изменён' : 'Пароль установлен'}</p>}
+            {err && <p style={{ color:'#EF4444', fontSize:13, marginBottom:8 }}>{err}</p>}
+            <button onClick={save} disabled={saving || !newPw || (hasPassword && !oldPw)}
+              style={{ width:'100%', padding:'12px', background:, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:700, cursor:'pointer', opacity:(saving || !newPw || (hasPassword && !oldPw)) ? 0.6 : 1 }}>
+              {saving ? 'Сохранение...' : hasPassword ? 'Сменить пароль' : 'Установить пароль'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Вкладка: Профиль ─────────────────────────────────────────────────────────
 function ProfileTab({ token, primary, profile, onUpdate }) {
   const [name, setName] = useState(profile.name||'')
@@ -558,6 +695,9 @@ function ProfileTab({ token, primary, profile, onUpdate }) {
         </div>
       </div>
 
+      <PushSection token={token} primary={primary} phone={profile.phone} apiBase={API} />
+      <PasswordSection token={token} primary={primary} hasPassword={profile.has_password} onUpdate={onUpdate} />
+
       <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload() }}
         style={{ width:'100%', padding:'13px', background:'none', border:'1.5px solid #EAECF0', borderRadius:12, fontSize:14, color:'#9CA3AF', cursor:'pointer' }}>
         Выйти из кабинета
@@ -568,9 +708,11 @@ function ProfileTab({ token, primary, profile, onUpdate }) {
 
 // ── Экран входа ──────────────────────────────────────────────────────────────
 function LoginView({ primary, logo, clinicName, onLogin }) {
+  const [mode, setMode] = useState('otp')
   const [step, setStep] = useState('phone')
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const [devCode, setDevCode] = useState(null)
@@ -599,6 +741,16 @@ function LoginView({ primary, logo, clinicName, onLogin }) {
     finally { setLoading(false) }
   }
 
+  async function loginWithPassword() {
+    setErr(''); setLoading(true)
+    try {
+      const r = await axios.post(`${API}/portal/auth/password`, { phone, password })
+      localStorage.setItem(STORAGE_KEY, r.data.access_token)
+      onLogin(r.data)
+    } catch(e) { setErr(e.response?.data?.detail||'Неверный пароль') }
+    finally { setLoading(false) }
+  }
+
   return (
     <div style={{ minHeight:'100vh', background:'#F5F8FF', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ width:'100%', maxWidth:360 }}>
@@ -612,43 +764,76 @@ function LoginView({ primary, logo, clinicName, onLogin }) {
         </div>
 
         <div style={{ background:'#fff', borderRadius:20, padding:'28px 24px', boxShadow:'0 8px 40px rgba(0,0,0,.08)' }}>
-          {step==='phone' ? (
+          {step === 'phone' && (
+            <div style={{ display:'flex', background:'#F3F4F6', borderRadius:12, padding:3, marginBottom:18 }}>
+              {[['otp','SMS-код'],['password','Пароль']].map(([m,l]) => (
+                <button key={m} onClick={() => { setMode(m); setErr('') }}
+                  style={{ flex:1, padding:'8px', borderRadius:9, border:'none', background:mode===m?'#fff':'transparent', color:mode===m?'#1A2B3C':'#9CA3AF', fontWeight:mode===m?700:400, fontSize:13, cursor:'pointer', boxShadow:mode===m?'0 1px 4px rgba(0,0,0,.08)':undefined, transition:'all .15s' }}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {mode === 'otp' && (
+            step==='phone' ? (
+              <>
+                <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Номер телефона</label>
+                <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7 (999) 000-00-00" autoFocus
+                  onKeyDown={e=>e.key==='Enter'&&sendOtp()}
+                  style={{ width:'100%', padding:'14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:16, outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
+                {err && <p style={{ color:'#EF4444', fontSize:13, marginTop:8 }}>{err}</p>}
+                <button onClick={sendOtp} disabled={loading||!phone}
+                  style={{ width:'100%', marginTop:14, padding:'14px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', opacity:(loading||!phone)?0.6:1 }}>
+                  {loading?'Отправка...':'Получить код'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize:13, color:'#6B7280', marginBottom:14 }}>
+                  Код отправлен на <b style={{ color:'#1A2B3C' }}>{fmtPhone(phone)}</b>
+                </p>
+                {devCode && (
+                  <div style={{ background:'#FEF3C7', border:'1px solid #F59E0B', borderRadius:10, padding:'8px 12px', marginBottom:12, fontSize:13, color:'#92400E' }}>
+                    Тестовый режим: код <b style={{ fontSize:16 }}>{devCode}</b>
+                  </div>
+                )}
+                <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Код подтверждения</label>
+                <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="• • • •" maxLength={4} autoFocus
+                  onKeyDown={e=>e.key==='Enter'&&verifyOtp()}
+                  style={{ width:'100%', padding:'14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:26, letterSpacing:10, textAlign:'center', outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
+                {err && <p style={{ color:'#EF4444', fontSize:13, marginTop:8 }}>{err}</p>}
+                <button onClick={verifyOtp} disabled={loading||code.length<4}
+                  style={{ width:'100%', marginTop:14, padding:'14px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', opacity:(loading||code.length<4)?0.6:1 }}>
+                  {loading?'Проверка...':'Войти'}
+                </button>
+                <div style={{ textAlign:'center', marginTop:12 }}>
+                  {timer>0
+                    ? <span style={{ fontSize:13, color:'#9CA3AF' }}>Повторить через {timer} с</span>
+                    : <button onClick={()=>{setStep('phone');setCode('');setErr('')}} style={{ background:'none', border:'none', color:primary, fontSize:13, cursor:'pointer', fontWeight:600 }}>← Изменить номер</button>
+                  }
+                </div>
+              </>
+            )
+          )}
+
+          {mode === 'password' && (
             <>
               <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Номер телефона</label>
               <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7 (999) 000-00-00" autoFocus
-                onKeyDown={e=>e.key==='Enter'&&sendOtp()}
+                style={{ width:'100%', padding:'14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:16, outline:'none', boxSizing:'border-box', color:'#1A2B3C', marginBottom:10 }} />
+              <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Пароль</label>
+              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Ваш пароль"
+                onKeyDown={e=>e.key==='Enter'&&loginWithPassword()}
                 style={{ width:'100%', padding:'14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:16, outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
               {err && <p style={{ color:'#EF4444', fontSize:13, marginTop:8 }}>{err}</p>}
-              <button onClick={sendOtp} disabled={loading||!phone}
-                style={{ width:'100%', marginTop:14, padding:'14px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', opacity:(loading||!phone)?0.6:1 }}>
-                {loading?'Отправка...':'Получить код'}
+              <button onClick={loginWithPassword} disabled={loading||!phone||!password}
+                style={{ width:'100%', marginTop:14, padding:'14px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', opacity:(loading||!phone||!password)?0.6:1 }}>
+                {loading?'Вход...':'Войти'}
               </button>
-            </>
-          ) : (
-            <>
-              <p style={{ fontSize:13, color:'#6B7280', marginBottom:14 }}>
-                Код отправлен на <b style={{ color:'#1A2B3C' }}>{fmtPhone(phone)}</b>
+              <p style={{ textAlign:'center', fontSize:12, color:'#C4C9D4', marginTop:12 }}>
+                Пароль устанавливается в разделе Профиль после первого входа по SMS
               </p>
-              {devCode && (
-                <div style={{ background:'#FEF3C7', border:'1px solid #F59E0B', borderRadius:10, padding:'8px 12px', marginBottom:12, fontSize:13, color:'#92400E' }}>
-                  Тестовый режим: код <b style={{ fontSize:16 }}>{devCode}</b>
-                </div>
-              )}
-              <label style={{ display:'block', fontSize:12, fontWeight:700, color:'#6B7280', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>Код подтверждения</label>
-              <input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,4))} placeholder="• • • •" maxLength={4} autoFocus
-                onKeyDown={e=>e.key==='Enter'&&verifyOtp()}
-                style={{ width:'100%', padding:'14px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:26, letterSpacing:10, textAlign:'center', outline:'none', boxSizing:'border-box', color:'#1A2B3C' }} />
-              {err && <p style={{ color:'#EF4444', fontSize:13, marginTop:8 }}>{err}</p>}
-              <button onClick={verifyOtp} disabled={loading||code.length<4}
-                style={{ width:'100%', marginTop:14, padding:'14px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', opacity:(loading||code.length<4)?0.6:1 }}>
-                {loading?'Проверка...':'Войти'}
-              </button>
-              <div style={{ textAlign:'center', marginTop:12 }}>
-                {timer>0
-                  ? <span style={{ fontSize:13, color:'#9CA3AF' }}>Повторить через {timer} с</span>
-                  : <button onClick={()=>{setStep('phone');setCode('');setErr('')}} style={{ background:'none', border:'none', color:primary, fontSize:13, cursor:'pointer', fontWeight:600 }}>← Изменить номер</button>
-                }
-              </div>
             </>
           )}
         </div>
@@ -692,8 +877,46 @@ export default function PatientPortal() {
   const clinicName = branding?.branding?.brand_name || branding?.tenant?.name || 'Личный кабинет'
   const logo = branding?.branding?.logo_url
 
+  // Считываем ?token=... из URL (редирект из универсального входа)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlToken = params.get('token')
+    if (urlToken && !token) {
+      localStorage.setItem(STORAGE_KEY, urlToken)
+      window.history.replaceState({}, '', window.location.pathname)
+      setToken(urlToken)
+    }
+  }, []) // eslint-disable-line
+
+  // PWA manifest + iOS meta-теги
+  useEffect(() => {
+    let link = document.querySelector('link[rel="manifest"]')
+    if (!link) {
+      link = document.createElement('link')
+      link.rel = 'manifest'
+      document.head.appendChild(link)
+    }
+    link.href = `${API}/portal/manifest.json?slug=${SLUG}`
+    const setMeta = (name, content) => {
+      let m = document.querySelector(`meta[name="${name}"]`)
+      if (!m) { m = document.createElement('meta'); m.setAttribute('name', name); document.head.appendChild(m) }
+      m.setAttribute('content', content)
+    }
+    setMeta('apple-mobile-web-app-capable', 'yes')
+    setMeta('apple-mobile-web-app-status-bar-style', 'default')
+    setMeta('apple-mobile-web-app-title', clinicName)
+    setMeta('theme-color', primary)
+  }, [clinicName, primary])
+
+  // Подписка на push-уведомления после входа
+  useEffect(() => {
+    if (!token || !profile?.phone) return
+    if (Notification.permission === 'denied') return
+    subscribePush(profile.phone, API)
+  }, [token, profile?.phone])
+
   if (!token || (!profile && !loading)) {
-    return <LoginView primary={primary} logo={logo} clinicName={clinicName} onLogin={d => { setToken(d.access_token); setProfile({ phone:d.phone, name:d.name, email:d.email }) }} />
+    return <LoginView primary={primary} logo={logo} clinicName={clinicName} onLogin={d => { setToken(d.access_token); setProfile({ phone:d.phone, name:d.name, email:d.email, has_password: d.has_password }) }} />
   }
 
   if (loading) return (

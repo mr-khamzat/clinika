@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +41,37 @@ class ProfileUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
     birth_date: Optional[str] = None   # "YYYY-MM-DD"
+
+class PasswordSetRequest(BaseModel):
+    password: str
+
+class PasswordChangeRequest(BaseModel):
+    old_password: str
+    new_password: str
+
+class PasswordLoginRequest(BaseModel):
+    phone: str
+    password: str
+
+class UniversalFindRequest(BaseModel):
+    phone: str
+
+class UniversalVerifyRequest(BaseModel):
+    phone: str
+    code: str
+    slug: str
+
+
+def _validate_password(pw: str) -> None:
+    import re as _re
+    if len(pw) < 8:
+        raise HTTPException(400, 'Пароль должен быть не менее 8 символов')
+    if not _re.search(r'[A-Za-zА-Яа-яЁё]', pw):
+        raise HTTPException(400, 'Пароль должен содержать буквы')
+    if not _re.search(r'[0-9]', pw):
+        raise HTTPException(400, 'Пароль должен содержать цифры')
+
+
 
 
 # ── Хелпер авторизации ─────────────────────────────────────────────────────────
@@ -93,7 +125,7 @@ async def send_otp(body: OTPSendRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     # В production здесь SMS. Пока — консоль.
-    print(f"[PORTAL OTP] {phone} → {code}")
+    print(f"[PORTAL OTP] {phone} -> {code}")
     return {"ok": True, "message": "Код отправлен", "dev_code": code}
 
 
@@ -137,6 +169,7 @@ async def verify_otp(body: OTPVerifyRequest, db: AsyncSession = Depends(get_db))
         "phone": account.phone,
         "name": account.name,
         "email": account.email,
+        "has_password": bool(account.password_hash),
     }
 
 
@@ -152,6 +185,7 @@ async def get_profile(patient: PatientAccount = Depends(_get_patient)):
         "birth_date": patient.birth_date.isoformat() if patient.birth_date else None,
         "created_at": patient.created_at.isoformat(),
         "last_login_at": patient.last_login_at.isoformat() if patient.last_login_at else None,
+        "has_password": bool(patient.password_hash),
     }
 
 
@@ -318,4 +352,210 @@ async def portal_book(
         "short_code": apt.short_code,
         "qr_code": apt.qr_code,
         "patient_token": token,
+    }
+
+
+
+
+# ── PWA-манифест ───────────────────────────────────────────────────────────────
+
+from fastapi.responses import JSONResponse as _JSONResponse
+
+@router.get("/manifest.json", include_in_schema=False)
+async def portal_manifest(slug: str = Query(""), db: AsyncSession = Depends(get_db)):
+    name = "Личный кабинет"
+    theme_color = "#0097A7"
+    if slug:
+        try:
+            from sqlalchemy import text as _text
+            row = (await db.execute(
+                _text("SELECT t.name, b.brand_name, b.primary_color FROM tenants t LEFT JOIN tenant_branding b ON b.tenant_id = t.id WHERE t.slug = :slug AND t.is_active = true LIMIT 1"),
+                {"slug": slug}
+            )).fetchone()
+            if row:
+                name = row.brand_name or row.name or name
+                theme_color = row.primary_color or theme_color
+        except Exception:
+            pass
+    short_name = name[:12] if len(name) > 12 else name
+    manifest = {
+        "name": name,
+        "short_name": short_name,
+        "description": "Личный кабинет пациента",
+        "start_url": f"/{slug}/portal" if slug else "/portal",
+        "scope": f"/{slug}/" if slug else "/",
+        "display": "standalone",
+        "background_color": "#F5F8FF",
+        "theme_color": theme_color,
+        "orientation": "portrait-primary",
+    }
+    return _JSONResponse(content=manifest, headers={
+        "Content-Type": "application/manifest+json",
+        "Cache-Control": "no-cache",
+    })
+
+
+# ── Вход с паролем ─────────────────────────────────────────────────────────────
+
+@router.post("/auth/password")
+async def login_with_password(body: PasswordLoginRequest, db: AsyncSession = Depends(get_db)):
+    from app.core.security import verify_password
+    phone = normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(400, "Неверный номер телефона")
+    acc_res = await db.execute(select(PatientAccount).where(PatientAccount.phone == phone))
+    account = acc_res.scalar_one_or_none()
+    if not account or not account.is_active:
+        raise HTTPException(401, "Аккаунт не найден")
+    if not account.password_hash:
+        raise HTTPException(400, "Пароль не установлен. Используйте вход по SMS-коду.")
+    if not verify_password(body.password, account.password_hash):
+        raise HTTPException(401, "Неверный пароль")
+    account.last_login_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(account)
+    token = make_portal_token(str(account.id), account.phone)
+    return {
+        "access_token": token,
+        "patient_id": str(account.id),
+        "phone": account.phone,
+        "name": account.name,
+        "email": account.email,
+        "has_password": True,
+    }
+
+
+# ── Установить пароль ──────────────────────────────────────────────────────────
+
+@router.post("/password/set")
+async def set_password(
+    body: PasswordSetRequest,
+    patient: PatientAccount = Depends(_get_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.core.security import hash_password
+    if patient.password_hash:
+        raise HTTPException(400, "Пароль уже установлен. Используйте смену пароля.")
+    _validate_password(body.password)
+    patient.password_hash = hash_password(body.password)
+    await db.commit()
+    return {"ok": True, "message": "Пароль установлен"}
+
+
+# ── Сменить пароль ─────────────────────────────────────────────────────────────
+
+@router.post("/password/change")
+async def change_password(
+    body: PasswordChangeRequest,
+    patient: PatientAccount = Depends(_get_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.core.security import hash_password, verify_password
+    if not patient.password_hash:
+        raise HTTPException(400, "Пароль не установлен. Сначала установите пароль.")
+    if not verify_password(body.old_password, patient.password_hash):
+        raise HTTPException(400, "Неверный текущий пароль")
+    _validate_password(body.new_password)
+    if body.old_password == body.new_password:
+        raise HTTPException(400, "Новый пароль должен отличаться от текущего")
+    patient.password_hash = hash_password(body.new_password)
+    await db.commit()
+    return {"ok": True, "message": "Пароль изменён"}
+
+
+# ── Универсальный вход: найти клиники + отправить OTP ──────────────────────────
+
+@router.post("/universal/find")
+async def universal_find(body: UniversalFindRequest, db: AsyncSession = Depends(get_db)):
+    phone = normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(400, "Неверный номер телефона")
+
+    since = datetime.utcnow() - timedelta(minutes=10)
+    count_res = await db.execute(
+        select(PatientOTP).where(
+            PatientOTP.phone == phone,
+            PatientOTP.created_at >= since,
+            PatientOTP.is_used == False,
+        )
+    )
+    if len(count_res.scalars().all()) >= 5:
+        raise HTTPException(429, "Слишком много запросов. Попробуйте позже.")
+
+    from app.models.tenant import Tenant
+
+    apts_res = await db.execute(
+        select(Clinic.tenant_id)
+        .join(Appointment, Appointment.clinic_id == Clinic.id)
+        .where(Appointment.patient_phone == phone)
+        .distinct()
+        .limit(10)
+    )
+    tenant_ids = [r[0] for r in apts_res.all()]
+
+    clinics = []
+    if tenant_ids:
+        tenants_res = await db.execute(
+            select(Tenant).where(Tenant.id.in_(tenant_ids), Tenant.is_active == True)
+        )
+        for t in tenants_res.scalars().all():
+            clinics.append({"slug": t.slug, "name": t.name})
+
+    code = str(random.randint(1000, 9999))
+    otp = PatientOTP(
+        id=uuid.uuid4(),
+        phone=phone,
+        code=code,
+        expires_at=datetime.utcnow() + timedelta(minutes=5),
+    )
+    db.add(otp)
+    await db.commit()
+    print(f"[UNIVERSAL OTP] {phone} -> {code}")
+
+    return {
+        "ok": True,
+        "clinics": clinics,
+        "message": "Код отправлен",
+        "dev_code": code,
+    }
+
+
+# ── Универсальный вход: проверить OTP + вернуть токен ─────────────────────────
+
+@router.post("/universal/verify")
+async def universal_verify(body: UniversalVerifyRequest, db: AsyncSession = Depends(get_db)):
+    phone = normalize_phone(body.phone)
+
+    otp_res = await db.execute(
+        select(PatientOTP).where(
+            PatientOTP.phone == phone,
+            PatientOTP.code == body.code.strip(),
+            PatientOTP.is_used == False,
+            PatientOTP.expires_at >= datetime.utcnow(),
+        ).order_by(PatientOTP.created_at.desc()).limit(1)
+    )
+    otp = otp_res.scalar_one_or_none()
+    if not otp:
+        raise HTTPException(400, "Неверный или просроченный код")
+
+    otp.is_used = True
+
+    acc_res = await db.execute(
+        select(PatientAccount).where(PatientAccount.phone == phone)
+    )
+    account = acc_res.scalar_one_or_none()
+    if not account:
+        account = PatientAccount(id=uuid.uuid4(), phone=phone)
+        db.add(account)
+    account.last_login_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(account)
+
+    token = make_portal_token(str(account.id), account.phone)
+    return {
+        "access_token": token,
+        "slug": body.slug,
+        "patient_id": str(account.id),
+        "phone": account.phone,
+        "name": account.name,
     }
