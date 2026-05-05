@@ -1,13 +1,14 @@
 /**
- * CallRulesSection — управление правилами звонков (матричная версия).
+ * CallRulesSection — премиум-версия правил звонков.
  *
- * UX: дропдаун выбора тенанта (если не fixedTenantId) → проверка модуля телефонии →
- *     дропдаун scope (any / same_clinic / cross_clinic) → матрица rows=from_role,
- *     cols=to_role с двумя чекбоксами в ячейке: 🎤 audio и 🎥 video.
- *
- * Дефолт системы: «все активные роли могут друг другу аудио и видео» — все галочки on.
- * Каждый клик по галочке → upsert правила (если оба on и =дефолт — можно оставить запись,
- * это не вредит). Снятие галочки = explicit deny.
+ * Структура:
+ *   1. Заголовок + описание модуля
+ *   2. Бейдж статуса модуля (active/grace/нет модуля)
+ *   3. Карточка «Как это работает» — 3 шага
+ *   4. Tabs: 3 уровня правил (any / same_clinic / cross_clinic) с пояснениями
+ *   5. Легенда — что значит каждый бейдж
+ *   6. Матрица ролей с tooltip-подсказками
+ *   7. Сводка: сколько правил создано + кнопка сброса
  */
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import axios from 'axios'
@@ -15,34 +16,57 @@ import { API_BASE } from '../config'
 
 const authH = t => ({ Authorization: `Bearer ${t}` })
 
-const ROLE_LABELS = {
-  franchise_owner: 'Влад. фр.',
-  manager:         'Управ.',
-  supervisor:      'Старший',
-  admin:           'Регистр.',
-  nurse:           'Медсестра',
-  doctor:          'Врач',
-  recruiter:       'Рекрутер',
-  accountant:      'Бухгал.',
+const ROLE_INFO = {
+  franchise_owner: { short: 'Владелец',   full: 'Владелец франшизы',  desc: 'Управляет всеми тенантами франшизы' },
+  manager:         { short: 'Управляющий', full: 'Управляющий клиники', desc: 'Полная операционка одного тенанта' },
+  supervisor:      { short: 'Старший',     full: 'Старший на месте',    desc: 'Оперативное управление, аналитика, реестр' },
+  admin:           { short: 'Регистратор', full: 'Администратор',       desc: 'Создание направлений, чаты с пациентами' },
+  nurse:           { short: 'Медсестра',   full: 'Медсестра',           desc: 'Запись пациентов, помощь врачу' },
+  doctor:          { short: 'Врач',        full: 'Врач (штатный)',      desc: 'Расписание, приём, медкарта' },
+  recruiter:       { short: 'Рекрутер',    full: 'Рекрутер',            desc: 'Приглашение врачей, бонусы за привлечение' },
+  accountant:      { short: 'Бухгалтер',   full: 'Бухгалтер',           desc: 'Акты, счета, реквизиты, ЭП' },
 }
-const SCOPE_OPTIONS = [
-  { id: 'any',          label: 'Любая клиника' },
-  { id: 'same_clinic',  label: 'Одна клиника' },
-  { id: 'cross_clinic', label: 'Между клиниками' },
-]
+
+const SCOPE_INFO = {
+  any:          { title: 'Любая клиника',       sub: 'Применяется когда стороны в одной или разных клиниках', icon: '🌐' },
+  same_clinic:  { title: 'В одной клинике',     sub: 'Когда обе стороны работают в одном филиале',           icon: '🏥' },
+  cross_clinic: { title: 'Между клиниками',     sub: 'Когда стороны в разных филиалах одной сети',           icon: '🔀' },
+}
+
 const TELEPHONY_MODULES = ['telephony_basic', 'cross_clinic_audio', 'video_calls', 'video_conference']
 
+// Premium oklch палитра (локальная, не зависит от глобальных tokens)
+const C = {
+  bg:        'oklch(0.20 0.018 235)',
+  surface:   'oklch(0.245 0.020 235)',
+  surfaceHi: 'oklch(0.275 0.022 235)',
+  border:    'oklch(0.34 0.022 235)',
+  line:      'oklch(0.295 0.020 235)',
+  fg:        'oklch(0.97 0.008 230)',
+  fg2:       'oklch(0.82 0.014 230)',
+  fg3:       'oklch(0.66 0.018 230)',
+  fg4:       'oklch(0.52 0.018 230)',
+  accent:    'oklch(0.72 0.13 220)',
+  accentSoft:'oklch(0.72 0.13 220 / 0.16)',
+  good:      'oklch(0.74 0.15 160)',
+  goodSoft:  'oklch(0.74 0.15 160 / 0.18)',
+  warn:      'oklch(0.78 0.14 80)',
+  warnSoft:  'oklch(0.78 0.14 80 / 0.18)',
+  bad:       'oklch(0.70 0.18 25)',
+  badSoft:   'oklch(0.70 0.18 25 / 0.18)',
+}
+
 export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }) {
-  const [tenants, setTenants]     = useState([])
+  const [tenants, setTenants]       = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [tenantData, setTenantData] = useState(null)
-  const [rules, setRules]         = useState([])
+  const [rules, setRules]           = useState([])
   const [activeRoles, setActiveRoles] = useState([])
-  const [scope, setScope]         = useState('any')
-  const [loading, setLoading]     = useState(true)
-  const [saving, setSaving]       = useState(null)  // ключ ячейки, которая сейчас сохраняется
+  const [scope, setScope]           = useState('any')
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(null)
+  const [tooltip, setTooltip]       = useState(null)
 
-  // Загрузка тенантов франшизы (если tenantId не зафиксирован)
   useEffect(() => {
     if (fixedTenantId) {
       setSelectedId(fixedTenantId)
@@ -59,7 +83,6 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
       .finally(() => setLoading(false))
   }, [fixedTenantId])
 
-  // Загрузка правил + модулей
   const reload = useCallback(() => {
     if (!selectedId) return
     const detailUrl = fixedTenantId
@@ -95,23 +118,20 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
     return g?.grace_until || null
   }, [tenantData])
 
-  // Индекс правил для быстрого поиска: ключ "from|to|scope"
   const ruleIndex = useMemo(() => {
     const idx = {}
     for (const r of rules) idx[`${r.from_role}|${r.to_role}|${r.scope}`] = r
     return idx
   }, [rules])
 
-  // Получить текущие права для ячейки (rule || default = both true)
   const cellState = (from, to) => {
     const r = ruleIndex[`${from}|${to}|${scope}`]
-    if (r) return { audio: r.allow_audio, video: r.allow_video }
-    // Если scope != any и точного нет — fallback на ANY
+    if (r) return { audio: r.allow_audio, video: r.allow_video, hasOverride: true }
     if (scope !== 'any') {
       const r2 = ruleIndex[`${from}|${to}|any`]
-      if (r2) return { audio: r2.allow_audio, video: r2.allow_video }
+      if (r2) return { audio: r2.allow_audio, video: r2.allow_video, hasOverride: false, fallback: true }
     }
-    return { audio: true, video: true }   // дефолт
+    return { audio: true, video: true, hasOverride: false }
   }
 
   const toggleCell = async (from, to, field) => {
@@ -134,139 +154,333 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
   }
 
   const resetAll = async () => {
-    if (!confirm('Удалить все правила и вернуться к дефолтам?')) return
+    if (!confirm('Удалить все настройки и вернуться к политике «все могут всем»?')) return
     await axios.delete(`${API_BASE}/call-rules/${selectedId}`, { headers: authH(adminToken) })
     reload()
   }
 
-  if (loading) return <div className="p-6 text-center text-gray-500">Загрузка…</div>
+  if (loading) return <div style={{ padding: 32, textAlign:'center', color: C.fg3 }}>Загрузка…</div>
 
   return (
-    <div className="px-4 pb-24 max-w-6xl mx-auto">
-      <h2 className="text-2xl font-black mb-1">Правила звонков</h2>
-      <p className="text-sm text-gray-500 mb-5">
-        По умолчанию все могут звонить друг другу. Снимите галочку чтобы запретить связь между ролями.
-      </p>
+    <div style={{
+      background: C.bg, color: C.fg, minHeight: '100vh',
+      padding: '24px 16px 96px', fontFamily: "'Inter',system-ui,sans-serif",
+    }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
 
-      {/* Tenant selector — скрыт если зафиксирован */}
-      {!fixedTenantId && (
-        <div className="mb-4">
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Тенант</label>
-          <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
-            className="w-full p-3 rounded-xl border border-gray-200 bg-white text-sm font-medium">
-            {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>)}
-          </select>
+        {/* Hero */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 8 }}>
+            Модуль связи · Правила
+          </div>
+          <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, lineHeight: 1.15 }}>
+            Кто и кому может звонить
+          </h1>
+          <p style={{ fontSize: 14, color: C.fg3, marginTop: 10, maxWidth: 720 }}>
+            Настройте права аудио- и видеозвонков для каждой пары ролей.
+            По умолчанию все сотрудники могут связываться друг с другом —
+            здесь вы добавляете точечные ограничения.
+          </p>
         </div>
-      )}
 
-      {/* Module status */}
-      {!hasTelephonyModule && (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 mb-5">
-          <div className="flex items-start gap-3">
-            <span className="material-symbols-outlined text-amber-600">warning</span>
-            <div className="text-sm text-amber-800">
-              <span className="font-bold">Модуль телефонии не подключён.</span>{' '}
-              Перейдите в раздел «Модули» и активируйте «Базовая телефония», «Аудио между клиниками» или «Видеозвонки».
+        {/* Tenant selector (если не зафиксирован) */}
+        {!fixedTenantId && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: C.fg3, marginBottom: 6, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+              Тенант
+            </label>
+            <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
+              style={{
+                width: '100%', padding: '12px 14px', borderRadius: 12,
+                background: C.surface, color: C.fg, border: `1px solid ${C.border}`,
+                fontSize: 14, fontWeight: 500, cursor: 'pointer', outline: 'none',
+              }}>
+              {tenants.map(t => <option key={t.id} value={t.id} style={{background:C.surface}}>{t.name} ({t.slug})</option>)}
+            </select>
+          </div>
+        )}
+
+        {/* Module status banner */}
+        {!hasTelephonyModule && (
+          <div style={{
+            padding: 20, borderRadius: 16, marginBottom: 20,
+            background: C.warnSoft, border: `1px solid ${C.warn}`,
+            display: 'flex', gap: 14, alignItems: 'flex-start',
+          }}>
+            <div style={{ fontSize: 28, lineHeight: 1 }}>⚠️</div>
+            <div>
+              <div style={{ fontWeight: 700, color: C.warn, marginBottom: 4 }}>Модуль телефонии не подключён</div>
+              <div style={{ fontSize: 13, color: C.fg2 }}>
+                Чтобы настраивать правила, нужен один из активных модулей: «Базовая телефония»,
+                «Аудио между клиниками», «Видеозвонки» или «Видеоконференция». Откройте раздел
+                «Модули» у этого тенанта.
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {hasTelephonyModule && inGrace && (
-        <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 mb-5 text-sm text-rose-800">
-          <span className="font-bold">Льготный период.</span> Звонки работают до{' '}
-          {new Date(inGrace).toLocaleString('ru-RU')}.
-        </div>
-      )}
-
-      {hasTelephonyModule && (
-        <>
-          {/* Scope tabs */}
-          <div className="flex bg-gray-100 rounded-xl p-1 mb-4 max-w-md">
-            {SCOPE_OPTIONS.map(s => (
-              <button key={s.id} onClick={() => setScope(s.id)}
-                className={`flex-1 px-3 py-2 rounded-lg text-xs font-bold transition ${scope === s.id ? 'bg-white shadow' : 'text-gray-500'}`}>
-                {s.label}
-              </button>
-            ))}
+        {hasTelephonyModule && inGrace && (
+          <div style={{
+            padding: 16, borderRadius: 14, marginBottom: 20,
+            background: C.badSoft, border: `1px solid ${C.bad}`,
+            display: 'flex', gap: 12, alignItems: 'center', fontSize: 13,
+          }}>
+            <div style={{ fontSize: 22 }}>🕒</div>
+            <div style={{ color: C.fg }}>
+              <span style={{ fontWeight: 700 }}>Льготный период.</span>{' '}
+              Звонки работают до {new Date(inGrace).toLocaleString('ru-RU')}, после этой даты модуль отключится.
+            </div>
           </div>
+        )}
 
-          {/* Matrix */}
-          <div className="bg-white rounded-2xl border border-gray-100 overflow-x-auto">
-            <table className="w-full text-xs" style={{ minWidth: 700 }}>
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="text-left p-2 font-bold text-gray-500 sticky left-0 bg-gray-50">КТО ↓ КОМУ →</th>
-                  {activeRoles.map(r => (
-                    <th key={r} className="p-2 font-bold text-gray-700 text-center">
-                      <div>{ROLE_LABELS[r] || r}</div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {activeRoles.map(from => (
-                  <tr key={from} className="border-t border-gray-100">
-                    <td className="p-2 font-bold text-gray-700 sticky left-0 bg-white whitespace-nowrap">
-                      {ROLE_LABELS[from] || from}
-                    </td>
-                    {activeRoles.map(to => {
-                      if (from === to) {
-                        return <td key={to} className="p-2 text-center text-gray-200">—</td>
-                      }
-                      const cur = cellState(from, to)
-                      const audioKey = `${from}|${to}|${scope}|audio`
-                      const videoKey = `${from}|${to}|${scope}|video`
-                      return (
-                        <td key={to} className="p-2 text-center">
-                          <div className="inline-flex flex-col gap-1">
-                            <Toggle
-                              icon="🎤"
-                              on={cur.audio}
-                              loading={saving === audioKey}
-                              onClick={() => toggleCell(from, to, 'audio')}
-                            />
-                            <Toggle
-                              icon="🎥"
-                              on={cur.video}
-                              loading={saving === videoKey}
-                              onClick={() => toggleCell(from, to, 'video')}
-                            />
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
+        {hasTelephonyModule && (
+          <>
+            {/* Help: 3 шага как пользоваться */}
+            <div style={{
+              padding: 20, borderRadius: 16, marginBottom: 20,
+              background: C.surface, border: `1px solid ${C.line}`,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 14 }}>
+                Как настроить
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 14 }}>
+                <Step n={1} title="Выберите уровень"
+                  text='«Любая клиника» — общая политика для всех. «В одной клинике» — для коллег под одной крышей. «Между клиниками» — для разных филиалов сети.' />
+                <Step n={2} title="Снимите галочки"
+                  text="В таблице найдите пару ролей. Зелёные кнопки = разрешено, серые = запрещено. Микрофон — голос, камера — видео." />
+                <Step n={3} title="Сохранится автоматически"
+                  text="Каждый клик мгновенно отправляется на сервер. Можно сбросить все правила одной кнопкой внизу страницы." />
+              </div>
+            </div>
+
+            {/* Scope tabs */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.fg3, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 10 }}>
+                Уровень правил
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10,
+              }}>
+                {Object.entries(SCOPE_INFO).map(([id, info]) => (
+                  <button key={id} onClick={() => setScope(id)}
+                    style={{
+                      padding: 14, borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+                      background: scope === id ? C.accentSoft : C.surface,
+                      border: `1px solid ${scope === id ? C.accent : C.line}`,
+                      color: C.fg, transition: 'all 0.15s',
+                    }}>
+                    <div style={{ fontSize: 22, marginBottom: 6 }}>{info.icon}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{info.title}</div>
+                    <div style={{ fontSize: 12, color: C.fg3, lineHeight: 1.4 }}>{info.sub}</div>
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            </div>
 
-          {rules.length > 0 && (
-            <button onClick={resetAll}
-              className="mt-4 px-4 py-2 rounded-xl text-sm font-semibold text-rose-600 hover:bg-rose-50">
-              Сбросить все правила к дефолтам ({rules.length})
-            </button>
-          )}
+            {/* Legend */}
+            <div style={{
+              padding: 14, borderRadius: 12, marginBottom: 16,
+              background: C.surface, border: `1px solid ${C.line}`,
+              display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12,
+            }}>
+              <LegendItem on color={C.good} icon="🎤" label="Аудио разрешено" />
+              <LegendItem on color={C.good} icon="🎥" label="Видео разрешено" />
+              <LegendItem on={false} icon="🎤" label="Аудио запрещено" />
+              <LegendItem on={false} icon="🎥" label="Видео запрещено" />
+              <div style={{ marginLeft: 'auto', color: C.fg4, fontSize: 11 }}>
+                {rules.length > 0 ? `${rules.length} правил настроено` : 'Активна политика по умолчанию'}
+              </div>
+            </div>
 
-          <div className="mt-4 text-xs text-gray-400">
-            🎤 — голосовые звонки, 🎥 — видеозвонки. Правило сохраняется при клике.
-            Зелёный = разрешено, серый = запрещено.
-          </div>
-        </>
-      )}
+            {/* Matrix */}
+            <div style={{ background: C.surface, borderRadius: 16, border: `1px solid ${C.line}`, padding: 4, overflow: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0, minWidth: 720, fontSize: 12 }}>
+                <thead>
+                  <tr>
+                    <th style={cellHead(C, 'left')}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.fg4, marginBottom: 2 }}>КТО ↓</div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.fg4 }}>КОМУ →</div>
+                    </th>
+                    {activeRoles.map(r => (
+                      <th key={r} style={cellHead(C, 'center')}>
+                        <div style={{ fontWeight: 700, color: C.fg, fontSize: 12 }}>
+                          {ROLE_INFO[r]?.short || r}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeRoles.map(from => (
+                    <tr key={from}>
+                      <td style={{
+                        padding: '14px 12px', position: 'sticky', left: 0,
+                        background: C.surface, borderTop: `1px solid ${C.line}`,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        <div style={{ fontWeight: 700, color: C.fg }}>{ROLE_INFO[from]?.short || from}</div>
+                        <div style={{ fontSize: 10, color: C.fg4, marginTop: 2 }}>{ROLE_INFO[from]?.full}</div>
+                      </td>
+                      {activeRoles.map(to => {
+                        if (from === to) {
+                          return (
+                            <td key={to} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${C.line}` }}>
+                              <span style={{ color: C.fg4, fontSize: 18 }}>—</span>
+                            </td>
+                          )
+                        }
+                        const cur = cellState(from, to)
+                        const audioKey = `${from}|${to}|${scope}|audio`
+                        const videoKey = `${from}|${to}|${scope}|video`
+                        const tipKey = `${from}|${to}`
+                        return (
+                          <td key={to} style={{ padding: 8, textAlign: 'center', borderTop: `1px solid ${C.line}`, position: 'relative' }}
+                              onMouseEnter={() => setTooltip(tipKey)}
+                              onMouseLeave={() => setTooltip(null)}>
+                            <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 4 }}>
+                              <Pill icon="🎤" on={cur.audio} loading={saving === audioKey} fallback={cur.fallback}
+                                onClick={() => toggleCell(from, to, 'audio')} C={C} />
+                              <Pill icon="🎥" on={cur.video} loading={saving === videoKey} fallback={cur.fallback}
+                                onClick={() => toggleCell(from, to, 'video')} C={C} />
+                            </div>
+                            {tooltip === tipKey && (
+                              <div style={{
+                                position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
+                                marginTop: 8, padding: '10px 14px', background: C.bg,
+                                border: `1px solid ${C.border}`, borderRadius: 10,
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                                zIndex: 50, whiteSpace: 'nowrap', pointerEvents: 'none',
+                                fontSize: 12, fontWeight: 500, color: C.fg,
+                              }}>
+                                <div style={{ marginBottom: 4 }}>
+                                  <span style={{ color: C.fg3 }}>Звонит:</span>{' '}
+                                  <strong>{ROLE_INFO[from]?.full}</strong>
+                                </div>
+                                <div style={{ marginBottom: 6 }}>
+                                  <span style={{ color: C.fg3 }}>Принимает:</span>{' '}
+                                  <strong>{ROLE_INFO[to]?.full}</strong>
+                                </div>
+                                <div style={{ display:'flex', gap: 12, fontSize: 11 }}>
+                                  <span style={{ color: cur.audio ? C.good : C.fg4 }}>🎤 {cur.audio ? 'разрешено' : 'запрещено'}</span>
+                                  <span style={{ color: cur.video ? C.good : C.fg4 }}>🎥 {cur.video ? 'разрешено' : 'запрещено'}</span>
+                                </div>
+                                {cur.fallback && (
+                                  <div style={{ marginTop: 6, fontSize: 10, color: C.fg4 }}>
+                                    Унаследовано из «Любая клиника»
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {rules.length > 0 && (
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, justifyContent:'space-between' }}>
+                <div style={{ fontSize: 12, color: C.fg3 }}>
+                  Создано {rules.length} {ruleWordRu(rules.length)}. Все остальные пары — по умолчанию разрешены.
+                </div>
+                <button onClick={resetAll}
+                  style={{
+                    padding: '10px 18px', borderRadius: 10, cursor: 'pointer',
+                    background: C.badSoft, color: C.bad, border: `1px solid ${C.bad}`,
+                    fontSize: 12, fontWeight: 600, transition: 'all 0.15s',
+                  }}>
+                  Сбросить всё
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
 
-function Toggle({ icon, on, loading, onClick }) {
+function ruleWordRu(n) {
+  const last = n % 10
+  if (n >= 11 && n <= 14) return 'правил'
+  if (last === 1) return 'правило'
+  if (last >= 2 && last <= 4) return 'правила'
+  return 'правил'
+}
+
+function cellHead(C, align) {
+  return {
+    padding: '14px 12px',
+    textAlign: align,
+    background: C.surfaceHi,
+    color: C.fg2,
+    fontWeight: 600,
+    fontSize: 12,
+    borderBottom: `2px solid ${C.line}`,
+    position: align === 'left' ? 'sticky' : undefined,
+    left: align === 'left' ? 0 : undefined,
+    zIndex: align === 'left' ? 2 : 1,
+    whiteSpace: 'nowrap',
+  }
+}
+
+function Step({ n, title, text }) {
+  return (
+    <div>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%',
+        background: 'oklch(0.72 0.13 220 / 0.18)', color: 'oklch(0.72 0.13 220)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        fontWeight: 800, fontSize: 13, marginBottom: 8,
+      }}>{n}</div>
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 12.5, color: 'oklch(0.66 0.018 230)', lineHeight: 1.5 }}>{text}</div>
+    </div>
+  )
+}
+
+function LegendItem({ on, color, icon, label }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+      <div style={{
+        width: 26, height: 26, borderRadius: 8,
+        background: on ? 'oklch(0.74 0.15 160 / 0.18)' : 'oklch(0.295 0.020 235)',
+        opacity: on ? 1 : 0.45,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <span style={{ fontSize: 14, filter: on ? 'none' : 'grayscale(1)' }}>{icon}</span>
+      </div>
+      <span style={{ color: 'oklch(0.82 0.014 230)' }}>{label}</span>
+    </div>
+  )
+}
+
+function Pill({ icon, on, loading, fallback, onClick, C }) {
   return (
     <button onClick={onClick} disabled={loading}
-      className={`w-7 h-7 rounded-md text-sm flex items-center justify-center transition ${
-        on ? 'bg-emerald-100 hover:bg-emerald-200' : 'bg-gray-100 hover:bg-gray-200 grayscale opacity-40'
-      } ${loading ? 'animate-pulse' : ''}`}>
-      {icon}
+      title={loading ? 'Сохраняется…' : (on ? 'Разрешено — клик чтобы запретить' : 'Запрещено — клик чтобы разрешить')}
+      style={{
+        width: 38, height: 28, borderRadius: 8,
+        background: on ? C.goodSoft : C.surfaceHi,
+        border: `1px solid ${on ? C.good : C.border}`,
+        color: on ? C.good : C.fg4,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        opacity: loading ? 0.5 : (on ? 1 : 0.55),
+        filter: on ? 'none' : 'grayscale(1)',
+        position: 'relative',
+        transition: 'all 0.15s',
+        fontSize: 14,
+      }}>
+      <span>{icon}</span>
+      {fallback && (
+        <span style={{
+          position: 'absolute', top: -3, right: -3, fontSize: 8, color: C.fg4,
+        }}>↑</span>
+      )}
     </button>
   )
 }
