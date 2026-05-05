@@ -26,6 +26,7 @@ const ALL_NAV = [
   { key:'settings',  label:'Настройки', icon:'tune',         path:'/manager/settings'  },
   { key:'invoices',  label:'Счета',     icon:'receipt_long', path:'/manager/invoices'  },
   { key:'recruit',   label:'Врачи',     icon:'groups',       path:'/manager/recruit-doctors' },
+  { key:'appointments', label:'Записи', icon:'event',     path:'/manager/appointments' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => ALL_NAV.find(n => n.key === k)).filter(Boolean)
