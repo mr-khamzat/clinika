@@ -1,6 +1,13 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+
+// Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
+const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
+const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
+const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
+const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
+const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
@@ -1819,6 +1826,45 @@ function DoctorsTab({ primary, patientName, patientPhone, onRefreshHistory }) {
   )
 }
 
+// ── HealthHub: подвкладки внутри «Здоровье» ────────────────────────────────
+function HealthHub({ sessionToken, phone }) {
+  const [sub, setSub] = useState('vitals')
+  const SUBS = [
+    { key: 'vitals',        label: 'Показатели', icon: 'monitoring' },
+    { key: 'medcard',       label: 'Карта',      icon: 'medical_information' },
+    { key: 'prescriptions', label: 'Лекарства',  icon: 'medication' },
+    { key: 'documents',     label: 'Документы',  icon: 'folder' },
+  ]
+  return (
+    <div>
+      <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
+        {SUBS.map(s => {
+          const active = sub === s.key
+          return (
+            <button key={s.key} onClick={() => setSub(s.key)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition"
+              style={active ? {
+                background: 'linear-gradient(135deg,#0097A7,#0e7490)',
+                color: 'white',
+                boxShadow: '0 4px 14px rgba(14,116,144,0.3)',
+              } : { background: 'white', color: '#475569', border: '1px solid #e5e7eb' }}>
+              <span className="material-symbols-outlined text-[16px]"
+                style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{s.icon}</span>
+              {s.label}
+            </button>
+          )
+        })}
+      </div>
+      <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+        {sub === 'vitals'        && <VitalsTab sessionToken={sessionToken} phone={phone} />}
+        {sub === 'medcard'       && <MedCardTab sessionToken={sessionToken} phone={phone} apiBase={API_BASE} />}
+        {sub === 'prescriptions' && <PrescriptionsTab sessionToken={sessionToken} apiBase={API_BASE} />}
+        {sub === 'documents'     && <DocumentsTab sessionToken={sessionToken} apiBase={API_BASE} />}
+      </Suspense>
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PatientCabinet() {
@@ -2068,11 +2114,12 @@ export default function PatientCabinet() {
         { key: 'support', icon: 'chat_bubble', label: 'Чат'    },
       ]
     : [
-        { key: 'home',      icon: 'home',       label: 'Главная'     },
-        { key: 'referrals', icon: 'assignment',  label: 'Направления' },
-        { key: 'history',   icon: 'history',     label: 'История'     },
-        { key: 'doctors',   icon: 'stethoscope', label: 'Врачи'       },
-        { key: 'support',   icon: 'chat_bubble', label: 'Чат'         },
+        { key: 'home',         icon: 'home',                label: 'Главная'    },
+        { key: 'appointments', icon: 'event_available',     label: 'Записи'     },
+        { key: 'referrals',    icon: 'assignment',          label: 'Направления'},
+        { key: 'health',       icon: 'health_and_safety',   label: 'Здоровье'   },
+        { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
+        { key: 'support',      icon: 'chat_bubble',         label: 'Чат'        },
       ]
 
   const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
@@ -2572,6 +2619,27 @@ export default function PatientCabinet() {
         {tab === 'support' && !data?.type && (
           <div className="tab-enter">
             <ChatTab phone={patient_phone} sessionToken={localStorage.getItem(SESSION_KEY)} />
+          </div>
+        )}
+
+        {/* ── APPOINTMENTS — мои записи к врачам ── */}
+        {tab === 'appointments' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <AppointmentsTab
+                sessionToken={localStorage.getItem(SESSION_KEY)}
+                onBookNew={() => window.location.href = `${BASE_PATH}/book`}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── HEALTH — медкарта/анализы/назначения/документы/витальные ── */}
+        {tab === 'health' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <HealthHub sessionToken={localStorage.getItem(SESSION_KEY)} phone={patient_phone} />
+            </Suspense>
           </div>
         )}
       </div>

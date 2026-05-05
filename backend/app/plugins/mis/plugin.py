@@ -46,3 +46,32 @@ class MISPlugin(BasePlugin):
     async def get_clinics(self) -> list[dict]:
         from app.services.mis_client import get_clinics
         return await get_clinics()
+
+    async def get_patient_prescriptions(self, phone: str) -> list[dict]:
+        """
+        Назначения пациента (лекарства).
+        МИС Renovatio публичного метода getPatientPrescriptions сейчас не предоставляет —
+        это мягкая заглушка: пытаемся дёрнуть метод, при отсутствии возвращаем [].
+        Когда метод появится — здесь будет реальный вызов через mis_client._post.
+        """
+        if not await self.is_enabled():
+            return []
+        try:
+            from app.services.mis_client import _post, find_patient_by_phone
+            patient = await find_patient_by_phone(phone)
+            if not patient:
+                return []
+            patient_id = patient.get("patient_id") or patient.get("id")
+            if not patient_id:
+                return []
+            # Пробуем гипотетический эндпоинт; если 404 — вернётся пустой список
+            try:
+                result = await _post("getPatientPrescriptions", patient_id=patient_id)
+                if isinstance(result, dict) and result.get("error") == 0:
+                    data = result.get("data") or []
+                    return data if isinstance(data, list) else []
+            except Exception:
+                return []
+            return []
+        except Exception:
+            return []

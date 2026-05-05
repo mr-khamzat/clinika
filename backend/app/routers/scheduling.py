@@ -354,11 +354,13 @@ async def list_appointments(
     doctor_id: Optional[uuid.UUID] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     appointment_date: Optional[date] = Query(None),
+    from_date: Optional[date] = Query(None),
+    to_date: Optional[date] = Query(None),
     status: Optional[AppointmentStatus] = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Список записей. Фильтры: врач, клиника, дата, статус. Изолировано по тенанту."""
+    """Список записей. Фильтры: врач, клиника, дата, диапазон, статус. Изолировано по тенанту."""
     q = select(Appointment)
     if current_user.tenant_id is not None:
         q = q.where(Appointment.tenant_id == current_user.tenant_id)
@@ -368,6 +370,10 @@ async def list_appointments(
         q = q.where(Appointment.clinic_id == clinic_id)
     if appointment_date:
         q = q.where(Appointment.appointment_date == appointment_date)
+    if from_date:
+        q = q.where(Appointment.appointment_date >= from_date)
+    if to_date:
+        q = q.where(Appointment.appointment_date <= to_date)
     if status:
         q = q.where(Appointment.status == status)
     q = q.order_by(Appointment.appointment_date, Appointment.start_time)
@@ -406,6 +412,173 @@ async def update_appointment_status(
     appt.updated_at = datetime.utcnow()
     await db.commit()
     return {"id": str(appt.id), "status": appt.status}
+
+
+# ── Перенос/редактирование записи ────────────────────────────────────────────
+
+class AppointmentMove(BaseModel):
+    appointment_date: Optional[date] = None
+    start_time: Optional[time] = None
+    notes: Optional[str] = None
+    patient_name: Optional[str] = None
+
+
+@router.patch("/appointments/{appointment_id}", dependencies=_FEAT)
+async def move_appointment(
+    appointment_id: uuid.UUID,
+    data: AppointmentMove,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Перенос записи на другое время/дату или редактирование примечаний.
+    Проверяет, что новый слот свободен (если дата/время изменены).
+    """
+    appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
+    if not appt:
+        raise HTTPException(404, "Запись не найдена")
+    if current_user.tenant_id and appt.tenant_id != current_user.tenant_id:
+        raise HTTPException(403, "Чужой тенант")
+
+    new_date = data.appointment_date or appt.appointment_date
+    new_start = data.start_time or appt.start_time
+
+    # Если меняется дата или время — проверяем конфликт
+    if (data.appointment_date and data.appointment_date != appt.appointment_date) or \
+       (data.start_time and data.start_time != appt.start_time):
+        conflict = (await db.execute(
+            select(Appointment).where(
+                Appointment.doctor_id == appt.doctor_id,
+                Appointment.appointment_date == new_date,
+                Appointment.start_time == new_start,
+                Appointment.id != appointment_id,
+                Appointment.status.in_([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]),
+            )
+        )).scalar_one_or_none()
+        if conflict:
+            raise HTTPException(409, "Этот слот уже занят")
+
+        # Пересчёт end_time из slot_duration врача
+        doctor = (await db.execute(select(Doctor).where(Doctor.id == appt.doctor_id))).scalar_one_or_none()
+        if doctor:
+            from datetime import datetime as _dt, timedelta as _td
+            new_end_dt = _dt.combine(new_date, new_start) + _td(minutes=doctor.slot_duration)
+            appt.end_time = new_end_dt.time()
+
+        appt.appointment_date = new_date
+        appt.start_time = new_start
+
+    if data.notes is not None:
+        appt.notes = data.notes
+    if data.patient_name is not None:
+        appt.patient_name = data.patient_name
+
+    from datetime import datetime
+    appt.updated_at = datetime.utcnow()
+    await db.commit()
+    return {
+        "id": str(appt.id),
+        "doctor_id": str(appt.doctor_id),
+        "appointment_date": appt.appointment_date.isoformat(),
+        "start_time": appt.start_time.strftime("%H:%M"),
+        "end_time": appt.end_time.strftime("%H:%M"),
+        "status": appt.status,
+    }
+
+
+# ── Неделя расписания врача (агрегированно) ──────────────────────────────────
+
+@router.get("/doctors/{doctor_id}/week", dependencies=_FEAT)
+async def get_doctor_week(
+    doctor_id: uuid.UUID,
+    start_date: date = Query(..., description="Понедельник недели, YYYY-MM-DD"),
+    _=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Вернёт расписание врача на неделю (7 дней начиная с start_date).
+    Каждый день: рабочие часы из шаблона + слоты с признаком занятости.
+    Для занятых слотов — данные пациента и id записи.
+    """
+    from datetime import timedelta as _td
+    from sqlalchemy import select as _sel
+    DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor:
+        raise HTTPException(404, "Врач не найден")
+
+    # Шаблон расписания
+    sched_rows = (await db.execute(
+        select(DoctorSchedule).where(DoctorSchedule.doctor_id == doctor_id, DoctorSchedule.is_active == True)
+    )).scalars().all()
+    sched_by_dow = {s.day_of_week: s for s in sched_rows}
+
+    # Все записи на эту неделю
+    end_date = start_date + _td(days=6)
+    appts = (await db.execute(
+        select(Appointment).where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.appointment_date >= start_date,
+            Appointment.appointment_date <= end_date,
+            Appointment.status.in_([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED, AppointmentStatus.COMPLETED, AppointmentStatus.NO_SHOW]),
+        )
+    )).scalars().all()
+    appts_by_key: dict = {}
+    for a in appts:
+        k = (a.appointment_date.isoformat(), a.start_time.strftime("%H:%M"))
+        appts_by_key[k] = a
+
+    # Сборка дней
+    days_out = []
+    for i in range(7):
+        d = start_date + _td(days=i)
+        dow = d.weekday()
+        sched = sched_by_dow.get(dow)
+        slots = []
+        if sched:
+            from datetime import datetime as _dt
+            current = _dt.combine(d, sched.start_time)
+            finish = _dt.combine(d, sched.end_time)
+            from datetime import timedelta as _td2
+            step = _td2(minutes=doctor.slot_duration)
+            while current + step <= finish:
+                t = current.time().strftime("%H:%M")
+                key = (d.isoformat(), t)
+                a = appts_by_key.get(key)
+                slot = {
+                    "start_time": t,
+                    "end_time": (current + step).time().strftime("%H:%M"),
+                    "available": a is None,
+                }
+                if a:
+                    slot["appointment"] = {
+                        "id": str(a.id),
+                        "patient_name": a.patient_name,
+                        "patient_phone": a.patient_phone,
+                        "status": a.status.value if hasattr(a.status, "value") else a.status,
+                        "notes": a.notes,
+                    }
+                slots.append(slot)
+                current += step
+        days_out.append({
+            "date": d.isoformat(),
+            "day_of_week": dow,
+            "day_name": DAY_NAMES[dow],
+            "is_working": sched is not None,
+            "start_time": sched.start_time.strftime("%H:%M") if sched else None,
+            "end_time": sched.end_time.strftime("%H:%M") if sched else None,
+            "slots": slots,
+        })
+
+    return {
+        "doctor_id": str(doctor_id),
+        "doctor_name": doctor.full_name,
+        "slot_duration": doctor.slot_duration,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "days": days_out,
+    }
 
 
 @router.get("/my-doctor")

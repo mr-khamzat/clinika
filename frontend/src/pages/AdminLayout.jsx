@@ -23,6 +23,7 @@ const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSection'))
 const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
 const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
+const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekScheduleSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -5601,110 +5602,9 @@ function SchedulingSection({ token }) {
 
       {/* ─── TAB: Календарь ─── */}
       {activeTab === 'calendar' && (
-        <div className="space-y-4">
-          {/* Выбор врача */}
-          <div className="flex flex-wrap gap-3 items-center">
-            <select value={calDoctor?.id || ''} onChange={e => {
-              const d = doctors.find(x => x.id === e.target.value)
-              setCalDoctor(d || null)
-              setSlotsCache({})
-            }}
-              className="border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white min-w-[220px]">
-              <option value="">— Выберите врача —</option>
-              {doctors.filter(d => d.is_active).map(d => (
-                <option key={d.id} value={d.id}>{d.full_name} · {d.specialty}</option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setWeekOffset(w => w - 1)}
-                className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                <span className="material-symbols-outlined text-lg text-gray-600 dark:text-gray-300">chevron_left</span>
-              </button>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
-                {weekDates[0].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — {weekDates[6].toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-              <button onClick={() => setWeekOffset(w => w + 1)}
-                className="p-2 rounded-xl border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
-                <span className="material-symbols-outlined text-lg text-gray-600 dark:text-gray-300">chevron_right</span>
-              </button>
-              {weekOffset !== 0 && (
-                <button onClick={() => setWeekOffset(0)}
-                  className="text-sm text-[#0097A7] font-medium hover:underline">
-                  Сегодня
-                </button>
-              )}
-            </div>
-          </div>
-
-          {!calDoctor ? (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-12 text-center text-gray-400 shadow-sm">
-              <span className="material-symbols-outlined text-5xl mb-3 block">calendar_month</span>
-              <p>Выберите врача для просмотра расписания</p>
-            </div>
-          ) : calLoading ? <Spinner /> : (
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
-              {/* Заголовки дней */}
-              <div className="grid grid-cols-7 border-b border-gray-100 dark:border-gray-700">
-                {weekDates.map((d, i) => {
-                  const isToday = fmtDate(d) === fmtDate(new Date())
-                  return (
-                    <div key={i} className={`p-3 text-center border-r last:border-r-0 border-gray-100 dark:border-gray-700 ${isToday ? 'bg-[#e0f7fa] dark:bg-[#004D5F]/40' : ''}`}>
-                      <p className={`text-xs font-medium ${isToday ? 'text-[#0097A7]' : 'text-gray-400'}`}>{DAY_NAMES[i]}</p>
-                      <p className={`text-lg font-bold ${isToday ? 'text-[#0097A7]' : 'text-gray-700 dark:text-gray-300'}`}>{d.getDate()}</p>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Слоты */}
-              <div className="grid grid-cols-7 min-h-[300px]">
-                {weekDates.map((d, i) => {
-                  const dateStr = fmtDate(d)
-                  const daySlots = slotsCache[`${calDoctor.id}_${dateStr}`] || []
-                  const isToday = dateStr === fmtDate(new Date())
-                  const isPast = d < new Date(new Date().setHours(0,0,0,0))
-
-                  return (
-                    <div key={i} className={`border-r last:border-r-0 border-gray-100 dark:border-gray-700 p-2 ${isToday ? 'bg-[#f0fbfc] dark:bg-[#004D5F]/20' : ''}`}>
-                      {daySlots.length === 0 && (
-                        <p className="text-xs text-gray-300 dark:text-gray-600 text-center pt-4">—</p>
-                      )}
-                      <div className="space-y-1">
-                        {daySlots.map((slot, si) => {
-                          const isBooked = !slot.available
-                          const slotTime = slot.start_time
-                          return (
-                            <button
-                              key={si}
-                              disabled={isBooked || isPast}
-                              onClick={() => { if (!isBooked && !isPast) { setBookModal({ doctor: calDoctor, date: dateStr, start_time: slotTime }); setBookForm(EMPTY_BOOK); setActionErr('') } }}
-                              className={`w-full text-xs px-1.5 py-1 rounded-lg font-medium transition text-center ${
-                                isBooked
-                                  ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300 cursor-default'
-                                  : isPast
-                                    ? 'bg-gray-50 text-gray-300 dark:bg-gray-800 dark:text-gray-600 cursor-default'
-                                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer'
-                              }`}>
-                              {slotTime}
-                              {isBooked && <span className="block text-[10px] opacity-70">занят</span>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Легенда */}
-              <div className="px-4 py-2 border-t border-gray-100 dark:border-gray-700 flex gap-4 text-xs text-gray-500">
-                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-100 dark:bg-emerald-900/40 inline-block"/><span>Свободно</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-100 dark:bg-blue-900/40 inline-block"/><span>Занято</span></div>
-                <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-50 dark:bg-gray-700 inline-block"/><span>Прошедшее</span></div>
-              </div>
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<Spinner />}>
+          <WeekScheduleSection token={token} mode="full" />
+        </Suspense>
       )}
 
       {/* ─── TAB: Записи ─── */}

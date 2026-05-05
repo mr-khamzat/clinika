@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
 
 function authH(t) { return { Authorization: `Bearer ${t}` } }
 function apiFetch(m, u, t, d) { return axios({ method: m, url: `${API_BASE}${u}`, headers: authH(t), data: d }) }
@@ -27,59 +28,14 @@ function EmptyState({ icon, text }) {
   )
 }
 
-function ScheduleTab({ token, doctorId }) {
-  const today = new Date().toISOString().split('T')[0]
-  const [date, setDate] = useState(today)
-  const [schedule, setSchedule] = useState(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setLoading(true)
-    apiFetch('get', `/doctors/${doctorId}/slots?date=${date}`, token)
-      .then(r => setSchedule(r.data))
-      .catch(() => setSchedule(null))
-      .finally(() => setLoading(false))
-  }, [token, doctorId, date])
-
-  const slots = schedule?.slots || []
-  const booked = slots.filter(s => s.appointment_id).length
-  const free   = slots.filter(s => !s.appointment_id).length
-
+function ScheduleTab({ token, doctorId, doctorName }) {
   return (
-    <div className="space-y-5">
-      {/* Date picker + stats */}
-      <div className="rounded-2xl p-4" style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)' }}>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)}
-          className="w-full rounded-xl px-3 py-2.5 text-sm font-medium mb-4 focus:outline-none border-0"
-          style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', colorScheme: 'dark' }} />
-        <div className="grid grid-cols-2 gap-3">
-          {[{ v: booked, l: 'Занято', i: 'event_busy', c: '#90caf9' }, { v: free, l: 'Свободно', i: 'event_available', c: '#a5d6a7' }].map(x => (
-            <div key={x.l} className="rounded-xl p-3 text-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              <span className="material-symbols-outlined text-2xl block mb-1" style={{ color: x.c, fontVariationSettings:"'FILL' 1" }}>{x.i}</span>
-              <div className="text-2xl font-bold text-white">{x.v}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{x.l}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {loading ? <Spinner /> : slots.length === 0 ? (
-        <EmptyState icon="calendar_today" text="Расписание не настроено на эту дату" />
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-          {slots.map((slot, i) => (
-            <div key={i} className="rounded-2xl p-3 text-center border"
-              style={slot.appointment_id
-                ? { background: 'rgba(21,101,192,0.08)', borderColor: 'rgba(21,101,192,0.2)', color: '#1565c0' }
-                : { background: 'rgba(0,151,167,0.06)', borderColor: 'rgba(0,151,167,0.2)', color: '#00796b' }}>
-              <div className="text-base font-bold">{slot.time}</div>
-              {slot.patient_name && <div className="text-xs mt-0.5 truncate opacity-80">{slot.patient_name}</div>}
-              {!slot.appointment_id && <div className="text-xs opacity-50 mt-0.5">Свободно</div>}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <WeekScheduleSection
+      token={token}
+      mode="self"
+      selfDoctorId={doctorId}
+      selfDoctorName={doctorName}
+    />
   )
 }
 
@@ -299,7 +255,7 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               Расписание и записи доступны после привязки кабинета администратором.
             </div>
           )}
-          {tab === 'schedule'     && doctorId && <ScheduleTab token={adminToken} doctorId={doctorId} />}
+          {tab === 'schedule'     && doctorId && <ScheduleTab token={adminToken} doctorId={doctorId} doctorName={doctorInfo?.full_name || userName} />}
           {tab === 'appointments' && doctorId && <AppointmentsTab token={adminToken} doctorId={doctorId} />}
           {tab === 'referrals'   && <ReferralsTab token={adminToken} />}
         </main>

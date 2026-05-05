@@ -50,6 +50,10 @@ from app.routers.public_clinic import router as public_clinic_router
 from app.routers.wiki import router as wiki_router
 from app.routers.reviews import router as reviews_router
 from app.routers.inter_clinic_invoices import router as ici_router
+from app.routers.medcard import router as medcard_router
+from app.routers.patient_documents import router as patient_documents_router
+from app.routers.prescriptions import router as prescriptions_router
+from app.routers.vitals import router as vitals_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -712,6 +716,10 @@ app.include_router(cms_router)
 app.include_router(acts_router)
 app.include_router(public_booking_router)
 app.include_router(public_clinic_router)
+app.include_router(medcard_router)
+app.include_router(patient_documents_router)
+app.include_router(prescriptions_router)
+app.include_router(vitals_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

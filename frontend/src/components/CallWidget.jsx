@@ -7,12 +7,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
+import { startRingback, stopRingback, startRingtone, stopRingtone, stopAllTones } from '../lib/callTones'
 
 const DEFAULT_RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
   ],
+  // bundle + transport policy для надёжности соединения
+  bundlePolicy: 'max-bundle',
+  rtcpMuxPolicy: 'require',
 }
 const STATUS_COLOR = { online:'bg-emerald-400', busy:'bg-red-400', away:'bg-amber-400', offline:'bg-gray-300' }
 const STATUS_LABEL = { online:'Онлайн', busy:'Занят', away:'Не на месте', offline:'Не в сети' }
@@ -36,6 +40,8 @@ export default function CallWidget() {
   const pingRef        = useRef(null)
   const pcRef          = useRef(null)
   const localStreamRef = useRef(null)
+  const remoteStreamRef = useRef(null)   // персистентный поток для удалённых треков
+  const remoteAudioRef = useRef(null)    // <audio> для гарантированного воспроизведения голоса
   const localVideoRef  = useRef(null)
   const remoteVideoRef = useRef(null)
   const pendingIce     = useRef([])
@@ -160,22 +166,58 @@ export default function CallWidget() {
     pendingIce.current = []
     const pc = new RTCPeerConnection(iceConfigRef.current)
     pcRef.current = pc
+
+    // Персистентный поток — копим в нём входящие треки и переаттачим
+    // в video/audio теги при их монтировании (см. useEffect ниже).
+    const remoteStream = new MediaStream()
+    remoteStreamRef.current = remoteStream
+
     pc.onicecandidate = (e) => {
       if (e.candidate) sendWs({ type: 'ice_candidate', target_id: targetId, candidate: e.candidate.toJSON() })
     }
     pc.ontrack = (e) => {
-      if (remoteVideoRef.current && e.streams[0]) remoteVideoRef.current.srcObject = e.streams[0]
+      // Добавляем именно track (на Safari/Firefox e.streams может быть пустым)
+      if (e.track) {
+        try { remoteStream.addTrack(e.track) } catch {}
+      }
+      // Если ref уже доступен — присваиваем сразу
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream
+      }
+      if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
+        remoteAudioRef.current.srcObject = remoteStream
+      }
     }
     pc.onconnectionstatechange = () => {
       if (['failed','disconnected','closed'].includes(pc.connectionState)) endCall()
+      else if (pc.connectionState === 'connected') {
+        // соединение установлено — гасим гудки
+        stopAllTones()
+      }
+    }
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        try { pc.restartIce() } catch {}
+      }
     }
     return pc
   }
 
   const getMedia = async (callType) => {
     const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: callType === 'video' ? { width: 1280, height: 720, facingMode: 'user' } : false,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: 48000,
+      },
+      video: callType === 'video' ? {
+        width:  { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 24 },
+        facingMode: 'user',
+      } : false,
     })
     localStreamRef.current = stream
     if (localVideoRef.current) localVideoRef.current.srcObject = stream
@@ -183,11 +225,17 @@ export default function CallWidget() {
   }
 
   const cleanupMedia = () => {
+    stopAllTones()
     localStreamRef.current?.getTracks().forEach(t => t.stop())
     localStreamRef.current = null
+    if (remoteStreamRef.current) {
+      try { remoteStreamRef.current.getTracks().forEach(t => t.stop()) } catch {}
+      remoteStreamRef.current = null
+    }
     if (pcRef.current) { pcRef.current.close(); pcRef.current = null }
     if (localVideoRef.current)  localVideoRef.current.srcObject = null
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null
     pendingIce.current = []
   }
 
@@ -258,6 +306,40 @@ export default function CallWidget() {
     setCamOn(v => !v)
   }
 
+  // ── Звуковые сигналы: гудок (исходящий) и мелодия (входящий) ──────────────
+  useEffect(() => {
+    if (outgoing && !active) startRingback()
+    else stopRingback()
+    return () => stopRingback()
+  }, [outgoing, active])
+
+  useEffect(() => {
+    if (incoming) startRingtone()
+    else stopRingtone()
+    return () => stopRingtone()
+  }, [incoming])
+
+  // На случай выгрузки компонента/закрытия страницы — глушим всё
+  useEffect(() => () => stopAllTones(), [])
+
+  // ── Реаттач удалённого потока к видео/аудио элементам при их монтаже ───────
+  // (overlay рендерится позже, чем приходит ontrack — без эффекта видео не виден)
+  useEffect(() => {
+    const s = remoteStreamRef.current
+    if (!s) return
+    if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== s) {
+      remoteVideoRef.current.srcObject = s
+      remoteVideoRef.current.play?.().catch(() => {})
+    }
+    if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== s) {
+      remoteAudioRef.current.srcObject = s
+      remoteAudioRef.current.play?.().catch(() => {})
+    }
+    if (localVideoRef.current && localStreamRef.current && localVideoRef.current.srcObject !== localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current
+    }
+  })
+
   if (!token || !user) return null  // не показываем без авторизации
 
   const isVideo = (active || outgoing || incoming)?.call_type === 'video'
@@ -266,6 +348,10 @@ export default function CallWidget() {
 
   return (
     <>
+      {/* Скрытый <audio> — всегда смонтирован, чтобы голос не пропадал
+         при переключении между UI-режимами (видеооверлей ↔ компактная карточка). */}
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+
       {/* ── Входящий звонок ─────────────────────────────────────────────── */}
       {incoming && (
         <div className="fixed inset-0 z-[60] flex items-end justify-center pb-28 pointer-events-none">
@@ -305,7 +391,7 @@ export default function CallWidget() {
         <div className="fixed inset-0 z-50 bg-black flex flex-col">
           <div className="relative flex-1 flex items-center justify-center overflow-hidden">
             {/* Удалённое видео */}
-            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
             {/* Заглушка */}
             {!active && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900">
@@ -350,7 +436,7 @@ export default function CallWidget() {
       {/* ── Аудиозвонок: компактная карточка ────────────────────────────── */}
       {callActive && !isVideo && (
         <div className="fixed bottom-56 right-4 z-50 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4">
-          <video ref={remoteVideoRef} autoPlay playsInline style={{ display:'none' }} />
+          <video ref={remoteVideoRef} autoPlay playsInline muted style={{ display:'none' }} />
           <video ref={localVideoRef}  autoPlay playsInline muted style={{ display:'none' }} />
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">

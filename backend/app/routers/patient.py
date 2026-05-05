@@ -783,6 +783,68 @@ async def _session_or_401(db: AsyncSession, t: str):
     return session
 
 
+# ── Записи пациента (все: активные + завершённые) ────────────────────────────
+
+@router.get("/appointments")
+async def list_patient_appointments(
+    t: str = Query(..., description="patient_session_token"),
+    include_past: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Все записи пациента к врачу (активные и прошлые), отсортированы по дате (свежие сверху).
+    Используется во вкладке «Записи» PatientCabinet.
+    """
+    from app.models.doctor import Appointment as _Apt, AppointmentStatus as _AS, Doctor as _Doc
+    from app.models.clinic import Clinic as _Cl
+
+    session = await _session_or_401(db, t)
+    phone_n = normalize_phone(session.phone)
+
+    statuses = [_AS.PENDING, _AS.CONFIRMED]
+    if include_past:
+        statuses += [_AS.COMPLETED, _AS.CANCELLED, _AS.NO_SHOW]
+
+    q = select(_Apt).where(_Apt.status.in_(statuses))
+    if session.tenant_id:
+        q = q.where(_Apt.tenant_id == session.tenant_id)
+    q = q.order_by(_Apt.appointment_date.desc(), _Apt.start_time.desc()).limit(100)
+    rows = (await db.execute(q)).scalars().all()
+
+    out: list[dict] = []
+    for apt in rows:
+        if normalize_phone(apt.patient_phone) != phone_n:
+            continue
+        doctor = (await db.execute(select(_Doc).where(_Doc.id == apt.doctor_id))).scalar_one_or_none()
+        clinic = (await db.execute(select(_Cl).where(_Cl.id == apt.clinic_id))).scalar_one_or_none()
+        # Признак прошедшего приёма
+        try:
+            apt_dt = datetime.combine(apt.appointment_date, apt.start_time)
+            is_past = apt_dt < datetime.utcnow()
+        except Exception:
+            is_past = False
+        out.append({
+            "id": str(apt.id),
+            "doctor_id": str(apt.doctor_id),
+            "doctor_name": doctor.full_name if doctor else "—",
+            "specialty": doctor.specialty if doctor else None,
+            "doctor_photo": doctor.photo_url if doctor else None,
+            "clinic_id": str(apt.clinic_id),
+            "clinic_name": clinic.name if clinic else "—",
+            "clinic_address": clinic.address if clinic else None,
+            "clinic_phone": clinic.phone if clinic else None,
+            "appointment_date": apt.appointment_date.isoformat() if apt.appointment_date else None,
+            "start_time": str(apt.start_time)[:5] if apt.start_time else None,
+            "end_time":   str(apt.end_time)[:5]   if apt.end_time   else None,
+            "status": apt.status.value if hasattr(apt.status, "value") else str(apt.status),
+            "short_code": apt.short_code,
+            "qr_code": apt.qr_code,
+            "is_past": is_past,
+            "notes": apt.notes,
+        })
+    return out
+
+
 @router.get("/family")
 async def family_list(
     t: str = Query(..., description="patient_session_token"),
