@@ -8,7 +8,7 @@ import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 
-const RTC_CONFIG = {
+const DEFAULT_RTC_CONFIG = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -39,6 +39,7 @@ export default function CallWidget() {
   const localVideoRef  = useRef(null)
   const remoteVideoRef = useRef(null)
   const pendingIce     = useRef([])
+  const iceConfigRef   = useRef(DEFAULT_RTC_CONFIG)
 
   const h = { Authorization: `Bearer ${token}` }
 
@@ -50,6 +51,9 @@ export default function CallWidget() {
         setCaps(r.data)
         setMode(r.data.audio ? 'audio' : 'video')
       })
+      .catch(() => {})
+    axios.get(API_BASE + '/presence/ice-config', { headers: h })
+      .then(r => { if (r.data?.iceServers) iceConfigRef.current = { iceServers: r.data.iceServers } })
       .catch(() => {})
   }, [token])
 
@@ -154,7 +158,7 @@ export default function CallWidget() {
   const createPC = (targetId) => {
     if (pcRef.current) pcRef.current.close()
     pendingIce.current = []
-    const pc = new RTCPeerConnection(RTC_CONFIG)
+    const pc = new RTCPeerConnection(iceConfigRef.current)
     pcRef.current = pc
     pc.onicecandidate = (e) => {
       if (e.candidate) sendWs({ type: 'ice_candidate', target_id: targetId, candidate: e.candidate.toJSON() })

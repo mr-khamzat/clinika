@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     superadmin_password: str = "khamzat88712"
     superadmin_full_name: str = "Системный администратор"
 
+    # TURN/STUN для WebRTC (REST API time-limited credentials)
+    turn_host: str = ""
+    turn_port: int = 3478
+    turn_secret: str = ""
+    turn_ttl: int = 3600
+
     class Config:
         env_file = ".env"
 

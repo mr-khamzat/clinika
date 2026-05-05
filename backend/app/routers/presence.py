@@ -600,6 +600,35 @@ async def upsert_notification_setting(
     return {"ok": True}
 
 
+@router.get("/ice-config")
+async def ice_config(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Возвращает iceServers для WebRTC: STUN + TURN с time-limited credentials.
+    Пароль валиден turn_ttl секунд (default 1ч), генерится через HMAC-SHA1
+    от static-auth-secret coturn — стандарт RFC TURN REST API.
+    """
+    import hmac, hashlib, base64, time
+    from app.config import settings
+
+    servers = [
+        {"urls": "stun:stun.l.google.com:19302"},
+        {"urls": "stun:stun1.l.google.com:19302"},
+    ]
+
+    if settings.turn_host and settings.turn_secret:
+        ttl = settings.turn_ttl
+        username = f"{int(time.time()) + ttl}:{current_user.id}"
+        h = hmac.new(settings.turn_secret.encode(), username.encode(), hashlib.sha1)
+        credential = base64.b64encode(h.digest()).decode()
+        turn_url_udp = f"turn:{settings.turn_host}:{settings.turn_port}?transport=udp"
+        turn_url_tcp = f"turn:{settings.turn_host}:{settings.turn_port}?transport=tcp"
+        servers.append({"urls": [turn_url_udp, turn_url_tcp], "username": username, "credential": credential})
+
+    return {"iceServers": servers, "ttl": settings.turn_ttl if settings.turn_secret else 0}
+
+
 @router.get("/can-call")
 async def can_call(
     current_user: User = Depends(get_current_user),
