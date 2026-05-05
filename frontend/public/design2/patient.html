@@ -1,0 +1,2235 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>КлиникСеть · Кабинет пациента</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Patient cabinet — premium dark theme */
+:root {
+  --hue: 215;
+
+  /* Surfaces */
+  --bg: oklch(0.16 0.012 var(--hue));
+  --bg-1: oklch(0.19 0.014 var(--hue));
+  --bg-2: oklch(0.22 0.016 var(--hue));
+  --bg-3: oklch(0.26 0.018 var(--hue));
+  --surface: oklch(0.21 0.014 var(--hue));
+  --surface-hi: oklch(0.25 0.018 var(--hue));
+  --border: oklch(0.30 0.014 var(--hue) / 0.6);
+  --border-strong: oklch(0.36 0.018 var(--hue));
+  --line: oklch(0.30 0.014 var(--hue) / 0.4);
+
+  /* Text */
+  --fg: oklch(0.97 0.005 var(--hue));
+  --fg-2: oklch(0.78 0.012 var(--hue));
+  --fg-3: oklch(0.62 0.014 var(--hue));
+  --fg-4: oklch(0.48 0.014 var(--hue));
+
+  /* Accent (teal-blue premium) */
+  --accent: oklch(0.78 0.14 200);
+  --accent-2: oklch(0.86 0.13 180);
+  --accent-soft: oklch(0.78 0.14 200 / 0.14);
+  --accent-line: oklch(0.78 0.14 200 / 0.32);
+  --accent-fg: oklch(0.20 0.04 220);
+
+  /* Semantic */
+  --good: oklch(0.82 0.16 150);
+  --good-soft: oklch(0.82 0.16 150 / 0.14);
+  --warn: oklch(0.85 0.14 75);
+  --warn-soft: oklch(0.85 0.14 75 / 0.14);
+  --bad: oklch(0.74 0.16 25);
+  --bad-soft: oklch(0.74 0.16 25 / 0.14);
+  --gold: oklch(0.85 0.14 85);
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-lg: 22px;
+
+  --shadow-sm: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-md: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 24px 60px oklch(0 0 0 / 0.5);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  font-family: 'Golos Text', -apple-system, system-ui, sans-serif;
+  background: var(--bg); color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  font-size: 14.5px; line-height: 1.5;
+  min-height: 100vh;
+}
+button, input, select, textarea { font-family: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+a { color: inherit; text-decoration: none; }
+input { outline: none; }
+
+/* ============ APP SHELL ============ */
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr 340px;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 60% 40% at 80% 0%, oklch(0.78 0.14 200 / 0.06), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 0% 100%, oklch(0.86 0.13 180 / 0.04), transparent 60%),
+    var(--bg);
+}
+
+/* ============ SIDEBAR ============ */
+.side {
+  border-right: 1px solid var(--border);
+  padding: 22px 14px;
+  display: flex; flex-direction: column;
+  background: oklch(0.18 0.014 var(--hue) / 0.6);
+  backdrop-filter: blur(20px);
+}
+.side-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 10px 22px;
+}
+.side-brand-mark {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center;
+  color: var(--accent-fg); font-weight: 700; font-size: 14px;
+  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.06), 0 8px 20px oklch(0.78 0.14 200 / 0.25);
+}
+.side-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.side-brand-name span { display: block; font-size: 11px; color: var(--fg-3); font-weight: 500; }
+
+.side-section {
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--fg-4); text-transform: uppercase;
+  padding: 14px 10px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 11px;
+  padding: 8px 10px; border-radius: 9px;
+  font-size: 13.5px; color: var(--fg-2); font-weight: 500;
+  cursor: pointer; user-select: none;
+  margin-bottom: 1px;
+  position: relative;
+  transition: background .12s, color .12s;
+}
+.nav-item:hover { background: oklch(1 0 0 / 0.04); color: var(--fg); }
+.nav-item[data-active="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.nav-item[data-active="true"]::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
+  background: var(--accent); border-radius: 2px;
+}
+.nav-item-icon {
+  width: 18px; height: 18px; flex-shrink: 0;
+  display: grid; place-items: center;
+  font-size: 14px;
+}
+.nav-item-badge {
+  margin-left: auto;
+  background: var(--accent); color: var(--accent-fg);
+  font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px;
+  min-width: 18px; text-align: center;
+}
+.nav-item-badge.warn { background: var(--warn); color: oklch(0.2 0.04 80); }
+
+.side-foot {
+  margin-top: auto;
+  padding: 14px 10px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============ MAIN ============ */
+.main {
+  min-width: 0;
+  display: flex; flex-direction: column;
+}
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border);
+  background: oklch(0.18 0.014 var(--hue) / 0.7);
+  backdrop-filter: blur(20px);
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar-search {
+  flex: 1; max-width: 520px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 9px 14px;
+  color: var(--fg-3);
+  font-size: 13px;
+}
+.topbar-search input {
+  flex: 1; border: 0; background: transparent;
+  font-size: 13.5px; color: var(--fg);
+}
+.topbar-search input::placeholder { color: var(--fg-4); }
+.topbar-kbd {
+  padding: 2px 6px; border-radius: 5px; font-size: 10.5px;
+  background: var(--bg-3); color: var(--fg-3);
+  border: 1px solid var(--border);
+  font-family: 'SF Mono', Consolas, monospace;
+}
+.topbar-icon-btn {
+  width: 38px; height: 38px; border-radius: 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  display: grid; place-items: center;
+  color: var(--fg-2); font-size: 16px;
+  position: relative;
+}
+.topbar-icon-btn:hover { background: var(--bg-3); color: var(--fg); }
+.topbar-icon-btn .pip {
+  position: absolute; top: 8px; right: 8px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0 2px var(--bg-2);
+}
+.topbar-avatar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 5px 10px 5px 5px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  cursor: pointer;
+}
+.topbar-avatar:hover { background: var(--bg-3); }
+.topbar-avatar-img {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg, oklch(0.7 0.14 30), oklch(0.65 0.16 60));
+  display: grid; place-items: center;
+  color: #fff; font-size: 11px; font-weight: 700;
+}
+.topbar-avatar-name { font-size: 13px; font-weight: 500; }
+
+.content {
+  flex: 1; padding: 28px;
+  overflow-x: hidden;
+}
+.page-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; margin-bottom: 28px;
+}
+.page-title {
+  font-size: 28px; font-weight: 600;
+  letter-spacing: -0.025em; line-height: 1.1;
+}
+.page-sub {
+  font-size: 14px; color: var(--fg-3); margin-top: 6px;
+}
+
+/* ============ CARDS ============ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.card-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.card-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.card-sub { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+
+/* ============ BUTTONS ============ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 16px; border-radius: 10px;
+  font-size: 13.5px; font-weight: 600;
+  transition: background .12s, transform .08s;
+  white-space: nowrap;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary {
+  background: var(--accent); color: var(--accent-fg);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 0.12) inset, 0 6px 16px oklch(0.78 0.14 200 / 0.25);
+}
+.btn-primary:hover { background: oklch(0.83 0.13 200); }
+.btn-secondary {
+  background: var(--bg-2); color: var(--fg);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg-3); }
+.btn-ghost { color: var(--fg-2); }
+.btn-ghost:hover { background: oklch(1 0 0 / 0.04); color: var(--fg); }
+.btn-sm { padding: 6px 12px; font-size: 12.5px; border-radius: 8px; }
+.btn-lg { padding: 13px 22px; font-size: 14.5px; border-radius: 11px; }
+
+/* ============ CHIPS / PILLS ============ */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 500;
+  background: var(--bg-2); color: var(--fg-2);
+  border: 1px solid var(--border);
+}
+.chip-good { background: var(--good-soft); color: var(--good); border-color: var(--good-soft); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-soft); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-soft); }
+.chip-accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* ============ DASHBOARD ============ */
+.greeting {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(ellipse 60% 100% at 100% 50%, oklch(0.78 0.14 200 / 0.18), transparent 70%),
+    linear-gradient(135deg, var(--bg-1), var(--bg-2));
+  border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+}
+.greeting h2 {
+  font-size: 26px; font-weight: 600;
+  letter-spacing: -0.02em; line-height: 1.15;
+  margin-bottom: 6px;
+}
+.greeting p { color: var(--fg-3); font-size: 14px; max-width: 520px; }
+.greeting-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.kpi-row {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 12px; margin-bottom: 16px;
+}
+.kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.kpi-label { font-size: 11.5px; color: var(--fg-3); font-weight: 500; }
+.kpi-value {
+  font-size: 22px; font-weight: 600; letter-spacing: -0.02em;
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.kpi-delta { font-size: 11px; color: var(--good); margin-top: 2px; font-weight: 500; }
+.kpi-delta.bad { color: var(--bad); }
+
+/* Appointment card */
+.appt-card {
+  position: relative;
+  background:
+    radial-gradient(ellipse 50% 70% at 100% 0%, oklch(0.78 0.14 200 / 0.12), transparent 60%),
+    var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex; gap: 18px;
+}
+.appt-date {
+  width: 64px; flex-shrink: 0;
+  text-align: center;
+  padding: 12px 0;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.appt-date-day { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent); }
+.appt-date-mon { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-top: -2px; }
+.appt-date-time { font-size: 11.5px; color: var(--fg-2); margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--accent-line); font-weight: 500; }
+.appt-info { flex: 1; min-width: 0; }
+.appt-info h4 { font-size: 16px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
+.appt-meta { color: var(--fg-3); font-size: 12.5px; margin-bottom: 4px; }
+.appt-doc {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+.appt-doc-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(135deg, oklch(0.55 0.14 280), oklch(0.6 0.14 230));
+  display: grid; place-items: center;
+  font-size: 9.5px; font-weight: 700; color: #fff;
+}
+.appt-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+/* Quick actions */
+.quick-actions {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+}
+.qa {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 14px;
+  text-align: left;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: all .15s;
+}
+.qa:hover { background: var(--surface-hi); border-color: var(--border-strong); transform: translateY(-1px); }
+.qa-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center;
+  font-size: 16px;
+}
+.qa-label { font-size: 13px; font-weight: 600; }
+.qa-sub { font-size: 11.5px; color: var(--fg-3); }
+
+/* Health snapshot */
+.vitals { display: grid; gap: 10px; }
+.vital-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.vital-row:last-child { border-bottom: 0; }
+.vital-icon {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--bg-2);
+  display: grid; place-items: center;
+  font-size: 14px;
+}
+.vital-label { flex: 1; font-size: 13px; }
+.vital-label small { display: block; font-size: 11px; color: var(--fg-3); }
+.vital-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Loyalty card */
+.loyalty {
+  position: relative;
+  border-radius: var(--radius);
+  padding: 18px;
+  background:
+    radial-gradient(ellipse 80% 100% at 0% 0%, oklch(0.85 0.14 85 / 0.18), transparent 65%),
+    linear-gradient(135deg, oklch(0.22 0.03 85), oklch(0.18 0.014 215));
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.loyalty::after {
+  content: ''; position: absolute; top: -40px; right: -40px;
+  width: 160px; height: 160px; border-radius: 50%;
+  background: radial-gradient(circle, oklch(0.85 0.14 85 / 0.18), transparent 70%);
+  pointer-events: none;
+}
+.loyalty-tier {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  background: oklch(0.85 0.14 85 / 0.14);
+  color: var(--gold);
+  border: 1px solid oklch(0.85 0.14 85 / 0.3);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.loyalty-balance { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.loyalty-balance small { font-size: 14px; color: var(--fg-3); font-weight: 500; margin-left: 4px; }
+.loyalty-prog {
+  margin-top: 14px;
+  background: oklch(1 0 0 / 0.06);
+  height: 6px; border-radius: 999px; overflow: hidden;
+}
+.loyalty-prog-fill { height: 100%; background: linear-gradient(90deg, var(--gold), oklch(0.92 0.12 65)); border-radius: 999px; }
+.loyalty-foot { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--fg-3); margin-top: 8px; }
+
+/* List items */
+.list-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 0; border-top: 1px solid var(--line);
+}
+.list-row:first-child { border-top: 0; padding-top: 0; }
+.list-row:last-child { padding-bottom: 0; }
+
+/* ============ AI BOT ============ */
+.bot-fab {
+  position: fixed; bottom: 22px; right: 22px;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: var(--accent-fg);
+  display: grid; place-items: center;
+  box-shadow: 0 8px 32px oklch(0.78 0.14 200 / 0.4), 0 0 0 4px oklch(0.78 0.14 200 / 0.12);
+  z-index: 50;
+  font-size: 22px;
+}
+.bot-fab::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  background: var(--accent); opacity: 0.2; animation: ring 2.4s ease-out infinite;
+}
+@keyframes ring { 0% { transform: scale(1); opacity: 0.3; } 100% { transform: scale(1.6); opacity: 0; } }
+.bot-panel {
+  position: fixed; bottom: 22px; right: 22px;
+  width: 360px; max-height: 560px;
+  background: var(--bg-1); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  animation: bot-in .25s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes bot-in { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: none; } }
+.bot-hd {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.bot-hd-avatar {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; color: var(--accent-fg);
+  font-weight: 700; font-size: 12px;
+}
+.bot-hd-info { flex: 1; }
+.bot-hd-info-name { font-size: 13.5px; font-weight: 600; }
+.bot-hd-info-status { font-size: 11px; color: var(--good); display: flex; align-items: center; gap: 5px; }
+.bot-hd-info-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+.bot-x {
+  width: 28px; height: 28px; border-radius: 7px;
+  display: grid; place-items: center; color: var(--fg-3);
+}
+.bot-x:hover { background: var(--bg-2); color: var(--fg); }
+.bot-msgs {
+  flex: 1; overflow-y: auto;
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.bot-msg {
+  max-width: 84%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  font-size: 13px; line-height: 1.45;
+}
+.bot-msg-bot {
+  align-self: flex-start;
+  background: var(--bg-2); color: var(--fg);
+  border-bottom-left-radius: 4px;
+}
+.bot-msg-me {
+  align-self: flex-end;
+  background: var(--accent); color: var(--accent-fg);
+  border-bottom-right-radius: 4px;
+}
+.bot-suggest {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 4px 16px 0;
+}
+.bot-suggest button {
+  padding: 6px 11px; font-size: 12px; font-weight: 500;
+  background: var(--bg-2); color: var(--fg-2);
+  border: 1px solid var(--border); border-radius: 999px;
+}
+.bot-suggest button:hover { background: var(--bg-3); color: var(--fg); }
+.bot-input {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.bot-input input {
+  flex: 1; background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 12px;
+  font-size: 13px;
+}
+.bot-input input:focus { border-color: var(--accent-line); }
+.bot-send {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--accent); color: var(--accent-fg);
+  display: grid; place-items: center;
+  font-size: 14px;
+}
+
+/* ============ NOTIFICATIONS DRAWER ============ */
+.notify-rail {
+  border-left: 1px solid var(--border);
+  background: oklch(0.18 0.014 var(--hue) / 0.7);
+  padding: 22px 22px 110px;
+  display: flex; flex-direction: column; gap: 16px;
+  overflow-y: auto;
+  max-height: 100vh;
+  position: sticky; top: 0;
+}
+.notify-hd {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.notify-hd h3 { font-size: 15px; font-weight: 600; }
+.notif {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex; gap: 11px;
+  position: relative;
+}
+.notif.unread::before {
+  content: ''; position: absolute; left: -1px; top: 14px; bottom: 14px;
+  width: 2px; background: var(--accent);
+  border-radius: 2px;
+}
+.notif-icon {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: var(--accent-soft); color: var(--accent);
+  display: grid; place-items: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.notif-icon.warn { background: var(--warn-soft); color: var(--warn); }
+.notif-icon.good { background: var(--good-soft); color: var(--good); }
+.notif-body { flex: 1; min-width: 0; }
+.notif-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.notif-text { font-size: 12.5px; color: var(--fg-3); line-height: 1.45; }
+.notif-time { font-size: 11px; color: var(--fg-4); margin-top: 4px; }
+
+/* ============ BOOKING FLOW ============ */
+.booking-stage {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.booking-steps {
+  display: flex; align-items: center; gap: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.booking-step {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--fg-3); font-weight: 500;
+}
+.booking-step + .booking-step::before {
+  content: ''; width: 24px; height: 1px;
+  background: var(--border); margin: 0 12px;
+}
+.booking-step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 11px; font-weight: 700;
+  background: var(--bg-3); color: var(--fg-3);
+  border: 1px solid var(--border);
+}
+.booking-step.active .booking-step-num { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.booking-step.active { color: var(--fg); }
+.booking-step.done .booking-step-num { background: var(--good); color: oklch(0.18 0.04 150); border-color: var(--good); }
+.booking-step.done { color: var(--fg-2); }
+
+.booking-body { padding: 24px; }
+.booking-grid {
+  display: grid; grid-template-columns: 280px 1fr;
+  gap: 20px;
+}
+
+/* Filters */
+.filter-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.filter-group { margin-bottom: 18px; }
+.filter-group:last-child { margin-bottom: 0; }
+.filter-label { font-size: 11.5px; font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
+.chip-group { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-toggle {
+  padding: 6px 11px; border-radius: 8px;
+  font-size: 12px; font-weight: 500;
+  background: var(--bg-2); color: var(--fg-2);
+  border: 1px solid var(--border);
+}
+.chip-toggle:hover { background: var(--bg-3); color: var(--fg); }
+.chip-toggle[data-active="true"] {
+  background: var(--accent-soft); color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+/* Doctor cards */
+.doc-list { display: grid; gap: 12px; }
+.doc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex; gap: 14px;
+  transition: all .12s;
+  cursor: pointer;
+}
+.doc-card:hover { border-color: var(--border-strong); background: var(--surface-hi); }
+.doc-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.doc-photo {
+  width: 64px; height: 64px; border-radius: 12px;
+  background: linear-gradient(135deg, oklch(0.5 0.13 280), oklch(0.55 0.14 230));
+  display: grid; place-items: center;
+  color: #fff; font-size: 18px; font-weight: 600;
+  flex-shrink: 0;
+}
+.doc-photo.p2 { background: linear-gradient(135deg, oklch(0.55 0.13 350), oklch(0.6 0.13 30)); }
+.doc-photo.p3 { background: linear-gradient(135deg, oklch(0.45 0.13 200), oklch(0.55 0.14 160)); }
+.doc-photo.p4 { background: linear-gradient(135deg, oklch(0.55 0.14 120), oklch(0.6 0.14 80)); }
+.doc-info { flex: 1; min-width: 0; }
+.doc-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+.doc-spec { font-size: 12.5px; color: var(--fg-3); margin-top: 2px; }
+.doc-meta { display: flex; align-items: center; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--fg-2); }
+.doc-meta b { color: var(--fg); font-weight: 600; }
+.doc-meta .gold { color: var(--gold); }
+.doc-price { text-align: right; flex-shrink: 0; }
+.doc-price-amount { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.doc-price-from { font-size: 11px; color: var(--fg-3); }
+
+/* Calendar */
+.cal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.cal-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 16px; }
+.cal-day {
+  padding: 10px 0; border-radius: 10px;
+  text-align: center;
+  background: var(--bg-2); border: 1px solid var(--border);
+  cursor: pointer;
+}
+.cal-day:hover { background: var(--bg-3); }
+.cal-day.disabled { opacity: 0.35; cursor: default; }
+.cal-day.selected { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.cal-day-dow { font-size: 10.5px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.cal-day.selected .cal-day-dow { color: var(--accent-fg); }
+.cal-day-num { font-size: 16px; font-weight: 600; margin-top: 2px; letter-spacing: -0.02em; }
+.cal-day-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); margin: 4px auto 0; }
+.cal-day.selected .cal-day-dot { background: var(--accent-fg); }
+.cal-day.disabled .cal-day-dot { opacity: 0; }
+
+.slots-label { font-size: 12px; color: var(--fg-3); margin-bottom: 10px; }
+.slot-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.slot {
+  padding: 10px 0; border-radius: 9px;
+  text-align: center;
+  background: var(--bg-2); border: 1px solid var(--border);
+  font-size: 12.5px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.slot:hover { background: var(--bg-3); border-color: var(--border-strong); }
+.slot.taken { opacity: 0.35; background: var(--bg-1); cursor: not-allowed; text-decoration: line-through; }
+.slot.selected { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+
+/* Confirmation */
+.confirm-grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+.confirm-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+.confirm-panel h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 18px; }
+.confirm-row { display: flex; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.confirm-row:first-of-type { border-top: 0; padding-top: 0; }
+.confirm-row span:first-child { color: var(--fg-3); }
+.confirm-row span:last-child { font-weight: 600; }
+
+.confirm-summary { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+.confirm-pricing { padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 16px 0; }
+.confirm-pricing .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+.confirm-pricing .total { font-size: 18px; font-weight: 600; padding-top: 10px; margin-top: 6px; border-top: 1px solid var(--line); }
+
+/* Success */
+.success-stage {
+  text-align: center;
+  padding: 48px 24px;
+}
+.success-icon {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: var(--good-soft); color: var(--good);
+  display: grid; place-items: center;
+  font-size: 32px;
+  margin: 0 auto 20px;
+  border: 1px solid var(--good);
+}
+.success-stage h3 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
+.success-stage p { color: var(--fg-3); max-width: 420px; margin: 0 auto 24px; }
+.qr-box {
+  display: inline-flex; flex-direction: column; align-items: center;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 12px;
+}
+.qr-box svg { display: block; }
+.qr-box-label { font-size: 11.5px; color: var(--fg-3); }
+
+/* ============ RECORDS / ANALYZES / CHAT etc shared ============ */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.tab {
+  padding: 10px 16px; font-size: 13px; font-weight: 500;
+  color: var(--fg-3);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab[data-active="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.tab:hover { color: var(--fg); }
+
+.timeline { display: grid; gap: 12px; }
+.tl-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+  display: grid; grid-template-columns: 80px 1fr auto;
+  gap: 16px; align-items: flex-start;
+}
+.tl-date { font-size: 12px; color: var(--fg-3); }
+.tl-date b { display: block; font-size: 14px; color: var(--fg); font-weight: 600; }
+.tl-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.tl-meta { font-size: 12.5px; color: var(--fg-3); }
+
+/* ============ MEDICAL CARD ============ */
+.med-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.med-grid > .card.span-2 { grid-column: 1 / -1; }
+.allergy-list, .vac-list { display: grid; gap: 10px; }
+.allergy-row, .vac-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; background: var(--bg-2);
+  border-radius: var(--radius-sm); border: 1px solid var(--border);
+  font-size: 13px;
+}
+.allergy-row .lvl { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+
+/* ============ ANALYSES ============ */
+.analysis-row {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  display: grid; grid-template-columns: 1fr auto auto auto auto;
+  gap: 14px; align-items: center;
+  margin-bottom: 8px;
+}
+.analysis-row:hover { background: var(--surface-hi); }
+.spark-svg { display: block; }
+
+/* ============ PROFILE ============ */
+.profile-hd {
+  display: flex; gap: 20px; align-items: center;
+  padding: 24px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 20px;
+}
+.profile-photo {
+  width: 80px; height: 80px; border-radius: 18px;
+  background: linear-gradient(135deg, oklch(0.7 0.14 30), oklch(0.65 0.16 60));
+  display: grid; place-items: center;
+  color: #fff; font-size: 26px; font-weight: 700;
+}
+
+/* ============ MOBILE PREVIEW ============ */
+.mobile-overlay {
+  position: fixed; inset: 0;
+  background: oklch(0 0 0 / 0.6);
+  backdrop-filter: blur(6px);
+  z-index: 200;
+  display: grid; place-items: center;
+  padding: 20px;
+}
+.mobile-frame {
+  width: 380px; height: 780px;
+  background: var(--bg);
+  border-radius: 48px;
+  border: 8px solid #0a0a0a;
+  box-shadow: 0 0 0 2px #1a1a1a, 0 40px 80px oklch(0 0 0 / 0.6);
+  overflow: hidden;
+  position: relative;
+  display: flex; flex-direction: column;
+}
+.mobile-status {
+  height: 38px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 26px; font-size: 12px; font-weight: 600;
+}
+.mobile-screen { flex: 1; overflow-y: auto; padding: 14px 16px 100px; }
+.mobile-tabbar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 78px;
+  background: oklch(0.17 0.014 var(--hue) / 0.92);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-around;
+  padding-top: 10px;
+}
+.mobile-tab {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-size: 10.5px; color: var(--fg-3); font-weight: 500;
+  padding: 4px 8px;
+}
+.mobile-tab[data-active="true"] { color: var(--accent); }
+.mobile-tab-icon { font-size: 18px; }
+.mobile-close {
+  position: absolute; top: 24px; right: 24px;
+  width: 40px; height: 40px; border-radius: 50%;
+  background: oklch(1 0 0 / 0.1); color: #fff;
+  display: grid; place-items: center;
+  font-size: 18px;
+  z-index: 10;
+}
+
+.mob-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+  margin-bottom: 10px;
+}
+
+/* responsive */
+@media (max-width: 1180px) {
+  .app { grid-template-columns: 240px 1fr; }
+  .notify-rail { display: none; }
+  .dash-grid { grid-template-columns: 1fr; }
+  .booking-grid { grid-template-columns: 1fr; }
+  .confirm-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  .side { display: none; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .quick-actions { grid-template-columns: 1fr 1fr; }
+  .topbar-search { display: none; }
+  .content { padding: 18px; }
+  .med-grid { grid-template-columns: 1fr; }
+}
+
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<style>
+.tw-panel { position: fixed; bottom: 22px; left: 22px; width: 280px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 24px 60px oklch(0 0 0 / 0.5); z-index: 70; padding: 14px 16px; font-size: 13px; }
+.tw-panel.collapsed { width: auto; padding: 8px 12px; }
+.tw-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tw-hd-title { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+.tw-x { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--fg-3); }
+.tw-x:hover { background: var(--bg-2); color: var(--fg); }
+.tw-section { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; color: var(--fg-4); text-transform: uppercase; margin: 12px 0 6px; }
+.tw-section:first-child { margin-top: 0; }
+.tw-radio { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 3px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 9px; }
+.tw-radio button { padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--fg-2); }
+.tw-radio button[data-on="true"] { background: var(--accent); color: var(--accent-fg); }
+.tw-btn { width: 100%; padding: 9px 12px; border-radius: 9px; background: var(--bg-2); border: 1px solid var(--border); color: var(--fg); font-size: 12.5px; font-weight: 500; }
+.tw-btn:hover { background: var(--bg-3); }
+.tw-fab { position: fixed; bottom: 22px; left: 22px; padding: 9px 14px; border-radius: 999px; background: var(--bg-1); border: 1px solid var(--border); box-shadow: 0 8px 20px oklch(0 0 0 / 0.4); font-size: 12.5px; font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 8px; z-index: 70; }
+.tw-fab:hover { background: var(--bg-2); }
+</style>
+<script type="text/babel">
+// Inline tweaks helpers (replaces external tweaks-panel.jsx)
+const { useState: __useState1 } = React;
+
+function useTweaks(defaults) {
+  const [v, setV] = __useState1(defaults);
+  const set = (k, val) => {
+    if (typeof k === 'object') {
+      setV(prev => ({ ...prev, ...k }));
+      try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: k }, '*'); } catch(e){}
+    } else {
+      setV(prev => ({ ...prev, [k]: val }));
+      try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [k]: val } }, '*'); } catch(e){}
+    }
+  };
+  return [v, set];
+}
+
+function TweaksPanel({ children }) {
+  const [open, setOpen] = __useState1(false);
+  const [available, setAvailable] = __useState1(false);
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === '__activate_edit_mode') { setOpen(true); setAvailable(true); }
+      if (e.data.type === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(e){}
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+  if (!open) {
+    return <button className="tw-fab" onClick={() => setOpen(true)}>⚙ Tweaks</button>;
+  }
+  return (
+    <div className="tw-panel">
+      <div className="tw-hd">
+        <div className="tw-hd-title">Tweaks</div>
+        <button className="tw-x" onClick={() => { setOpen(false); try { window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*'); } catch(e){} }}>×</button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function TweakSection({ label }) { return <div className="tw-section">{label}</div>; }
+
+function TweakRadio({ label, value, options, onChange }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {label && <div style={{ fontSize: 12, color: 'var(--fg-2)', marginBottom: 6 }}>{label}</div>}
+      <div className="tw-radio" style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}>
+        {options.map(o => (
+          <button key={o} data-on={value === o} onClick={() => onChange(o)}>{o}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TweakButton({ label, onClick }) {
+  return <button className="tw-btn" onClick={onClick}>{label}</button>;
+}
+
+Object.assign(window, { useTweaks, TweaksPanel, TweakSection, TweakRadio, TweakButton });
+</script>
+<script type="text/babel">
+// Patient cabinet — shared data + helpers
+// Exposed: window.PatientData, window.Icons, window.QRCode
+
+const PatientData = {
+  user: { name: 'Анна Соколова', initials: 'АС', card: 'А-104857', email: 'anna.s@mail.ru', phone: '+7 (916) 555-12-44', dob: '14.03.1991', age: 34 },
+
+  loyalty: { tier: 'Platinum', balance: 18420, nextTier: 'Diamond', toNext: 1580, ytdSpend: 184200, level: 92 },
+
+  vitals: [
+    { ico: '♡', label: 'Пульс покоя', sub: 'среднее за 7 дней', val: '64', unit: 'уд/мин' },
+    { ico: '⤧', label: 'Давление', sub: 'последнее измерение', val: '118/76' },
+    { ico: '⚖', label: 'Вес', sub: '−1.2 кг за 30 дней', val: '64.8', unit: 'кг' },
+    { ico: '☉', label: 'Сон', sub: '7ч 24м в среднем', val: '7.4', unit: 'ч' },
+  ],
+
+  upcoming: {
+    day: '14', month: 'мая', dow: 'вторник', time: '11:30',
+    doctor: 'Иванов Алексей Сергеевич', spec: 'Кардиолог · к.м.н.', initials: 'ИА',
+    clinic: 'Клиника на Тверской', cabinet: 'каб. 304', addr: 'ул. Тверская, 12',
+  },
+
+  doctors: [
+    { id: 1, name: 'Иванов Алексей Сергеевич', spec: 'Кардиолог · к.м.н.', exp: '14 лет', rating: 4.94, reviews: 312, price: 4900, clinic: 'Тверская', initials: 'ИА', cls: '' },
+    { id: 2, name: 'Соколова Мария Викторовна', spec: 'Терапевт', exp: '8 лет', rating: 4.87, reviews: 198, price: 3200, clinic: 'Чистые пруды', initials: 'СМ', cls: 'p2' },
+    { id: 3, name: 'Петров Дмитрий Олегович', spec: 'Эндокринолог', exp: '11 лет', rating: 4.91, reviews: 256, price: 4400, clinic: 'Тверская', initials: 'ПД', cls: 'p3' },
+    { id: 4, name: 'Фёдорова Анна Игоревна', spec: 'Невролог · к.м.н.', exp: '9 лет', rating: 4.96, reviews: 421, price: 5200, clinic: 'Юго-Западная', initials: 'ФА', cls: 'p4' },
+  ],
+
+  visitHistory: [
+    { date: '02.05.2026', doc: 'Соколова М. В.', spec: 'Терапевт', diag: 'Профилактический осмотр', status: 'done' },
+    { date: '14.03.2026', doc: 'Петров Д. О.', spec: 'Эндокринолог', diag: 'Контроль гормонального фона', status: 'done' },
+    { date: '08.02.2026', doc: 'Иванов А. С.', spec: 'Кардиолог', diag: 'ЭКГ + консультация', status: 'done' },
+    { date: '20.12.2025', doc: 'Фёдорова А. И.', spec: 'Невролог', diag: 'Головные боли — диагностика', status: 'done' },
+  ],
+
+  analyses: [
+    { name: 'Общий анализ крови', date: '02.05', vals: [4.2,4.1,4.3,4.0,4.2,4.4,4.3], ref: '4.0–5.0', unit: '×10¹²/л', status: 'norm' },
+    { name: 'Глюкоза', date: '02.05', vals: [5.4,5.2,5.6,5.3,5.5,5.4,5.2], ref: '3.9–5.6', unit: 'ммоль/л', status: 'norm' },
+    { name: 'ЛПНП холестерин', date: '02.05', vals: [3.1,3.2,3.4,3.3,3.6,3.7,3.8], ref: '< 3.0', unit: 'ммоль/л', status: 'attn' },
+    { name: 'Витамин D (25-OH)', date: '28.04', vals: [22,24,26,28,30,32,34], ref: '30–100', unit: 'нг/мл', status: 'norm' },
+    { name: 'ТТГ', date: '14.03', vals: [2.1,2.0,1.9,2.2,2.1,2.0,1.9], ref: '0.4–4.0', unit: 'мМЕ/л', status: 'norm' },
+  ],
+
+  prescriptions: [
+    { name: 'Розувастатин 10 мг', dose: '1 табл./сутки, вечером', period: 'до 14.08.2026', doc: 'Иванов А. С.', status: 'active' },
+    { name: 'Витамин D3 2000 МЕ', dose: '1 капля/сутки, утром', period: 'постоянно', doc: 'Соколова М. В.', status: 'active' },
+    { name: 'Магний B6', dose: '1 табл. ×2/сутки', period: '14 дней до 28.05', doc: 'Фёдорова А. И.', status: 'active' },
+  ],
+
+  allergies: [
+    { name: 'Пенициллин', type: 'Лекарственная', lvl: 'high' },
+    { name: 'Цитрусовые', type: 'Пищевая', lvl: 'mid' },
+    { name: 'Пыльца берёзы', type: 'Сезонная', lvl: 'mid' },
+  ],
+
+  vaccines: [
+    { name: 'COVID-19 (Спутник V)', date: '14.09.2024', next: 'через 6 мес', status: 'done' },
+    { name: 'Грипп (сезонный)', date: '12.10.2025', next: 'осень 2026', status: 'done' },
+    { name: 'Столбняк/дифтерия', date: '03.06.2021', next: 'к 03.06.2031', status: 'done' },
+    { name: 'Клещевой энцефалит', date: '—', next: 'рекомендуется', status: 'todo' },
+  ],
+
+  diagnoses: [
+    { code: 'I10', name: 'Эссенциальная гипертензия (мягкая)', date: '14.03.2024', doc: 'Иванов А. С.' },
+    { code: 'E78.0', name: 'Гиперхолестеринемия', date: '02.05.2026', doc: 'Иванов А. С.' },
+    { code: 'M54.2', name: 'Цервикалгия (в ремиссии)', date: '20.12.2025', doc: 'Фёдорова А. И.' },
+  ],
+
+  documents: [
+    { name: 'Полис ОМС', sub: 'до 31.12.2030', ico: '⛨' },
+    { name: 'Полис ДМС · Премиум', sub: 'действует до 14.05.2027', ico: '⛨' },
+    { name: 'Справка 086/у', sub: 'выдана 02.05.2026', ico: '⌬' },
+    { name: 'Выписка из ЭМК', sub: 'для работодателя', ico: '⌬' },
+    { name: 'Договор оказания услуг', sub: '№ 2024-А-104857', ico: '⌬' },
+  ],
+
+  chats: [
+    { id: 1, name: 'Иванов А. С. · кардиолог', last: 'Анна, давление в норме. Продолжайте приём розувастатина по схеме.', time: '14:22', unread: 0, online: true, init: 'ИА' },
+    { id: 2, name: 'Поддержка клиники', last: 'Подтвердили перенос приёма на 14 мая, 11:30.', time: 'вчера', unread: 2, online: true, init: 'КС' },
+    { id: 3, name: 'Соколова М. В. · терапевт', last: 'Результаты анализов в норме, дублирую файл.', time: '02.05', unread: 0, online: false, init: 'СМ' },
+  ],
+
+  notifications: [
+    { ico: '◔', cls: '', title: 'Напоминание о приёме', text: 'Завтра в 11:30 — кардиолог Иванов А. С. на Тверской.', time: 'через 18 ч', unread: true },
+    { ico: '⚯', cls: 'good', title: 'Готовы анализы', text: 'Биохимия и общий анализ крови от 02.05 — открыть.', time: '2 ч назад', unread: true },
+    { ico: '◊', cls: 'warn', title: 'Бонусы скоро сгорят', text: '420 ₽ из 18 420 ₽ сгорят через 14 дней.', time: 'сегодня', unread: true },
+    { ico: '✎', cls: '', title: 'Назначен новый рецепт', text: 'Магний B6, курс 14 дней — от Фёдоровой А. И.', time: 'вчера', unread: false },
+    { ico: '★', cls: 'good', title: 'Новый уровень лояльности', text: 'Поздравляем! Вы достигли уровня Platinum.', time: '12.04', unread: false },
+  ],
+};
+
+// Simple SVG QR placeholder generator
+function QRCode({ size = 160, seed = 'anna-104857' }) {
+  // pseudo-deterministic 21x21 grid
+  const N = 21, cell = size / N;
+  const cells = [];
+  let s = 0;
+  for (let i = 0; i < seed.length; i++) s = (s * 31 + seed.charCodeAt(i)) >>> 0;
+  const rand = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      // finder patterns
+      const finder = (x < 7 && y < 7) || (x >= N-7 && y < 7) || (x < 7 && y >= N-7);
+      let on = false;
+      if (finder) {
+        const fx = x < 7 ? x : (x - (N-7));
+        const fy = y < 7 ? y : (y - (N-7));
+        on = fx === 0 || fx === 6 || fy === 0 || fy === 6 || (fx >= 2 && fx <= 4 && fy >= 2 && fy <= 4);
+      } else {
+        on = rand() > 0.5;
+      }
+      if (on) cells.push(<rect key={`${x}-${y}`} x={x*cell} y={y*cell} width={cell} height={cell} fill="#0d1117" />);
+    }
+  }
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ background: '#fff', borderRadius: 10, padding: 8, boxSizing: 'content-box' }}>
+      {cells}
+    </svg>
+  );
+}
+
+// Sparkline svg
+function Sparkline({ vals, width = 110, height = 28, color = 'currentColor' }) {
+  const max = Math.max(...vals), min = Math.min(...vals);
+  const span = max - min || 1;
+  const dx = width / (vals.length - 1);
+  const pts = vals.map((v, i) => `${i*dx},${height - ((v - min) / span) * height}`).join(' ');
+  const last = vals[vals.length-1], lastY = height - ((last - min) / span) * height;
+  return (
+    <svg width={width} height={height} className="spark-svg">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={width} cy={lastY} r="2.5" fill={color} />
+    </svg>
+  );
+}
+
+Object.assign(window, { PatientData, QRCode, Sparkline });
+
+</script>
+<script type="text/babel">
+// Patient cabinet — page components for each section
+// Exposed: window.Pages (object keyed by route)
+
+const { useState } = React;
+const D = window.PatientData;
+
+/* ============ DASHBOARD ============ */
+function DashboardPage({ go, openBot }) {
+  return (
+    <>
+      <div className="greeting">
+        <div>
+          <h2>Добрый день, Анна</h2>
+          <p>Завтра приём у кардиолога. Готовы 3 новых результата анализов и одно назначение.</p>
+        </div>
+        <div className="greeting-actions">
+          <button className="btn btn-secondary" onClick={openBot}>Спросить AI</button>
+          <button className="btn btn-primary" onClick={() => go('booking')}>Записаться к врачу →</button>
+        </div>
+      </div>
+
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Бонусов</div><div className="kpi-value">18 420 ₽</div><div className="kpi-delta">+340 за месяц</div></div>
+        <div className="kpi"><div className="kpi-label">Приёмов в год</div><div className="kpi-value">12</div><div className="kpi-delta">+3 к 2024</div></div>
+        <div className="kpi"><div className="kpi-label">Анализов</div><div className="kpi-value">28</div><div className="kpi-delta">3 новых</div></div>
+        <div className="kpi"><div className="kpi-label">Активных рецептов</div><div className="kpi-value">3</div><div className="kpi-delta">+1 за неделю</div></div>
+      </div>
+
+      <div className="dash-grid">
+        <div className="appt-card">
+          <div className="appt-date">
+            <div className="appt-date-day">{D.upcoming.day}</div>
+            <div className="appt-date-mon">{D.upcoming.month}</div>
+            <div className="appt-date-time">{D.upcoming.time}</div>
+          </div>
+          <div className="appt-info">
+            <div className="chip chip-accent" style={{ marginBottom: 8 }}><span className="chip-dot"></span>Подтверждён · {D.upcoming.dow}</div>
+            <h4>{D.upcoming.spec}</h4>
+            <div className="appt-meta">{D.upcoming.clinic} · {D.upcoming.cabinet}</div>
+            <div className="appt-meta">{D.upcoming.addr}</div>
+            <div className="appt-doc">
+              <div className="appt-doc-avatar">{D.upcoming.initials}</div>
+              <span>{D.upcoming.doctor}</span>
+            </div>
+            <div className="appt-actions">
+              <button className="btn btn-primary btn-sm">Открыть QR</button>
+              <button className="btn btn-secondary btn-sm">Маршрут</button>
+              <button className="btn btn-ghost btn-sm">Перенести</button>
+              <button className="btn btn-ghost btn-sm">Отменить</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="loyalty">
+          <div className="loyalty-tier">★ {D.loyalty.tier} уровень</div>
+          <div className="loyalty-balance">{D.loyalty.balance.toLocaleString('ru')}<small>бонусных ₽</small></div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>До уровня {D.loyalty.nextTier} — ещё {D.loyalty.toNext.toLocaleString('ru')} ₽ трат</div>
+          <div className="loyalty-prog"><div className="loyalty-prog-fill" style={{ width: `${D.loyalty.level}%` }}></div></div>
+          <div className="loyalty-foot"><span>Кешбэк 7%</span><span>Истекают 420 ₽ через 14 дней</span></div>
+          <button className="btn btn-secondary btn-sm" style={{ marginTop: 14, width: '100%' }} onClick={() => go('loyalty')}>Программа лояльности →</button>
+        </div>
+      </div>
+
+      <div className="quick-actions" style={{ marginBottom: 16 }}>
+        <button className="qa" onClick={() => go('booking')}>
+          <div className="qa-icon">＋</div>
+          <div><div className="qa-label">Записаться к врачу</div><div className="qa-sub">12 специалистов рядом</div></div>
+        </button>
+        <button className="qa" onClick={() => go('analyses')}>
+          <div className="qa-icon">⌕</div>
+          <div><div className="qa-label">Результаты анализов</div><div className="qa-sub">3 новых · готовы</div></div>
+        </button>
+        <button className="qa" onClick={() => go('prescriptions')}>
+          <div className="qa-icon">℞</div>
+          <div><div className="qa-label">Рецепты и приём</div><div className="qa-sub">3 активных курса</div></div>
+        </button>
+        <button className="qa" onClick={() => go('chat')}>
+          <div className="qa-icon">◯</div>
+          <div><div className="qa-label">Чат с врачом</div><div className="qa-sub">2 непрочитанных</div></div>
+        </button>
+      </div>
+
+      <div className="dash-grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="card">
+          <div className="card-hd">
+            <div><div className="card-title">Здоровье · последние данные</div><div className="card-sub">синхронизация с Apple Health</div></div>
+            <button className="btn btn-ghost btn-sm">Все →</button>
+          </div>
+          <div className="vitals">
+            {D.vitals.map(v => (
+              <div className="vital-row" key={v.label}>
+                <div className="vital-icon" style={{ color: 'var(--accent)' }}>{v.ico}</div>
+                <div className="vital-label">{v.label}<small>{v.sub}</small></div>
+                <div className="vital-value">{v.val} {v.unit && <small style={{ color: 'var(--fg-3)', fontWeight: 500 }}>{v.unit}</small>}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd">
+            <div><div className="card-title">Последние анализы</div><div className="card-sub">от 02.05.2026</div></div>
+            <button className="btn btn-ghost btn-sm" onClick={() => go('analyses')}>Все →</button>
+          </div>
+          <div className="vitals">
+            {D.analyses.slice(0, 4).map(a => {
+              const cl = a.status === 'norm' ? 'good' : 'warn';
+              return (
+                <div className="vital-row" key={a.name}>
+                  <div className="vital-label">{a.name}<small>норма {a.ref} {a.unit}</small></div>
+                  <Sparkline vals={a.vals} color={a.status === 'norm' ? 'oklch(0.82 0.16 150)' : 'oklch(0.85 0.14 75)'} />
+                  <span className={`chip chip-${cl}`} style={{ minWidth: 70, justifyContent: 'center' }}>{a.status === 'norm' ? 'норма' : 'внимание'}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ BOOKING FLOW ============ */
+function BookingPage({ go }) {
+  const [step, setStep] = useState(0);
+  const [doc, setDoc] = useState(null);
+  const [day, setDay] = useState(2);
+  const [slot, setSlot] = useState(null);
+  const [spec, setSpec] = useState('Все');
+  const specs = ['Все', 'Терапевт', 'Кардиолог', 'Эндокринолог', 'Невролог'];
+  const filtered = spec === 'Все' ? D.doctors : D.doctors.filter(x => x.spec.startsWith(spec));
+
+  const days = [
+    { dow: 'Пн', n: 12, dis: false }, { dow: 'Вт', n: 13, dis: false }, { dow: 'Ср', n: 14, dis: false },
+    { dow: 'Чт', n: 15, dis: false }, { dow: 'Пт', n: 16, dis: false }, { dow: 'Сб', n: 17, dis: true }, { dow: 'Вс', n: 18, dis: true },
+  ];
+  const slots = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','14:00','14:30','15:00','15:30'];
+  const taken = new Set(['09:30','10:30','11:30','14:30']);
+
+  const steps = ['Специалист','Дата и время','Подтверждение','Готово'];
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div className="page-title">Запись к врачу</div>
+          <div className="page-sub">Выберите специалиста и удобное время · подтверждение мгновенно</div>
+        </div>
+        <button className="btn btn-ghost" onClick={() => go('dashboard')}>← К дашборду</button>
+      </div>
+
+      <div className="booking-stage">
+        <div className="booking-steps">
+          {steps.map((s, i) => (
+            <div key={s} className={`booking-step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}>
+              <div className="booking-step-num">{i < step ? '✓' : i+1}</div>{s}
+            </div>
+          ))}
+        </div>
+
+        <div className="booking-body">
+          {step === 0 && (
+            <div className="booking-grid">
+              <div className="filter-card">
+                <div className="filter-group">
+                  <div className="filter-label">Специальность</div>
+                  <div className="chip-group">
+                    {specs.map(s => (
+                      <button key={s} className="chip-toggle" data-active={spec === s} onClick={() => setSpec(s)}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Клиника</div>
+                  <div className="chip-group">
+                    <button className="chip-toggle" data-active="true">Все 12</button>
+                    <button className="chip-toggle">Тверская</button>
+                    <button className="chip-toggle">Чистые пруды</button>
+                    <button className="chip-toggle">Юго-Зап.</button>
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Цена</div>
+                  <div className="chip-group">
+                    <button className="chip-toggle">до 3 000 ₽</button>
+                    <button className="chip-toggle">3–5 000 ₽</button>
+                    <button className="chip-toggle">5 000+</button>
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Опции</div>
+                  <div className="chip-group">
+                    <button className="chip-toggle" data-active="true">Принимает по ДМС</button>
+                    <button className="chip-toggle">Видеоконсультация</button>
+                    <button className="chip-toggle">К.м.н. / д.м.н.</button>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, color: 'var(--fg-3)' }}>Найдено: <b style={{ color: 'var(--fg)' }}>{filtered.length}</b> · сортировка: рейтинг</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="chip">↕ Цена</button>
+                    <button className="chip">★ Рейтинг</button>
+                  </div>
+                </div>
+                <div className="doc-list">
+                  {filtered.map(dd => (
+                    <div key={dd.id} className={`doc-card ${doc?.id === dd.id ? 'selected' : ''}`} onClick={() => setDoc(dd)}>
+                      <div className={`doc-photo ${dd.cls}`}>{dd.initials}</div>
+                      <div className="doc-info">
+                        <div className="doc-name">{dd.name}</div>
+                        <div className="doc-spec">{dd.spec}</div>
+                        <div className="doc-meta">
+                          <span className="gold">★ <b>{dd.rating}</b></span>
+                          <span>{dd.reviews} отзывов</span>
+                          <span>стаж {dd.exp}</span>
+                          <span>· {dd.clinic}</span>
+                        </div>
+                      </div>
+                      <div className="doc-price">
+                        <div className="doc-price-amount">{dd.price.toLocaleString('ru')} ₽</div>
+                        <div className="doc-price-from">первичный</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+                  <button className="btn btn-primary btn-lg" disabled={!doc} style={{ opacity: doc ? 1 : 0.4 }} onClick={() => doc && setStep(1)}>Выбрать дату →</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 1 && (
+            <div className="booking-grid">
+              <div className="filter-card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                  <div className={`doc-photo ${doc.cls}`} style={{ width: 48, height: 48, fontSize: 14 }}>{doc.initials}</div>
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{doc.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>{doc.spec}</div>
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Тип приёма</div>
+                  <div className="chip-group">
+                    <button className="chip-toggle" data-active="true">Очно</button>
+                    <button className="chip-toggle">Видеосвязь</button>
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Клиника</div>
+                  <div style={{ background: 'var(--bg-2)', padding: 10, borderRadius: 9, border: '1px solid var(--border)', fontSize: 12.5 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 2 }}>Клиника на Тверской</div>
+                    <div style={{ color: 'var(--fg-3)' }}>ул. Тверская, 12 · м. Тверская</div>
+                  </div>
+                </div>
+                <div className="filter-group">
+                  <div className="filter-label">Стоимость</div>
+                  <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{doc.price.toLocaleString('ru')} ₽</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--gold)', marginTop: 2 }}>Кешбэк {Math.round(doc.price * 0.07).toLocaleString('ru')} ₽</div>
+                </div>
+              </div>
+              <div className="cal-card">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>Май 2026</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-ghost btn-sm">‹</button>
+                    <button className="btn btn-ghost btn-sm">›</button>
+                  </div>
+                </div>
+                <div className="cal-strip">
+                  {days.map((d, i) => (
+                    <div key={d.n} className={`cal-day ${d.dis ? 'disabled' : ''} ${day === i ? 'selected' : ''}`} onClick={() => !d.dis && setDay(i)}>
+                      <div className="cal-day-dow">{d.dow}</div>
+                      <div className="cal-day-num">{d.n}</div>
+                      <div className="cal-day-dot"></div>
+                    </div>
+                  ))}
+                </div>
+                <div className="slots-label">Свободно на {days[day].dow}, {days[day].n} мая · {slots.length - taken.size} слотов</div>
+                <div className="slot-grid">
+                  {slots.map(s => (
+                    <button key={s} className={`slot ${taken.has(s) ? 'taken' : ''} ${slot === s ? 'selected' : ''}`} disabled={taken.has(s)} onClick={() => !taken.has(s) && setSlot(s)}>{s}</button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 18 }}>
+                  <button className="btn btn-secondary" onClick={() => setStep(0)}>← Назад</button>
+                  <button className="btn btn-primary btn-lg" disabled={!slot} style={{ opacity: slot ? 1 : 0.4 }} onClick={() => slot && setStep(2)}>Перейти к подтверждению →</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="confirm-grid">
+              <div className="confirm-panel">
+                <h3>Проверьте детали приёма</h3>
+                <div className="confirm-row"><span>Специалист</span><span>{doc.name}</span></div>
+                <div className="confirm-row"><span>Специальность</span><span>{doc.spec}</span></div>
+                <div className="confirm-row"><span>Дата и время</span><span>{days[day].n} мая в {slot}</span></div>
+                <div className="confirm-row"><span>Тип приёма</span><span>Очно · первичный</span></div>
+                <div className="confirm-row"><span>Клиника</span><span>На Тверской · каб. 304</span></div>
+                <div className="confirm-row"><span>Полис</span><span>ДМС · Премиум</span></div>
+
+                <div style={{ marginTop: 22, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Контакты для уведомлений</div>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  <input style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 9, padding: '10px 12px', fontSize: 13 }} value="+7 (916) 555-12-44" readOnly />
+                  <input style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 9, padding: '10px 12px', fontSize: 13 }} value="anna.s@mail.ru" readOnly />
+                </div>
+                <div style={{ marginTop: 14, display: 'grid', gap: 6, fontSize: 12.5, color: 'var(--fg-3)' }}>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}><input type="checkbox" defaultChecked /> Push за 24 часа и за 1 час до приёма</label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}><input type="checkbox" defaultChecked /> SMS с QR-кодом для регистратуры</label>
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}><input type="checkbox" /> Предложить добавить в календарь</label>
+                </div>
+              </div>
+              <div className="confirm-summary">
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-3)' }}>К оплате</div>
+                <div className="confirm-pricing">
+                  <div className="row"><span>Приём ({doc.spec.split(' ·')[0]})</span><span>{doc.price.toLocaleString('ru')} ₽</span></div>
+                  <div className="row"><span>Скидка ДМС</span><span style={{ color: 'var(--good)' }}>−{Math.round(doc.price * 0.3).toLocaleString('ru')} ₽</span></div>
+                  <div className="row"><span>Списать бонусов</span><span>0 ₽ из 18 420</span></div>
+                  <div className="row total"><span>Итого</span><span>{Math.round(doc.price * 0.7).toLocaleString('ru')} ₽</span></div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--gold)', marginBottom: 14 }}>+ {Math.round(doc.price * 0.7 * 0.07).toLocaleString('ru')} ₽ кешбэка после визита</div>
+                <button className="btn btn-primary btn-lg" style={{ width: '100%', marginBottom: 8 }} onClick={() => setStep(3)}>Подтвердить запись</button>
+                <button className="btn btn-ghost btn-sm" style={{ width: '100%' }} onClick={() => setStep(1)}>← Изменить время</button>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="success-stage">
+              <div className="success-icon">✓</div>
+              <h3>Запись подтверждена</h3>
+              <p>Ждём вас {days[day].n} мая в {slot}, кабинет 304. Мы пришлём напоминание за сутки и за час до приёма.</p>
+              <div className="qr-box">
+                <QRCode size={140} seed={`appt-${doc.id}-${days[day].n}-${slot}`} />
+                <div className="qr-box-label">Покажите на регистратуре</div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 26 }}>
+                <button className="btn btn-secondary">Добавить в календарь</button>
+                <button className="btn btn-secondary">Маршрут до клиники</button>
+                <button className="btn btn-primary" onClick={() => go('appointments')}>Мои приёмы →</button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ APPOINTMENTS ============ */
+function AppointmentsPage() {
+  const [tab, setTab] = useState('upcoming');
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Мои приёмы</div><div className="page-sub">Предстоящие и история визитов</div></div>
+        <button className="btn btn-primary">＋ Новая запись</button>
+      </div>
+      <div className="tabs">
+        <div className="tab" data-active={tab === 'upcoming'} onClick={() => setTab('upcoming')}>Предстоящие · 1</div>
+        <div className="tab" data-active={tab === 'history'} onClick={() => setTab('history')}>История · 12</div>
+        <div className="tab" data-active={tab === 'cancelled'} onClick={() => setTab('cancelled')}>Отменённые · 2</div>
+      </div>
+      {tab === 'upcoming' && (
+        <div className="appt-card" style={{ marginBottom: 14 }}>
+          <div className="appt-date">
+            <div className="appt-date-day">{D.upcoming.day}</div>
+            <div className="appt-date-mon">{D.upcoming.month}</div>
+            <div className="appt-date-time">{D.upcoming.time}</div>
+          </div>
+          <div className="appt-info">
+            <div className="chip chip-accent" style={{ marginBottom: 8 }}><span className="chip-dot"></span>Подтверждён</div>
+            <h4>{D.upcoming.spec}</h4>
+            <div className="appt-meta">{D.upcoming.clinic} · {D.upcoming.cabinet} · {D.upcoming.addr}</div>
+            <div className="appt-doc"><div className="appt-doc-avatar">{D.upcoming.initials}</div><span>{D.upcoming.doctor}</span></div>
+            <div className="appt-actions">
+              <button className="btn btn-primary btn-sm">QR для регистратуры</button>
+              <button className="btn btn-secondary btn-sm">Маршрут</button>
+              <button className="btn btn-ghost btn-sm">Перенести</button>
+              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--bad)' }}>Отменить</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {tab === 'history' && (
+        <div className="timeline">
+          {D.visitHistory.map(v => (
+            <div className="tl-item" key={v.date}>
+              <div className="tl-date"><b>{v.date.split('.')[0]}.{v.date.split('.')[1]}</b><span>{v.date.split('.')[2]}</span></div>
+              <div>
+                <div className="tl-title">{v.spec} · {v.diag}</div>
+                <div className="tl-meta">Врач: {v.doc}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-ghost btn-sm">Заключение</button>
+                <button className="btn btn-secondary btn-sm">Повторить</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === 'cancelled' && <div className="card" style={{ textAlign: 'center', color: 'var(--fg-3)', padding: 40 }}>Нет отменённых приёмов в этом месяце</div>}
+    </>
+  );
+}
+
+/* ============ MEDICAL CARD ============ */
+function MedicalCardPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Медицинская карта</div><div className="page-sub">Карта № {D.user.card} · ведётся с 14.03.2018</div></div>
+        <button className="btn btn-secondary">Скачать выписку</button>
+      </div>
+      <div className="med-grid">
+        <div className="card span-2">
+          <div className="card-hd"><div className="card-title">Активные диагнозы</div><div className="chip">{D.diagnoses.length} записи</div></div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {D.diagnoses.map(d => (
+              <div key={d.code} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '12px 14px', background: 'var(--bg-2)', borderRadius: 10, border: '1px solid var(--border)' }}>
+                <span className="chip chip-accent" style={{ fontFamily: 'SF Mono, monospace', minWidth: 56, justifyContent: 'center' }}>{d.code}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>{d.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>Установлен {d.date} · {d.doc}</div>
+                </div>
+                <button className="btn btn-ghost btn-sm">Подробнее</button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Аллергии и реакции</div></div>
+          <div className="allergy-list">
+            {D.allergies.map(a => (
+              <div className="allergy-row" key={a.name}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{a.name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{a.type}</div>
+                </div>
+                <span className="chip" style={a.lvl === 'high' ? { background: 'var(--bad-soft)', color: 'var(--bad)' } : { background: 'var(--warn-soft)', color: 'var(--warn)' }}>
+                  {a.lvl === 'high' ? 'высокая' : 'средняя'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Прививки</div></div>
+          <div className="vac-list">
+            {D.vaccines.map(v => (
+              <div className="vac-row" key={v.name}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600 }}>{v.name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{v.date === '—' ? 'нет данных' : v.date} · след: {v.next}</div>
+                </div>
+                <span className={`chip ${v.status === 'done' ? 'chip-good' : 'chip-warn'}`}>{v.status === 'done' ? '✓' : '!'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ ANALYSES ============ */
+function AnalysesPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Анализы и результаты</div><div className="page-sub">28 исследований в карте · 3 новых от 02.05</div></div>
+        <button className="btn btn-secondary">Выгрузить PDF</button>
+      </div>
+      <div className="tabs">
+        <div className="tab" data-active="true">Все · 28</div>
+        <div className="tab">Новые · 3</div>
+        <div className="tab">Гематология</div>
+        <div className="tab">Биохимия</div>
+        <div className="tab">Гормоны</div>
+      </div>
+      {D.analyses.map(a => (
+        <div key={a.name} className="analysis-row">
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{a.name}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>от {a.date} · норма {a.ref} {a.unit}</div>
+          </div>
+          <Sparkline vals={a.vals} width={140} height={36} color={a.status === 'norm' ? 'oklch(0.82 0.16 150)' : 'oklch(0.85 0.14 75)'} />
+          <div style={{ fontSize: 16, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{a.vals[a.vals.length - 1]}</div>
+          <span className={`chip ${a.status === 'norm' ? 'chip-good' : 'chip-warn'}`}>{a.status === 'norm' ? 'норма' : 'внимание'}</span>
+          <button className="btn btn-ghost btn-sm">Открыть →</button>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* ============ PRESCRIPTIONS ============ */
+function PrescriptionsPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Назначения и рецепты</div><div className="page-sub">3 активных курса · напоминания включены</div></div>
+        <button className="btn btn-secondary">История назначений</button>
+      </div>
+      <div style={{ display: 'grid', gap: 12 }}>
+        {D.prescriptions.map(p => (
+          <div key={p.name} className="card">
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+              <div style={{ width: 48, height: 48, borderRadius: 12, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center', fontSize: 20, flexShrink: 0 }}>℞</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ fontSize: 16, fontWeight: 600 }}>{p.name}</div>
+                  <span className="chip chip-good">активен</span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--fg-2)', marginTop: 4 }}>{p.dose}</div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 8 }}>Курс: {p.period} · назначил {p.doc}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-secondary btn-sm">Заказать в аптеке</button>
+                <button className="btn btn-ghost btn-sm">Напоминания</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ============ LOYALTY ============ */
+function LoyaltyPage() {
+  const tiers = [
+    { name: 'Bronze', from: '0 ₽', cb: '3%', mine: false },
+    { name: 'Silver', from: '50 000 ₽', cb: '5%', mine: false },
+    { name: 'Platinum', from: '150 000 ₽', cb: '7%', mine: true },
+    { name: 'Diamond', from: '300 000 ₽', cb: '10%', mine: false },
+  ];
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Программа лояльности</div><div className="page-sub">Уровни, бонусы и кешбэк за приёмы и анализы</div></div>
+      </div>
+      <div className="loyalty" style={{ marginBottom: 20, padding: 28 }}>
+        <div className="loyalty-tier">★ Platinum уровень</div>
+        <div className="loyalty-balance">{D.loyalty.balance.toLocaleString('ru')}<small>бонусных ₽</small></div>
+        <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 4 }}>До уровня Diamond — ещё 1 580 ₽ трат</div>
+        <div className="loyalty-prog" style={{ height: 8 }}><div className="loyalty-prog-fill" style={{ width: `${D.loyalty.level}%` }}></div></div>
+        <div className="loyalty-foot"><span>Кешбэк 7% с каждого приёма</span><span>Истекают 420 ₽ через 14 дней</span></div>
+      </div>
+      <div className="kpi-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+        {tiers.map(t => (
+          <div key={t.name} className="kpi" style={t.mine ? { borderColor: 'var(--gold)', background: 'oklch(0.85 0.14 85 / 0.06)' } : {}}>
+            <div className="kpi-label" style={t.mine ? { color: 'var(--gold)', fontWeight: 600 } : {}}>{t.name} {t.mine && '· ваш'}</div>
+            <div className="kpi-value">{t.cb}</div>
+            <div className="kpi-delta" style={{ color: 'var(--fg-3)' }}>от {t.from} в год</div>
+          </div>
+        ))}
+      </div>
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-hd"><div className="card-title">История начислений</div></div>
+        {[
+          ['02.05.2026','Кешбэк за приём терапевта','+224 ₽','good'],
+          ['14.03.2026','Кешбэк за анализы','+182 ₽','good'],
+          ['08.02.2026','Списание при оплате приёма','−420 ₽','bad'],
+          ['12.04.2026','Бонус за достижение уровня Platinum','+2 000 ₽','good'],
+        ].map(([d, t, v, cl]) => (
+          <div key={d+t} className="list-row">
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', width: 80 }}>{d}</div>
+            <div style={{ flex: 1, fontSize: 13 }}>{t}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: cl === 'good' ? 'var(--good)' : 'var(--bad)' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ============ CHAT ============ */
+function ChatPage() {
+  const [active, setActive] = useState(D.chats[0]);
+  const messages = [
+    { who: 'doc', text: 'Анна, добрый день. Получил результаты биохимии от 02.05.', time: '14:18' },
+    { who: 'doc', text: 'Давление по дневнику — в пределах нормы. ЛПНП немного повышен, но динамики ухудшения нет.', time: '14:18' },
+    { who: 'me', text: 'Спасибо! Розувастатин продолжать как раньше?', time: '14:20' },
+    { who: 'doc', text: 'Да, продолжайте 10 мг вечером. Контроль через 3 месяца.', time: '14:22' },
+    { who: 'doc', text: 'И, пожалуйста, сдайте липидограмму перед следующим визитом.', time: '14:22' },
+  ];
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Чат с врачом и поддержкой</div><div className="page-sub">Защищённая переписка по протоколу 152-ФЗ</div></div>
+      </div>
+      <div className="card" style={{ padding: 0, display: 'grid', gridTemplateColumns: '300px 1fr', minHeight: 540, overflow: 'hidden' }}>
+        <div style={{ borderRight: '1px solid var(--border)' }}>
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>Диалоги</div>
+          {D.chats.map(c => (
+            <div key={c.id} onClick={() => setActive(c)} style={{
+              padding: '12px 16px', borderBottom: '1px solid var(--line)', cursor: 'pointer',
+              background: active.id === c.id ? 'var(--accent-soft)' : 'transparent',
+              borderLeft: active.id === c.id ? '2px solid var(--accent)' : '2px solid transparent',
+              display: 'flex', gap: 11, alignItems: 'flex-start',
+            }}>
+              <div style={{ position: 'relative' }}>
+                <div className="appt-doc-avatar" style={{ width: 36, height: 36, fontSize: 12 }}>{c.init}</div>
+                {c.online && <span style={{ position: 'absolute', bottom: 0, right: 0, width: 9, height: 9, borderRadius: '50%', background: 'var(--good)', border: '2px solid var(--surface)' }}></span>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', flexShrink: 0 }}>{c.time}</div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.last}</div>
+              </div>
+              {c.unread > 0 && <div style={{ background: 'var(--accent)', color: 'var(--accent-fg)', fontSize: 10.5, fontWeight: 700, padding: '1px 7px', borderRadius: 999, alignSelf: 'center' }}>{c.unread}</div>}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 11 }}>
+            <div className="appt-doc-avatar" style={{ width: 38, height: 38, fontSize: 13 }}>{active.init}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{active.name}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--good)', display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--good)' }}></span> в сети</div>
+            </div>
+            <button className="btn btn-secondary btn-sm">Записаться повторно</button>
+          </div>
+          <div style={{ flex: 1, padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+            {messages.map((m, i) => (
+              <div key={i} className={`bot-msg ${m.who === 'me' ? 'bot-msg-me' : 'bot-msg-bot'}`}>{m.text}<div style={{ fontSize: 10, opacity: 0.6, marginTop: 4 }}>{m.time}</div></div>
+            ))}
+          </div>
+          <div className="bot-input">
+            <button className="topbar-icon-btn" style={{ width: 34, height: 34 }}>📎</button>
+            <input placeholder="Введите сообщение..." />
+            <button className="bot-send">→</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ============ DOCUMENTS ============ */
+function DocumentsPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Документы и справки</div><div className="page-sub">Полисы, договоры, справки и выписки</div></div>
+        <button className="btn btn-primary">＋ Запросить справку</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {D.documents.map(d => (
+          <div key={d.name} className="card" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 48, height: 48, borderRadius: 11, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center', fontSize: 20 }}>{d.ico}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{d.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{d.sub}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-ghost btn-sm">⤓</button>
+              <button className="btn btn-secondary btn-sm">Открыть</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ============ PROFILE ============ */
+function ProfilePage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Профиль и настройки</div><div className="page-sub">Личные данные, безопасность и уведомления</div></div>
+      </div>
+      <div className="profile-hd">
+        <div className="profile-photo">{D.user.initials}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{D.user.name}</div>
+          <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 4 }}>Карта № {D.user.card} · {D.user.age} лет · родилась {D.user.dob}</div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <button className="btn btn-secondary btn-sm">Сменить фото</button>
+            <button className="btn btn-ghost btn-sm">Сменить пароль</button>
+          </div>
+        </div>
+      </div>
+      <div className="med-grid">
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Контакты</div><button className="btn btn-ghost btn-sm">Изменить</button></div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div className="list-row"><div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>Телефон</div><div style={{ fontSize: 13.5, fontWeight: 500 }}>{D.user.phone}</div></div>
+            <div className="list-row"><div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>E-mail</div><div style={{ fontSize: 13.5, fontWeight: 500 }}>{D.user.email}</div></div>
+            <div className="list-row"><div style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>Адрес</div><div style={{ fontSize: 13.5, fontWeight: 500 }}>Москва, ул. Тверская, 14</div></div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Уведомления</div></div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {[['Push о приёмах', true], ['SMS-напоминания', true], ['Готовность анализов', true], ['Маркетинг и акции', false], ['Программа лояльности', true]].map(([n, on]) => (
+              <label key={n} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 12px', background: 'var(--bg-2)', borderRadius: 9, border: '1px solid var(--border)', fontSize: 13 }}>
+                <span>{n}</span>
+                <span style={{ width: 32, height: 18, borderRadius: 999, background: on ? 'var(--accent)' : 'var(--bg-3)', position: 'relative' }}>
+                  <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff' }}></span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Безопасность</div></div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div className="list-row"><div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500 }}>Двухфакторная авторизация</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>SMS-код при входе с нового устройства</div></div><span className="chip chip-good">включена</span></div>
+            <div className="list-row"><div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500 }}>Биометрия в приложении</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>Face ID / Touch ID</div></div><span className="chip chip-good">включена</span></div>
+            <div className="list-row"><div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500 }}>Согласие на обработку данных</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>152-ФЗ · обновлено 14.03.2026</div></div><button className="btn btn-ghost btn-sm">Открыть</button></div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Семейный доступ</div></div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div className="list-row"><div className="appt-doc-avatar">МС</div><div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500 }}>Михаил Соколов</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>сын · 8 лет</div></div><button className="btn btn-ghost btn-sm">Открыть карту</button></div>
+            <div className="list-row"><div className="appt-doc-avatar" style={{ background: 'linear-gradient(135deg, oklch(0.55 0.14 280), oklch(0.6 0.14 230))' }}>ИС</div><div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 500 }}>Ирина Соколова</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>мама · 62 года</div></div><button className="btn btn-ghost btn-sm">Открыть карту</button></div>
+            <button className="btn btn-secondary btn-sm" style={{ marginTop: 4 }}>＋ Добавить родственника</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+window.Pages = {
+  dashboard: DashboardPage,
+  booking: BookingPage,
+  appointments: AppointmentsPage,
+  card: MedicalCardPage,
+  analyses: AnalysesPage,
+  prescriptions: PrescriptionsPage,
+  loyalty: LoyaltyPage,
+  chat: ChatPage,
+  documents: DocumentsPage,
+  profile: ProfilePage,
+};
+
+</script>
+<script type="text/babel">
+// Patient cabinet — App shell with router, AI bot, mobile preview
+const { useState, useEffect, useRef } = React;
+
+const NAV = [
+  { id: 'dashboard', label: 'Главная', ico: '⌂' },
+  { id: 'booking', label: 'Запись к врачу', ico: '＋', badge: 'new' },
+  { id: 'appointments', label: 'Мои приёмы', ico: '☰' },
+  { id: 'card', label: 'Медкарта', ico: '⛨' },
+  { id: 'analyses', label: 'Анализы', ico: '⌕', badge: 3 },
+  { id: 'prescriptions', label: 'Рецепты', ico: '℞' },
+  { id: 'loyalty', label: 'Бонусы', ico: '◊' },
+  { id: 'chat', label: 'Чат', ico: '◯', badge: 2 },
+  { id: 'documents', label: 'Документы', ico: '⌬' },
+  { id: 'profile', label: 'Профиль', ico: '☉' },
+];
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "teal",
+  "showMobile": false
+}/*EDITMODE-END*/;
+
+const themes = {
+  teal:    { hue: 215, ax: 200, c1: 'oklch(0.78 0.14 200)', c2: 'oklch(0.86 0.13 180)' },
+  violet:  { hue: 250, ax: 280, c1: 'oklch(0.78 0.13 290)', c2: 'oklch(0.84 0.12 260)' },
+  emerald: { hue: 200, ax: 155, c1: 'oklch(0.82 0.16 150)', c2: 'oklch(0.86 0.14 165)' },
+  amber:   { hue: 35,  ax: 65,  c1: 'oklch(0.85 0.14 75)',  c2: 'oklch(0.88 0.12 55)'  },
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState('dashboard');
+  const [bot, setBot] = useState(false);
+  const [mobile, setMobile] = useState(false);
+
+  useEffect(() => {
+    const th = themes[t.theme] || themes.teal;
+    const r = document.documentElement.style;
+    r.setProperty('--hue', th.hue);
+    r.setProperty('--accent', th.c1);
+    r.setProperty('--accent-2', th.c2);
+    r.setProperty('--accent-soft', th.c1.replace(')', ' / 0.14)').replace('oklch(', 'oklch('));
+    r.setProperty('--accent-line', th.c1.replace(')', ' / 0.32)').replace('oklch(', 'oklch('));
+  }, [t.theme]);
+
+  const Page = window.Pages[route] || window.Pages.dashboard;
+
+  const go = (id) => {
+    setRoute(id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  return (
+    <>
+      <div className="app">
+        <aside className="side">
+          <div className="side-brand">
+            <div className="side-brand-mark">⚕</div>
+            <div className="side-brand-name">КлиникСеть<span>личный кабинет</span></div>
+          </div>
+          <div className="side-section">Основное</div>
+          {NAV.slice(0, 7).map(n => (
+            <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => go(n.id)}>
+              <div className="nav-item-icon">{n.ico}</div>
+              {n.label}
+              {n.badge && <div className={`nav-item-badge ${n.badge === 'new' ? 'warn' : ''}`}>{n.badge}</div>}
+            </div>
+          ))}
+          <div className="side-section">Кабинет</div>
+          {NAV.slice(7).map(n => (
+            <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => go(n.id)}>
+              <div className="nav-item-icon">{n.ico}</div>
+              {n.label}
+              {n.badge && <div className={`nav-item-badge ${n.badge === 'new' ? 'warn' : ''}`}>{n.badge}</div>}
+            </div>
+          ))}
+          <div className="side-foot">
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', marginBottom: 6 }}>v 4.12 · 152-ФЗ · УЗ-1</div>
+            <button className="btn btn-ghost btn-sm" style={{ width: '100%', justifyContent: 'flex-start' }}>↗ Выход</button>
+          </div>
+        </aside>
+
+        <main className="main">
+          <div className="topbar">
+            <div className="topbar-search">
+              <span>⌕</span>
+              <input placeholder="Найти врача, услугу, анализ..." />
+              <span className="topbar-kbd">⌘K</span>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setMobile(true)}>📱 Мобильная версия</button>
+            <button className="topbar-icon-btn" title="Уведомления">◔<span className="pip"></span></button>
+            <button className="topbar-icon-btn" title="QR для регистратуры">⊞</button>
+            <div className="topbar-avatar">
+              <div className="topbar-avatar-img">{PatientData.user.initials}</div>
+              <div className="topbar-avatar-name">{PatientData.user.name.split(' ')[0]}</div>
+            </div>
+          </div>
+          <div className="content">
+            <Page go={go} openBot={() => setBot(true)} />
+          </div>
+        </main>
+
+        <aside className="notify-rail">
+          <div className="notify-hd">
+            <h3>Лента</h3>
+            <button className="btn btn-ghost btn-sm">Все →</button>
+          </div>
+          {PatientData.notifications.map((n, i) => (
+            <div key={i} className={`notif ${n.unread ? 'unread' : ''}`}>
+              <div className={`notif-icon ${n.cls}`}>{n.ico}</div>
+              <div className="notif-body">
+                <div className="notif-title">{n.title}</div>
+                <div className="notif-text">{n.text}</div>
+                <div className="notif-time">{n.time}</div>
+              </div>
+            </div>
+          ))}
+          <div className="card" style={{ background: 'var(--bg-1)', textAlign: 'center', padding: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>QR для регистратуры</div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginBottom: 12 }}>Покажите на стойке вместо паспорта</div>
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <QRCode size={120} seed={`patient-${PatientData.user.card}`} />
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {!bot && <button className="bot-fab" onClick={() => setBot(true)} title="AI-помощник">✦</button>}
+
+      {bot && (
+        <div className="bot-panel">
+          <div className="bot-hd">
+            <div className="bot-hd-avatar">AI</div>
+            <div className="bot-hd-info">
+              <div className="bot-hd-info-name">AI-помощник</div>
+              <div className="bot-hd-info-status">Видит вашу карту</div>
+            </div>
+            <button className="bot-x" onClick={() => setBot(false)}>×</button>
+          </div>
+          <div className="bot-msgs">
+            <div className="bot-msg bot-msg-bot">Здравствуйте, Анна. Я разобрал вашу карту и вижу: завтра приём у кардиолога, ЛПНП слегка повышен, готовы 3 анализа. Чем помочь?</div>
+            <div className="bot-msg bot-msg-me">Что делать с холестерином?</div>
+            <div className="bot-msg bot-msg-bot">ЛПНП у вас 3.8 при норме до 3.0 — небольшое отклонение, динамика последние 4 месяца — рост.<br/><br/>Доктор Иванов уже назначил <b>розувастатин 10 мг</b>. Курс продолжается. На завтрашнем приёме обсудите контрольную липидограмму через 3 месяца.</div>
+            <div className="bot-msg bot-msg-bot">Хотите, я подготовлю вопросы к завтрашнему приёму?</div>
+          </div>
+          <div className="bot-suggest">
+            <button>Подготовь вопросы</button>
+            <button>Расшифруй анализ</button>
+            <button>Записать к диетологу</button>
+          </div>
+          <div className="bot-input">
+            <input placeholder="Спросите что-нибудь..." />
+            <button className="bot-send">→</button>
+          </div>
+        </div>
+      )}
+
+      {mobile && <MobilePreview onClose={() => setMobile(false)} />}
+
+      <TweaksPanel>
+        <TweakSection label="Тема оформления" />
+        <TweakRadio label="Палитра" value={t.theme} options={['teal','violet','emerald','amber']} onChange={(v) => setTweak('theme', v)} />
+        <TweakSection label="Превью" />
+        <TweakButton label="Открыть мобильную версию" onClick={() => setMobile(true)} />
+      </TweaksPanel>
+    </>
+  );
+}
+
+/* ============ MOBILE PREVIEW ============ */
+function MobilePreview({ onClose }) {
+  const [tab, setTab] = useState('home');
+  const tabs = [
+    { id: 'home', label: 'Главная', ico: '⌂' },
+    { id: 'book', label: 'Записаться', ico: '＋' },
+    { id: 'health', label: 'Здоровье', ico: '♡' },
+    { id: 'chat', label: 'Чат', ico: '◯' },
+    { id: 'me', label: 'Профиль', ico: '☉' },
+  ];
+
+  return (
+    <div className="mobile-overlay" onClick={onClose}>
+      <button className="mobile-close" onClick={onClose}>×</button>
+      <div className="mobile-frame" onClick={e => e.stopPropagation()}>
+        <div className="mobile-status">
+          <span>9:41</span>
+          <span style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11 }}>•••• ⚿ ▮▮</span>
+        </div>
+        <div className="mobile-screen">
+          {tab === 'home' && <MobHome />}
+          {tab === 'book' && <MobBook />}
+          {tab === 'health' && <MobHealth />}
+          {tab === 'chat' && <MobChat />}
+          {tab === 'me' && <MobMe />}
+        </div>
+        <div className="mobile-tabbar">
+          {tabs.map(tt => (
+            <div key={tt.id} className="mobile-tab" data-active={tab === tt.id} onClick={() => setTab(tt.id)}>
+              <div className="mobile-tab-icon">{tt.ico}</div>{tt.label}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobHome() {
+  return (
+    <>
+      <div style={{ padding: '8px 4px 14px' }}>
+        <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Добрый день,</div>
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Анна Соколова</div>
+      </div>
+      <div className="appt-card" style={{ padding: 14, marginBottom: 12 }}>
+        <div className="appt-date" style={{ width: 56 }}>
+          <div className="appt-date-day" style={{ fontSize: 20 }}>14</div>
+          <div className="appt-date-mon">мая</div>
+          <div className="appt-date-time">11:30</div>
+        </div>
+        <div className="appt-info">
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Кардиолог</div>
+          <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>Иванов А. С. · Тверская</div>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <button className="btn btn-primary btn-sm" style={{ flex: 1 }}>QR</button>
+            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }}>Маршрут</button>
+          </div>
+        </div>
+      </div>
+      <div className="loyalty" style={{ padding: 14, marginBottom: 12 }}>
+        <div className="loyalty-tier">★ Platinum</div>
+        <div className="loyalty-balance" style={{ fontSize: 22 }}>18 420<small style={{ fontSize: 12 }}>бонусных ₽</small></div>
+        <div className="loyalty-prog"><div className="loyalty-prog-fill" style={{ width: '92%' }}></div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        <button className="qa" style={{ padding: 12 }}><div className="qa-icon">＋</div><div className="qa-label">Записаться</div></button>
+        <button className="qa" style={{ padding: 12 }}><div className="qa-icon">⌕</div><div className="qa-label">Анализы</div></button>
+        <button className="qa" style={{ padding: 12 }}><div className="qa-icon">℞</div><div className="qa-label">Рецепты</div></button>
+        <button className="qa" style={{ padding: 12 }}><div className="qa-icon">◯</div><div className="qa-label">Чат</div></button>
+      </div>
+      <div className="mob-card">
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Здоровье · сегодня</div>
+        {PatientData.vitals.slice(0, 3).map(v => (
+          <div className="vital-row" key={v.label}>
+            <div className="vital-icon" style={{ color: 'var(--accent)' }}>{v.ico}</div>
+            <div className="vital-label" style={{ fontSize: 12 }}>{v.label}</div>
+            <div className="vital-value" style={{ fontSize: 13 }}>{v.val} <small style={{ fontWeight: 500, color: 'var(--fg-3)' }}>{v.unit}</small></div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function MobBook() {
+  return (
+    <>
+      <div style={{ padding: '4px 4px 12px' }}>
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Записаться</div>
+        <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>12 специалистов · ближайший слот сегодня</div>
+      </div>
+      <div className="topbar-search" style={{ padding: '10px 12px', marginBottom: 12 }}>
+        <span>⌕</span>
+        <input placeholder="Специалист или услуга" />
+      </div>
+      <div className="chip-group" style={{ marginBottom: 14, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4 }}>
+        <button className="chip-toggle" data-active="true">Все</button>
+        <button className="chip-toggle">Терапевт</button>
+        <button className="chip-toggle">Кардиолог</button>
+        <button className="chip-toggle">Эндокринолог</button>
+      </div>
+      {PatientData.doctors.slice(0, 3).map(d => (
+        <div key={d.id} className="doc-card" style={{ marginBottom: 8, padding: 12 }}>
+          <div className={`doc-photo ${d.cls}`} style={{ width: 52, height: 52, fontSize: 14 }}>{d.initials}</div>
+          <div className="doc-info">
+            <div className="doc-name" style={{ fontSize: 13 }}>{d.name.split(' ').slice(0, 2).join(' ')}</div>
+            <div className="doc-spec" style={{ fontSize: 11.5 }}>{d.spec}</div>
+            <div className="doc-meta" style={{ fontSize: 11 }}><span className="gold">★ {d.rating}</span><span>{d.exp}</span></div>
+          </div>
+          <div className="doc-price"><div className="doc-price-amount" style={{ fontSize: 13 }}>{d.price.toLocaleString('ru')} ₽</div></div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function MobHealth() {
+  return (
+    <>
+      <div style={{ padding: '4px 4px 14px' }}>
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Здоровье</div>
+      </div>
+      <div className="kpi-row" style={{ gridTemplateColumns: '1fr 1fr', marginBottom: 12 }}>
+        {PatientData.vitals.slice(0, 4).map(v => (
+          <div className="kpi" key={v.label} style={{ padding: 12 }}>
+            <div className="kpi-label">{v.label}</div>
+            <div className="kpi-value" style={{ fontSize: 18 }}>{v.val} <small style={{ fontSize: 11, fontWeight: 500, color: 'var(--fg-3)' }}>{v.unit}</small></div>
+          </div>
+        ))}
+      </div>
+      <div className="mob-card">
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Анализы · 3 новых</div>
+        {PatientData.analyses.slice(0, 4).map(a => (
+          <div key={a.name} className="vital-row" style={{ padding: '8px 0' }}>
+            <div className="vital-label" style={{ fontSize: 12 }}>{a.name}</div>
+            <Sparkline vals={a.vals} width={60} height={20} color={a.status === 'norm' ? 'oklch(0.82 0.16 150)' : 'oklch(0.85 0.14 75)'} />
+            <span className={`chip ${a.status === 'norm' ? 'chip-good' : 'chip-warn'}`} style={{ fontSize: 10 }}>{a.status === 'norm' ? '✓' : '!'}</span>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function MobChat() {
+  return (
+    <>
+      <div style={{ padding: '4px 4px 14px' }}>
+        <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Чаты</div>
+      </div>
+      {PatientData.chats.map(c => (
+        <div key={c.id} className="mob-card" style={{ display: 'flex', gap: 11, alignItems: 'flex-start', padding: 12 }}>
+          <div className="appt-doc-avatar" style={{ width: 38, height: 38, fontSize: 12 }}>{c.init}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{c.name.split(' · ')[0]}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>{c.time}</div>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.last}</div>
+          </div>
+          {c.unread > 0 && <div style={{ background: 'var(--accent)', color: 'var(--accent-fg)', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, alignSelf: 'center' }}>{c.unread}</div>}
+        </div>
+      ))}
+    </>
+  );
+}
+
+function MobMe() {
+  return (
+    <>
+      <div className="profile-hd" style={{ padding: 16, marginBottom: 14 }}>
+        <div className="profile-photo" style={{ width: 60, height: 60, fontSize: 20 }}>{PatientData.user.initials}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 17, fontWeight: 600 }}>{PatientData.user.name}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>Карта № {PatientData.user.card}</div>
+        </div>
+      </div>
+      <div className="qr-box" style={{ marginBottom: 14, width: '100%' }}>
+        <QRCode size={120} seed={`patient-${PatientData.user.card}`} />
+        <div className="qr-box-label">QR для регистратуры</div>
+      </div>
+      {[['Полис ДМС','до 14.05.2027'],['Семейный доступ','2 родственника'],['Уведомления','5 включено'],['Безопасность','2FA + биометрия']].map(([n, s]) => (
+        <div key={n} className="mob-card" style={{ display: 'flex', alignItems: 'center', padding: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{n}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{s}</div>
+          </div>
+          <div style={{ color: 'var(--fg-3)' }}>›</div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+</script>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#0a0e1a"/>
+    <text x="60" y="42" text-anchor="middle" font-size="22" fill="#7ec5ff" font-family="sans-serif" font-weight="700">⚕</text>
+    <text x="60" y="58" text-anchor="middle" font-size="9" fill="#7ec5ff" font-family="sans-serif" font-weight="600">Кабинет</text>
+  </svg>
+</template>
+</body>
+</html>

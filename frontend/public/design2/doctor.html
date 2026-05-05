@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>КлиникСеть · Кабинет врача</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* КлиникСеть · общая дизайн-система · светлая тема для рабочих кабинетов */
+:root {
+  --hue: 220;
+  --bg: oklch(0.985 0.004 var(--hue));
+  --bg-1: oklch(0.97 0.005 var(--hue));
+  --bg-2: oklch(0.955 0.006 var(--hue));
+  --bg-3: oklch(0.93 0.008 var(--hue));
+  --surface: oklch(1 0 0);
+  --surface-hi: oklch(0.98 0.004 var(--hue));
+  --border: oklch(0.90 0.008 var(--hue));
+  --border-strong: oklch(0.84 0.01 var(--hue));
+  --line: oklch(0.93 0.008 var(--hue));
+  --fg: oklch(0.18 0.014 var(--hue));
+  --fg-2: oklch(0.36 0.012 var(--hue));
+  --fg-3: oklch(0.52 0.012 var(--hue));
+  --fg-4: oklch(0.65 0.012 var(--hue));
+  --accent: oklch(0.55 0.16 240);
+  --accent-2: oklch(0.62 0.15 220);
+  --accent-soft: oklch(0.55 0.16 240 / 0.10);
+  --accent-line: oklch(0.55 0.16 240 / 0.28);
+  --accent-fg: #fff;
+  --good: oklch(0.55 0.15 150);
+  --good-soft: oklch(0.55 0.15 150 / 0.10);
+  --warn: oklch(0.65 0.15 65);
+  --warn-soft: oklch(0.65 0.15 65 / 0.12);
+  --bad: oklch(0.55 0.20 25);
+  --bad-soft: oklch(0.55 0.20 25 / 0.10);
+  --gold: oklch(0.62 0.13 75);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px oklch(0.18 0.014 220 / 0.06);
+  --shadow-md: 0 4px 14px oklch(0.18 0.014 220 / 0.08);
+  --shadow-lg: 0 20px 50px oklch(0.18 0.014 220 / 0.12);
+  --density-pad: 14px;
+  --density-row: 12px;
+}
+[data-density="compact"] { --density-pad: 10px; --density-row: 8px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { font-family: 'Golos Text', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+button, input, select, textarea { font-family: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+a { color: inherit; text-decoration: none; }
+input, select, textarea { outline: none; }
+.app { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+.side { border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; background: var(--bg-1); position: sticky; top: 0; max-height: 100vh; overflow-y: auto; }
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
+.side-brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(140deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px oklch(0.55 0.16 240 / 0.25); }
+.side-brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.side-brand-name span { display: block; font-size: 11px; color: var(--fg-3); font-weight: 500; }
+.side-section { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: var(--fg-4); text-transform: uppercase; padding: 12px 10px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--fg-2); font-weight: 500; cursor: pointer; user-select: none; margin-bottom: 1px; position: relative; }
+.nav-item:hover { background: var(--bg-2); color: var(--fg); }
+.nav-item[data-active="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-item-ico { width: 18px; text-align: center; font-size: 14px; }
+.nav-item-badge { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; min-width: 18px; text-align: center; }
+.nav-item-badge.warn { background: var(--warn); }
+.nav-item-badge.bad { background: var(--bad); }
+.side-foot { margin-top: auto; padding: 12px 6px; border-top: 1px solid var(--border); }
+.side-user { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 9px; }
+.side-user:hover { background: var(--bg-2); }
+.side-user-name { font-size: 12.5px; font-weight: 600; }
+.side-user-role { font-size: 11px; color: var(--fg-3); }
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); background: oklch(1 0 0 / 0.85); backdrop-filter: blur(20px); position: sticky; top: 0; z-index: 10; }
+.topbar-search { flex: 1; max-width: 480px; display: flex; align-items: center; gap: 8px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; color: var(--fg-3); font-size: 13px; }
+.topbar-search input { flex: 1; border: 0; background: transparent; font-size: 13px; color: var(--fg); }
+.topbar-search input::placeholder { color: var(--fg-4); }
+.topbar-kbd { padding: 1px 5px; border-radius: 4px; font-size: 10.5px; background: var(--bg-2); color: var(--fg-3); border: 1px solid var(--border); font-family: 'SF Mono', Consolas, monospace; }
+.topbar-icon-btn { width: 34px; height: 34px; border-radius: 9px; background: var(--bg-1); border: 1px solid var(--border); display: grid; place-items: center; color: var(--fg-2); font-size: 14px; position: relative; }
+.topbar-icon-btn:hover { background: var(--bg-2); color: var(--fg); }
+.topbar-icon-btn .pip { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
+.content { flex: 1; padding: 22px 24px 80px; overflow-x: hidden; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
+.page-sub { font-size: 13px; color: var(--fg-3); margin-top: 4px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--density-pad); box-shadow: var(--shadow-sm); }
+.card-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.card-sub { font-size: 12px; color: var(--fg-3); margin-top: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .12s; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); box-shadow: 0 1px 0 oklch(1 0 0 / 0.2) inset, 0 4px 12px oklch(0.55 0.16 240 / 0.22); }
+.btn-primary:hover { filter: brightness(0.95); }
+.btn-secondary { background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-2); border-color: var(--border-strong); }
+.btn-ghost { color: var(--fg-2); }
+.btn-ghost:hover { background: var(--bg-2); color: var(--fg); }
+.btn-danger { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad-soft); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+.btn-lg { padding: 12px 20px; font-size: 14px; border-radius: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 500; background: var(--bg-2); color: var(--fg-2); border: 1px solid var(--border); }
+.chip-good { background: var(--good-soft); color: var(--good); border-color: var(--good-soft); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-soft); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-soft); }
+.chip-accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.kpi-label { font-size: 11.5px; color: var(--fg-3); font-weight: 500; }
+.kpi-value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi-delta { font-size: 11.5px; color: var(--good); margin-top: 2px; font-weight: 500; }
+.kpi-delta.bad { color: var(--bad); }
+.kpi-delta.muted { color: var(--fg-3); }
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.tab { padding: 10px 14px; font-size: 13px; font-weight: 500; color: var(--fg-3); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.tab[data-active="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:hover { color: var(--fg); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; padding: 10px 12px; font-weight: 600; font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); background: var(--bg-1); position: sticky; top: 0; }
+.tbl td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tr:hover td { background: var(--bg-1); }
+.tbl tr:last-child td { border-bottom: 0; }
+.avatar { border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; flex-shrink: 0; }
+.avatar.sm { width: 28px; height: 28px; font-size: 11px; }
+.avatar.md { width: 36px; height: 36px; font-size: 12px; }
+.avatar.lg { width: 48px; height: 48px; font-size: 15px; }
+.avatar.xl { width: 72px; height: 72px; font-size: 22px; border-radius: 16px; }
+.av-1 { background: linear-gradient(135deg, oklch(0.6 0.14 280), oklch(0.55 0.16 230)); }
+.av-2 { background: linear-gradient(135deg, oklch(0.6 0.14 350), oklch(0.55 0.16 30)); }
+.av-3 { background: linear-gradient(135deg, oklch(0.55 0.14 200), oklch(0.6 0.14 160)); }
+.av-4 { background: linear-gradient(135deg, oklch(0.55 0.14 120), oklch(0.6 0.14 80)); }
+.av-5 { background: linear-gradient(135deg, oklch(0.55 0.16 50), oklch(0.6 0.14 20)); }
+.av-6 { background: linear-gradient(135deg, oklch(0.5 0.16 320), oklch(0.55 0.16 280)); }
+.tw-panel { position: fixed; bottom: 18px; left: 18px; width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); z-index: 70; padding: 14px; font-size: 13px; }
+.tw-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tw-hd-title { font-size: 13px; font-weight: 600; }
+.tw-x { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--fg-3); }
+.tw-x:hover { background: var(--bg-2); color: var(--fg); }
+.tw-section { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--fg-4); text-transform: uppercase; margin: 12px 0 6px; }
+.tw-section:first-child { margin-top: 0; }
+.tw-radio { display: grid; gap: 4px; padding: 3px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; }
+.tw-radio button { padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--fg-2); }
+.tw-radio button[data-on="true"] { background: var(--accent); color: var(--accent-fg); }
+.tw-fab { position: fixed; bottom: 18px; left: 18px; padding: 8px 13px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-md); font-size: 12.5px; font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 7px; z-index: 70; }
+.tw-fab:hover { background: var(--bg-1); }
+.tw-label { font-size: 11.5px; color: var(--fg-2); margin-bottom: 5px; }
+.role-banner { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-3); padding: 4px 10px; border-radius: 999px; background: var(--bg-1); border: 1px solid var(--border); }
+.role-banner b { color: var(--accent); font-weight: 600; }
+.spark { display: block; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.list-row:first-child { border-top: 0; padding-top: 0; }
+.list-row:last-child { padding-bottom: 0; }
+@media (max-width: 1100px) { .app { grid-template-columns: 200px 1fr; } .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px) { .app { grid-template-columns: 1fr; } .side { display: none; } .topbar-search { display: none; } .content { padding: 16px; } }
+
+</style>
+<style>
+:root { --accent: oklch(0.50 0.13 200); --accent-2: oklch(0.58 0.12 180); --accent-soft: oklch(0.50 0.13 200 / 0.10); --accent-line: oklch(0.50 0.13 200 / 0.28); }
+.dash-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; }
+.timeline-day { display: grid; gap: 8px; }
+.slot-row { display: grid; grid-template-columns: 70px 1fr auto; gap: 14px; align-items: center; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.slot-row:hover { border-color: var(--border-strong); }
+.slot-row.now { border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.slot-row.done { opacity: 0.65; }
+.slot-row.cancelled { opacity: 0.5; text-decoration: line-through; }
+.slot-time { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.slot-time small { display: block; font-size: 11px; color: var(--fg-3); font-weight: 500; }
+.slot-pat { font-size: 13.5px; font-weight: 600; }
+.slot-pat small { display: block; font-size: 11.5px; color: var(--fg-3); font-weight: 400; margin-top: 2px; }
+.consult-stage { display: grid; grid-template-columns: 280px 1fr 320px; gap: 14px; min-height: 600px; }
+.protocol-area { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; }
+.proto-section { margin-bottom: 16px; }
+.proto-section label { font-size: 11px; font-weight: 600; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 6px; }
+.proto-section textarea, .proto-section input { width: 100%; background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13.5px; resize: vertical; font-family: inherit; }
+.proto-section textarea { min-height: 70px; }
+.proto-section textarea:focus, .proto-section input:focus { border-color: var(--accent); }
+.ai-suggest { padding: 12px; background: linear-gradient(135deg, var(--accent-soft), oklch(1 0 0 / 0)); border: 1px solid var(--accent-line); border-radius: 9px; margin-top: 8px; }
+.ai-suggest-title { font-size: 11px; color: var(--accent); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.ai-suggest-text { font-size: 12.5px; color: var(--fg-2); line-height: 1.5; }
+.ai-suggest-actions { display: flex; gap: 6px; margin-top: 8px; }
+.template-list { display: grid; gap: 6px; max-height: 260px; overflow-y: auto; }
+.template-item { padding: 8px 10px; border-radius: 7px; background: var(--bg-1); border: 1px solid var(--border); font-size: 12.5px; cursor: pointer; }
+.template-item:hover { background: var(--accent-soft); border-color: var(--accent-line); }
+.icd-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; background: var(--accent-soft); color: var(--accent); border-radius: 5px; font-family: 'SF Mono', monospace; font-size: 11px; font-weight: 600; }
+.bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
+.donut { width: 120px; height: 120px; }
+.cal-grid { display: grid; grid-template-columns: 70px repeat(5, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.cal-h { background: var(--bg-1); padding: 10px 12px; font-size: 11.5px; color: var(--fg-3); font-weight: 600; text-align: center; }
+.cal-h.dow b { display: block; font-size: 16px; color: var(--fg); font-weight: 700; }
+.cal-cell { background: var(--surface); padding: 4px; min-height: 60px; position: relative; font-size: 11.5px; color: var(--fg-3); }
+.cal-cell.taken { background: var(--accent-soft); color: var(--accent); font-weight: 600; padding: 6px 8px; }
+.cal-cell.taken b { display: block; font-size: 12.5px; }
+.cal-cell.blocked { background: repeating-linear-gradient(45deg, var(--bg-1), var(--bg-1) 6px, var(--bg-2) 6px, var(--bg-2) 12px); }
+.cal-time { background: var(--bg-1); padding: 8px 10px; font-size: 11px; color: var(--fg-3); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.review-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.stars { color: var(--gold); font-size: 13px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>
+// КлиникСеть · общие данные между всеми кабинетами
+window.CN = {
+  clinics: [
+    { id: 1, name: 'Клиника на Тверской', short: 'Тверская', addr: 'Москва, ул. Тверская, 12', rooms: 18, staff: 42 },
+    { id: 2, name: 'Клиника на Чистых прудах', short: 'Чистые пруды', addr: 'Москва, Чистопрудный б-р, 8', rooms: 12, staff: 26 },
+    { id: 3, name: 'Клиника на Юго-Западной', short: 'Юго-Зап.', addr: 'Москва, пр-т Вернадского, 86', rooms: 10, staff: 22 },
+    { id: 4, name: 'Клиника в Сколково', short: 'Сколково', addr: 'Сколково, Новая ул., 100', rooms: 15, staff: 31 },
+  ],
+  doctors: [
+    { id: 1, name: 'Иванов Алексей Сергеевич', short: 'Иванов А. С.', spec: 'Кардиолог, к.м.н.', exp: 14, rating: 4.94, reviews: 312, clinic: 1, init: 'ИА', av: 'av-1', load: 0.92, salary: 312000, ytd: 3120000, status: 'online' },
+    { id: 2, name: 'Соколова Мария Викторовна', short: 'Соколова М. В.', spec: 'Терапевт', exp: 8, rating: 4.87, reviews: 198, clinic: 2, init: 'СМ', av: 'av-2', load: 0.78, salary: 218000, ytd: 2180000, status: 'busy' },
+    { id: 3, name: 'Петров Дмитрий Олегович', short: 'Петров Д. О.', spec: 'Эндокринолог', exp: 11, rating: 4.91, reviews: 256, clinic: 1, init: 'ПД', av: 'av-3', load: 0.85, salary: 268000, ytd: 2680000, status: 'online' },
+    { id: 4, name: 'Фёдорова Анна Игоревна', short: 'Фёдорова А. И.', spec: 'Невролог, к.м.н.', exp: 9, rating: 4.96, reviews: 421, clinic: 3, init: 'ФА', av: 'av-4', load: 0.88, salary: 295000, ytd: 2950000, status: 'offline' },
+    { id: 5, name: 'Морозов Сергей Павлович', short: 'Морозов С. П.', spec: 'УЗИ-диагностика', exp: 12, rating: 4.82, reviews: 178, clinic: 4, init: 'МС', av: 'av-5', load: 0.71, salary: 198000, ytd: 1980000, status: 'online' },
+    { id: 6, name: 'Лебедева Ольга Юрьевна', short: 'Лебедева О. Ю.', spec: 'Гинеколог', exp: 16, rating: 4.93, reviews: 389, clinic: 2, init: 'ЛО', av: 'av-6', load: 0.94, salary: 342000, ytd: 3420000, status: 'busy' },
+  ],
+  patients: [
+    { id: 1, name: 'Анна Соколова', short: 'А. Соколова', card: 'А-104857', age: 34, dob: '14.03.1991', phone: '+7 (916) 555-12-44', email: 'anna.s@mail.ru', dms: 'Премиум', loyalty: 'Platinum', status: 'active', init: 'АС', av: 'av-2', visits: 12, last: '02.05.2026' },
+    { id: 2, name: 'Михаил Петров', short: 'М. Петров', card: 'А-104723', age: 41, phone: '+7 (903) 222-18-90', email: 'mp@yandex.ru', dms: 'Базовый', loyalty: 'Silver', status: 'active', init: 'МП', av: 'av-1', visits: 7, last: '28.04.2026' },
+    { id: 3, name: 'Елена Кузнецова', short: 'Е. Кузнецова', card: 'А-105921', age: 52, phone: '+7 (985) 117-00-44', email: 'e.kuz@gmail.com', dms: 'нет', loyalty: 'Bronze', status: 'active', init: 'ЕК', av: 'av-4', visits: 3, last: '14.04.2026' },
+    { id: 4, name: 'Дмитрий Васильев', short: 'Д. Васильев', card: 'А-104102', age: 28, phone: '+7 (916) 309-44-21', email: 'dv@mail.ru', dms: 'Премиум', loyalty: 'Gold', status: 'active', init: 'ДВ', av: 'av-3', visits: 9, last: '01.05.2026' },
+    { id: 5, name: 'Татьяна Морозова', short: 'Т. Морозова', card: 'А-105033', age: 67, phone: '+7 (495) 712-88-01', dms: 'нет', loyalty: 'Bronze', status: 'active', init: 'ТМ', av: 'av-5', visits: 22, last: '04.05.2026' },
+    { id: 6, name: 'Александр Новиков', short: 'А. Новиков', card: 'А-105588', age: 36, phone: '+7 (925) 411-22-65', dms: 'Базовый', loyalty: 'Silver', status: 'active', init: 'АН', av: 'av-6', visits: 4, last: '22.04.2026' },
+  ],
+  roles: [
+    { id: 'patient', name: 'Пациент', who: 'Анна Соколова', desc: 'Запись, медкарта, анализы, бонусы, чат с врачом', file: 'patient.html', accent: 'oklch(0.55 0.16 240)' },
+    { id: 'doctor',  name: 'Врач',     who: 'Иванов Алексей Сергеевич', desc: 'Расписание, приёмы, заключения, заработок', file: 'doctor.html', accent: 'oklch(0.50 0.15 200)' },
+    { id: 'admin',   name: 'Администратор', who: 'Ольга Семёнова', desc: 'Ресепшн, касса, очередь, оформление пациентов', file: 'admin.html', accent: 'oklch(0.55 0.15 160)' },
+    { id: 'manager', name: 'Менеджер по найму', who: 'Илья Громов', desc: 'CRM-воронка кандидатов, аналитика найма, шаблоны', file: 'manager.html', accent: 'oklch(0.55 0.16 30)' },
+    { id: 'head',    name: 'Руководитель сети', who: 'Виктор Лазарев', desc: 'Финансы, бенчмарк клиник, NPS, маркетинг', file: 'head.html', accent: 'oklch(0.45 0.15 290)' },
+  ],
+};
+
+window.makeTweaks = function(React) {
+  const { useState, useEffect } = React;
+  function useTweaks(defaults) {
+    const [v, setV] = useState(defaults);
+    const set = (k, val) => {
+      const patch = (typeof k === 'object') ? k : { [k]: val };
+      setV(prev => ({ ...prev, ...patch }));
+      try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: patch }, '*'); } catch(e){}
+    };
+    return [v, set];
+  }
+  function TweaksPanel({ children }) {
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+      const onMsg = (e) => {
+        if (!e.data || typeof e.data !== 'object') return;
+        if (e.data.type === '__activate_edit_mode') setOpen(true);
+        if (e.data.type === '__deactivate_edit_mode') setOpen(false);
+      };
+      window.addEventListener('message', onMsg);
+      try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(e){}
+      return () => window.removeEventListener('message', onMsg);
+    }, []);
+    if (!open) return React.createElement('button', { className: 'tw-fab', onClick: () => setOpen(true) }, '⚙ Tweaks');
+    return React.createElement('div', { className: 'tw-panel' },
+      React.createElement('div', { className: 'tw-hd' },
+        React.createElement('div', { className: 'tw-hd-title' }, 'Tweaks'),
+        React.createElement('button', { className: 'tw-x', onClick: () => { setOpen(false); try { window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*'); } catch(e){} } }, '×'),
+      ),
+      children
+    );
+  }
+  function TweakSection({ label }) { return React.createElement('div', { className: 'tw-section' }, label); }
+  function TweakRadio({ label, value, options, onChange }) {
+    return React.createElement('div', { style: { marginBottom: 8 } },
+      label && React.createElement('div', { className: 'tw-label' }, label),
+      React.createElement('div', { className: 'tw-radio', style: { gridTemplateColumns: `repeat(${options.length}, 1fr)` } },
+        options.map(o => React.createElement('button', { key: o, 'data-on': value === o, onClick: () => onChange(o) }, o))
+      )
+    );
+  }
+  return { useTweaks, TweaksPanel, TweakSection, TweakRadio };
+};
+
+window.themePalettes = {
+  blue:    { c1: 'oklch(0.55 0.16 240)', c2: 'oklch(0.62 0.15 220)' },
+  teal:    { c1: 'oklch(0.50 0.13 200)', c2: 'oklch(0.58 0.12 180)' },
+  emerald: { c1: 'oklch(0.55 0.15 160)', c2: 'oklch(0.62 0.14 140)' },
+  violet:  { c1: 'oklch(0.50 0.16 290)', c2: 'oklch(0.55 0.15 270)' },
+  rose:    { c1: 'oklch(0.58 0.18 25)',  c2: 'oklch(0.63 0.16 10)'  },
+};
+window.applyTheme = function(name) {
+  const p = window.themePalettes[name] || window.themePalettes.blue;
+  const r = document.documentElement.style;
+  r.setProperty('--accent', p.c1);
+  r.setProperty('--accent-2', p.c2);
+  const pull = (s, op) => s.replace(')', ` / ${op})`);
+  r.setProperty('--accent-soft', pull(p.c1, 0.10));
+  r.setProperty('--accent-line', pull(p.c1, 0.28));
+};
+
+</script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const { useTweaks, TweaksPanel, TweakSection, TweakRadio } = window.makeTweaks(React);
+const CN = window.CN;
+const ME = CN.doctors[0]; // Иванов А. С.
+
+const NAV = [
+  { id: 'today', label: 'Сегодня', ico: '◐', badge: '8' },
+  { id: 'schedule', label: 'Расписание', ico: '▦' },
+  { id: 'consult', label: 'Идёт приём', ico: '●', badge: 'live' },
+  { id: 'patients', label: 'Мои пациенты', ico: '☰' },
+  { id: 'templates', label: 'Шаблоны', ico: '⌬' },
+  { id: 'chat', label: 'Чаты', ico: '◯', badge: '3' },
+  { id: 'video', label: 'Видеоконсультации', ico: '▶' },
+  { id: 'earnings', label: 'Заработок', ico: '◊' },
+  { id: 'rating', label: 'Рейтинг и отзывы', ico: '★' },
+  { id: 'time', label: 'Часы и отпуск', ico: '⏱' },
+  { id: 'edu', label: 'Обучение', ico: '✦' },
+  { id: 'profile', label: 'Профиль', ico: '☉' },
+];
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "teal",
+  "density": "cozy"
+}/*EDITMODE-END*/;
+
+/* ================== TODAY ================== */
+function TodayPage() {
+  const slots = [
+    { time: '09:00', dur: '30', pat: 'Соколова Анна Викторовна', reason: 'Первичный · ЭКГ + консультация', dms: 'ДМС Премиум', status: 'done' },
+    { time: '09:30', dur: '30', pat: 'Петров Михаил Олегович', reason: 'Повторный · контроль АД', dms: 'ДМС Базовый', status: 'done' },
+    { time: '10:00', dur: '30', pat: 'Кузнецова Елена Сергеевна', reason: 'Расшифровка холтера', dms: 'наличные', status: 'done' },
+    { time: '10:30', dur: '45', pat: 'Васильев Дмитрий Андреевич', reason: 'Первичный · аритмия', dms: 'ДМС Премиум', status: 'now' },
+    { time: '11:30', dur: '30', pat: 'Морозова Татьяна Ивановна', reason: 'Повторный', dms: 'наличные', status: 'next' },
+    { time: '12:00', dur: '30', pat: 'Новиков Александр', reason: 'Первичный', dms: 'ДМС Базовый', status: 'next' },
+    { time: '13:00', dur: '60', pat: '— перерыв —', reason: '', dms: '', status: 'break' },
+    { time: '14:00', dur: '30', pat: 'Лебедев Иван Петрович', reason: 'Видеоконсультация', dms: 'ДМС Премиум', status: 'next' },
+    { time: '14:30', dur: '30', pat: 'Захарова Ольга', reason: 'Контроль терапии', dms: 'наличные', status: 'next' },
+    { time: '15:00', dur: '30', pat: '— свободно —', reason: '', dms: '', status: 'free' },
+    { time: '15:30', dur: '30', pat: 'Ким Ан-Сон', reason: 'Первичный', dms: 'ДМС Премиум', status: 'next' },
+    { time: '16:00', dur: '60', pat: 'Григорьев Сергей', reason: 'Развёрнутая консультация', dms: 'наличные', status: 'next' },
+  ];
+  const done = slots.filter(s => s.status === 'done').length;
+  const total = slots.filter(s => s.status !== 'break' && s.status !== 'free').length;
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div className="page-title">Расписание на вторник, 5 мая</div>
+          <div className="page-sub">{done} из {total} приёмов завершены · ближайший — Васильев Д. А., через 8 минут</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary">＋ Добавить слот</button>
+          <button className="btn btn-primary">Начать приём →</button>
+        </div>
+      </div>
+
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Запланировано</div><div className="kpi-value">{total}</div><div className="kpi-delta muted">приёмов</div></div>
+        <div className="kpi"><div className="kpi-label">Завершено</div><div className="kpi-value">{done}</div><div className="kpi-delta">+ {done * 30} мин</div></div>
+        <div className="kpi"><div className="kpi-label">Заработок дня</div><div className="kpi-value">{(done * 4900).toLocaleString('ru')} ₽</div><div className="kpi-delta">прогноз {(total * 4900).toLocaleString('ru')} ₽</div></div>
+        <div className="kpi"><div className="kpi-label">Видеоконсультаций</div><div className="kpi-value">2</div><div className="kpi-delta muted">14:00 · 15:30</div></div>
+      </div>
+
+      <div className="dash-grid">
+        <div className="card">
+          <div className="card-hd"><div><div className="card-title">Расписание дня</div><div className="card-sub">Иконка ● — текущий приём</div></div><div className="chip chip-accent"><span className="chip-dot"></span>сейчас 10:38</div></div>
+          <div className="timeline-day">
+            {slots.map((s, i) => (
+              <div key={i} className={`slot-row ${s.status}`}>
+                <div className="slot-time">{s.time}<small>{s.dur} мин</small></div>
+                <div className="slot-pat">
+                  {s.pat}
+                  {s.reason && <small>{s.reason} · {s.dms}</small>}
+                </div>
+                <div>
+                  {s.status === 'done' && <span className="chip chip-good">✓ закрыт</span>}
+                  {s.status === 'now' && <span className="chip chip-accent"><span className="chip-dot"></span>идёт</span>}
+                  {s.status === 'next' && <span className="chip">в очереди</span>}
+                  {s.status === 'free' && <button className="btn btn-ghost btn-sm">＋ записать</button>}
+                  {s.status === 'break' && <span className="chip">перерыв</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gap: 14 }}>
+          <div className="card">
+            <div className="card-hd"><div className="card-title">Сводка по дню</div></div>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0 14px' }}>
+              <svg className="donut" viewBox="0 0 120 120">
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--bg-2)" strokeWidth="14"/>
+                <circle cx="60" cy="60" r="50" fill="none" stroke="var(--accent)" strokeWidth="14" strokeDasharray={`${done/total*314} 314`} transform="rotate(-90 60 60)" strokeLinecap="round"/>
+                <text x="60" y="62" textAnchor="middle" fontSize="22" fontWeight="700" fill="var(--fg)">{Math.round(done/total*100)}%</text>
+                <text x="60" y="78" textAnchor="middle" fontSize="10" fill="var(--fg-3)">прогресс</text>
+              </svg>
+            </div>
+            <div className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>Среднее время приёма</span><b style={{ fontSize: 13 }}>28 мин</b></div>
+            <div className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>Опоздание расписания</span><b style={{ fontSize: 13, color: 'var(--warn)' }}>+ 8 мин</b></div>
+            <div className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>Документов оформлено</span><b style={{ fontSize: 13 }}>3 / 8</b></div>
+          </div>
+
+          <div className="card">
+            <div className="card-hd"><div className="card-title">Уведомления</div></div>
+            {[
+              { ico: '⚯', t: 'Готовы анализы', s: 'Соколова А. — биохимия', tm: '10 мин назад' },
+              { ico: '◔', t: 'Просьба о записи', s: 'Сидоров М. — на пн', tm: '32 мин назад' },
+              { ico: '✎', t: 'Чат от пациента', s: 'Лебедев И. — уточнение по дозе', tm: '1 ч назад' },
+              { ico: '★', t: 'Новый отзыв 5★', s: 'Морозова Т. — благодарность', tm: '2 ч назад' },
+            ].map((n, i) => (
+              <div key={i} className="list-row">
+                <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center' }}>{n.ico}</div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>{n.t}</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{n.s}</div></div>
+                <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{n.tm}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================== CONSULTATION ================== */
+function ConsultPage() {
+  const [tab, setTab] = useState('proto');
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span className="chip chip-accent"><span className="chip-dot"></span>идёт приём · 14 мин</span>
+            <span className="chip">10:30 — 11:15 · 45 мин</span>
+          </div>
+          <div className="page-title">Васильев Дмитрий Андреевич, 28 лет</div>
+          <div className="page-sub">Карта А-104102 · ДМС Премиум · первичный приём по аритмии</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary">⏸ Пауза</button>
+          <button className="btn btn-secondary">＋ Назначить анализы</button>
+          <button className="btn btn-primary">Завершить и подписать ЭЦП</button>
+        </div>
+      </div>
+
+      <div className="consult-stage">
+        {/* LEFT: пациент */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="card" style={{ padding: 16 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14 }}>
+              <div className="avatar lg av-3">ДВ</div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>Васильев Д. А.</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>+7 (916) 309-44-21</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+              <div className="list-row" style={{ padding: '6px 0' }}><span style={{ flex: 1, color: 'var(--fg-3)' }}>Рост / вес</span><b>178 / 74 кг</b></div>
+              <div className="list-row" style={{ padding: '6px 0' }}><span style={{ flex: 1, color: 'var(--fg-3)' }}>Группа крови</span><b>II Rh+</b></div>
+              <div className="list-row" style={{ padding: '6px 0' }}><span style={{ flex: 1, color: 'var(--fg-3)' }}>Аллергии</span><b style={{ color: 'var(--bad)' }}>пенициллин</b></div>
+              <div className="list-row" style={{ padding: '6px 0' }}><span style={{ flex: 1, color: 'var(--fg-3)' }}>Хр. диагнозы</span><b>I10 (АГ 1ст)</b></div>
+            </div>
+          </div>
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>История визитов</div>
+            {[['14.03.26','Терапевт · профосмотр'],['08.02.26','Кардиолог · ЭКГ'],['12.11.25','Невролог · головная боль']].map(([d, t]) => (
+              <div key={d} className="list-row" style={{ padding: '7px 0' }}>
+                <div style={{ fontSize: 11, color: 'var(--fg-3)', width: 60 }}>{d}</div>
+                <div style={{ flex: 1, fontSize: 12 }}>{t}</div>
+                <button className="btn btn-ghost btn-sm">›</button>
+              </div>
+            ))}
+          </div>
+          <div className="card" style={{ padding: 14, background: 'var(--warn-soft)', borderColor: 'var(--warn)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--warn)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>⚠ внимание</div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>Пенициллин — анафилактическая реакция в 2019. Не назначать антибиотики пенициллинового ряда.</div>
+          </div>
+        </div>
+
+        {/* MIDDLE: протокол */}
+        <div className="protocol-area">
+          <div className="tabs" style={{ marginBottom: 16 }}>
+            <div className={`tab`} data-active={tab === 'proto'} onClick={() => setTab('proto')}>Протокол</div>
+            <div className={`tab`} data-active={tab === 'orders'} onClick={() => setTab('orders')}>Назначения</div>
+            <div className={`tab`} data-active={tab === 'docs'} onClick={() => setTab('docs')}>Документы</div>
+          </div>
+
+          {tab === 'proto' && (
+            <>
+              <div className="proto-section">
+                <label>Жалобы</label>
+                <textarea defaultValue="Перебои в работе сердца последние 3 недели, ощущение «замирания» 2–3 раза в сутки, чаще вечером. Связь с физ. нагрузкой не отслеживает. Эпизоды проходят самостоятельно за 10–30 секунд." />
+              </div>
+              <div className="proto-section">
+                <label>Анамнез заболевания</label>
+                <textarea defaultValue="Считает себя больным с апреля 2026. К врачам по этому поводу не обращался. Самостоятельно принимал валокордин — без эффекта. АД дома до 145/90." />
+                <div className="ai-suggest">
+                  <div className="ai-suggest-title">✦ AI · подсказка</div>
+                  <div className="ai-suggest-text">По описанию похоже на пароксизмы наджелудочковой экстрасистолии. Рекомендую: суточное мониторирование ЭКГ (Холтер), ЭхоКГ, ТТГ, калий/магний.</div>
+                  <div className="ai-suggest-actions">
+                    <button className="btn btn-secondary btn-sm">Применить</button>
+                    <button className="btn btn-ghost btn-sm">Игнорировать</button>
+                  </div>
+                </div>
+              </div>
+              <div className="proto-section">
+                <label>Объективный осмотр</label>
+                <textarea defaultValue="Состояние удовлетворительное. Кожные покровы обычной окраски. ЧСС 78, ритмичный, тоны ясные. АД 138/84 мм рт. ст. на обеих руках. Дыхание везикулярное. Живот мягкий, безболезненный." />
+              </div>
+              <div className="proto-section">
+                <label>Диагноз (МКБ-10)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  <span className="icd-tag">I49.4 Преждевременная деполяризация желудочков ×</span>
+                  <span className="icd-tag">I10 Эссенциальная (первичная) гипертензия ×</span>
+                  <button className="btn btn-ghost btn-sm">＋ код МКБ</button>
+                </div>
+              </div>
+              <div className="proto-section">
+                <label>Рекомендации</label>
+                <textarea defaultValue="1. Холтеровское мониторирование ЭКГ — 24 часа. 2. ЭхоКГ. 3. Биохимия (K, Mg, ТТГ, св. Т4). 4. Бисопролол 2.5 мг утром, 14 дней. 5. Контрольный приём через 3 недели." />
+              </div>
+            </>
+          )}
+
+          {tab === 'orders' && (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[
+                { name: 'Холтер ЭКГ 24 ч', code: 'A05.10.008', price: 4200, when: 'на завтра, 9:00' },
+                { name: 'ЭхоКГ', code: 'A04.10.002', price: 3800, when: 'на пятницу, 11:00' },
+                { name: 'Биохимия (K, Mg, ТТГ, св. Т4)', code: 'B03.016.004', price: 2400, when: 'до приёма' },
+                { name: 'Бисопролол 2.5 мг №30', code: 'rx', price: 0, when: 'рецепт выдан' },
+              ].map(o => (
+                <div key={o.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--bg-1)', borderRadius: 9, border: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{o.name}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{o.code} · {o.when}</div>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{o.price ? `${o.price.toLocaleString('ru')} ₽` : '—'}</div>
+                  <button className="btn btn-ghost btn-sm">×</button>
+                </div>
+              ))}
+              <button className="btn btn-secondary">＋ Добавить назначение из шаблона</button>
+            </div>
+          )}
+
+          {tab === 'docs' && (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {['Протокол приёма (PDF)','Заключение для пациента','Рецепт на Бисопролол','Направление на Холтер','Справка о приёме (086/у)'].map(d => (
+                <div key={d} style={{ display: 'flex', alignItems: 'center', padding: 10, background: 'var(--bg-1)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <span style={{ flex: 1, fontSize: 12.5 }}>📄 {d}</span>
+                  <button className="btn btn-ghost btn-sm">⤓</button>
+                  <button className="btn btn-secondary btn-sm">Открыть</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT: шаблоны + AI */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>✦ AI-помощник</div>
+            <div style={{ background: 'var(--bg-1)', borderRadius: 9, padding: 10, marginBottom: 8, fontSize: 12.5 }}>На основе жалоб и анамнеза — три наиболее вероятных диагноза:</div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {[['I49.4','Преждевр. деп. желудочков','78%'],['I49.1','Преждевр. деп. предсердий','15%'],['I47.1','Наджелудочковая тахикардия','7%']].map(([c, n, p]) => (
+                <div key={c} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '7px 10px', background: 'var(--bg-1)', borderRadius: 7, border: '1px solid var(--border)' }}>
+                  <span className="icd-tag" style={{ fontSize: 10 }}>{c}</span>
+                  <span style={{ flex: 1, fontSize: 12 }}>{n}</span>
+                  <b style={{ fontSize: 11.5, color: 'var(--accent)' }}>{p}</b>
+                </div>
+              ))}
+            </div>
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%', marginTop: 10 }}>Подробнее</button>
+          </div>
+
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Шаблоны</div>
+            <div className="template-list">
+              {['Первичный кардиолог','Контроль АД','Аритмия — стандарт','Дислипидемия','ИБС стенокардия','Сердечная недостаточность','Видеоконсультация коротко'].map(t => (
+                <div key={t} className="template-item">{t}</div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Таймер приёма</div>
+            <div style={{ fontSize: 32, fontWeight: 600, letterSpacing: '-0.02em', textAlign: 'center', fontVariantNumeric: 'tabular-nums', color: 'var(--accent)' }}>14:38</div>
+            <div className="bar" style={{ marginTop: 10 }}><div className="bar-fill" style={{ width: '32%' }}></div></div>
+            <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 6, textAlign: 'center' }}>осталось 30:22 из 45 минут</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================== SCHEDULE WEEK ================== */
+function SchedulePage() {
+  const days = [{ d:'Пн', n:4 },{ d:'Вт', n:5, today:true },{ d:'Ср', n:6 },{ d:'Чт', n:7 },{ d:'Пт', n:8 }];
+  const hours = ['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00'];
+  const events = {
+    '09:00-1': { who: 'Иванов', dur: 1 }, '10:00-1': { who: 'Петрова', dur: 1 }, '11:00-1': { who: 'Сидоров', dur: 1 },
+    '09:00-2': { who: 'Соколова', dur: 1 }, '10:00-2': { who: 'Васильев', dur: 1 }, '11:00-2': { who: 'Морозова', dur: 1 }, '14:00-2': { who: 'Захарова', dur: 1 }, '15:00-2': { who: 'Ким', dur: 1 }, '16:00-2': { who: 'Григорьев', dur: 1 },
+    '09:00-3': { who: 'Лебедев', dur: 1 }, '10:00-3': { who: 'Орлова', dur: 1 },
+    '14:00-4': { who: 'Конференция', dur: 2, special: true },
+    '10:00-5': { who: 'Видео-приём', dur: 1 }, '11:00-5': { who: 'Козлов', dur: 1 }, '15:00-5': { who: 'Никитин', dur: 1 },
+  };
+  const blocked = new Set(['13:00-1','13:00-2','13:00-3','13:00-4','13:00-5']);
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Расписание · неделя</div><div className="page-sub">4–8 мая 2026 · загрузка 78%</div></div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="chip">‹ пред. неделя</div>
+          <div className="chip">след. неделя ›</div>
+          <button className="btn btn-secondary">▦ Месяц</button>
+          <button className="btn btn-primary">＋ Заблокировать слот</button>
+        </div>
+      </div>
+
+      <div className="cal-grid">
+        <div className="cal-h"></div>
+        {days.map(d => <div key={d.n} className="cal-h dow"><span style={{ color: d.today ? 'var(--accent)' : 'inherit' }}>{d.d}</span><b style={{ color: d.today ? 'var(--accent)' : 'inherit' }}>{d.n}</b></div>)}
+        {hours.map(h => (
+          <React.Fragment key={h}>
+            <div className="cal-time">{h}</div>
+            {days.map(d => {
+              const k = `${h}-${d.n - 3}`;
+              const e = events[k];
+              const isBlocked = blocked.has(k);
+              if (isBlocked) return <div key={k} className="cal-cell blocked" style={{ display: 'grid', placeItems: 'center', fontSize: 10 }}>обед</div>;
+              if (e) return <div key={k} className="cal-cell taken" style={ e.special ? { background: 'var(--warn-soft)', color: 'var(--warn)' } : {}}><b>{h}</b>{e.who}</div>;
+              return <div key={k} className="cal-cell"></div>;
+            })}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div className="kpi-row" style={{ marginTop: 18 }}>
+        <div className="kpi"><div className="kpi-label">Слотов в неделе</div><div className="kpi-value">42</div><div className="kpi-delta muted">по 30 мин</div></div>
+        <div className="kpi"><div className="kpi-label">Занято</div><div className="kpi-value">33</div><div className="kpi-delta">78% загрузка</div></div>
+        <div className="kpi"><div className="kpi-label">Свободно</div><div className="kpi-value">9</div><div className="kpi-delta muted">видны пациентам</div></div>
+        <div className="kpi"><div className="kpi-label">Прогноз заработка</div><div className="kpi-value">161 700 ₽</div><div className="kpi-delta">+ 12% к пред. неделе</div></div>
+      </div>
+    </>
+  );
+}
+
+/* ================== PATIENTS ================== */
+function PatientsPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Мои пациенты</div><div className="page-sub">312 пациентов в наблюдении · 14 на контроле</div></div>
+        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-secondary">⤓ Экспорт</button><button className="btn btn-primary">＋ Принять нового</button></div>
+      </div>
+      <div className="tabs">
+        <div className="tab" data-active="true">Все · 312</div>
+        <div className="tab">На контроле · 14</div>
+        <div className="tab">Новые за месяц · 9</div>
+        <div className="tab">Не приходили &gt; 6 мес · 28</div>
+      </div>
+      <div className="card" style={{ padding: 0 }}>
+        <table className="tbl">
+          <thead><tr><th>Пациент</th><th>Возраст</th><th>Телефон</th><th>Диагнозы</th><th>Последний приём</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            {CN.patients.concat(CN.patients).slice(0, 8).map((p, i) => (
+              <tr key={i}>
+                <td><div style={{ display: 'flex', gap: 10, alignItems: 'center' }}><div className={`avatar md ${p.av}`}>{p.init}</div><div><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{p.card}</div></div></div></td>
+                <td>{p.age}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums', fontSize: 12.5 }}>{p.phone}</td>
+                <td>{i % 3 === 0 ? <span className="icd-tag">I10</span> : i % 3 === 1 ? <><span className="icd-tag">I10</span> <span className="icd-tag">E78.0</span></> : <span className="icd-tag">I49.4</span>}</td>
+                <td style={{ fontSize: 12.5 }}>{p.last}</td>
+                <td>{i % 4 === 0 ? <span className="chip chip-warn">контроль</span> : <span className="chip chip-good">наблюдение</span>}</td>
+                <td><button className="btn btn-ghost btn-sm">Открыть карту →</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* ================== EARNINGS ================== */
+function EarningsPage() {
+  const months = [['Янв', 218000],['Фев', 245000],['Мар', 268000],['Апр', 298000],['Май', 312000]];
+  const max = Math.max(...months.map(m => m[1]));
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Заработок и KPI</div><div className="page-sub">Май 2026 · к выплате 14 числа</div></div>
+        <button className="btn btn-secondary">⤓ Расчётный лист</button>
+      </div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Май к выплате</div><div className="kpi-value">312 000 ₽</div><div className="kpi-delta">+ 4.7% к апрелю</div></div>
+        <div className="kpi"><div className="kpi-label">Средний чек</div><div className="kpi-value">4 850 ₽</div><div className="kpi-delta">+ 2% к норме</div></div>
+        <div className="kpi"><div className="kpi-label">Приёмов с начала года</div><div className="kpi-value">624</div><div className="kpi-delta">3 120 000 ₽</div></div>
+        <div className="kpi"><div className="kpi-label">Бонус по KPI</div><div className="kpi-value">42 000 ₽</div><div className="kpi-delta">за NPS 9.4</div></div>
+      </div>
+
+      <div className="dash-grid">
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Динамика по месяцам</div></div>
+          <svg viewBox="0 0 500 220" style={{ width: '100%', height: 220 }}>
+            {months.map((m, i) => {
+              const x = 60 + i * 90;
+              const h = (m[1] / max) * 160;
+              return (
+                <g key={i}>
+                  <rect x={x - 30} y={190 - h} width="60" height={h} fill="var(--accent)" rx="6"/>
+                  <text x={x} y={210} textAnchor="middle" fontSize="11" fill="var(--fg-3)">{m[0]}</text>
+                  <text x={x} y={185 - h} textAnchor="middle" fontSize="11" fontWeight="600" fill="var(--fg)">{Math.round(m[1]/1000)}к</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Структура дохода</div></div>
+          <div style={{ display: 'grid', gap: 12, marginTop: 8 }}>
+            {[['Очные приёмы','236 400 ₽','76%'],['Видеоконсультации','42 600 ₽','14%'],['Бонус по KPI','42 000 ₽','13%'],['Доплата за стаж','9 000 ₽','3%']].map(([n, v, p]) => (
+              <div key={n}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5 }}><span>{n}</span><b>{v} <span style={{ color: 'var(--fg-3)', fontWeight: 400 }}>{p}</span></b></div>
+                <div className="bar"><div className="bar-fill" style={{ width: p }}></div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 14, padding: 0 }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 600 }}>История начислений</div>
+        <table className="tbl">
+          <thead><tr><th>Дата</th><th>Тип</th><th>Описание</th><th>Сумма</th><th>Статус</th></tr></thead>
+          <tbody>
+            {[['14.04.26','выплата','Зарплата за март','268 000 ₽','оплачено'],['28.04.26','аванс','Аванс апрель','120 000 ₽','оплачено'],['14.05.26','выплата','Зарплата за апрель + бонус','340 000 ₽','к выплате'],['02.05.26','премия','Бонус по NPS Q1','42 000 ₽','к выплате']].map((r, i) => (
+              <tr key={i}><td>{r[0]}</td><td><span className="chip">{r[1]}</span></td><td>{r[2]}</td><td><b>{r[3]}</b></td><td><span className={`chip ${r[4] === 'оплачено' ? 'chip-good' : 'chip-warn'}`}>{r[4]}</span></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* ================== RATING ================== */
+function RatingPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Рейтинг и отзывы пациентов</div><div className="page-sub">312 отзывов всего · 4.94 / 5.00</div></div>
+      </div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Средняя оценка</div><div className="kpi-value">4.94 ★</div><div className="kpi-delta">топ-3 в сети</div></div>
+        <div className="kpi"><div className="kpi-label">NPS</div><div className="kpi-value">94</div><div className="kpi-delta">+ 4 пункта</div></div>
+        <div className="kpi"><div className="kpi-label">Отзывов за месяц</div><div className="kpi-value">28</div><div className="kpi-delta">5★ — 26</div></div>
+        <div className="kpi"><div className="kpi-label">Время ответа в чате</div><div className="kpi-value">12 мин</div><div className="kpi-delta">в норме (≤30)</div></div>
+      </div>
+
+      <div className="dash-grid">
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Распределение оценок</div></div>
+          {[[5, 286],[4, 21],[3, 4],[2, 1],[1, 0]].map(([s, n]) => (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <span style={{ width: 16, fontSize: 12, fontWeight: 600 }}>{s}★</span>
+              <div className="bar" style={{ flex: 1 }}><div className="bar-fill" style={{ width: `${n/286*100}%` }}></div></div>
+              <span style={{ width: 38, fontSize: 12, color: 'var(--fg-3)', textAlign: 'right' }}>{n}</span>
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">По темам</div></div>
+          {[['Внимательность','98%'],['Понятность объяснений','96%'],['Профессионализм','99%'],['Пунктуальность','87%']].map(([n, p]) => (
+            <div key={n} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 5 }}><span>{n}</span><b>{p}</b></div>
+              <div className="bar"><div className="bar-fill" style={{ width: p }}></div></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
+        {[
+          { who: 'Морозова Татьяна', when: '04.05.26', s: 5, t: 'Алексей Сергеевич — врач от Бога. Объяснил мою кардиограмму простым языком, расписал всё по полочкам. Спасибо!' },
+          { who: 'Васильев Дмитрий', when: '02.05.26', s: 5, t: 'Внимательно выслушал, не торопил. Назначил адекватное обследование, без лишнего. Буду ходить только к нему.' },
+          { who: 'Сидорова О.', when: '28.04.26', s: 4, t: 'Хороший врач, но пришлось ждать 15 минут — приём шёл с задержкой.' },
+          { who: 'Лебедев И.', when: '24.04.26', s: 5, t: 'Спасибо за грамотный подбор терапии! Давление стабилизировалось через 2 недели.' },
+        ].map((r, i) => (
+          <div key={i} className="review-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{r.who}</div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)' }}>{r.when}</div>
+            </div>
+            <div className="stars" style={{ marginBottom: 8 }}>{'★'.repeat(r.s)}{'☆'.repeat(5 - r.s)}</div>
+            <div style={{ fontSize: 13, color: 'var(--fg-2)', lineHeight: 1.5 }}>{r.t}</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}><button className="btn btn-ghost btn-sm">Поблагодарить</button>{r.s < 5 && <button className="btn btn-secondary btn-sm">Ответить</button>}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ================== TIME / VACATION ================== */
+function TimePage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Часы, отпуск и замены</div><div className="page-sub">Личный график на 2026 · согласовать заявку →</div></div>
+        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-secondary">＋ Заявка на отпуск</button><button className="btn btn-primary">＋ Запросить замену</button></div>
+      </div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Отработано в мае</div><div className="kpi-value">94 ч</div><div className="kpi-delta muted">из 168</div></div>
+        <div className="kpi"><div className="kpi-label">Отпуск в году</div><div className="kpi-value">14 / 28</div><div className="kpi-delta muted">осталось 14 дней</div></div>
+        <div className="kpi"><div className="kpi-label">Сверхурочные</div><div className="kpi-value">12 ч</div><div className="kpi-delta">оплачены ×1.5</div></div>
+        <div className="kpi"><div className="kpi-label">Активных заявок</div><div className="kpi-value">2</div><div className="kpi-delta muted">1 на согласовании</div></div>
+      </div>
+      <div className="dash-grid">
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Заявки и согласования</div></div>
+          {[
+            { t: 'Отпуск 16–29 июня', s: 'на согласовании', cl: 'warn' },
+            { t: 'Замена 12 мая (Соколова М. В.)', s: 'согласовано', cl: 'good' },
+            { t: 'Конференция 24 мая', s: 'согласовано', cl: 'good' },
+            { t: 'Б/л 02–04 апреля', s: 'закрыт', cl: 'good' },
+          ].map((r, i) => (
+            <div key={i} className="list-row"><span style={{ flex: 1, fontSize: 13 }}>{r.t}</span><span className={`chip chip-${r.cl}`}>{r.s}</span></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">График по дням недели</div></div>
+          {[['Пн','9:00 — 17:00','Тверская'],['Вт','9:00 — 17:00','Тверская'],['Ср','11:00 — 19:00','Чистые пруды'],['Чт','9:00 — 17:00','Тверская'],['Пт','9:00 — 14:00','Тверская'],['Сб','— выходной —',''],['Вс','— выходной —','']].map((r, i) => (
+            <div key={i} className="list-row"><span style={{ width: 36, fontWeight: 600, fontSize: 12.5 }}>{r[0]}</span><span style={{ flex: 1, fontSize: 12.5 }}>{r[1]}</span><span style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{r[2]}</span></div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================== TEMPLATES ================== */
+function TemplatesPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Шаблоны заключений</div><div className="page-sub">Личные и общие шаблоны · ускоряют приём в 3–4 раза</div></div>
+        <button className="btn btn-primary">＋ Новый шаблон</button>
+      </div>
+      <div className="tabs">
+        <div className="tab" data-active="true">Мои · 12</div>
+        <div className="tab">Общие сети · 38</div>
+        <div className="tab">AI-сгенерированные · 4</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {[
+          { n: 'Первичный приём кардиолога', use: 142, cat: 'Первичные', upd: '14.03.26' },
+          { n: 'Контроль АГ + ЛПНП', use: 86, cat: 'Повторные', upd: '02.05.26' },
+          { n: 'Аритмия — стандартный план', use: 64, cat: 'Аритмии', upd: '28.04.26' },
+          { n: 'Видеоконсультация (короткая)', use: 38, cat: 'Видео', upd: '12.04.26' },
+          { n: 'Заключение для ВВК', use: 12, cat: 'Справки', upd: '08.02.26' },
+          { n: 'ИБС стенокардия напряжения', use: 28, cat: 'ИБС', upd: '14.01.26' },
+        ].map(t => (
+          <div key={t.n} className="card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 9, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center', fontSize: 16 }}>⌬</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>{t.n}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{t.cat} · обновлён {t.upd}</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 10 }}>Использован <b style={{ color: 'var(--fg)' }}>{t.use}</b> раз за последний год</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="btn btn-secondary btn-sm">Редактировать</button>
+              <button className="btn btn-ghost btn-sm">Дублировать</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ================== CHAT ================== */
+function ChatPage() {
+  const [active, setActive] = useState(0);
+  const chats = [
+    { who: 'Васильев Д. А.', av: 'av-3', last: 'Спасибо за приём! Когда подойти за результатами?', tm: '12 мин', un: 1 },
+    { who: 'Соколова А. В.', av: 'av-2', last: 'Алексей Сергеевич, давление держится 125/80', tm: '1 ч', un: 0 },
+    { who: 'Лебедев И. П.', av: 'av-1', last: 'Подскажите, дозу можно уменьшить?', tm: '3 ч', un: 2 },
+    { who: 'Поддержка КС', av: 'av-5', last: 'Сегодня перенесли приём 14:00 → 14:30', tm: 'вчера', un: 0 },
+  ];
+  const a = chats[active];
+  const msgs = [
+    { who: 'p', t: 'Алексей Сергеевич, спасибо за приём!', tm: '14:18' },
+    { who: 'p', t: 'Когда мне подойти за результатами Холтера?', tm: '14:18' },
+    { who: 'me', t: 'Дмитрий, добрый день. Холтер будет готов послезавтра к 18:00. Я свяжусь сразу как посмотрю.', tm: '14:42' },
+    { who: 'p', t: 'Понял, спасибо! А Бисопролол можно сразу начинать или ждать результатов?', tm: '14:48' },
+    { who: 'me', t: 'Можно начинать с завтра — 2.5 мг утром, дальше скорректируем.', tm: '14:51' },
+  ];
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Чаты с пациентами</div><div className="page-sub">Защищённый канал по 152-ФЗ</div></div>
+      </div>
+      <div className="card" style={{ padding: 0, display: 'grid', gridTemplateColumns: '300px 1fr', minHeight: 540, overflow: 'hidden' }}>
+        <div style={{ borderRight: '1px solid var(--border)' }}>
+          {chats.map((c, i) => (
+            <div key={i} onClick={() => setActive(i)} style={{ padding: '12px 14px', borderBottom: '1px solid var(--line)', cursor: 'pointer', background: active === i ? 'var(--accent-soft)' : 'transparent', borderLeft: active === i ? '2px solid var(--accent)' : '2px solid transparent', display: 'flex', gap: 10 }}>
+              <div className={`avatar md ${c.av}`}>{c.who.split(' ')[0].slice(0,2)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={{ fontSize: 13, fontWeight: 600 }}>{c.who}</div><div style={{ fontSize: 11, color: 'var(--fg-3)' }}>{c.tm}</div></div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.last}</div>
+              </div>
+              {c.un > 0 && <div style={{ background: 'var(--accent)', color: '#fff', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 999, alignSelf: 'center' }}>{c.un}</div>}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className={`avatar md ${a.av}`}>{a.who.split(' ')[0].slice(0,2)}</div>
+            <div style={{ flex: 1 }}><div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.who}</div><div style={{ fontSize: 11.5, color: 'var(--good)' }}>● в сети</div></div>
+            <button className="btn btn-secondary btn-sm">Карта пациента</button>
+          </div>
+          <div style={{ flex: 1, padding: 18, display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto' }}>
+            {msgs.map((m, i) => (
+              <div key={i} style={{ alignSelf: m.who === 'me' ? 'flex-end' : 'flex-start', maxWidth: '70%', padding: '10px 13px', borderRadius: 12, background: m.who === 'me' ? 'var(--accent)' : 'var(--bg-1)', color: m.who === 'me' ? '#fff' : 'var(--fg)', fontSize: 13.5, border: m.who === 'me' ? 'none' : '1px solid var(--border)' }}>
+                {m.t}<div style={{ fontSize: 10, opacity: 0.6, marginTop: 4 }}>{m.tm}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: 12, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
+            <button className="topbar-icon-btn">📎</button>
+            <input style={{ flex: 1, background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px', fontSize: 13 }} placeholder="Сообщение..." />
+            <button className="btn btn-primary">→</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================== VIDEO ================== */
+function VideoPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Видеоконсультации</div><div className="page-sub">Сегодня 2 видеоприёма · ближайший в 14:00</div></div>
+        <button className="btn btn-primary">▶ Начать сейчас</button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 14 }}>
+        <div className="card" style={{ background: '#000', minHeight: 480, position: 'relative', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+          <div className="avatar xl av-1" style={{ width: 140, height: 140, fontSize: 50, borderRadius: '50%' }}>ЛИ</div>
+          <div style={{ position: 'absolute', bottom: 16, left: 16, right: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#fff' }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>Лебедев Иван Петрович, 52</div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>HD · 24 fps · защищённый канал · 04:18</div>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['🎤','📹','💬','📎'].map(i => <button key={i} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: 16 }}>{i}</button>)}
+              <button style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--bad)', color: '#fff', fontSize: 16 }}>×</button>
+            </div>
+          </div>
+          <div style={{ position: 'absolute', top: 16, right: 16, width: 140, height: 90, borderRadius: 8, background: '#222', display: 'grid', placeItems: 'center', color: '#666', fontSize: 11 }}>вы (ИА)</div>
+        </div>
+        <div className="card">
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>Ближайшие видеоприёмы</div>
+          {[['14:00','Лебедев И. П.','идёт'],['15:30','Никитин С. В.','через 1ч 22м'],['Завтра 11:00','Орлова М. С.','—']].map((r, i) => (
+            <div key={i} style={{ padding: 12, background: 'var(--bg-1)', borderRadius: 9, border: '1px solid var(--border)', marginBottom: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}><b style={{ fontSize: 13 }}>{r[0]}</b><span className={`chip ${r[2] === 'идёт' ? 'chip-accent' : ''}`}>{r[2]}</span></div>
+              <div style={{ fontSize: 12.5 }}>{r[1]}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* ================== EDU + PROFILE (компактно) ================== */
+function EduPage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Обучение и сертификация</div><div className="page-sub">Накоплено баллов НМО: 124 / 250 в году</div></div></div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Баллов НМО</div><div className="kpi-value">124</div><div className="kpi-delta muted">из 250 в год</div></div>
+        <div className="kpi"><div className="kpi-label">Сертификатов</div><div className="kpi-value">8</div><div className="kpi-delta">+ 2 в этом году</div></div>
+        <div className="kpi"><div className="kpi-label">Курсов в работе</div><div className="kpi-value">3</div><div className="kpi-delta muted">2 — обязательные</div></div>
+        <div className="kpi"><div className="kpi-label">До аккредитации</div><div className="kpi-value">14 мес</div><div className="kpi-delta">июль 2027</div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {[
+          { n: 'Современные подходы к лечению аритмий', p: 64, d: 'до 14.06.26', b: 36 },
+          { n: 'Кардиоренальный синдром · модуль 2', p: 28, d: 'до 30.06.26', b: 24 },
+          { n: 'Этика медицинской практики (обязательный)', p: 12, d: 'до 14.05.26', b: 6 },
+        ].map((c, i) => (
+          <div key={i} className="card">
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{c.n}</div>
+            <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 10 }}>Срок {c.d} · {c.b} баллов НМО</div>
+            <div className="bar"><div className="bar-fill" style={{ width: `${c.p}%` }}></div></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 12 }}><span>{c.p}% пройдено</span><button className="btn btn-secondary btn-sm">Продолжить</button></div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ProfilePage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Профиль и настройки</div><div className="page-sub">Личные данные, специализация, банк</div></div></div>
+      <div className="card" style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 14 }}>
+        <div className="avatar xl av-1">{ME.init}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>{ME.name}</div>
+          <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 4 }}>{ME.spec} · стаж {ME.exp} лет · {CN.clinics[ME.clinic-1].name}</div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}><button className="btn btn-secondary btn-sm">Сменить фото</button><button className="btn btn-ghost btn-sm">Сменить пароль</button></div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="stars" style={{ fontSize: 16 }}>★★★★★</div>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>{ME.rating} · {ME.reviews} отзывов</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Контакты</div><button className="btn btn-ghost btn-sm">Изменить</button></div>
+          {[['Телефон','+7 (985) 422-18-90'],['E-mail','a.ivanov@klinikset.ru'],['Кабинет','304 · Тверская']].map(r => (
+            <div key={r[0]} className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>{r[0]}</span><b style={{ fontSize: 13 }}>{r[1]}</b></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Профессиональное</div></div>
+          {[['Специальность','Кардиология'],['Категория','Высшая'],['Учёная степень','к.м.н.'],['Сертификат','до 14.07.2027']].map(r => (
+            <div key={r[0]} className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>{r[0]}</span><b style={{ fontSize: 13 }}>{r[1]}</b></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Реквизиты для выплат</div></div>
+          {[['Банк','Тинькофф'],['Карта','**** 4421'],['ИНН','7704123456']].map(r => (
+            <div key={r[0]} className="list-row"><span style={{ flex: 1, fontSize: 12.5, color: 'var(--fg-3)' }}>{r[0]}</span><b style={{ fontSize: 13 }}>{r[1]}</b></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Уведомления</div></div>
+          {[['Push о приёмах', true],['Чаты пациентов', true],['Готовность анализов', true],['Маркетинг', false]].map(([n, on]) => (
+            <label key={n} className="list-row" style={{ cursor: 'pointer' }}>
+              <span style={{ flex: 1, fontSize: 13 }}>{n}</span>
+              <span style={{ width: 32, height: 18, borderRadius: 999, background: on ? 'var(--accent)' : 'var(--bg-2)', position: 'relative', display: 'inline-block' }}>
+                <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }}></span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const PAGES = { today: TodayPage, schedule: SchedulePage, consult: ConsultPage, patients: PatientsPage, templates: TemplatesPage, chat: ChatPage, video: VideoPage, earnings: EarningsPage, rating: RatingPage, time: TimePage, edu: EduPage, profile: ProfilePage };
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState('today');
+  useEffect(() => { window.applyTheme(t.theme); document.documentElement.setAttribute('data-density', t.density); }, [t.theme, t.density]);
+  const Page = PAGES[route];
+  return (
+    <>
+      <div className="app">
+        <aside className="side">
+          <div className="side-brand">
+            <div className="side-brand-mark">✚</div>
+            <div className="side-brand-name">КлиникСеть<span>кабинет врача</span></div>
+          </div>
+          <div className="side-section">Работа</div>
+          {NAV.slice(0, 7).map(n => (
+            <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => setRoute(n.id)}>
+              <div className="nav-item-ico">{n.ico}</div>{n.label}
+              {n.badge && <div className={`nav-item-badge ${n.badge === 'live' ? 'bad' : ''}`}>{n.badge}</div>}
+            </div>
+          ))}
+          <div className="side-section">Кабинет</div>
+          {NAV.slice(7).map(n => (
+            <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => setRoute(n.id)}>
+              <div className="nav-item-ico">{n.ico}</div>{n.label}
+              {n.badge && <div className="nav-item-badge">{n.badge}</div>}
+            </div>
+          ))}
+          <div className="side-foot">
+            <div className="side-user">
+              <div className={`avatar md ${ME.av}`}>{ME.init}</div>
+              <div style={{ flex: 1, minWidth: 0 }}><div className="side-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Иванов А. С.</div><div className="side-user-role">кардиолог · к.м.н.</div></div>
+            </div>
+            <a href="index.html" style={{ fontSize: 11, color: 'var(--fg-3)', display: 'block', textAlign: 'center', marginTop: 8 }}>← к выбору кабинета</a>
+          </div>
+        </aside>
+
+        <main className="main">
+          <div className="topbar">
+            <div className="topbar-search"><span>⌕</span><input placeholder="Поиск пациента, анализа..." /><span className="topbar-kbd">⌘K</span></div>
+            <span className="role-banner">сейчас: <b>идёт приём 10:30</b></span>
+            <button className="topbar-icon-btn">◔<span className="pip"></span></button>
+            <button className="topbar-icon-btn">⚙</button>
+          </div>
+          <div className="content"><Page /></div>
+        </main>
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="Тема" />
+        <TweakRadio label="Палитра" value={t.theme} options={['blue','teal','emerald','violet','rose']} onChange={(v) => setTweak('theme', v)} />
+        <TweakSection label="Плотность" />
+        <TweakRadio label="" value={t.density} options={['cozy','compact']} onChange={(v) => setTweak('density', v)} />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="80" fill="#e6f4f5"/><text x="60" y="50" text-anchor="middle" font-size="24" fill="#2a8b94" font-weight="700">✚</text></svg>
+</template>
+</body>
+</html>

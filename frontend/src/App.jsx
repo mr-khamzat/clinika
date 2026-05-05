@@ -44,6 +44,7 @@ import PatientCabinet from './pages/PatientCabinet'
 import OnlineBooking from './pages/OnlineBooking'
 import ClinicPage from './pages/ClinicPage'
 import DesignPreview from './pages/DesignPreview'
+import DesignPreview2 from './pages/DesignPreview2'
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -164,6 +165,7 @@ function MiniApp() {
 
           {/* ─── Превью дизайн-токенов (публичный пилот, без auth) ─── */}
           <Route path="design-preview" element={<DesignPreview />} />
+          <Route path="design-preview-2" element={<DesignPreview2 />} />
 
           {/* ─── Маршруты для партнёра ─── */}
           <Route path="partner/create" element={<PartnerCreateReferral />} />
@@ -240,6 +242,10 @@ export default function App() {
   // Превью премиум-палитры (пилот, без auth) — /{slug}/design-preview
   if (SLUG && (path === '/' + SLUG + '/design-preview' || path.startsWith('/' + SLUG + '/design-preview/'))) {
     return <DesignPreview />
+  }
+  // Второй бандл дизайна — /{slug}/design-preview-2 (HTML-прототипы из Claude Design)
+  if (SLUG && (path === '/' + SLUG + '/design-preview-2' || path.startsWith('/' + SLUG + '/design-preview-2/'))) {
+    return <DesignPreview2 />
   }
 
   // Preview-версия кабинета пациента (новый премиум-дизайн) — параллельный URL /p-new

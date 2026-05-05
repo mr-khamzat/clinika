@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>КлиникСеть · Кабинет менеджера по найму</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* КлиникСеть · общая дизайн-система · светлая тема для рабочих кабинетов */
+:root {
+  --hue: 220;
+  --bg: oklch(0.985 0.004 var(--hue));
+  --bg-1: oklch(0.97 0.005 var(--hue));
+  --bg-2: oklch(0.955 0.006 var(--hue));
+  --bg-3: oklch(0.93 0.008 var(--hue));
+  --surface: oklch(1 0 0);
+  --surface-hi: oklch(0.98 0.004 var(--hue));
+  --border: oklch(0.90 0.008 var(--hue));
+  --border-strong: oklch(0.84 0.01 var(--hue));
+  --line: oklch(0.93 0.008 var(--hue));
+  --fg: oklch(0.18 0.014 var(--hue));
+  --fg-2: oklch(0.36 0.012 var(--hue));
+  --fg-3: oklch(0.52 0.012 var(--hue));
+  --fg-4: oklch(0.65 0.012 var(--hue));
+  --accent: oklch(0.55 0.16 240);
+  --accent-2: oklch(0.62 0.15 220);
+  --accent-soft: oklch(0.55 0.16 240 / 0.10);
+  --accent-line: oklch(0.55 0.16 240 / 0.28);
+  --accent-fg: #fff;
+  --good: oklch(0.55 0.15 150);
+  --good-soft: oklch(0.55 0.15 150 / 0.10);
+  --warn: oklch(0.65 0.15 65);
+  --warn-soft: oklch(0.65 0.15 65 / 0.12);
+  --bad: oklch(0.55 0.20 25);
+  --bad-soft: oklch(0.55 0.20 25 / 0.10);
+  --gold: oklch(0.62 0.13 75);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-lg: 18px;
+  --shadow-sm: 0 1px 2px oklch(0.18 0.014 220 / 0.06);
+  --shadow-md: 0 4px 14px oklch(0.18 0.014 220 / 0.08);
+  --shadow-lg: 0 20px 50px oklch(0.18 0.014 220 / 0.12);
+  --density-pad: 14px;
+  --density-row: 12px;
+}
+[data-density="compact"] { --density-pad: 10px; --density-row: 8px; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { font-family: 'Golos Text', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--fg); -webkit-font-smoothing: antialiased; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+button, input, select, textarea { font-family: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+a { color: inherit; text-decoration: none; }
+input, select, textarea { outline: none; }
+.app { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+.side { border-right: 1px solid var(--border); padding: 18px 12px; display: flex; flex-direction: column; background: var(--bg-1); position: sticky; top: 0; max-height: 100vh; overflow-y: auto; }
+.side-brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 18px; }
+.side-brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(140deg, var(--accent), var(--accent-2)); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px oklch(0.55 0.16 240 / 0.25); }
+.side-brand-name { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.side-brand-name span { display: block; font-size: 11px; color: var(--fg-3); font-weight: 500; }
+.side-section { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: var(--fg-4); text-transform: uppercase; padding: 12px 10px 4px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--fg-2); font-weight: 500; cursor: pointer; user-select: none; margin-bottom: 1px; position: relative; }
+.nav-item:hover { background: var(--bg-2); color: var(--fg); }
+.nav-item[data-active="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav-item-ico { width: 18px; text-align: center; font-size: 14px; }
+.nav-item-badge { margin-left: auto; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; min-width: 18px; text-align: center; }
+.nav-item-badge.warn { background: var(--warn); }
+.nav-item-badge.bad { background: var(--bad); }
+.side-foot { margin-top: auto; padding: 12px 6px; border-top: 1px solid var(--border); }
+.side-user { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 9px; }
+.side-user:hover { background: var(--bg-2); }
+.side-user-name { font-size: 12.5px; font-weight: 600; }
+.side-user-role { font-size: 11px; color: var(--fg-3); }
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border); background: oklch(1 0 0 / 0.85); backdrop-filter: blur(20px); position: sticky; top: 0; z-index: 10; }
+.topbar-search { flex: 1; max-width: 480px; display: flex; align-items: center; gap: 8px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; color: var(--fg-3); font-size: 13px; }
+.topbar-search input { flex: 1; border: 0; background: transparent; font-size: 13px; color: var(--fg); }
+.topbar-search input::placeholder { color: var(--fg-4); }
+.topbar-kbd { padding: 1px 5px; border-radius: 4px; font-size: 10.5px; background: var(--bg-2); color: var(--fg-3); border: 1px solid var(--border); font-family: 'SF Mono', Consolas, monospace; }
+.topbar-icon-btn { width: 34px; height: 34px; border-radius: 9px; background: var(--bg-1); border: 1px solid var(--border); display: grid; place-items: center; color: var(--fg-2); font-size: 14px; position: relative; }
+.topbar-icon-btn:hover { background: var(--bg-2); color: var(--fg); }
+.topbar-icon-btn .pip { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
+.content { flex: 1; padding: 22px 24px 80px; overflow-x: hidden; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 22px; }
+.page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
+.page-sub { font-size: 13px; color: var(--fg-3); margin-top: 4px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: var(--density-pad); box-shadow: var(--shadow-sm); }
+.card-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.card-title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.card-sub { font-size: 12px; color: var(--fg-3); margin-top: 2px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; white-space: nowrap; transition: background .12s; }
+.btn-primary { background: var(--accent); color: var(--accent-fg); box-shadow: 0 1px 0 oklch(1 0 0 / 0.2) inset, 0 4px 12px oklch(0.55 0.16 240 / 0.22); }
+.btn-primary:hover { filter: brightness(0.95); }
+.btn-secondary { background: var(--surface); color: var(--fg); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-2); border-color: var(--border-strong); }
+.btn-ghost { color: var(--fg-2); }
+.btn-ghost:hover { background: var(--bg-2); color: var(--fg); }
+.btn-danger { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad-soft); }
+.btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 7px; }
+.btn-lg { padding: 12px 20px; font-size: 14px; border-radius: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 500; background: var(--bg-2); color: var(--fg-2); border: 1px solid var(--border); }
+.chip-good { background: var(--good-soft); color: var(--good); border-color: var(--good-soft); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); border-color: var(--warn-soft); }
+.chip-bad { background: var(--bad-soft); color: var(--bad); border-color: var(--bad-soft); }
+.chip-accent { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }
+.chip-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.kpi-label { font-size: 11.5px; color: var(--fg-3); font-weight: 500; }
+.kpi-value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi-delta { font-size: 11.5px; color: var(--good); margin-top: 2px; font-weight: 500; }
+.kpi-delta.bad { color: var(--bad); }
+.kpi-delta.muted { color: var(--fg-3); }
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+.tab { padding: 10px 14px; font-size: 13px; font-weight: 500; color: var(--fg-3); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; }
+.tab[data-active="true"] { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:hover { color: var(--fg); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; padding: 10px 12px; font-weight: 600; font-size: 11px; color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); background: var(--bg-1); position: sticky; top: 0; }
+.tbl td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl tr:hover td { background: var(--bg-1); }
+.tbl tr:last-child td { border-bottom: 0; }
+.avatar { border-radius: 50%; display: grid; place-items: center; color: #fff; font-weight: 600; flex-shrink: 0; }
+.avatar.sm { width: 28px; height: 28px; font-size: 11px; }
+.avatar.md { width: 36px; height: 36px; font-size: 12px; }
+.avatar.lg { width: 48px; height: 48px; font-size: 15px; }
+.avatar.xl { width: 72px; height: 72px; font-size: 22px; border-radius: 16px; }
+.av-1 { background: linear-gradient(135deg, oklch(0.6 0.14 280), oklch(0.55 0.16 230)); }
+.av-2 { background: linear-gradient(135deg, oklch(0.6 0.14 350), oklch(0.55 0.16 30)); }
+.av-3 { background: linear-gradient(135deg, oklch(0.55 0.14 200), oklch(0.6 0.14 160)); }
+.av-4 { background: linear-gradient(135deg, oklch(0.55 0.14 120), oklch(0.6 0.14 80)); }
+.av-5 { background: linear-gradient(135deg, oklch(0.55 0.16 50), oklch(0.6 0.14 20)); }
+.av-6 { background: linear-gradient(135deg, oklch(0.5 0.16 320), oklch(0.55 0.16 280)); }
+.tw-panel { position: fixed; bottom: 18px; left: 18px; width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); z-index: 70; padding: 14px; font-size: 13px; }
+.tw-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tw-hd-title { font-size: 13px; font-weight: 600; }
+.tw-x { width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center; color: var(--fg-3); }
+.tw-x:hover { background: var(--bg-2); color: var(--fg); }
+.tw-section { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; color: var(--fg-4); text-transform: uppercase; margin: 12px 0 6px; }
+.tw-section:first-child { margin-top: 0; }
+.tw-radio { display: grid; gap: 4px; padding: 3px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; }
+.tw-radio button { padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--fg-2); }
+.tw-radio button[data-on="true"] { background: var(--accent); color: var(--accent-fg); }
+.tw-fab { position: fixed; bottom: 18px; left: 18px; padding: 8px 13px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow-md); font-size: 12.5px; font-weight: 600; color: var(--fg); display: flex; align-items: center; gap: 7px; z-index: 70; }
+.tw-fab:hover { background: var(--bg-1); }
+.tw-label { font-size: 11.5px; color: var(--fg-2); margin-bottom: 5px; }
+.role-banner { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--fg-3); padding: 4px 10px; border-radius: 999px; background: var(--bg-1); border: 1px solid var(--border); }
+.role-banner b { color: var(--accent); font-weight: 600; }
+.spark { display: block; }
+.list-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.list-row:first-child { border-top: 0; padding-top: 0; }
+.list-row:last-child { padding-bottom: 0; }
+@media (max-width: 1100px) { .app { grid-template-columns: 200px 1fr; } .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 760px) { .app { grid-template-columns: 1fr; } .side { display: none; } .topbar-search { display: none; } .content { padding: 16px; } }
+
+</style>
+<style>
+:root { --accent: oklch(0.58 0.18 25); --accent-2: oklch(0.63 0.16 10); --accent-soft: oklch(0.58 0.18 25 / 0.10); --accent-line: oklch(0.58 0.18 25 / 0.28); }
+.kanban { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; min-height: 580px; }
+.kan-col { background: var(--bg-1); border: 1px solid var(--border); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; }
+.kan-h { font-size: 11px; font-weight: 700; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 6px 10px; display: flex; justify-content: space-between; align-items: center; }
+.kan-h-bar { height: 3px; border-radius: 2px; margin: 0 6px 8px; }
+.kan-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-bottom: 8px; box-shadow: var(--shadow-sm); cursor: grab; }
+.kan-card:hover { border-color: var(--accent-line); }
+.kan-card-name { font-size: 12.5px; font-weight: 600; }
+.kan-card-spec { font-size: 11px; color: var(--fg-3); margin-top: 1px; }
+.kan-card-meta { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.kan-pill { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg-2); color: var(--fg-2); }
+.kan-pill.h { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.bar { height: 8px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 999px; }
+.funnel { display: flex; flex-direction: column; gap: 4px; }
+.fnl-row { display: grid; grid-template-columns: 160px 1fr 80px 60px; gap: 14px; align-items: center; padding: 8px 0; }
+.fnl-bar { height: 36px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius: 6px; display: flex; align-items: center; padding: 0 10px; color: #fff; font-size: 12.5px; font-weight: 600; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script>
+// КлиникСеть · общие данные между всеми кабинетами
+window.CN = {
+  clinics: [
+    { id: 1, name: 'Клиника на Тверской', short: 'Тверская', addr: 'Москва, ул. Тверская, 12', rooms: 18, staff: 42 },
+    { id: 2, name: 'Клиника на Чистых прудах', short: 'Чистые пруды', addr: 'Москва, Чистопрудный б-р, 8', rooms: 12, staff: 26 },
+    { id: 3, name: 'Клиника на Юго-Западной', short: 'Юго-Зап.', addr: 'Москва, пр-т Вернадского, 86', rooms: 10, staff: 22 },
+    { id: 4, name: 'Клиника в Сколково', short: 'Сколково', addr: 'Сколково, Новая ул., 100', rooms: 15, staff: 31 },
+  ],
+  doctors: [
+    { id: 1, name: 'Иванов Алексей Сергеевич', short: 'Иванов А. С.', spec: 'Кардиолог, к.м.н.', exp: 14, rating: 4.94, reviews: 312, clinic: 1, init: 'ИА', av: 'av-1', load: 0.92, salary: 312000, ytd: 3120000, status: 'online' },
+    { id: 2, name: 'Соколова Мария Викторовна', short: 'Соколова М. В.', spec: 'Терапевт', exp: 8, rating: 4.87, reviews: 198, clinic: 2, init: 'СМ', av: 'av-2', load: 0.78, salary: 218000, ytd: 2180000, status: 'busy' },
+    { id: 3, name: 'Петров Дмитрий Олегович', short: 'Петров Д. О.', spec: 'Эндокринолог', exp: 11, rating: 4.91, reviews: 256, clinic: 1, init: 'ПД', av: 'av-3', load: 0.85, salary: 268000, ytd: 2680000, status: 'online' },
+    { id: 4, name: 'Фёдорова Анна Игоревна', short: 'Фёдорова А. И.', spec: 'Невролог, к.м.н.', exp: 9, rating: 4.96, reviews: 421, clinic: 3, init: 'ФА', av: 'av-4', load: 0.88, salary: 295000, ytd: 2950000, status: 'offline' },
+    { id: 5, name: 'Морозов Сергей Павлович', short: 'Морозов С. П.', spec: 'УЗИ-диагностика', exp: 12, rating: 4.82, reviews: 178, clinic: 4, init: 'МС', av: 'av-5', load: 0.71, salary: 198000, ytd: 1980000, status: 'online' },
+    { id: 6, name: 'Лебедева Ольга Юрьевна', short: 'Лебедева О. Ю.', spec: 'Гинеколог', exp: 16, rating: 4.93, reviews: 389, clinic: 2, init: 'ЛО', av: 'av-6', load: 0.94, salary: 342000, ytd: 3420000, status: 'busy' },
+  ],
+  patients: [
+    { id: 1, name: 'Анна Соколова', short: 'А. Соколова', card: 'А-104857', age: 34, dob: '14.03.1991', phone: '+7 (916) 555-12-44', email: 'anna.s@mail.ru', dms: 'Премиум', loyalty: 'Platinum', status: 'active', init: 'АС', av: 'av-2', visits: 12, last: '02.05.2026' },
+    { id: 2, name: 'Михаил Петров', short: 'М. Петров', card: 'А-104723', age: 41, phone: '+7 (903) 222-18-90', email: 'mp@yandex.ru', dms: 'Базовый', loyalty: 'Silver', status: 'active', init: 'МП', av: 'av-1', visits: 7, last: '28.04.2026' },
+    { id: 3, name: 'Елена Кузнецова', short: 'Е. Кузнецова', card: 'А-105921', age: 52, phone: '+7 (985) 117-00-44', email: 'e.kuz@gmail.com', dms: 'нет', loyalty: 'Bronze', status: 'active', init: 'ЕК', av: 'av-4', visits: 3, last: '14.04.2026' },
+    { id: 4, name: 'Дмитрий Васильев', short: 'Д. Васильев', card: 'А-104102', age: 28, phone: '+7 (916) 309-44-21', email: 'dv@mail.ru', dms: 'Премиум', loyalty: 'Gold', status: 'active', init: 'ДВ', av: 'av-3', visits: 9, last: '01.05.2026' },
+    { id: 5, name: 'Татьяна Морозова', short: 'Т. Морозова', card: 'А-105033', age: 67, phone: '+7 (495) 712-88-01', dms: 'нет', loyalty: 'Bronze', status: 'active', init: 'ТМ', av: 'av-5', visits: 22, last: '04.05.2026' },
+    { id: 6, name: 'Александр Новиков', short: 'А. Новиков', card: 'А-105588', age: 36, phone: '+7 (925) 411-22-65', dms: 'Базовый', loyalty: 'Silver', status: 'active', init: 'АН', av: 'av-6', visits: 4, last: '22.04.2026' },
+  ],
+  roles: [
+    { id: 'patient', name: 'Пациент', who: 'Анна Соколова', desc: 'Запись, медкарта, анализы, бонусы, чат с врачом', file: 'patient.html', accent: 'oklch(0.55 0.16 240)' },
+    { id: 'doctor',  name: 'Врач',     who: 'Иванов Алексей Сергеевич', desc: 'Расписание, приёмы, заключения, заработок', file: 'doctor.html', accent: 'oklch(0.50 0.15 200)' },
+    { id: 'admin',   name: 'Администратор', who: 'Ольга Семёнова', desc: 'Ресепшн, касса, очередь, оформление пациентов', file: 'admin.html', accent: 'oklch(0.55 0.15 160)' },
+    { id: 'manager', name: 'Менеджер по найму', who: 'Илья Громов', desc: 'CRM-воронка кандидатов, аналитика найма, шаблоны', file: 'manager.html', accent: 'oklch(0.55 0.16 30)' },
+    { id: 'head',    name: 'Руководитель сети', who: 'Виктор Лазарев', desc: 'Финансы, бенчмарк клиник, NPS, маркетинг', file: 'head.html', accent: 'oklch(0.45 0.15 290)' },
+  ],
+};
+
+window.makeTweaks = function(React) {
+  const { useState, useEffect } = React;
+  function useTweaks(defaults) {
+    const [v, setV] = useState(defaults);
+    const set = (k, val) => {
+      const patch = (typeof k === 'object') ? k : { [k]: val };
+      setV(prev => ({ ...prev, ...patch }));
+      try { window.parent.postMessage({ type: '__edit_mode_set_keys', edits: patch }, '*'); } catch(e){}
+    };
+    return [v, set];
+  }
+  function TweaksPanel({ children }) {
+    const [open, setOpen] = useState(false);
+    useEffect(() => {
+      const onMsg = (e) => {
+        if (!e.data || typeof e.data !== 'object') return;
+        if (e.data.type === '__activate_edit_mode') setOpen(true);
+        if (e.data.type === '__deactivate_edit_mode') setOpen(false);
+      };
+      window.addEventListener('message', onMsg);
+      try { window.parent.postMessage({ type: '__edit_mode_available' }, '*'); } catch(e){}
+      return () => window.removeEventListener('message', onMsg);
+    }, []);
+    if (!open) return React.createElement('button', { className: 'tw-fab', onClick: () => setOpen(true) }, '⚙ Tweaks');
+    return React.createElement('div', { className: 'tw-panel' },
+      React.createElement('div', { className: 'tw-hd' },
+        React.createElement('div', { className: 'tw-hd-title' }, 'Tweaks'),
+        React.createElement('button', { className: 'tw-x', onClick: () => { setOpen(false); try { window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*'); } catch(e){} } }, '×'),
+      ),
+      children
+    );
+  }
+  function TweakSection({ label }) { return React.createElement('div', { className: 'tw-section' }, label); }
+  function TweakRadio({ label, value, options, onChange }) {
+    return React.createElement('div', { style: { marginBottom: 8 } },
+      label && React.createElement('div', { className: 'tw-label' }, label),
+      React.createElement('div', { className: 'tw-radio', style: { gridTemplateColumns: `repeat(${options.length}, 1fr)` } },
+        options.map(o => React.createElement('button', { key: o, 'data-on': value === o, onClick: () => onChange(o) }, o))
+      )
+    );
+  }
+  return { useTweaks, TweaksPanel, TweakSection, TweakRadio };
+};
+
+window.themePalettes = {
+  blue:    { c1: 'oklch(0.55 0.16 240)', c2: 'oklch(0.62 0.15 220)' },
+  teal:    { c1: 'oklch(0.50 0.13 200)', c2: 'oklch(0.58 0.12 180)' },
+  emerald: { c1: 'oklch(0.55 0.15 160)', c2: 'oklch(0.62 0.14 140)' },
+  violet:  { c1: 'oklch(0.50 0.16 290)', c2: 'oklch(0.55 0.15 270)' },
+  rose:    { c1: 'oklch(0.58 0.18 25)',  c2: 'oklch(0.63 0.16 10)'  },
+};
+window.applyTheme = function(name) {
+  const p = window.themePalettes[name] || window.themePalettes.blue;
+  const r = document.documentElement.style;
+  r.setProperty('--accent', p.c1);
+  r.setProperty('--accent-2', p.c2);
+  const pull = (s, op) => s.replace(')', ` / ${op})`);
+  r.setProperty('--accent-soft', pull(p.c1, 0.10));
+  r.setProperty('--accent-line', pull(p.c1, 0.28));
+};
+
+</script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const { useTweaks, TweaksPanel, TweakSection, TweakRadio } = window.makeTweaks(React);
+const CN = window.CN;
+
+const NAV = [
+  { id: 'dash', label: 'Сводка', ico: '◐' },
+  { id: 'pipeline', label: 'Воронка', ico: '☰', badge: '124' },
+  { id: 'vacancies', label: 'Вакансии', ico: '✚' },
+  { id: 'candidates', label: 'Кандидаты', ico: '◫' },
+  { id: 'interviews', label: 'Интервью', ico: '◑', badge: '6' },
+  { id: 'tasks', label: 'Задачи', ico: '✓', badge: '12' },
+  { id: 'sources', label: 'Источники', ico: '↺' },
+  { id: 'templates', label: 'Шаблоны писем', ico: '✎' },
+  { id: 'analytics', label: 'Аналитика найма', ico: '◊' },
+  { id: 'profile', label: 'Профиль', ico: '☉' },
+];
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "blue"
+}/*EDITMODE-END*/;
+
+const STAGES = [
+  { id: 'new', name: 'Новые', color: 'var(--fg-3)' },
+  { id: 'screen', name: 'Скрининг', color: 'oklch(0.55 0.16 240)' },
+  { id: 'interview', name: 'Интервью', color: 'oklch(0.58 0.18 25)' },
+  { id: 'check', name: 'Проверка', color: 'oklch(0.62 0.13 75)' },
+  { id: 'offer', name: 'Оффер', color: 'oklch(0.55 0.15 160)' },
+  { id: 'hired', name: 'Принят', color: 'oklch(0.50 0.16 290)' },
+];
+
+const CANDS = [
+  { n: 'Котов А. М.', s: 'Терапевт, 6 лет', src: 'hh.ru', sal: 180, fit: 92, st: 'new', tags: ['ОМС','ДМС'], vac: 'Терапевт · Сколково' },
+  { n: 'Ким Анастасия', s: 'Кардиолог, 9 лет', src: 'рекомендация', sal: 240, fit: 96, st: 'new', tags: ['к.м.н.'], vac: 'Кардиолог · Тверская' },
+  { n: 'Громова Е. С.', s: 'УЗИ-диагност, 4 г', src: 'Telegram', sal: 165, fit: 78, st: 'new', tags: [], vac: 'УЗИ · Юго-Зап.' },
+
+  { n: 'Орлов Р. Н.', s: 'Невролог, 11 лет', src: 'hh.ru', sal: 220, fit: 88, st: 'screen', tags: ['к.м.н.'], vac: 'Невролог · Тверская' },
+  { n: 'Никитина М. И.', s: 'Гинеколог, 7 лет', src: 'LinkedIn', sal: 210, fit: 84, st: 'screen', tags: ['ДМС'], vac: 'Гинеколог · Чистые пруды' },
+  { n: 'Семёнов Д. К.', s: 'Терапевт, 3 года', src: 'СуперДжоб', sal: 140, fit: 71, st: 'screen', tags: [], vac: 'Терапевт · Сколково' },
+
+  { n: 'Беляева Ольга', s: 'Эндокринолог, 8 лет', src: 'рекомендация', sal: 230, fit: 94, st: 'interview', tags: ['к.м.н.','ОМС'], vac: 'Эндокринолог · Тверская' },
+  { n: 'Захаров А. С.', s: 'Адм. ресепшн', src: 'hh.ru', sal: 75, fit: 82, st: 'interview', tags: [], vac: 'Адм. · Юго-Зап.' },
+
+  { n: 'Лазарева Т. М.', s: 'Невролог, 14 лет', src: 'хантинг', sal: 280, fit: 91, st: 'check', tags: ['к.м.н.','ДМС'], vac: 'Невролог · Тверская' },
+
+  { n: 'Прохоров К. И.', s: 'Кардиолог, 12 лет', src: 'рекомендация', sal: 260, fit: 95, st: 'offer', tags: ['к.м.н.'], vac: 'Кардиолог · Чистые пруды' },
+
+  { n: 'Иванова Н. С.', s: 'Терапевт, 5 лет', src: 'hh.ru', sal: 175, fit: 89, st: 'hired', tags: ['ОМС'], vac: 'Терапевт · Сколково' },
+];
+
+/* DASH */
+function DashPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Найм · сводка мая</div><div className="page-sub">14 открытых вакансий · 124 активных кандидата · 8 офферов в работе</div></div>
+        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-secondary">⤓ Отчёт CEO</button><button className="btn btn-primary">＋ Открыть вакансию</button></div>
+      </div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Закрыто в мае</div><div className="kpi-value">7</div><div className="kpi-delta">из 12 целей</div></div>
+        <div className="kpi"><div className="kpi-label">Среднее время найма</div><div className="kpi-value">28 дн</div><div className="kpi-delta">− 4 дня</div></div>
+        <div className="kpi"><div className="kpi-label">Принятие оффера</div><div className="kpi-value">73%</div><div className="kpi-delta">+ 8 п.п.</div></div>
+        <div className="kpi"><div className="kpi-label">Стоимость найма</div><div className="kpi-value">68 200 ₽</div><div className="kpi-delta">− 12% YoY</div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Воронка кандидатов</div><div className="chip">за 30 дней</div></div>
+          <div className="funnel">
+            {[['Заявок','384','100%',1.0],['Скрининг','198','52%',0.52],['Интервью','86','22%',0.22],['Проверка','38','10%',0.10],['Оффер','12','3%',0.031],['Принято','7','1.8%',0.018]].map(([n, c, p, w]) => (
+              <div key={n} className="fnl-row">
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{n}</div>
+                <div className="fnl-bar" style={{ width: `${w * 100}%`, minWidth: 60 }}>{c}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>{p}</div>
+                <div></div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Источники</div></div>
+          {[['hh.ru','42%','158 кандидатов'],['Рекомендации','24%','92 — best LTV'],['Telegram-каналы','15%','58'],['LinkedIn','9%','34'],['Хантинг','6%','23'],['СуперДжоб','4%','15']].map(([n, p, s]) => (
+            <div key={n} style={{ marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}><span>{n}</span><b>{p}</b></div>
+              <div className="bar"><div className="bar-fill" style={{ width: p }}></div></div>
+              <div style={{ fontSize: 11, color: 'var(--fg-3)', marginTop: 2 }}>{s}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Срочные вакансии</div></div>
+          {[['Кардиолог · Тверская','открыта 24 дня','horizont 14.05'],['Невролог · Тверская','открыта 18 дней','horizont 18.05'],['Терапевт · Сколково','открыта 12 дней','horizont 25.05'],['УЗИ · Юго-Западная','открыта 9 дней','horizont 28.05']].map(r => (
+            <div key={r[0]} className="list-row"><div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{r[0]}</div><div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>{r[1]} · до {r[2]}</div></div><button className="btn btn-secondary btn-sm">→</button></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Сегодня в календаре</div><div className="chip">6 встреч</div></div>
+          {[['09:30','Беляева Ольга','скрининг 30 мин','Zoom'],['11:00','Орлов Р. Н.','тех. интервью','офис Тверская'],['12:30','Котов А. М.','скрининг','Zoom'],['14:00','Захаров А. С.','финал. интервью','офис Юго-Зап.'],['16:00','Никитина М. И.','HR-интервью','Zoom']].map((r, i) => (
+            <div key={i} className="list-row"><span style={{ width: 50, fontSize: 13, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{r[0]}</span><div style={{ flex: 1 }}><div style={{ fontSize: 12.5, fontWeight: 600 }}>{r[1]}</div><div style={{ fontSize: 11, color: 'var(--fg-3)' }}>{r[2]} · {r[3]}</div></div></div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* PIPELINE — Kanban */
+function PipelinePage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Воронка кандидатов</div><div className="page-sub">Drag & drop между этапами · 124 активных кандидата</div></div>
+        <div style={{ display: 'flex', gap: 8 }}><button className="btn btn-secondary">Фильтры (3)</button><button className="btn btn-primary">＋ Кандидат</button></div>
+      </div>
+      <div className="kanban">
+        {STAGES.map(s => {
+          const cards = CANDS.filter(c => c.st === s.id);
+          return (
+            <div key={s.id} className="kan-col">
+              <div className="kan-h"><span>{s.name}</span><span className="kan-pill">{cards.length}</span></div>
+              <div className="kan-h-bar" style={{ background: s.color }}></div>
+              {cards.map(c => (
+                <div key={c.n} className="kan-card">
+                  <div className="kan-card-name">{c.n}</div>
+                  <div className="kan-card-spec">{c.s}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: 6, background: 'var(--accent-soft)', color: 'var(--accent)', display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 700 }}>{c.fit}</div>
+                    <div style={{ fontSize: 11, color: 'var(--fg-3)', flex: 1 }}>{c.sal} тыс ₽</div>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-3)', marginTop: 6 }}>→ {c.vac}</div>
+                  <div className="kan-card-meta">
+                    <span className="kan-pill">{c.src}</span>
+                    {c.tags.map(t => <span key={t} className="kan-pill h">{t}</span>)}
+                  </div>
+                </div>
+              ))}
+              <button className="btn btn-ghost btn-sm" style={{ width: '100%', marginTop: 'auto' }}>＋</button>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+/* VACANCIES */
+function VacanciesPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">Открытые вакансии</div><div className="page-sub">14 в работе · 7 закрыто в мае · 3 на паузе</div></div>
+        <button className="btn btn-primary">＋ Новая вакансия</button>
+      </div>
+      <div className="card" style={{ padding: 0 }}>
+        <table className="tbl">
+          <thead><tr><th>Должность</th><th>Клиника</th><th>Открыта</th><th>Кандидатов</th><th>На интервью</th><th>Оффер</th><th>Статус</th><th></th></tr></thead>
+          <tbody>
+            {[
+              ['Кардиолог','Тверская','24 дня',18,3,1,'срочно'],
+              ['Невролог','Тверская','18 дней',12,2,0,'срочно'],
+              ['Терапевт','Сколково','12 дней',24,4,0,'в работе'],
+              ['УЗИ-диагност','Юго-Зап.','9 дней',9,1,0,'в работе'],
+              ['Эндокринолог','Тверская','7 дней',6,1,0,'в работе'],
+              ['Гинеколог','Чистые пруды','5 дней',8,2,1,'оффер'],
+              ['Администратор','Юго-Зап.','3 дня',14,3,0,'в работе'],
+              ['Медсестра','Сколково','2 дня',21,0,0,'новая'],
+            ].map((r, i) => (
+              <tr key={i}>
+                <td><b>{r[0]}</b></td>
+                <td style={{ fontSize: 12.5 }}>{r[1]}</td>
+                <td style={{ fontSize: 12.5 }}>{r[2]}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r[3]}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r[4]}</td>
+                <td style={{ fontVariantNumeric: 'tabular-nums' }}>{r[5] || '—'}</td>
+                <td><span className={`chip ${r[6] === 'срочно' ? 'chip-bad' : r[6] === 'оффер' ? 'chip-good' : r[6] === 'новая' ? 'chip-accent' : ''}`}>{r[6]}</span></td>
+                <td><button className="btn btn-ghost btn-sm">Открыть →</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* CANDIDATES */
+function CandidatesPage() {
+  return (
+    <>
+      <div className="page-head">
+        <div><div className="page-title">База кандидатов</div><div className="page-sub">2 814 в базе · 124 активных · 86 в резерве</div></div>
+        <button className="btn btn-primary">＋ Кандидат</button>
+      </div>
+      <div className="tabs">
+        <div className="tab" data-active="true">Активные · 124</div>
+        <div className="tab">В резерве · 86</div>
+        <div className="tab">Архив · 2604</div>
+        <div className="tab">Чёрный список · 12</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {CANDS.slice(0, 8).map(c => (
+          <div key={c.n} className="card">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+              <div className="avatar lg av-2">{c.n.split(' ')[0][0]}{c.n.split(' ')[1][0]}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{c.n}</div>
+                  <div style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: c.fit > 90 ? 'var(--good-soft)' : c.fit > 80 ? 'var(--accent-soft)' : 'var(--bg-2)', color: c.fit > 90 ? 'var(--good)' : c.fit > 80 ? 'var(--accent)' : 'var(--fg-3)', fontWeight: 700 }}>fit {c.fit}%</div>
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 2 }}>{c.s}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-2)', marginTop: 6 }}>→ {c.vac}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  <span className="kan-pill">{c.src}</span>
+                  <span className="kan-pill">{c.sal} тыс ₽</span>
+                  <span className="kan-pill h">{STAGES.find(s => s.id === c.st).name}</span>
+                  {c.tags.map(t => <span key={t} className="kan-pill">{t}</span>)}
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+                  <button className="btn btn-secondary btn-sm">Открыть</button>
+                  <button className="btn btn-ghost btn-sm">✉ Написать</button>
+                  <button className="btn btn-ghost btn-sm">☏</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* INTERVIEWS */
+function InterviewsPage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Интервью</div><div className="page-sub">Календарь и оценочные листы</div></div><button className="btn btn-primary">＋ Назначить</button></div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Сегодня</div><div className="kpi-value">6</div><div className="kpi-delta muted">из 32 на неделе</div></div>
+        <div className="kpi"><div className="kpi-label">Прошло</div><div className="kpi-value">42</div><div className="kpi-delta muted">в мае</div></div>
+        <div className="kpi"><div className="kpi-label">Сорвалось</div><div className="kpi-value">3</div><div className="kpi-delta bad">7%</div></div>
+        <div className="kpi"><div className="kpi-label">Средняя оценка</div><div className="kpi-value">3.8 / 5</div><div className="kpi-delta">соответствие</div></div>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {[
+          { tm: '09:30 Сегодня', who: 'Беляева Ольга — Эндокринолог', stage: 'Скрининг', mode: 'Zoom', interviewer: 'Громов И.', st: 'now' },
+          { tm: '11:00 Сегодня', who: 'Орлов Р. Н. — Невролог', stage: 'Тех. интервью', mode: 'офис Тверская', interviewer: 'Иванов А. С. + Громов', st: 'next' },
+          { tm: '12:30 Сегодня', who: 'Котов А. М. — Терапевт', stage: 'Скрининг', mode: 'Zoom', interviewer: 'Громов И.', st: 'next' },
+          { tm: '14:00 Сегодня', who: 'Захаров А. С. — Администратор', stage: 'Финал', mode: 'офис Юго-Зап.', interviewer: 'Громов + Семёнова', st: 'next' },
+          { tm: '16:00 Сегодня', who: 'Никитина М. И. — Гинеколог', stage: 'HR', mode: 'Zoom', interviewer: 'Громов И.', st: 'next' },
+          { tm: '10:00 Завтра', who: 'Прохоров К. И. — Кардиолог', stage: 'Финал · Оффер', mode: 'офис Тверская', interviewer: 'Лазарев В. + Громов', st: 'soon' },
+        ].map((r, i) => (
+          <div key={i} className="card" style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+            <div style={{ width: 90, fontSize: 12.5, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{r.tm}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{r.who}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>{r.stage} · {r.mode} · с {r.interviewer}</div>
+            </div>
+            {r.st === 'now' && <span className="chip chip-accent"><span className="chip-dot"></span>сейчас</span>}
+            {r.st === 'next' && <span className="chip">сегодня</span>}
+            {r.st === 'soon' && <span className="chip">завтра</span>}
+            <button className="btn btn-secondary btn-sm">Оценочный лист</button>
+            <button className="btn btn-ghost btn-sm">⋯</button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* TASKS */
+function TasksPage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Задачи</div><div className="page-sub">12 активных · 3 просрочено</div></div><button className="btn btn-primary">＋ Задача</button></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+        {[
+          { t: 'Сегодня', items: [['Позвонить Котову — обсудить оффер','Кандидаты',true],['Подготовить оффер для Прохорова','Юрист',false],['Запросить рекомендации Беляевой','Скрининг',false],['Опубликовать вакансию УЗИ','Реклама',false]] },
+          { t: 'На неделе', items: [['Финальное интервью с Захаровым','Интервью',false],['Согласовать ставку для Лазаревой','Финансы',false],['Тестовое задание Семёнову','Скрининг',false],['Welcome-day для Ивановой','Адаптация',false]] },
+          { t: 'Просрочено', items: [['Перезвонить кандидатам с hh','Скрининг',false],['Закрыть вакансию администратора','Вакансии',false],['Оценочный лист после Орлова','Интервью',false]] },
+        ].map(g => (
+          <div key={g.t} className="card">
+            <div className="card-hd"><div className="card-title">{g.t}</div><span className="chip">{g.items.length}</span></div>
+            {g.items.map(([t, c, d], i) => (
+              <div key={i} className="list-row" style={{ alignItems: 'flex-start' }}>
+                <div style={{ width: 16, height: 16, borderRadius: 4, border: '1.5px solid var(--border)', background: d ? 'var(--accent)' : 'transparent', marginTop: 2, display: 'grid', placeItems: 'center', color: '#fff', fontSize: 10 }}>{d && '✓'}</div>
+                <div style={{ flex: 1 }}><div style={{ fontSize: 12.5, color: d ? 'var(--fg-3)' : 'var(--fg)', textDecoration: d ? 'line-through' : 'none' }}>{t}</div><span className="kan-pill" style={{ marginTop: 4, display: 'inline-block' }}>{c}</span></div>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* SOURCES */
+function SourcesPage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Источники найма</div><div className="page-sub">ROI каналов и стоимость кандидата</div></div></div>
+      <div className="card" style={{ padding: 0 }}>
+        <table className="tbl">
+          <thead><tr><th>Канал</th><th>Кандидатов</th><th>Дошли до интервью</th><th>Принято</th><th>CPC</th><th>Стоимость найма</th><th>Качество</th></tr></thead>
+          <tbody>
+            {[
+              ['hh.ru',158,42,3,'1 200 ₽','78 000 ₽',82],
+              ['Рекомендации сотрудников',92,38,3,'0 ₽','12 000 ₽',96],
+              ['Telegram-каналы',58,18,1,'600 ₽','42 000 ₽',74],
+              ['LinkedIn',34,8,0,'2 800 ₽','—',88],
+              ['Хантинг (внешний)',23,14,0,'8 000 ₽','—',94],
+              ['СуперДжоб',15,2,0,'900 ₽','—',58],
+            ].map((r, i) => (
+              <tr key={i}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3] || '—'}</td><td style={{ fontVariantNumeric: 'tabular-nums' }}>{r[4]}</td><td style={{ fontVariantNumeric: 'tabular-nums' }}>{r[5]}</td><td><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div className="bar" style={{ flex: 1, maxWidth: 80 }}><div className="bar-fill" style={{ width: `${r[6]}%` }}></div></div><b style={{ fontSize: 12 }}>{r[6]}</b></div></td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* TEMPLATES */
+function TemplatesPage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Шаблоны писем</div><div className="page-sub">Автоматизация коммуникации с кандидатами</div></div><button className="btn btn-primary">＋ Шаблон</button></div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+        {[
+          { n: 'Приглашение на скрининг', use: 142, last: '02.05', cat: 'Скрининг' },
+          { n: 'Тестовое задание (терапевт)', use: 38, last: '28.04', cat: 'Скрининг' },
+          { n: 'Приглашение на интервью', use: 86, last: '04.05', cat: 'Интервью' },
+          { n: 'Запрос рекомендаций', use: 52, last: '03.05', cat: 'Проверка' },
+          { n: 'Оффер · стандартный', use: 14, last: '04.05', cat: 'Оффер' },
+          { n: 'Welcome · в команду', use: 8, last: '01.05', cat: 'Адаптация' },
+          { n: 'Отказ · с фидбэком', use: 64, last: '03.05', cat: 'Отказ' },
+          { n: 'Резерв · через полгода', use: 22, last: '01.04', cat: 'Резерв' },
+        ].map(t => (
+          <div key={t.n} className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}><div style={{ fontSize: 13.5, fontWeight: 600 }}>{t.n}</div><span className="chip">{t.cat}</span></div>
+            <div style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>Использован {t.use} раз · обновлён {t.last}</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}><button className="btn btn-secondary btn-sm">Редактировать</button><button className="btn btn-ghost btn-sm">Дублировать</button></div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ANALYTICS */
+function AnalyticsPage() {
+  const m = [['Янв',5],['Фев',8],['Мар',6],['Апр',9],['Май',7]];
+  const max = 10;
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Аналитика найма</div><div className="page-sub">5 месяцев в году · план 60, факт 35</div></div><button className="btn btn-secondary">⤓ Excel</button></div>
+      <div className="kpi-row">
+        <div className="kpi"><div className="kpi-label">Закрыто YTD</div><div className="kpi-value">35</div><div className="kpi-delta">из 60 плана</div></div>
+        <div className="kpi"><div className="kpi-label">Survival (3 мес)</div><div className="kpi-value">94%</div><div className="kpi-delta">+ 3 п.п.</div></div>
+        <div className="kpi"><div className="kpi-label">Time-to-hire</div><div className="kpi-value">28 дн</div><div className="kpi-delta">− 12% YoY</div></div>
+        <div className="kpi"><div className="kpi-label">Cost-per-hire</div><div className="kpi-value">68 200 ₽</div><div className="kpi-delta">− 12% YoY</div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Закрытые вакансии по месяцам</div></div>
+          <svg viewBox="0 0 500 220" style={{ width: '100%', height: 220 }}>
+            {m.map((r, i) => {
+              const x = 60 + i * 90; const h = (r[1] / max) * 160;
+              return <g key={i}><rect x={x - 30} y={190 - h} width="60" height={h} fill="var(--accent)" rx="6"/><text x={x} y={210} textAnchor="middle" fontSize="11" fill="var(--fg-3)">{r[0]}</text><text x={x} y={185 - h} textAnchor="middle" fontSize="13" fontWeight="700" fill="var(--fg)">{r[1]}</text></g>;
+            })}
+          </svg>
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Конверсия по этапам</div></div>
+          {[['Заявка → Скрининг','52%'],['Скрининг → Интервью','43%'],['Интервью → Проверка','44%'],['Проверка → Оффер','32%'],['Оффер → Принято','58%']].map(r => (
+            <div key={r[0]} style={{ marginBottom: 10 }}><div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}><span>{r[0]}</span><b>{r[1]}</b></div><div className="bar"><div className="bar-fill" style={{ width: r[1] }}></div></div></div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+/* PROFILE */
+function ProfilePage() {
+  return (
+    <>
+      <div className="page-head"><div><div className="page-title">Профиль</div><div className="page-sub">Илья Громов · менеджер по найму</div></div></div>
+      <div className="card" style={{ display: 'flex', gap: 18, alignItems: 'center', marginBottom: 14 }}>
+        <div className="avatar xl av-5">ИГ</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 22, fontWeight: 600 }}>Громов Илья Сергеевич</div>
+          <div style={{ fontSize: 13, color: 'var(--fg-3)', marginTop: 4 }}>Старший менеджер по найму · 4 года в компании</div>
+        </div>
+        <div style={{ textAlign: 'right' }}><div style={{ fontSize: 13, fontWeight: 600 }}>план мая 12, факт 7</div><div style={{ fontSize: 11, color: 'var(--accent)' }}>58% выполнения</div></div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">KPI</div></div>
+          {[['Закрыто YTD','35','цель 60'],['Survival 3 мес','94%','> 90%'],['Time-to-hire','28 дн','< 35 дн'],['NPS нанятых','9.1','> 8.5']].map(r => (
+            <div key={r[0]} className="list-row"><span style={{ flex: 1, fontSize: 12.5 }}>{r[0]}</span><b style={{ marginRight: 8 }}>{r[1]}</b><span style={{ fontSize: 11, color: 'var(--good)' }}>{r[2]}</span></div>
+          ))}
+        </div>
+        <div className="card">
+          <div className="card-hd"><div className="card-title">Доступ к вакансиям</div></div>
+          {[['Все клиники сети','полный'],['Финансовые офферы','через согласование'],['Доступ к ЗП-вилкам','✓'],['Подписант офферов','соруководитель']].map(r => (
+            <div key={r[0]} className="list-row"><span style={{ flex: 1, fontSize: 12.5 }}>{r[0]}</span><b style={{ fontSize: 12.5 }}>{r[1]}</b></div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
+
+const PAGES = { dash: DashPage, pipeline: PipelinePage, vacancies: VacanciesPage, candidates: CandidatesPage, interviews: InterviewsPage, tasks: TasksPage, sources: SourcesPage, templates: TemplatesPage, analytics: AnalyticsPage, profile: ProfilePage };
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [route, setRoute] = useState('dash');
+  useEffect(() => { window.applyTheme(t.theme); }, [t.theme]);
+  const Page = PAGES[route];
+  return (
+    <>
+      <div className="app">
+        <aside className="side">
+          <div className="side-brand"><div className="side-brand-mark">◉</div><div className="side-brand-name">КлиникСеть<span>менеджер по найму</span></div></div>
+          <div className="side-section">Работа</div>
+          {NAV.slice(0, 6).map(n => <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => setRoute(n.id)}><div className="nav-item-ico">{n.ico}</div>{n.label}{n.badge && <div className="nav-item-badge">{n.badge}</div>}</div>)}
+          <div className="side-section">Инструменты</div>
+          {NAV.slice(6).map(n => <div key={n.id} className="nav-item" data-active={route === n.id} onClick={() => setRoute(n.id)}><div className="nav-item-ico">{n.ico}</div>{n.label}{n.badge && <div className="nav-item-badge">{n.badge}</div>}</div>)}
+          <div className="side-foot">
+            <div className="side-user"><div className="avatar md av-5">ИГ</div><div style={{ flex: 1 }}><div className="side-user-name">Илья Громов</div><div className="side-user-role">recruiter · TA-lead</div></div></div>
+            <a href="index.html" style={{ fontSize: 11, color: 'var(--fg-3)', display: 'block', textAlign: 'center', marginTop: 8 }}>← к выбору кабинета</a>
+          </div>
+        </aside>
+        <main className="main">
+          <div className="topbar">
+            <div className="topbar-search"><span>⌕</span><input placeholder="Кандидат, вакансия, навык..." /><span className="topbar-kbd">⌘K</span></div>
+            <span className="role-banner">май: <b>7 / 12</b> закрыто</span>
+            <button className="topbar-icon-btn">◔<span className="pip"></span></button>
+            <button className="topbar-icon-btn">⚙</button>
+          </div>
+          <div className="content"><Page /></div>
+        </main>
+      </div>
+      <TweaksPanel>
+        <TweakSection label="Тема" />
+        <TweakRadio label="" value={t.theme} options={['rose','blue','emerald','violet']} onChange={(v) => setTweak('theme', v)} />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg"><rect width="120" height="80" fill="#fce8e0"/><text x="60" y="50" text-anchor="middle" font-size="24" fill="#c4502b" font-weight="700">◉</text></svg>
+</template>
+</body>
+</html>
