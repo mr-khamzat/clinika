@@ -23,6 +23,7 @@ class IntegrationType(str, enum.Enum):
 class ModuleStatus(str, enum.Enum):
     TRIAL     = "trial"
     ACTIVE    = "active"
+    GRACE     = "grace"
     EXPIRED   = "expired"
     CANCELLED = "cancelled"
 
@@ -64,6 +65,7 @@ class TenantModuleSubscription(Base):
     started_at:    Mapped[datetime]     = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     trial_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at:    Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    grace_until:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Модульный конфиг (для телефонии — role matrix, для рекламы — остаток показов)
     config:        Mapped[dict | None]  = mapped_column(JSONB, nullable=True)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
+import CallRulesSection from '../sections/CallRulesSection'
 
 const ACCENT = '#7c3aed'
 
@@ -480,6 +481,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     { id:'reviews',   label:'Отзывы',    icon:'rate_review'          },
     { id:'knowledge', label:'База AI',   icon:'library_books'        },
     { id:'royalty',   label:'Роялти',    icon:'account_balance_wallet'},
+    { id:'calls',     label:'Звонки',    icon:'call'                 },
   ]
 
   useEffect(() => {
@@ -565,6 +567,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
         )}
 
         {tab === 'tenants' && <MyTenantsTab adminToken={adminToken} />}
+        {tab === 'calls' && <CallRulesSection adminToken={adminToken} />}
 
         {tab === 'doctors' && (
           <Suspense fallback={<div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" /></div>}>

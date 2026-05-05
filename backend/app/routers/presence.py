@@ -209,9 +209,9 @@ async def get_all_presence(
     if current_user.tenant_id:
         q = q.where(UserModel.tenant_id == current_user.tenant_id)
 
-    # Исключаем роли, которые не участвуют в звонках
-    EXCLUDED_FROM_CALLS = [UserRole.SUPER_ADMIN, UserRole.VISITING_DOCTOR, UserRole.EXTERNAL_DOCTOR]
-    q = q.where(UserModel.role.not_in(EXCLUDED_FROM_CALLS))
+    # Исключаем роли, которые не участвуют в звонках по умолчанию (см. call_rules_service)
+    from app.services.call_rules_service import EXCLUDED_ROLES
+    q = q.where(UserModel.role.not_in([r.value for r in EXCLUDED_ROLES]))
 
     # Врач видит только свою клинику
     if current_user.role == UserRole.ADMIN and current_user.clinic_id:
@@ -639,16 +639,50 @@ async def can_call(
     if not current_user.tenant_id:
         return {"enabled": False, "audio": False, "video": False}
 
-    async def _has(key: str) -> bool:
-        row = (await db.execute(
+    async def _sub(key: str):
+        return (await db.execute(
             select(TenantModuleSubscription).where(
                 TenantModuleSubscription.tenant_id == current_user.tenant_id,
                 TenantModuleSubscription.module_key == key,
-                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL]),
+                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL, ModuleStatus.GRACE]),
             )
         )).scalar_one_or_none()
-        return row is not None
 
-    audio = await _has("telephony_basic")
-    video = await _has("video_calls")
-    return {"enabled": audio or video, "audio": audio, "video": video}
+    audio_sub = await _sub("telephony_basic")
+    video_sub = await _sub("video_calls")
+    audio = audio_sub is not None
+    video = video_sub is not None
+
+    in_grace = False
+    grace_until = None
+    for sub in (audio_sub, video_sub):
+        if sub and sub.status == ModuleStatus.GRACE and sub.grace_until:
+            if not grace_until or sub.grace_until < grace_until:
+                grace_until = sub.grace_until
+            in_grace = True
+
+    return {
+        "enabled": audio or video,
+        "audio": audio,
+        "video": video,
+        "in_grace": in_grace,
+        "grace_until": grace_until.isoformat() if grace_until else None,
+    }
+
+
+@router.get("/can-call-target/{target_user_id}")
+async def can_call_target(
+    target_user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает {allow_audio, allow_video} для пары current_user → target по правилам."""
+    from app.services.call_rules_service import check_can_call
+    try:
+        tid = uuid.UUID(target_user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    target = (await db.execute(select(User).where(User.id == tid))).scalar_one_or_none()
+    if not target:
+        raise HTTPException(status_code=404, detail="Target user not found")
+    return await check_can_call(current_user, target, db)

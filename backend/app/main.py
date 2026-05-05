@@ -140,6 +140,68 @@ async def renew_plugins_job():
     except Exception as e:
         logger.error(f'renew_plugins: {e}')
 
+async def module_expiry_job():
+    """APScheduler: переключение коммерческих модулей по срокам (каждый час).
+
+    Логика:
+      - active + expires_at < now           → grace, grace_until = now + 3 дня
+      - trial + trial_ends_at < now         → expired
+      - grace + grace_until < now           → expired
+    """
+    import logging
+    from datetime import datetime, timedelta
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.commercial import TenantModuleSubscription, ModuleStatus
+    logger = logging.getLogger("module_expiry")
+    GRACE_DAYS = 3
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            grace_count = 0
+            expired_count = 0
+
+            active_subs = (await db.execute(
+                select(TenantModuleSubscription).where(
+                    TenantModuleSubscription.status == ModuleStatus.ACTIVE,
+                    TenantModuleSubscription.expires_at != None,
+                    TenantModuleSubscription.expires_at < now,
+                )
+            )).scalars().all()
+            for sub in active_subs:
+                sub.status = ModuleStatus.GRACE
+                sub.grace_until = now + timedelta(days=GRACE_DAYS)
+                grace_count += 1
+
+            trial_subs = (await db.execute(
+                select(TenantModuleSubscription).where(
+                    TenantModuleSubscription.status == ModuleStatus.TRIAL,
+                    TenantModuleSubscription.trial_ends_at != None,
+                    TenantModuleSubscription.trial_ends_at < now,
+                )
+            )).scalars().all()
+            for sub in trial_subs:
+                sub.status = ModuleStatus.EXPIRED
+                expired_count += 1
+
+            grace_subs = (await db.execute(
+                select(TenantModuleSubscription).where(
+                    TenantModuleSubscription.status == ModuleStatus.GRACE,
+                    TenantModuleSubscription.grace_until != None,
+                    TenantModuleSubscription.grace_until < now,
+                )
+            )).scalars().all()
+            for sub in grace_subs:
+                sub.status = ModuleStatus.EXPIRED
+                expired_count += 1
+
+            if grace_count or expired_count:
+                await db.commit()
+                logger.info(f"module_expiry: grace+={grace_count}, expired+={expired_count}")
+    except Exception as e:
+        logger.error(f"module_expiry: {e}")
+
+
 async def process_webhook_queue_job():
     """APScheduler: обработка очереди вебхуков (каждую минуту)."""
     from redis.asyncio import Redis
@@ -240,6 +302,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_auto_confirm_job, 'interval', minutes=10, id='auto_confirm', replace_existing=True)
     scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
+    scheduler.add_job(module_expiry_job, 'interval', hours=1, id='module_expiry', replace_existing=True)
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
@@ -587,6 +650,8 @@ app.include_router(analytics_router)
 app.include_router(audit_router)
 app.include_router(billing_router)
 app.include_router(consent_router)
+from app.routers import call_rules as call_rules_router
+app.include_router(call_rules_router.router)
 app.include_router(admin_router)
 app.include_router(franchise_owner_router)
 app.include_router(mis_router)

@@ -175,6 +175,49 @@ async def create_tenant_in_my_franchise(
     return result
 
 
+@router.get("/tenants/{tenant_id}")
+async def get_my_tenant(
+    tenant_id: uuid.UUID,
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детали тенанта моей франшизы + список коммерческих модулей."""
+    from app.models.commercial import TenantModuleSubscription
+
+    f = await _get_my_franchise(db, user)
+    t = (await db.execute(select(Tenant).where(Tenant.id == tenant_id, Tenant.franchise_id == f.id))).scalar_one_or_none()
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден в вашей франшизе")
+
+    lic = (await db.execute(select(TenantLicense).where(TenantLicense.tenant_id == t.id))).scalar_one_or_none()
+    sub = (await db.execute(
+        select(Subscription).where(Subscription.tenant_id == t.id).order_by(Subscription.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    modules = (await db.execute(
+        select(TenantModuleSubscription).where(TenantModuleSubscription.tenant_id == t.id)
+    )).scalars().all()
+
+    return {
+        "id": str(t.id),
+        "name": t.name,
+        "slug": t.slug,
+        "is_active": t.is_active,
+        "plan": lic.plan if lic else None,
+        "subscription_status": sub.status if sub else None,
+        "mrr": float(sub.amount_per_period) if sub else 0.0,
+        "modules": [
+            {
+                "module_key": m.module_key,
+                "status": m.status,
+                "expires_at": m.expires_at.isoformat() if m.expires_at else None,
+                "trial_ends_at": m.trial_ends_at.isoformat() if m.trial_ends_at else None,
+                "grace_until": m.grace_until.isoformat() if m.grace_until else None,
+            }
+            for m in modules
+        ],
+    }
+
+
 @router.patch("/tenants/{tenant_id}")
 async def update_my_tenant(
     tenant_id: uuid.UUID,

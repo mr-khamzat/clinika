@@ -102,7 +102,7 @@ def require_module(*module_keys: str):
             select(TenantModuleSubscription).where(
                 TenantModuleSubscription.tenant_id == current_user.tenant_id,
                 TenantModuleSubscription.module_key.in_(list(module_keys)),
-                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL]),
+                TenantModuleSubscription.status.in_([ModuleStatus.ACTIVE, ModuleStatus.TRIAL, ModuleStatus.GRACE]),
             )
         )).first()
         if not row:
