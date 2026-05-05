@@ -30,6 +30,7 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
 
     data = UserResponse.model_validate(current_user).model_dump()
     data["tenant_slug"] = tenant_slug
+    data["tenant_id"] = str(current_user.tenant_id) if current_user.tenant_id else None
     data["is_super"] = is_super
     if is_super:
         data["redirect_url"] = "/admin"
