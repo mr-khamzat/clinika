@@ -41,11 +41,12 @@ export default function CallWidget() {
   const pcRef          = useRef(null)
   const localStreamRef = useRef(null)
   const remoteStreamRef = useRef(null)   // персистентный поток для удалённых треков
-  const remoteAudioRef = useRef(null)    // <audio> для гарантированного воспроизведения голоса
+  const remoteAudioRef = useRef(null)    // постоянный <audio> — играет голос всегда
   const localVideoRef  = useRef(null)
   const remoteVideoRef = useRef(null)
   const pendingIce     = useRef([])
   const iceConfigRef   = useRef(DEFAULT_RTC_CONFIG)
+  const userGestureUnlockedRef = useRef(false)  // факт user-click для autoplay-policy
 
   const h = { Authorization: `Bearer ${token}` }
 
@@ -161,45 +162,83 @@ export default function CallWidget() {
       wsRef.current.send(JSON.stringify(msg))
   }
 
+  const attachRemoteStream = (stream) => {
+    // Постоянно смонтированный <video> играет и звук, и картинку.
+    // <audio> держим как РЕЗЕРВ для редких случаев, когда <video> не доступен —
+    // он muted, чтобы не было эха.
+    if (!stream) return
+    remoteStreamRef.current = stream
+    if (remoteVideoRef.current) {
+      if (remoteVideoRef.current.srcObject !== stream) remoteVideoRef.current.srcObject = stream
+      remoteVideoRef.current.muted = false
+      remoteVideoRef.current.volume = 1.0
+      remoteVideoRef.current.play?.().catch(() => {})
+    }
+    if (remoteAudioRef.current) {
+      if (remoteAudioRef.current.srcObject !== stream) remoteAudioRef.current.srcObject = stream
+      remoteAudioRef.current.muted = true   // эхо-страховка, играет только <video>
+    }
+  }
+
+  // Synchronously prime media elements in user-gesture context (Safari fix).
+  // Вызывается из onClick «Позвонить»/«Принять» — НЕ async, чтобы Safari
+  // зачёл это как user-gesture и разрешил последующие .play() из колбэков.
+  const primeMediaSync = () => {
+    try {
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.muted = false
+        remoteVideoRef.current.play?.().catch(() => {})
+      }
+    } catch {}
+    try {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = false
+        remoteAudioRef.current.play?.().catch(() => {})
+      }
+    } catch {}
+  }
+
   const createPC = (targetId) => {
     if (pcRef.current) pcRef.current.close()
     pendingIce.current = []
     const pc = new RTCPeerConnection(iceConfigRef.current)
     pcRef.current = pc
 
-    // Персистентный поток — копим в нём входящие треки и переаттачим
-    // в video/audio теги при их монтировании (см. useEffect ниже).
-    const remoteStream = new MediaStream()
-    remoteStreamRef.current = remoteStream
-
     pc.onicecandidate = (e) => {
       if (e.candidate) sendWs({ type: 'ice_candidate', target_id: targetId, candidate: e.candidate.toJSON() })
     }
+
     pc.ontrack = (e) => {
-      // Добавляем именно track (на Safari/Firefox e.streams может быть пустым)
-      if (e.track) {
-        try { remoteStream.addTrack(e.track) } catch {}
+      // Современные браузеры: e.streams[0] содержит все треки звонка с дальней стороны.
+      // Firefox/Safari иногда возвращают пустой streams[] — fallback на персистентный MediaStream.
+      let stream = e.streams && e.streams[0]
+      if (!stream) {
+        if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream()
+        try { remoteStreamRef.current.addTrack(e.track) } catch {}
+        stream = remoteStreamRef.current
       }
-      // Если ref уже доступен — присваиваем сразу
-      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
-        remoteVideoRef.current.srcObject = remoteStream
-      }
-      if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== remoteStream) {
-        remoteAudioRef.current.srcObject = remoteStream
-      }
+      attachRemoteStream(stream)
     }
+
     pc.onconnectionstatechange = () => {
-      if (['failed','disconnected','closed'].includes(pc.connectionState)) endCall()
-      else if (pc.connectionState === 'connected') {
-        // соединение установлено — гасим гудки
-        stopAllTones()
-      }
-    }
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') {
+      const s = pc.connectionState
+      // 'disconnected' — временное состояние WebRTC, не дропаем звонок.
+      // ICE может восстановиться сам или через restartIce.
+      if (s === 'connected') stopAllTones()
+      if (s === 'failed') {
         try { pc.restartIce() } catch {}
       }
+      // 'closed' — мы сами закрыли, обработка не нужна.
     }
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState
+      if (s === 'failed') {
+        try { pc.restartIce() } catch {}
+      }
+      // disconnected → ничего не делаем, ждём connected/failed
+    }
+
     return pc
   }
 
@@ -240,6 +279,7 @@ export default function CallWidget() {
   }
 
   const startCall = async (contact) => {
+    primeMediaSync()  // Safari: разблокировать <video>/<audio> в контексте клика
     setOpen(false)
     setOutgoing({ callee_id: contact.user_id, callee_name: contact.full_name, call_type: mode, status: 'calling' })
     setCamOn(mode === 'video'); setMicOn(true)
@@ -257,6 +297,7 @@ export default function CallWidget() {
   }
 
   const acceptCall = async () => {
+    primeMediaSync()  // Safari: разблокировать <video>/<audio> синхронно по клику
     const callType = incoming.call_type
     setCamOn(callType === 'video'); setMicOn(true)
 
@@ -325,18 +366,10 @@ export default function CallWidget() {
   // ── Реаттач удалённого потока к видео/аудио элементам при их монтаже ───────
   // (overlay рендерится позже, чем приходит ontrack — без эффекта видео не виден)
   useEffect(() => {
-    const s = remoteStreamRef.current
-    if (!s) return
-    if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== s) {
-      remoteVideoRef.current.srcObject = s
-      remoteVideoRef.current.play?.().catch(() => {})
-    }
-    if (remoteAudioRef.current && remoteAudioRef.current.srcObject !== s) {
-      remoteAudioRef.current.srcObject = s
-      remoteAudioRef.current.play?.().catch(() => {})
-    }
+    if (remoteStreamRef.current) attachRemoteStream(remoteStreamRef.current)
     if (localVideoRef.current && localStreamRef.current && localVideoRef.current.srcObject !== localStreamRef.current) {
       localVideoRef.current.srcObject = localStreamRef.current
+      localVideoRef.current.play?.().catch(() => {})
     }
   })
 
@@ -348,9 +381,31 @@ export default function CallWidget() {
 
   return (
     <>
-      {/* Скрытый <audio> — всегда смонтирован, чтобы голос не пропадал
-         при переключении между UI-режимами (видеооверлей ↔ компактная карточка). */}
-      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+      {/* ── Постоянно смонтированные медиа-элементы (Safari fix) ───────────
+         Видео и аудио теги создаются ОДИН раз при маунте компонента, что:
+         - даёт стабильные ref для srcObject (нет null-промаха при ontrack)
+         - позволяет primeMediaSync() сработать прямо из user-gesture (клика)
+         - убирает мерцание стрима при перемонтировании оверлеев */}
+      <audio ref={remoteAudioRef} autoPlay playsInline />
+      <video
+        ref={remoteVideoRef}
+        autoPlay playsInline
+        className={callActive && isVideo ? 'fixed inset-0 z-40 w-full h-full object-cover bg-black' : ''}
+        style={{
+          display: callActive && isVideo ? 'block' : 'none',
+          pointerEvents: callActive && isVideo ? 'auto' : 'none',
+        }}
+      />
+      <video
+        ref={localVideoRef}
+        autoPlay playsInline muted
+        className={callActive && isVideo && camOn
+          ? 'fixed bottom-28 right-4 z-50 w-36 h-24 object-cover rounded-2xl border-2 border-white/30 shadow-2xl bg-gray-800'
+          : ''}
+        style={{
+          display: (callActive && isVideo && camOn) ? 'block' : 'none',
+        }}
+      />
 
       {/* ── Входящий звонок ─────────────────────────────────────────────── */}
       {incoming && (
@@ -386,15 +441,13 @@ export default function CallWidget() {
         </div>
       )}
 
-      {/* ── Видеозвонок: полноэкранный оверлей ──────────────────────────── */}
+      {/* ── Видеозвонок: оверлей с заглушкой и управлением (видео уже в DOM выше) ─ */}
       {callActive && isVideo && (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col">
-          <div className="relative flex-1 flex items-center justify-center overflow-hidden">
-            {/* Удалённое видео */}
-            <video ref={remoteVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-            {/* Заглушка */}
+        <div className="fixed inset-0 z-50 flex flex-col pointer-events-none">
+          <div className="relative flex-1 pointer-events-none">
+            {/* Заглушка пока удалённый стрим не пришёл */}
             {!active && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white bg-gray-900 pointer-events-auto">
                 <div className="w-24 h-24 rounded-3xl bg-white/10 flex items-center justify-center">
                   <span className="material-symbols-outlined text-5xl" style={{ fontVariationSettings:"'FILL' 1" }}>videocam</span>
                 </div>
@@ -404,19 +457,14 @@ export default function CallWidget() {
                 </p>
               </div>
             )}
-            {/* Локальное PIP */}
-            <div className="absolute bottom-4 right-4 w-36 h-24 rounded-2xl overflow-hidden border-2 border-white/30 shadow-2xl bg-gray-800">
-              <video ref={localVideoRef} autoPlay playsInline muted
-                className="w-full h-full object-cover" style={{ display: camOn ? 'block' : 'none' }} />
-              {!camOn && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-white/40 text-3xl">videocam_off</span>
-                </div>
-              )}
-            </div>
+            {!camOn && (
+              <div className="absolute bottom-28 right-4 z-50 w-36 h-24 rounded-2xl bg-gray-800 border-2 border-white/30 shadow-2xl flex items-center justify-center pointer-events-auto">
+                <span className="material-symbols-outlined text-white/40 text-3xl">videocam_off</span>
+              </div>
+            )}
           </div>
           {/* Управление */}
-          <div className="flex items-center justify-center gap-4 py-6 bg-black/60">
+          <div className="flex items-center justify-center gap-4 py-6 bg-black/60 pointer-events-auto">
             <button onClick={toggleMic}
               className={`w-14 h-14 rounded-full flex items-center justify-center transition ${micOn ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white'}`}>
               <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>{micOn ? 'mic' : 'mic_off'}</span>
@@ -436,8 +484,6 @@ export default function CallWidget() {
       {/* ── Аудиозвонок: компактная карточка ────────────────────────────── */}
       {callActive && !isVideo && (
         <div className="fixed bottom-56 right-4 z-50 w-64 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 p-4">
-          <video ref={remoteVideoRef} autoPlay playsInline muted style={{ display:'none' }} />
-          <video ref={localVideoRef}  autoPlay playsInline muted style={{ display:'none' }} />
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
               <span className="material-symbols-outlined text-xl text-blue-600" style={{ fontVariationSettings:"'FILL' 1" }}>
