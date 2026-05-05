@@ -22,6 +22,8 @@ class RuleIn(BaseModel):
     scope: str  # same_clinic | cross_clinic | any
     allow_audio: bool
     allow_video: bool
+    from_clinic_id: str | None = None
+    to_clinic_id: str | None = None
 
 
 async def _ensure_access(tenant_id: uuid.UUID, current_user: User, db: AsyncSession) -> Tenant:
@@ -78,6 +80,8 @@ async def upsert_rule(
     await _ensure_access(tenant_id, current_user, db)
     if body.scope not in {"same_clinic", "cross_clinic", "any"}:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "scope должен быть same_clinic|cross_clinic|any")
+    fc = uuid.UUID(body.from_clinic_id) if body.from_clinic_id else None
+    tc = uuid.UUID(body.to_clinic_id) if body.to_clinic_id else None
     rule = await crs.upsert_rule(
         tenant_id=tenant_id,
         from_role=body.from_role,
@@ -85,6 +89,8 @@ async def upsert_rule(
         scope=body.scope,
         allow_audio=body.allow_audio,
         allow_video=body.allow_video,
+        from_clinic_id=fc,
+        to_clinic_id=tc,
         db=db,
     )
     return {"ok": True, "id": str(rule.id)}

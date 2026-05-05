@@ -16,11 +16,14 @@ class CallScope:
 
 
 class CallRule(Base):
-    """Правило: пользователь с ролью from_role может звонить пользователю с ролью to_role
-    при заданном scope. Правило отсутствует → используется дефолт (см. call_rules_service)."""
+    """Правило звонков. Иерархия точности (от точного к общему):
+      1. от точно конкретной пары клиник + ролей (from_clinic_id + to_clinic_id заданы)
+      2. от общего правила пары ролей с scope (без клиник)
+      3. дефолт из call_rules_service.default_rule
+    """
     __tablename__ = "call_rules"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "from_role", "to_role", "scope", name="uq_call_rule"),
+        UniqueConstraint("tenant_id", "from_role", "to_role", "scope", "from_clinic_id", "to_clinic_id", name="uq_call_rule"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -30,6 +33,13 @@ class CallRule(Base):
     from_role: Mapped[str] = mapped_column(String(50), nullable=False)
     to_role: Mapped[str] = mapped_column(String(50), nullable=False)
     scope: Mapped[str] = mapped_column(String(20), nullable=False, default=CallScope.ANY)
+    # Опциональная пара клиник. Если оба заданы — правило применимо только к этой паре.
+    from_clinic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clinics.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    to_clinic_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("clinics.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     allow_audio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_video: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
