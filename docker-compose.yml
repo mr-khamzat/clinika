@@ -50,6 +50,7 @@ services:
     volumes:
       - ./VERSION:/app/VERSION:ro
       - /opt/clinika/uploads:/app/uploads
+      - /opt/clinika/data:/app/data
       # docker.sock убран — используем clinika-docker-proxy
     ports:
       - "127.0.0.1:8900:8000"

@@ -1,5 +1,38 @@
-BILLING_ARCHITECTURE.md is a source file and should not be added to .gitignore. Since there are no build artifacts, dependencies, or temporary files in the changes, the .gitignore should remain empty.
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
 
-```gitignore
+# Node
+node_modules/
+dist/
+build/
+.vite/
 
-```
+# Логи
+*.log
+logs/
+
+# Бэкапы и дампы (создаются cron-ом)
+backups/
+*.sql.gz
+*.dump
+
+# Гео-БД (скачивается контейнером, ~130 MB)
+data/
+*.mmdb
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Локальные секреты и оверрайды (в репо уже есть .env — оставляем как есть, новые игнорируем)
+.env.local
+*.env.local
