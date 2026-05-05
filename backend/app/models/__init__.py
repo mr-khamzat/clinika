@@ -13,6 +13,7 @@ from app.models.discount import Discount, DiscountType
 from app.models.support import SupportMessage
 from app.models.tenant import Tenant, TenantLicense, TenantBranding, TenantModule, TenantPlugin
 from app.models.franchise import Franchise
+from app.models.franchise_invoice import FranchiseInvoice, InvoiceStatus
 from app.models.call_rule import CallRule, CallScope
 from app.models.city import City
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus

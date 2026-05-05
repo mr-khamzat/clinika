@@ -12,8 +12,9 @@
 # Пример: «Клиника Сеть Юг» (Franchise) → 3 тенанта (Краснодар, Сочи, Ростов).
 
 import uuid
+from decimal import Decimal
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Numeric, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
@@ -44,6 +45,12 @@ class Franchise(Base):
     brand_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Биллинг платформы: % с бонусов франшизы
+    platform_fee_per_bonus: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("100"))
+    min_bonus_amount:       Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("300"))
+    refund_fee_on_cancel:   Mapped[bool]    = mapped_column(Boolean, nullable=False, default=False)
+    billing_period_days:    Mapped[int]     = mapped_column(Integer, nullable=False, default=30)
+    last_invoice_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(

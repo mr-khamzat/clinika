@@ -233,3 +233,32 @@ async def create_tenant(
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/modules-status")
+async def my_tenant_modules_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает модули текущего тенанта (для проверки доступности фич в UI).
+    Любая роль внутри тенанта может прочитать."""
+    from app.models.commercial import TenantModuleSubscription
+    if not current_user.tenant_id:
+        return {"modules": []}
+    rows = (await db.execute(
+        select(TenantModuleSubscription).where(
+            TenantModuleSubscription.tenant_id == current_user.tenant_id
+        )
+    )).scalars().all()
+    return {
+        "modules": [
+            {
+                "module_key": r.module_key,
+                "status": r.status,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "trial_ends_at": r.trial_ends_at.isoformat() if r.trial_ends_at else None,
+                "grace_until": r.grace_until.isoformat() if r.grace_until else None,
+            }
+            for r in rows
+        ]
+    }
+

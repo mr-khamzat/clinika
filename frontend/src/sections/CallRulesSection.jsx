@@ -31,7 +31,7 @@ const SCOPE_LABELS = {
 }
 const TELEPHONY_MODULES = ['telephony_basic', 'cross_clinic_audio', 'video_calls', 'video_conference']
 
-export default function CallRulesSection({ adminToken }) {
+export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }) {
   const [tenants, setTenants]       = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [tenantData, setTenantData] = useState(null)  // {modules: [...], ...}
@@ -41,8 +41,13 @@ export default function CallRulesSection({ adminToken }) {
   const [adding, setAdding]         = useState(false)
   const [draft, setDraft]           = useState({ from_role:'doctor', to_role:'doctor', scope:'any', allow_audio:false, allow_video:false })
 
-  // Загрузка списка тенантов франшизы
+  // Загрузка списка тенантов франшизы — пропускаем если tenantId передан явно
   useEffect(() => {
+    if (fixedTenantId) {
+      setSelectedId(fixedTenantId)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(adminToken) })
       .then(r => {
@@ -51,15 +56,18 @@ export default function CallRulesSection({ adminToken }) {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [fixedTenantId])
 
   // Загрузка правил и модулей выбранного тенанта
   useEffect(() => {
     if (!selectedId) { setRules([]); setTenantData(null); return }
+    const detailUrl = fixedTenantId
+      ? `${API_BASE}/tenant/modules-status`
+      : `${API_BASE}/franchise-owner/tenants/${selectedId}`
     Promise.all([
       axios.get(`${API_BASE}/call-rules/${selectedId}`, { headers: authH(adminToken) })
         .then(r => r.data).catch(() => ({ rules: [], active_roles: [] })),
-      axios.get(`${API_BASE}/franchise-owner/tenants/${selectedId}`, { headers: authH(adminToken) })
+      axios.get(detailUrl, { headers: authH(adminToken) })
         .then(r => r.data).catch(() => null),
     ]).then(([rulesData, tData]) => {
       setRules(rulesData.rules || [])
@@ -115,7 +123,8 @@ export default function CallRulesSection({ adminToken }) {
         По умолчанию все активные роли могут звонить друг другу. Здесь добавляются исключения.
       </p>
 
-      {/* Выбор тенанта */}
+      {/* Выбор тенанта — скрыт если tenantId зафиксирован */}
+      {!fixedTenantId && (
       <div className="mb-5">
         <label className="block text-xs font-semibold text-gray-500 mb-1">Тенант</label>
         <select value={selectedId} onChange={e => setSelectedId(e.target.value)}
@@ -123,6 +132,7 @@ export default function CallRulesSection({ adminToken }) {
           {tenants.map(t => <option key={t.id} value={t.id}>{t.name} ({t.slug})</option>)}
         </select>
       </div>
+      )}
 
       {/* Состояние модуля */}
       {!hasTelephonyModule && (

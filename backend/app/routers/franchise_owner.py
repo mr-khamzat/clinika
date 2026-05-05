@@ -244,3 +244,55 @@ async def update_my_tenant(
         "slug": t.slug,
         "is_active": t.is_active,
     }
+
+# ── Биллинг от платформы ──────────────────────────────────────────────────────
+
+@router.get("/billing/summary")
+async def billing_summary(
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сводка биллинга: текущий период + pending счета."""
+    from app.services.franchise_billing_service import get_pending_total
+    f = await _get_my_franchise(db, user)
+    summary = await get_pending_total(db, f.id)
+    summary["franchise"] = {
+        "platform_fee_per_bonus": float(f.platform_fee_per_bonus),
+        "min_bonus_amount": float(f.min_bonus_amount),
+        "refund_fee_on_cancel": f.refund_fee_on_cancel,
+        "billing_period_days": f.billing_period_days,
+        "last_invoice_at": f.last_invoice_at.isoformat() if f.last_invoice_at else None,
+    }
+    return summary
+
+
+@router.get("/billing/invoices")
+async def billing_invoices(
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список счетов от платформы."""
+    from app.services.franchise_billing_service import list_invoices_for_franchise
+    f = await _get_my_franchise(db, user)
+    return await list_invoices_for_franchise(db, f.id)
+
+
+class FranchiseSettingsIn(BaseModel):
+    platform_fee_per_bonus: float | None = None
+    min_bonus_amount: float | None = None
+    refund_fee_on_cancel: bool | None = None
+    billing_period_days: int | None = None
+
+
+@router.patch("/billing/settings")
+async def update_billing_settings(
+    body: FranchiseSettingsIn,
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Только super_admin может реально менять — но эндпоинт здесь для UI.
+    Owner франшизы видит свои настройки read-only через /billing/summary.
+    Реальное изменение делает super_admin через /admin/franchises/{id}."""
+    from fastapi import HTTPException, status
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Изменение тарифа делает super_admin")
+

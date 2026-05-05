@@ -26,6 +26,12 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
             )
         except Exception:
             pass  # Реестр не мешает основной логике
+        # Биллинг платформы — fee с франшизы за выплаченный бонус
+        try:
+            from app.services.franchise_billing_service import record_platform_fee_for_bonus
+            await record_platform_fee_for_bonus(db, bonus, direction="charge")
+        except Exception:
+            pass
         # Вебхук bonus_paid
         try:
             from app.services.webhook_service import send_event
@@ -58,6 +64,12 @@ async def mark_bonus_cancelled(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus |
                 description=f"Отмена бонуса #{str(bonus.id)[:8]}",
                 tenant_id=bonus.tenant_id if hasattr(bonus, 'tenant_id') else None,
             )
+        except Exception:
+            pass
+        # Биллинг платформы — refund fee франшизе если так настроено
+        try:
+            from app.services.franchise_billing_service import record_platform_fee_for_bonus
+            await record_platform_fee_for_bonus(db, bonus, direction="refund")
         except Exception:
             pass
         await db.commit()

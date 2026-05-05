@@ -8,6 +8,9 @@ const ReviewsSection  = lazy(() => import('../sections/ReviewsSection'))
 const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
 const RequisitesSection = lazy(() => import('../sections/RequisitesSection'))
 const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
+const CallRulesSection = lazy(() => import('../sections/CallRulesSection'))
+const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
+const PlatformInvoicesSection = lazy(() => import('../sections/PlatformInvoicesSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -85,6 +88,9 @@ const NAV = [
   { key: 'reviews',    label: 'Отзывы',        icon: 'rate_review' },
   { key: 'clinic_invoices', label: 'Межкл. счета',  icon: 'receipt_long' },
   { key: 'requisites',    label: 'Реквизиты',     icon: 'corporate_fare' },
+  { key: 'calls',         label: 'Звонки',        icon: 'call' },
+  { key: 'ai_knowledge',  label: 'База AI',       icon: 'library_books' },
+  { key: 'platform_invoices', label: 'Платформа', icon: 'receipt_long' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
@@ -3468,6 +3474,9 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'reviews':  return <Suspense fallback={null}><ReviewsSection token={adminToken} /></Suspense>
       case 'clinic_invoices': return <Suspense fallback={null}><InterClinicInvoicesSection isSupervisor={true} token={adminToken} /></Suspense>
       case 'requisites':      return <Suspense fallback={null}><RequisitesSection token={adminToken} /></Suspense>
+      case 'calls':           return <Suspense fallback={null}><CallRulesSection adminToken={adminToken} tenantId={user?.tenant_id} /></Suspense>
+      case 'ai_knowledge':    return <Suspense fallback={null}><AIKnowledgeSection token={adminToken} /></Suspense>
+      case 'platform_invoices': return <Suspense fallback={null}><PlatformInvoicesSection adminToken={adminToken} /></Suspense>
       default: return null
     }
   }

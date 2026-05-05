@@ -1617,3 +1617,34 @@ async def list_franchise_tenants(
         })
     return out
 
+class FranchiseBillingIn(BaseModel):
+    platform_fee_per_bonus: float | None = None
+    min_bonus_amount: float | None = None
+    refund_fee_on_cancel: bool | None = None
+    billing_period_days: int | None = None
+
+
+@router.patch("/franchises/{franchise_id}/billing")
+async def update_franchise_billing(
+    franchise_id: uuid.UUID,
+    body: FranchiseBillingIn,
+    current: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Изменение тарифной политики франшизы: % fee, минимум бонуса, refund-флаг, период."""
+    from decimal import Decimal
+    from app.models.franchise import Franchise
+    fr = (await db.execute(select(Franchise).where(Franchise.id == franchise_id))).scalar_one_or_none()
+    if not fr:
+        raise HTTPException(404, "Franchise not found")
+    if body.platform_fee_per_bonus is not None:
+        fr.platform_fee_per_bonus = Decimal(str(body.platform_fee_per_bonus))
+    if body.min_bonus_amount is not None:
+        fr.min_bonus_amount = Decimal(str(body.min_bonus_amount))
+    if body.refund_fee_on_cancel is not None:
+        fr.refund_fee_on_cancel = body.refund_fee_on_cancel
+    if body.billing_period_days is not None:
+        fr.billing_period_days = max(1, int(body.billing_period_days))
+    await db.commit()
+    return {"ok": True, "franchise_id": str(franchise_id)}
+

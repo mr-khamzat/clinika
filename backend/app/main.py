@@ -202,6 +202,21 @@ async def module_expiry_job():
         logger.error(f"module_expiry: {e}")
 
 
+async def franchise_invoice_job():
+    """APScheduler: выставление счетов франшизам по истечении billing_period_days."""
+    import logging
+    from app.database import AsyncSessionLocal
+    from app.services.franchise_billing_service import run_invoice_job
+    logger = logging.getLogger("franchise_invoice")
+    try:
+        async with AsyncSessionLocal() as db:
+            res = await run_invoice_job(db)
+            if res["created"]:
+                logger.info(f"franchise_invoice: created={res['created']}, skipped={res['skipped']}")
+    except Exception as e:
+        logger.error(f"franchise_invoice: {e}")
+
+
 async def process_webhook_queue_job():
     """APScheduler: обработка очереди вебхуков (каждую минуту)."""
     from redis.asyncio import Redis
@@ -303,6 +318,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
     scheduler.add_job(module_expiry_job, 'interval', hours=1, id='module_expiry', replace_existing=True)
+    scheduler.add_job(franchise_invoice_job, 'cron', hour=2, minute=0, id='franchise_invoice', replace_existing=True)
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
