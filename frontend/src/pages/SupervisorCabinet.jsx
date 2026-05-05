@@ -11,6 +11,8 @@ const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 const CallRulesSection = lazy(() => import('../sections/CallRulesSection'))
 const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 const PlatformInvoicesSection = lazy(() => import('../sections/PlatformInvoicesSection'))
+const AppointmentsCalendarSection = lazy(() => import('../sections/AppointmentsCalendarSection'))
+const AppointmentsStatsSection = lazy(() => import('../sections/AppointmentsStatsSection'))
 import WikiViewer from './WikiViewer'
 import axios from 'axios'
 import { API_BASE } from '../config'
@@ -91,6 +93,8 @@ const NAV = [
   { key: 'calls',         label: 'Звонки',        icon: 'call' },
   { key: 'ai_knowledge',  label: 'База AI',       icon: 'library_books' },
   { key: 'platform_invoices', label: 'Платформа', icon: 'receipt_long' },
+  { key: 'calendar',          label: 'Календарь', icon: 'event' },
+  { key: 'apt_stats',         label: 'Статистика записей', icon: 'query_stats' },
 ]
 
 // ── ExtDoctorsSection ────────────────────────────────────────────────────────
@@ -3477,6 +3481,8 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
       case 'calls':           return <Suspense fallback={null}><CallRulesSection adminToken={adminToken} tenantId={user?.tenant_id} /></Suspense>
       case 'ai_knowledge':    return <Suspense fallback={null}><AIKnowledgeSection token={adminToken} /></Suspense>
       case 'platform_invoices': return <Suspense fallback={null}><PlatformInvoicesSection adminToken={adminToken} /></Suspense>
+      case 'calendar':          return <Suspense fallback={null}><AppointmentsCalendarSection token={adminToken} /></Suspense>
+      case 'apt_stats':         return <Suspense fallback={null}><AppointmentsStatsSection token={adminToken} /></Suspense>
       default: return null
     }
   }

@@ -432,3 +432,74 @@ async def get_my_doctor(
         "user_id": str(current_user.id),
         "username": current_user.username,
     }
+
+
+@router.get("/appointments/stats", dependencies=_FEAT)
+async def appointments_stats(
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Статистика записей: кол-во по статусам и по каждому врачу за N дней.
+
+    Доступно: supervisor, manager, franchise_owner, super_admin (по тенанту).
+    """
+    from datetime import date, timedelta
+    from sqlalchemy import select, func, and_
+
+    today = date.today()
+    period_start = today - timedelta(days=days)
+
+    base_q = select(Appointment).where(
+        Appointment.appointment_date >= period_start,
+    )
+    if current_user.tenant_id:
+        # Фильтр через doctor.tenant_id (если у doctor есть это поле) или через clinic
+        base_q = base_q.join(Doctor, Doctor.id == Appointment.doctor_id).where(
+            Doctor.tenant_id == current_user.tenant_id
+        )
+
+    # Общая разбивка по статусам
+    status_q = select(Appointment.status, func.count(Appointment.id)).group_by(Appointment.status)
+    if current_user.tenant_id:
+        status_q = status_q.join(Doctor, Doctor.id == Appointment.doctor_id).where(
+            Doctor.tenant_id == current_user.tenant_id,
+        )
+    status_q = status_q.where(Appointment.appointment_date >= period_start)
+    status_rows = (await db.execute(status_q)).all()
+    by_status = {str(r[0].value if hasattr(r[0], "value") else r[0]): r[1] for r in status_rows}
+
+    # По врачам
+    by_doctor_q = (
+        select(Doctor.id, Doctor.full_name, Appointment.status, func.count(Appointment.id))
+        .join(Appointment, Appointment.doctor_id == Doctor.id)
+        .where(Appointment.appointment_date >= period_start)
+        .group_by(Doctor.id, Doctor.full_name, Appointment.status)
+    )
+    if current_user.tenant_id:
+        by_doctor_q = by_doctor_q.where(Doctor.tenant_id == current_user.tenant_id)
+
+    rows = (await db.execute(by_doctor_q)).all()
+    doctors_map: dict = {}
+    for did, name, status, cnt in rows:
+        d = doctors_map.setdefault(str(did), {"id": str(did), "name": name, "total": 0, "by_status": {}})
+        sval = status.value if hasattr(status, "value") else status
+        d["by_status"][sval] = cnt
+        d["total"] += cnt
+
+    today_count = (await db.execute(
+        select(func.count(Appointment.id))
+        .join(Doctor, Doctor.id == Appointment.doctor_id)
+        .where(Appointment.appointment_date == today)
+        .where(Doctor.tenant_id == current_user.tenant_id) if current_user.tenant_id else
+        select(func.count(Appointment.id)).where(Appointment.appointment_date == today)
+    )).scalar_one()
+
+    return {
+        "period_days": days,
+        "total": sum(by_status.values()),
+        "today": int(today_count or 0),
+        "by_status": by_status,
+        "doctors": sorted(doctors_map.values(), key=lambda d: -d["total"]),
+    }
+
