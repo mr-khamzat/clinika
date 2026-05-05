@@ -579,7 +579,9 @@ app = FastAPI(
     description="Платформа учёта направлений и бонусов для сети клиник",
     version="1.0.0",
     lifespan=lifespan,
-    root_path="/clinika/api"
+    docs_url=None,
+    redoc_url=None,
+    openapi_url="/openapi.json",
 )
 
 # ─── CORS: берём из конфига (ALLOWED_ORIGINS в .env) ───
@@ -590,6 +592,30 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
+
+
+
+
+# ─── Custom Swagger UI / Redoc — независимо от tenant slug ──────────────────
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html():
+    """Swagger UI: openapi.json подгружается с относительного URL,
+    что корректно работает за любым slug-prefix nginx."""
+    return get_swagger_ui_html(
+        openapi_url="openapi.json",
+        title="Клиника API — Swagger UI",
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def custom_redoc_html():
+    return get_redoc_html(
+        openapi_url="openapi.json",
+        title="Клиника API — ReDoc",
+    )
+
 
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
 app.add_middleware(DomainRouterMiddleware)
