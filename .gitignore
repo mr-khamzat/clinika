@@ -36,3 +36,8 @@ Thumbs.db
 # Локальные секреты и оверрайды (в репо уже есть .env — оставляем как есть, новые игнорируем)
 .env.local
 *.env.local
+
+# Десктопный инсталлятор Calls (большой бинарь, не в git)
+frontend/public/downloads/*.exe
+frontend/public/downloads/*.exe.blockmap
+frontend/public/downloads/latest.yml

@@ -273,6 +273,13 @@ export default function Landing() {
                 <span className="material-symbols-outlined">play_circle</span>
                 Возможности
               </button>
+              <a href="/downloads/KliniknetCalls-Setup-1.0.0.exe" download
+                className="px-6 py-4 rounded-2xl font-bold text-base transition shadow-2xl flex items-center gap-2 hover:brightness-110"
+                style={{ background: 'linear-gradient(135deg, #22d3ee, #0e7490)', color: 'white', boxShadow: '0 10px 30px rgba(34,211,238,0.35)' }}>
+                <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>download</span>
+                Calls для Windows
+                <span className="text-[10px] font-normal opacity-80 bg-white/20 px-1.5 py-0.5 rounded">.exe · 78 МБ</span>
+              </a>
             </div>
             <div className="flex flex-wrap gap-3">
               {[
