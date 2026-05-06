@@ -188,7 +188,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             <p className="text-white font-bold text-sm truncate">{user.full_name || 'Кабинет'}</p>
             <p className="text-white/70 text-xs">{roleLabel}</p>
           </div>
-          <button onClick={onLogout} className="p-2 rounded-xl" style={{ background:'rgba(255,255,255,0.12)' }}>
+          <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
             <span className="material-symbols-outlined text-white/80 text-base">logout</span>
           </button>
         </div>
@@ -443,7 +443,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                         {doc.clinic_name && <p className="text-xs text-gray-400">{doc.clinic_name}</p>}
                       </div>
                       <button onClick={() => { setBookVisitDoc(doc); setBookVisitForm({ patient_name:'', patient_phone:'', appointment_date:'', start_time:'09:00', end_time:'09:30', price:'' }); setBookVisitResult(null) }}
-                        className="px-3 py-1.5 rounded-xl text-white text-xs font-bold" style={{ background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
+                        className="px-4 py-2.5 min-h-[40px] rounded-xl text-white text-sm font-bold flex-shrink-0" style={{ background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
                         Записать
                       </button>
                     </div>
@@ -576,14 +576,14 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             { key:'visiting',  label:'Приезжие',  icon:'people'     },
           ].map(item => (
             <button key={item.key} onClick={() => setTab(item.key)}
-              className="flex-1 flex flex-col items-center pt-2 pb-1 gap-0.5 relative">
+              className="flex-1 flex flex-col items-center justify-center pt-2 pb-1 min-h-[56px] gap-0.5 relative">
               {tab === item.key && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:ACCENT }} />}
               <span className="material-symbols-outlined text-2xl" style={{ color:tab === item.key ? ACCENT : '#9ca3af', fontVariationSettings:tab === item.key ? "'FILL' 1" : "'FILL' 0" }}>{item.icon}</span>
               <span className="text-xs font-semibold" style={{ color:tab === item.key ? ACCENT : '#9ca3af' }}>{item.label}</span>
             </button>
           ))}
           <button onClick={() => setMoreOpen(true)}
-            className="flex-1 flex flex-col items-center pt-2 pb-1 gap-0.5">
+            className="flex-1 flex flex-col items-center justify-center pt-2 pb-1 min-h-[56px] gap-0.5">
             {moreItems.some(m => m.key === tab) && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:ACCENT }} />}
             <span className="material-symbols-outlined text-2xl" style={{ color: moreItems.some(m => m.key === tab) ? ACCENT : '#9ca3af' }}>more_horiz</span>
             <span className="text-xs font-semibold" style={{ color: moreItems.some(m => m.key === tab) ? ACCENT : '#9ca3af' }}>Ещё</span>
