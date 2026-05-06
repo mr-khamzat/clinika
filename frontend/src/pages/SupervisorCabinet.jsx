@@ -3673,7 +3673,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
           const isActive = activeSection === item.key
           return (
             <button key={item.key} onClick={() => handleNav(item.key)}
-              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all duration-150 relative">
+              className="flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] gap-0.5 transition-all duration-150 relative">
               {isActive && (
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full"
                   style={{ background: '#0097A7' }} />
@@ -3694,7 +3694,7 @@ export default function SupervisorCabinet({ adminToken, user, onLogout }) {
         })}
         {/* "Ещё" button */}
         <button onClick={() => setMoreOpen(true)}
-          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-all duration-150">
+          className="flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] gap-0.5 transition-all duration-150">
           <span className="material-symbols-outlined text-[22px]" style={{ color: '#4a6080' }}>more_horiz</span>
           <span className="text-[10px] font-semibold leading-none" style={{ color: '#4a6080' }}>Ещё</span>
         </button>

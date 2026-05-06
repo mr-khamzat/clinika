@@ -334,7 +334,7 @@ function MyTenantsTab({ adminToken }) {
                     </div>
                   </div>
                   <button onClick={() => setDetails(t)}
-                    className="p-2 rounded-xl hover:bg-gray-100">
+                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-gray-100 flex-shrink-0">
                     <span className="material-symbols-outlined text-gray-500">chevron_right</span>
                   </button>
                 </div>
@@ -509,7 +509,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
             <p className="text-white font-bold text-base truncate">{user?.full_name || 'Владелец франшизы'}</p>
             <p className="text-white/70 text-xs uppercase tracking-widest">Franchise Owner</p>
           </div>
-          <button onClick={onLogout} className="p-2 rounded-xl" style={{ background:'rgba(255,255,255,0.12)' }}>
+          <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
             <span className="material-symbols-outlined text-white/80 text-lg">logout</span>
           </button>
         </div>
@@ -603,10 +603,10 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-50"
         style={{ paddingBottom:'env(safe-area-inset-bottom)', background:'rgba(255,255,255,0.95)', backdropFilter:'blur(20px)', borderTop:'1px solid rgba(0,0,0,0.06)' }}>
-        <div className="flex">
+        <div className="flex overflow-x-auto scrollbar-none">
           {TABS.map(item => (
             <button key={item.id} onClick={() => setTab(item.id)}
-              className="flex-1 flex flex-col items-center pt-2 pb-1 gap-0.5 relative">
+              className="flex-shrink-0 min-w-[72px] flex-1 flex flex-col items-center justify-center pt-2 pb-1 min-h-[56px] gap-0.5 relative">
               {tab === item.id && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:ACCENT }} />}
               <span className="material-symbols-outlined text-2xl" style={{ color:tab === item.id ? ACCENT : '#9ca3af', fontVariationSettings:tab === item.id ? "'FILL' 1" : "'FILL' 0" }}>{item.icon}</span>
               <span className="text-xs font-semibold" style={{ color:tab === item.id ? ACCENT : '#9ca3af' }}>{item.label}</span>
