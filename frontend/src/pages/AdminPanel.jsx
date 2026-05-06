@@ -44,7 +44,7 @@ const EMPTY_FORM = {
   phone_number: '+7',
   date_of_birth: '',
   clinic_id: '',
-  role: 'admin',
+  role: 'reg',
   category: '',
 }
 
@@ -234,7 +234,7 @@ function EditModal({ admin, clinics, onClose, onSaved, onDeactivated }) {
     phone_number: admin.phone_number ? formatPhone(admin.phone_number) : '+7',
     date_of_birth: admin.date_of_birth ? admin.date_of_birth.slice(0, 10) : '',
     clinic_id: admin.clinic_id ? String(admin.clinic_id) : '',
-    role: admin.role || 'admin',
+    role: admin.role || 'reg',
     category: admin.category || '',
   })
   const [isActive, setIsActive] = useState(admin.is_active !== false)
@@ -468,7 +468,7 @@ function CsvImportModal({ clinics, onClose, onDone }) {
           username: (cols[1] || '').trim(),
           password: (cols[2] || '').trim(),
           clinic_name: (cols[3] || '').trim(),
-          role: (cols[4] || 'admin').trim(),
+          role: (cols[4] || 'reg').trim(),
         }
       }).filter(r => r.full_name)
       setRows(parsed)
@@ -488,7 +488,7 @@ function CsvImportModal({ clinics, onClose, onDone }) {
           username: row.username || undefined,
           password: row.password || undefined,
           clinic_id: clinic?.id || undefined,
-          role: row.role === 'manager' ? 'manager' : 'admin',
+          role: row.role === 'manager' ? 'manager' : 'reg',
         })
         res.push({ ...row, ok: true })
       } catch (e) {

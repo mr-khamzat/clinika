@@ -129,7 +129,7 @@ const EMPTY_STAFF_FORM = {
   phone_number: '+7',
   date_of_birth: '',
   clinic_id: '',
-  role: 'admin',
+  role: 'reg',
   category: '',
 }
 
@@ -156,7 +156,7 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
           phone_number: existing.phone_number ? formatPhone(existing.phone_number) : '+7',
           date_of_birth: existing.date_of_birth ? existing.date_of_birth.slice(0, 10) : '',
           clinic_id: existing.clinic_id ? String(existing.clinic_id) : '',
-          role: existing.role || 'admin',
+          role: existing.role || 'reg',
           category: existing.category || '',
         }
       : { ...EMPTY_STAFF_FORM }
@@ -301,14 +301,12 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
                 onChange={e => set('role', e.target.value)}
                 className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm text-gray-800 dark:text-white bg-white dark:bg-gray-900 focus:outline-none focus:border-blue-500"
               >
-                <option value="admin">Администратор</option>
+                <option value="reg">Регистратор</option>
                 <option value="manager">Руководитель</option>
                 <option value="doctor">Врач (кабинет врача)</option>
                 <option value="nurse">Медсестра</option>
                 <option value="recruiter">Менеджер (рекрутер)</option>
-                <option value="supervisor">Владелец франшизы</option>
-                <option value="franchise_owner">Franchise Owner</option>
-                <option value="accountant">Бухгалтер</option>
+                <option value="franchise_owner">Владелец франшизы</option>
               </select>
             </div>
             <div>
@@ -727,7 +725,7 @@ function StaffSection({ token }) {
 
   const filtered = admins.filter(a => {
     if (roleFilter === 'manager' && a.role !== 'manager') return false
-    if (roleFilter === 'admin' && (a.role !== 'admin' || a.category)) return false
+    if (roleFilter === 'reg' && (a.role !== 'reg' || a.category)) return false
     if (roleFilter === 'doctor' && a.category !== 'doctor') return false
     if (roleFilter === 'nurse' && a.category !== 'nurse') return false
     if (!search.trim()) return true
@@ -772,7 +770,7 @@ function StaffSection({ token }) {
           {[
             { key: 'all', label: 'Все' },
             { key: 'manager', label: 'Руководители' },
-            { key: 'admin', label: 'Администраторы' },
+            { key: 'reg', label: 'Регистраторы' },
             { key: 'doctor', label: 'Врачи' },
             { key: 'nurse', label: 'Медсёстры' },
           ].map(f => (
@@ -3301,7 +3299,7 @@ function PartnerModal({ token, existing, onClose, onDone }) {
     setLoading(true)
     setError('')
     try {
-      const payload = { full_name: form.full_name.trim(), role: 'partner' }
+      const payload = { full_name: form.full_name.trim(), role: 'partner_doctor' }
       if (form.username.trim()) payload.username = form.username.trim()
       if (form.password.trim()) payload.password = form.password.trim()
       payload.phone_number = (form.phone_number && form.phone_number !== '+7') ? form.phone_number : null
@@ -6572,9 +6570,9 @@ function CallsConfigSection({ token }) {
 
   const showMsg = (t, ok=true) => { setMsg({text:t, ok}); setTimeout(() => setMsg(''), 3000) }
 
-  const ROLES = ['admin', 'manager', 'partner', 'doctor']
-  const ROLE_LABELS = { admin: 'Администратор', manager: 'Руководитель', supervisor: 'Владелец франшизы', partner: 'Партнёр', doctor: 'Врач', nurse: 'Медсестра', recruiter: 'Менеджер' }
-  const ROLE_ICONS  = { admin: 'manage_accounts', manager: 'supervisor_account', partner: 'handshake', doctor: 'medical_services' }
+  const ROLES = ['reg', 'manager', 'partner_doctor', 'doctor']
+  const ROLE_LABELS = { reg: 'Регистратор', manager: 'Руководитель', franchise_owner: 'Владелец франшизы', partner_doctor: 'Врач-партнёр', doctor: 'Врач', nurse: 'Медсестра', recruiter: 'Менеджер' }
+  const ROLE_ICONS  = { reg: 'manage_accounts', manager: 'supervisor_account', partner_doctor: 'handshake', doctor: 'medical_services' }
 
   const loadPermissions = async () => {
     try {
@@ -6808,7 +6806,7 @@ function CallsConfigSection({ token }) {
       {tab === 'notifications' && (
         <div className="space-y-4">
           <p className="text-xs text-gray-500 font-medium">Настройте какие события и по каким каналам получает каждая роль.</p>
-          {['admin', 'manager', 'partner'].map(role => {
+          {['reg', 'manager', 'partner_doctor'].map(role => {
             const setting = notifSettings.find(s => s.role === role) || { events: {}, channels: {} }
             const events = setting.events || {}
             const channels = setting.channels || {}
@@ -7401,7 +7399,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const navBadge = { contacts: contactsBadge }
 
   const isSuperAdmin = user?.is_superadmin || user?.role === 'super_admin'
-  const isSupervisor = user?.role === 'supervisor'
+  const isSupervisor = user?.role === 'franchise_owner'
 
   const [activeModules, setActiveModules] = useState(null)
   useEffect(() => {
@@ -7493,9 +7491,9 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const userName  = user?.full_name || user?.username || 'Администратор'
   const userInit  = userName[0].toUpperCase()
   const roleLabel = user?.role === 'super_admin' ? 'Владелец платформы'
-    : user?.role === 'supervisor' ? 'Владелец франшизы'
+    : user?.role === 'franchise_owner' ? 'Владелец франшизы'
     : user?.role === 'manager'    ? 'Руководитель'
-    : user?.role === 'partner'    ? 'Партнёр'
+    : user?.role === 'partner_doctor'    ? 'Врач-партнёр'
     : 'Администратор'
 
   const brandName = branding?.brand_name || 'КлиникСеть'

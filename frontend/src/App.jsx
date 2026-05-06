@@ -18,7 +18,6 @@ import { authTelegram, getMe } from './api'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import CreateReferral from './pages/CreateReferral'
-import PartnerCreateReferral from './pages/PartnerCreateReferral'
 import QRScreen from './pages/QRScreen'
 import ScanScreen from './pages/ScanScreen'
 import History from './pages/History'
@@ -145,12 +144,12 @@ function MiniApp() {
   if (!user) return <Landing />
 
   // ─── ProfileSetup только для новых сотрудников (не партнёров) без клиники ───
-  if (user && user.role !== 'partner' && !user.clinic_id && user.telegram_id && !user.username) {
+  if (user && !user.clinic_id && user.telegram_id && !user.username) {
     return <ProfileSetup />
   }
 
   // ─── Приезжие и внешние врачи → только /admin ───
-  if (user?.role === 'visiting_doctor' || user?.role === 'external_doctor') {
+  if (user?.role === 'visiting_doctor' || user?.role === 'partner_doctor') {
     window.location.replace('/' + SLUG + '/admin')
     return null
   }
@@ -184,10 +183,9 @@ function MiniApp() {
           )}
 
           {/* ─── Маршруты для партнёра ─── */}
-          <Route path="partner/create" element={<PartnerCreateReferral />} />
 
           {/* ─── Маршруты для сотрудников клиники (admin/manager) ─── */}
-          {user?.role !== 'partner' && user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && (
+          {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && (
             <>
               <Route path="create" element={<CreateReferral />} />
               <Route path="scan" element={<ScanScreen />} />

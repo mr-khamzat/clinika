@@ -20,7 +20,7 @@ const DEFAULT_RTC_CONFIG = {
 }
 const STATUS_COLOR = { online:'bg-emerald-400', busy:'bg-red-400', away:'bg-amber-400', offline:'bg-gray-300' }
 const STATUS_LABEL = { online:'Онлайн', busy:'Занят', away:'Не на месте', offline:'Не в сети' }
-const ROLE_LABEL   = { admin:'Администратор', doctor:'Врач', manager:'Руководитель', nurse:'Медсестра', recruiter:'Рекрутер', partner:'Партнёр' }
+const ROLE_LABEL   = { super_admin:'Платформа', franchise_owner:'Франшиза', manager:'Управляющий', doctor:'Врач', reg:'Регистратор', nurse:'Медсестра', recruiter:'Рекрутер', partner_doctor:'Врач-партнёр', visiting_doctor:'Приходящий врач', patient:'Пациент' }
 
 export default function CallWidget() {
   const { token, user } = useAuthStore()

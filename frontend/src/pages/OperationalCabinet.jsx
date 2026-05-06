@@ -13,7 +13,7 @@ const api = (token) => ({
 
 const ACCENT = '#0097A7'
 
-const ROLE_LABELS = { admin:'Администратор', nurse:'Медсестра' }
+const ROLE_LABELS = { reg:'Регистратор', nurse:'Медсестра' }
 
 const BOTTOM_KEYS = ['dashboard', 'create', 'referrals', 'visiting']
 
@@ -156,7 +156,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   }
 
   const roleLabel = ROLE_LABELS[user.role] || user.role
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = user?.role === 'reg'
 
   const moreItems = [
     { key:'bonuses',  label:'Бонусы',   icon:'star'     },

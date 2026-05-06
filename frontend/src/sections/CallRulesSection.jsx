@@ -16,12 +16,10 @@ const authH = t => ({ Authorization: `Bearer ${t}` })
 const ROLE_INFO = {
   franchise_owner: { short: 'Владелец',    full: 'Владелец франшизы' },
   manager:         { short: 'Управляющий', full: 'Управляющий клиники' },
-  supervisor:      { short: 'Старший',     full: 'Старший на месте' },
-  admin:           { short: 'Регистратор', full: 'Администратор' },
+  reg:             { short: 'Регистратор', full: 'Регистратор' },
   nurse:           { short: 'Медсестра',   full: 'Медсестра' },
   doctor:          { short: 'Врач',        full: 'Врач (штатный)' },
   recruiter:       { short: 'Рекрутер',    full: 'Рекрутер' },
-  accountant:      { short: 'Бухгалтер',   full: 'Бухгалтер' },
 }
 
 const TELEPHONY_MODULES = ['telephony_basic', 'cross_clinic_audio', 'video_calls', 'video_conference']

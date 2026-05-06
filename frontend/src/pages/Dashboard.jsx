@@ -55,7 +55,7 @@ export default function Dashboard() {
   const confirmedDiff = thisMonth && lastMonth ? thisMonth.confirmed - lastMonth.confirmed : null
   const todayEarned = thisMonth?.pending_bonus ?? 0
   const todayReferrals = stats?.today?.total ?? 0
-  const isPartner = user?.role === 'partner'
+  const isPartner = user?.role === 'partner_doctor'
 
   return (
     <div className="p-4 pb-28 space-y-4 bg-[#f7f9fb] min-h-screen">

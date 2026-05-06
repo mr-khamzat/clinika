@@ -488,14 +488,14 @@ export default function HelpModal({ onClose, role: roleProp }) {
   const [openId, setOpenId] = useState(null)
   const [search, setSearch] = useState('')
 
-  const role = roleProp || user?.role || 'admin'
+  const role = roleProp || user?.role || 'reg'
 
   const sections = role === 'manager' ? HELP_MANAGER
-    : role === 'partner' ? HELP_PARTNER
+    : role === 'partner_doctor' ? HELP_PARTNER
     : HELP_ADMIN
 
   const roleLabel = role === 'manager' ? 'Системный администратор'
-    : role === 'partner' ? 'Партнёр'
+    : role === 'partner_doctor' ? 'Врач-партнёр'
     : 'Администратор клиники'
 
   const filtered = search.trim()

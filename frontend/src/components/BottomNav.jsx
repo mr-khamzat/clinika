@@ -30,7 +30,7 @@ export default function BottomNav() {
   const { user } = useAuthStore()
 
   const items =
-    user?.role === 'partner' ? partnerItems :
+    user?.role === 'partner_doctor' ? partnerItems :
     user?.role === 'manager' ? managerItems :
     baseItems
 

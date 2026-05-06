@@ -20,7 +20,7 @@ function fmt(d) {
 const STATUS_LABEL = { created:'Создано', confirmed:'Подтверждено', expired:'Истекло', cancelled:'Отменено' }
 const STATUS_BG    = { created:'bg-blue-100 text-blue-700', confirmed:'bg-green-100 text-green-700', expired:'bg-gray-100 text-gray-500', cancelled:'bg-red-100 text-red-700' }
 
-export default function ExternalDoctorCabinet({ adminToken, user, onLogout }) {
+export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('dashboard')
   const [referrals, setReferrals] = useState([])
   const [bonuses, setBonuses] = useState([])
@@ -56,7 +56,7 @@ export default function ExternalDoctorCabinet({ adminToken, user, onLogout }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base truncate">{user?.full_name}</p>
-            <p className="text-white/70 text-xs">Внешний врач</p>
+            <p className="text-white/70 text-xs">Врач-партнёр</p>
           </div>
           <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
             <span className="material-symbols-outlined text-white/80 text-lg">logout</span>

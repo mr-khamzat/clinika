@@ -114,8 +114,8 @@ export default function Layout() {
           <BottomNav />
         </div>
         {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-        {user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && <CallWidget />}
-        {user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && <SupportChat />}
+        {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <CallWidget />}
+        {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <SupportChat />}
       </HelpContext.Provider>
     </ThemeContext.Provider>
   )

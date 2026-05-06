@@ -24,7 +24,7 @@ function fmt(iso) {
     : d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
-const ROLE_LABELS = { admin: 'Администратор', manager: 'Менеджер', partner: 'Партнёр' }
+const ROLE_LABELS = { reg: 'Регистратор', manager: 'Менеджер', partner_doctor: 'Врач-партнёр' }
 
 // ─── Компонент: один диалог ───
 function ThreadView({ userId, userName, onClose, onCloseThread, isClosed, authHeaders }) {

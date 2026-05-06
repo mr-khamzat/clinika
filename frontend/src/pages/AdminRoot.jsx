@@ -5,14 +5,11 @@ import AdminLayout from './AdminLayout'
 import DoctorLayout from './DoctorLayout'
 import OperationalCabinet from './OperationalCabinet'
 import RecruiterCabinet from './RecruiterCabinet'
-import SupervisorCabinet from './SupervisorCabinet'
-import AcquisitionManagerCabinet from './AcquisitionManagerCabinet'
-import ExternalDoctorCabinet from './ExternalDoctorCabinet'
+import PartnerDoctorCabinet from './PartnerDoctorCabinet'
 import VisitingDoctorCabinet from './VisitingDoctorCabinet'
 import InviteAccept from './InviteAccept'
 import PatientCabinet from './PatientCabinet'
 import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
-import AccountantCabinet from './AccountantCabinet'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 import CallWidget from '../components/CallWidget'
 
@@ -55,11 +52,6 @@ export default function AdminRoot() {
         const slug = u.tenant_slug
         const isSuperAdmin = u.is_superadmin || u.is_super || role === 'super_admin'
 
-        if (role === 'partner') {
-          window.location.href = '/' + (slug || SLUG) + '/'
-          return
-        }
-
         if (!isSuperAdmin && slug && slug !== SLUG) {
           window.location.href = '/' + slug + '/admin'
           return
@@ -85,7 +77,7 @@ export default function AdminRoot() {
 
   // ── Presence WebSocket — всегда подключаем для отслеживания онлайн статуса
   useEffect(() => {
-    const NO_PRESENCE = ['visiting_doctor', 'external_doctor', 'patient']
+    const NO_PRESENCE = ['visiting_doctor', 'partner_doctor', 'patient']
     if (!adminToken || !user?.id || NO_PRESENCE.includes(user.role)) return
     const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}`
     const ws = new WebSocket(wsUrl)
@@ -119,19 +111,14 @@ export default function AdminRoot() {
     return <DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  // ── Администратор / Медсестра → операционный кабинет
-  if (role === 'admin' || role === 'nurse') {
+  // ── Регистратор / Медсестра → операционный кабинет
+  if (role === 'reg' || role === 'nurse') {
     return <OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  // ── Менеджер по привлечению
-  if (role === 'acquisition_manager') {
-    return <AcquisitionManagerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
-  }
-
-  // ── Внешний врач
-  if (role === 'external_doctor') {
-    return <ExternalDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+  // ── Врач-партнёр (бывший external_doctor)
+  if (role === 'partner_doctor') {
+    return <PartnerDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
   // ── Выездной врач
@@ -149,19 +136,9 @@ export default function AdminRoot() {
     return <RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
-  // ── Супервизор → кабинет супервизора (только чтение)
-  if (role === 'supervisor') {
-    return <SupervisorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
-  }
-
   // ── Владелец франшизы
   if (role === 'franchise_owner') {
     return <FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
-  }
-
-  // ── Бухгалтер
-  if (role === 'accountant') {
-    return <AccountantCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
