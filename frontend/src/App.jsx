@@ -18,6 +18,7 @@ import { authTelegram, getMe } from './api'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
 import CreateReferral from './pages/CreateReferral'
+// PartnerCreateReferral удалён в Этапе 3 ROADMAP — partner_doctor больше не имеет отдельной страницы.
 import QRScreen from './pages/QRScreen'
 import ScanScreen from './pages/ScanScreen'
 import History from './pages/History'
@@ -48,6 +49,10 @@ import DesignPreview2 from './pages/DesignPreview2'
 // ─── Новый этап: дизайн-токены + базовые компоненты (Этап 4 ROADMAP) ───
 // Lazy: бандл с компонентами и tokens.css не грузится для обычных пользователей.
 const DesignSystem = lazy(() => import('./pages/DesignSystem'))
+// ─── Wiki (публичный раздел «Обучение пользованию КлиникСеть») ───
+// Lazy: статьи и react-markdown не нужны рядовому пользователю кабинета.
+const Wiki = lazy(() => import('./pages/Wiki'))
+const WikiArticle = lazy(() => import('./pages/WikiArticle'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -144,12 +149,12 @@ function MiniApp() {
   if (!user) return <Landing />
 
   // ─── ProfileSetup только для новых сотрудников (не партнёров) без клиники ───
-  if (user && !user.clinic_id && user.telegram_id && !user.username) {
+  if (user && user.role !== 'partner' && !user.clinic_id && user.telegram_id && !user.username) {
     return <ProfileSetup />
   }
 
   // ─── Приезжие и внешние врачи → только /admin ───
-  if (user?.role === 'visiting_doctor' || user?.role === 'partner_doctor') {
+  if (user?.role === 'visiting_doctor' || user?.role === 'external_doctor') {
     window.location.replace('/' + SLUG + '/admin')
     return null
   }
@@ -182,10 +187,10 @@ function MiniApp() {
             />
           )}
 
-          {/* ─── Маршруты для партнёра ─── */}
+          {/* ─── Маршруты для партнёра — удалены в Этапе 3 ROADMAP ─── */}
 
           {/* ─── Маршруты для сотрудников клиники (admin/manager) ─── */}
-          {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && (
+          {user?.role !== 'partner' && user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && (
             <>
               <Route path="create" element={<CreateReferral />} />
               <Route path="scan" element={<ScanScreen />} />
@@ -219,6 +224,28 @@ function MiniApp() {
 // ─── Корневой компонент — определяет точку входа ───
 export default function App() {
   const path = window.location.pathname
+
+  // ─── Публичная Wiki (без auth) — глобально и в тенантах ───
+  // Маршруты: /wiki, /wiki/:slug, /<slug>/wiki, /<slug>/wiki/:article
+  // Точная проверка: /wiki или /<любой_сегмент>/wiki — но НЕ /admin/wiki и не служебные.
+  const wikiMatch = path.match(/^(?:\/([^/]+))?\/wiki(?:\/([^/]+))?\/?$/)
+  // Защита от ложных совпадений с одиночным /wiki без префикса
+  const isPureWiki = path === '/wiki' || path.startsWith('/wiki/')
+  const isTenantWiki = SLUG && (path === '/' + SLUG + '/wiki' || path.startsWith('/' + SLUG + '/wiki/'))
+  if (wikiMatch && (isPureWiki || isTenantWiki)) {
+    // Рассчитываем basename для BrowserRouter
+    const base = isTenantWiki ? '/' + SLUG : ''
+    return (
+      <BrowserRouter basename={base}>
+        <Suspense fallback={<div style={{ background: 'var(--bg, #f6f7fa)', minHeight: '100vh' }} />}>
+          <Routes>
+            <Route path="/wiki" element={<Wiki />} />
+            <Route path="/wiki/:slug" element={<WikiArticle />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    )
+  }
 
   // Корневой лендинг (/) — показываем Landing без slug-роутинга.
   // Но если на устройстве сохранён вход пациента (PWA-ярлык открылся на корне) —

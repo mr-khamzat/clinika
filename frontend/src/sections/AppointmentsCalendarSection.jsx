@@ -1,6 +1,6 @@
 /**
  * AppointmentsCalendarSection — обёртка-совместимость над WeekScheduleSection.
- * Используется ManagerAppointments и SupervisorCabinet.
+ * Используется ManagerAppointments.
  */
 import WeekScheduleSection from './scheduling/WeekScheduleSection'
 

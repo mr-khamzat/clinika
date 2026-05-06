@@ -1,6 +1,6 @@
 /**
  * RequisitesSection — редактирование юридических реквизитов и загрузка печати тенанта.
- * Доступно supervisor+. Используется внутри SupervisorCabinet и ManagerDashboard.
+ * Доступно managers+. Используется внутри ManagerDashboard.
  */
 import { useState, useEffect, useRef } from 'react'
 import { API_BASE } from '../config'
