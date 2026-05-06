@@ -274,7 +274,7 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
           const isActive = tab === t.key
           return (
             <button key={t.key} onClick={() => setTab(t.key)}
-              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative">
+              className="flex-1 flex flex-col items-center justify-center py-3 min-h-[56px] gap-0.5 relative">
               {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background: '#00d4eb' }} />}
               <span className="material-symbols-outlined text-[22px]"
                 style={{ color: isActive ? '#00d4eb' : '#4a7080', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>

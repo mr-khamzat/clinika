@@ -144,12 +144,12 @@ export default function ManagerDashboard() {
         )}
 
         {/* Быстрые переходы */}
-        <div className="grid grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
           {ALL_NAV.map(({ key, label, icon, path }) => (
             <button key={key} onClick={() => nav(path)}
-              className="bg-white rounded-2xl p-3 flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+              className="bg-white rounded-2xl p-3 min-h-[88px] flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-transform"
               style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: QUICK_BG[key] }}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: QUICK_BG[key] }}>
                 <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>{icon}</span>
               </div>
               <span className="text-xs font-semibold text-[#727783] leading-tight text-center">{label}</span>
@@ -274,7 +274,8 @@ export default function ManagerDashboard() {
             ) : admins.length === 0 ? (
               <div className="p-6 text-center text-[#727783] text-sm">Нет данных</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="min-w-full text-sm whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-[#eceef0]">
                     <th className="text-left text-xs font-bold text-[#727783] uppercase tracking-wider px-4 py-3">Сотрудник</th>
@@ -294,6 +295,7 @@ export default function ManagerDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -308,7 +310,8 @@ export default function ManagerDashboard() {
             {loadingClinics ? (<div className="p-6 text-center text-[#727783] text-sm">Загрузка...</div>
             ) : clinics.length === 0 ? (<div className="p-6 text-center text-[#727783] text-sm">Нет данных</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="min-w-full text-sm whitespace-nowrap">
                 <thead>
                   <tr className="border-b border-[#eceef0]">
                     <th className="text-left text-xs font-bold text-[#727783] uppercase tracking-wider px-4 py-3">Откуда</th>
@@ -326,6 +329,7 @@ export default function ManagerDashboard() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

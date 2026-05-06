@@ -12,7 +12,7 @@ function PageHeader({ title, icon, color }) {
   return (
     <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
       <div className="flex items-center gap-3">
-        <button onClick={() => nav('/manager')} className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+        <button onClick={() => nav('/manager')} className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform flex-shrink-0">
           <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
         </button>
         <div className="flex items-center gap-2">
@@ -82,7 +82,7 @@ export default function ManagerBonuses() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-1.5 mb-4 flex gap-1.5" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
           {[['pending','Ожидают выплаты'],['all','Все бонусы']].map(([k,l]) => (
             <button key={k} onClick={() => setFilter(k)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${filter===k ? 'text-white shadow-sm' : 'text-[#727783]'}`}
+              className={`flex-1 py-3 min-h-[44px] rounded-xl text-sm font-bold transition-all ${filter===k ? 'text-white shadow-sm' : 'text-[#727783]'}`}
               style={filter===k ? { background:'linear-gradient(135deg,#0097A7,#006173)' } : {}}>
               {l}
             </button>
