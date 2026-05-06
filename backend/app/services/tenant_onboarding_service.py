@@ -91,16 +91,18 @@ async def onboard_tenant(
     )
     db.add(branding)
 
-    # 4. Администратор тенанта
-    admin_user = User(
+    # 4. Владелец франшизы — создаётся при онбординге.
+    # Это первый и главный пользователь нового тенанта. Имеет доступ к
+    # управлению модулями, биллингу, аналитике, созданию клиник и manager'ов.
+    franchise_owner = User(
         tenant_id=tenant.id,
         username=admin_username,
         password_hash=hash_password(raw_password),
         full_name=admin_name,
-        role=UserRole.MANAGER,
+        role=UserRole.FRANCHISE_OWNER,
         is_active=True,
     )
-    db.add(admin_user)
+    db.add(franchise_owner)
 
     # 5. Trial подписка
     today = date.today()
