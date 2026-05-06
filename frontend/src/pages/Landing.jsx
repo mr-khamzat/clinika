@@ -406,7 +406,7 @@ export default function Landing() {
               <button onClick={() => setShowContact(true)} className="ks-btn-primary">
                 Получить демо <span aria-hidden>{ICONS.arrow}</span>
               </button>
-              <a href="/downloads/KliniknetCalls-Setup-1.0.3.exe" download className="ks-btn-secondary">
+              <a href="/downloads/KliniknetCalls-Setup-1.0.4.exe" download className="ks-btn-secondary">
                 {ICONS.download}
                 Calls для Windows
               </a>
@@ -742,20 +742,29 @@ export default function Landing() {
           <div className="ks-calls-card">
             <div className="ks-calls-text">
               <div className="ks-section-eyebrow">Десктоп-приложение</div>
-              <h2 className="ks-section-title">КлиникСеть Calls для Windows</h2>
+              <h2 className="ks-section-title">КлиникСеть Calls — десктопное приложение</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь врача и пациента. WebRTC через ваш собственный coturn-сервер.
-                Без сторонних облачных провайдеров. Версия 1.0.1.
+                Без сторонних облачных провайдеров. Версия 1.0.4 — adaptive bitrate, RNNoise, update flow.
               </p>
-              <div className="ks-hero-actions">
-                <a href="/downloads/KliniknetCalls-Setup-1.0.3.exe" download className="ks-btn-primary">
+              <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
+                <a href="/downloads/KliniknetCalls-Setup-1.0.4.exe" download className="ks-btn-primary">
                   {ICONS.download}
-                  Скачать .exe · 78 МБ
+                  Windows · 77 МБ
                 </a>
-                <button onClick={() => setShowContact(true)} className="ks-btn-secondary">
-                  Запросить версии для macOS / Linux
-                </button>
+                <a href="/downloads/KliniknetCalls-1.0.4-mac-arm64.zip" download className="ks-btn-secondary">
+                  {ICONS.download}
+                  macOS Apple Silicon · 91 МБ
+                </a>
+                <a href="/downloads/KliniknetCalls-1.0.4-mac-x64.zip" download className="ks-btn-secondary">
+                  {ICONS.download}
+                  macOS Intel · 96 МБ
+                </a>
               </div>
+              <p style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 8 }}>
+                macOS: распакуйте .zip → перетащите .app в «Программы». При первом запуске:
+                ПКМ → «Открыть» (без подписи Apple Developer).
+              </p>
             </div>
             <div className="ks-calls-mock">
               <div className="ks-preview-chrome">
