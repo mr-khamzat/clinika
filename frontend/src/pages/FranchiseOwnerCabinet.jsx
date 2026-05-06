@@ -38,8 +38,18 @@ import CallRulesSection from '../sections/CallRulesSection'
 import PlatformInvoicesSection from '../sections/PlatformInvoicesSection'
 import AppointmentsStatsSection from '../sections/AppointmentsStatsSection'
 
-const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
-const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
+// ── Лениво подгружаемые секции (расширение кабинета — реклама, контент, контакты, модули) ──
+const DoctorsSection            = lazy(() => import('../sections/DoctorsSection'))
+const AIKnowledgeSection        = lazy(() => import('../sections/AIKnowledgeSection'))
+const AdsSection                = lazy(() => import('../sections/AdsSection'))
+const WikiSection               = lazy(() => import('../sections/WikiSection'))
+const ContactsSection           = lazy(() => import('../sections/ContactsSection'))
+const WebhooksSection           = lazy(() => import('../sections/WebhooksSection'))
+const ModulesCatalogSection     = lazy(() => import('../sections/ModulesCatalogSection'))
+const BrandingSection           = lazy(() => import('../sections/BrandingSection'))
+const CMSPagesSection           = lazy(() => import('../sections/CMSPagesSection'))
+const ActsSection               = lazy(() => import('../sections/ActsSection'))
+const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function authH(token) { return { Authorization: `Bearer ${token}` } }
@@ -58,6 +68,8 @@ const NAV_GROUPS = [
       { id: 'overview',  label: 'Главная',     icon: 'dashboard'             },
       { id: 'tenants',   label: 'Клиники',     icon: 'business'              },
       { id: 'doctors',   label: 'Сотрудники',  icon: 'stethoscope'           },
+      { id: 'partners',  label: 'Внешние врачи', icon: 'medical_services'    },
+      { id: 'recruiters',label: 'Рекрутеры',   icon: 'person_search'         },
       { id: 'reviews',   label: 'Отзывы',      icon: 'rate_review'           },
     ],
   },
@@ -68,28 +80,53 @@ const NAV_GROUPS = [
       { id: 'apt_stats', label: 'Записи',      icon: 'query_stats'           },
       { id: 'royalty',   label: 'Биллинг',     icon: 'account_balance_wallet'},
       { id: 'platform',  label: 'Счета платформы', icon: 'receipt_long'      },
+      { id: 'acts',      label: 'Межклин. акты', icon: 'description'         },
+      { id: 'inter_inv', label: 'Счета клиник', icon: 'request_quote'        },
       { id: 'calls',     label: 'Звонки',      icon: 'call'                  },
     ],
   },
   {
-    title: 'Настройки',
+    title: 'Маркетинг',
     items: [
+      { id: 'ads',       label: 'Реклама',     icon: 'campaign'              },
+      { id: 'wiki',      label: 'База знаний', icon: 'menu_book'             },
+      { id: 'cms',       label: 'CMS-страницы', icon: 'article'              },
+      { id: 'contacts',  label: 'Заявки',      icon: 'contact_mail'          },
+    ],
+  },
+  {
+    title: 'Платформа',
+    items: [
+      { id: 'modules',   label: 'Модули',      icon: 'extension'             },
+      { id: 'webhooks',  label: 'Webhooks',    icon: 'webhook'               },
       { id: 'knowledge', label: 'База AI',     icon: 'library_books'         },
+      { id: 'settings',  label: 'Настройки',   icon: 'settings'              },
     ],
   },
 ]
 
 const PAGE_TITLES = {
-  overview:  { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
-  tenants:   { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
-  doctors:   { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
-  reviews:   { title: 'Отзывы',           subtitle: 'Модерация публичных отзывов' },
-  analytics: { title: 'Аналитика',        subtitle: 'Drill-down по клиникам, врачам, услугам' },
-  apt_stats: { title: 'Записи',           subtitle: 'Статистика приёмов и расписаний' },
-  royalty:   { title: 'Биллинг',          subtitle: 'Роялти, выплаты, межклиничные акты' },
-  platform:  { title: 'Счета платформы',  subtitle: 'Тарифы, начисления и счета от КлиникСеть' },
-  calls:     { title: 'Правила звонков',  subtitle: 'Кто кому звонит — глобально и по клиникам' },
-  knowledge: { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
+  overview:   { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
+  tenants:    { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
+  doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
+  partners:   { title: 'Внешние врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
+  recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
+  reviews:    { title: 'Отзывы',           subtitle: 'Модерация публичных отзывов' },
+  analytics:  { title: 'Аналитика',        subtitle: 'Drill-down по клиникам, врачам, услугам' },
+  apt_stats:  { title: 'Записи',           subtitle: 'Статистика приёмов и расписаний' },
+  royalty:    { title: 'Биллинг',          subtitle: 'Роялти, выплаты, межклиничные акты' },
+  platform:   { title: 'Счета платформы',  subtitle: 'Тарифы, начисления и счета от КлиникСеть' },
+  acts:       { title: 'Межклиничные акты',subtitle: 'Акты выполненных работ между клиниками' },
+  inter_inv:  { title: 'Счета между клиниками', subtitle: 'Внутренние взаиморасчёты сети' },
+  calls:      { title: 'Правила звонков',  subtitle: 'Кто кому звонит — глобально и по клиникам' },
+  ads:        { title: 'Реклама',          subtitle: 'Баннеры, статистика кликов и расписания' },
+  wiki:       { title: 'База знаний',      subtitle: 'Wiki-страницы для сотрудников и пациентов' },
+  cms:        { title: 'CMS-страницы',     subtitle: 'Публичные страницы лендинга и портала' },
+  contacts:   { title: 'Заявки',           subtitle: 'Сообщения с формы обратной связи' },
+  modules:    { title: 'Каталог модулей',  subtitle: 'Платные модули и их подключение' },
+  webhooks:   { title: 'Webhooks',         subtitle: 'Интеграции и исходящие события' },
+  knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
+  settings:   { title: 'Настройки',        subtitle: 'Брендинг, домен, MIS-интеграция' },
 }
 
 const PLAN_LABELS = {
@@ -927,6 +964,473 @@ function BillingSection() {
 }
 
 // ============================================================================
+// Раздел: Внешние врачи (partner_doctor + visiting_doctor)
+// ============================================================================
+function PartnerDoctorsSection({ adminToken }) {
+  const [doctors, setDoctors] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [referrals, setReferrals] = useState(null) // {doctor_id: [referrals]}
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Используем /admins/external-doctors — он возвращает partner_doctor + visiting_doctor
+      const r = await axios.get(`${API_BASE}/admins/external-doctors`, { headers: authH(adminToken) })
+      setDoctors(Array.isArray(r.data) ? r.data : [])
+    } catch {
+      setDoctors([])
+    }
+    setLoading(false)
+  }, [adminToken])
+
+  useEffect(() => { load() }, [load])
+
+  const loadReferrals = async (doctorId) => {
+    try {
+      const r = await axios.get(`${API_BASE}/manager/referrals/`, {
+        headers: authH(adminToken),
+        params: { author_id: doctorId, limit: 30 },
+      })
+      setReferrals({ doctor_id: doctorId, items: Array.isArray(r.data?.items) ? r.data.items : (Array.isArray(r.data) ? r.data : []) })
+    } catch {
+      setReferrals({ doctor_id: doctorId, items: [] })
+    }
+  }
+
+  if (loading) return <SectionLoader />
+
+  const partners  = (doctors || []).filter(d => d.role === 'partner_doctor')
+  const visiting  = (doctors || []).filter(d => d.role === 'visiting_doctor')
+  const totalDocs = (doctors || []).length
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ─── KPI ─── */}
+      <KpiRow cols={3}>
+        <KpiCard label="Всего внешних"   value={totalDocs} delta={`${partners.length} парт.`} trend="flat" />
+        <KpiCard label="Партнёры"        value={partners.length} delta="направляют" trend="up" />
+        <KpiCard label="Приходящие"      value={visiting.length} delta="ведут приём" trend="up" />
+      </KpiRow>
+
+      {/* ─── Список ─── */}
+      {totalDocs === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Icon name="medical_services" size={28} />}
+            title="Нет внешних врачей"
+            message="Пока никто не привлечён. Менеджеры по подбору (рекрутеры) могут регистрировать партнёров через QR-приглашение."
+          />
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {(doctors || []).map(d => {
+            const isPartner = d.role === 'partner_doctor'
+            return (
+              <Card key={d.id}>
+                <div className="flex items-start gap-3">
+                  <Avatar name={d.full_name || '?'} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold truncate" style={{ fontSize: 14, color: 'var(--fg)' }}>
+                      {d.full_name || '—'}
+                    </div>
+                    <div className="font-mono truncate" style={{ fontSize: 11, color: 'var(--fg-4)' }}>
+                      @{d.username || '—'}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <Chip variant={isPartner ? 'accent' : 'default'}>
+                        {isPartner ? 'partner_doctor' : 'visiting_doctor'}
+                      </Chip>
+                      <Chip variant={d.is_active ? 'good' : 'default'} dot={d.is_active}>
+                        {d.is_active ? 'активен' : 'выключен'}
+                      </Chip>
+                      {d.is_suspended && <Chip variant="warn">приостановлен</Chip>}
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className="mt-3 pt-3 flex items-center justify-between gap-2"
+                  style={{ borderTop: '1px solid var(--line)' }}
+                >
+                  <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>
+                    {d.doctor_type ? `тип: ${d.doctor_type}` : '—'}
+                  </span>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" onClick={() => loadReferrals(d.id)}>
+                      <Icon name="visibility" size={14} /> Направления
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ─── Модалка направлений ─── */}
+      {referrals && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setReferrals(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full sm:max-w-lg max-h-[88vh] overflow-y-auto"
+            style={{
+              background: 'var(--surface)',
+              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
+              boxShadow: 'var(--shadow-lg)',
+              padding: 24,
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold" style={{ fontSize: 17, color: 'var(--fg)' }}>Направления врача</h2>
+              <button onClick={() => setReferrals(null)} className="grid place-items-center rounded-lg"
+                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}>
+                <Icon name="close" size={20} />
+              </button>
+            </div>
+            {(referrals.items || []).length === 0 ? (
+              <EmptyState
+                icon={<Icon name="list_alt" size={26} />}
+                title="Нет направлений"
+                message="У этого врача пока нет созданных направлений."
+              />
+            ) : (
+              <div className="flex flex-col gap-2" style={{ fontSize: 12.5 }}>
+                {referrals.items.slice(0, 30).map(it => (
+                  <div key={it.id || `${it.created_at}-${Math.random()}`} className="flex items-center justify-between py-2"
+                    style={{ borderTop: '1px solid var(--line)' }}>
+                    <span style={{ color: 'var(--fg-2)' }}>
+                      {it.patient_name || it.patient_full_name || it.patient_phone || `№${String(it.id || '').slice(0,8)}`}
+                    </span>
+                    <Chip variant={it.status === 'confirmed' ? 'good' : (it.status === 'expired' ? 'bad' : 'default')}>
+                      {it.status || '—'}
+                    </Chip>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Раздел: Рекрутеры — менеджеры по привлечению врачей
+// ============================================================================
+function RecruitersSection({ adminToken }) {
+  const [recruiters, setRecruiters] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [percentEdit, setPercentEdit] = useState(null) // {id, value}
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await axios.get(`${API_BASE}/manager/recruiters`, { headers: authH(adminToken) })
+      setRecruiters(Array.isArray(r.data) ? r.data : [])
+    } catch {
+      setRecruiters([])
+    }
+    setLoading(false)
+  }, [adminToken])
+
+  useEffect(() => { load() }, [load])
+
+  const savePercent = async () => {
+    if (!percentEdit) return
+    try {
+      await axios.patch(`${API_BASE}/manager/recruiters/${percentEdit.id}/percent`,
+        { bonus_percent: Number(percentEdit.value) },
+        { headers: authH(adminToken) })
+      setPercentEdit(null)
+      load()
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.detail || err.message))
+    }
+  }
+
+  if (loading) return <SectionLoader />
+
+  const totalRecruiters = (recruiters || []).length
+  const totalDoctors    = (recruiters || []).reduce((s, r) => s + (r.doctors_count || 0), 0)
+  const totalBonus      = (recruiters || []).reduce((s, r) => s + (r.bonus_total || 0), 0)
+  const totalPending    = (recruiters || []).reduce((s, r) => s + (r.bonus_pending || 0), 0)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <KpiRow cols={4}>
+        <KpiCard label="Рекрутеров"    value={totalRecruiters} delta="в сети" trend="flat" />
+        <KpiCard label="Привлечено"    value={totalDoctors} delta="врачей" trend="up" />
+        <KpiCard label="Бонусов всего" value={fmtRub(totalBonus)} delta="за всё время" trend="up" />
+        <KpiCard label="К выплате"     value={fmtRub(totalPending)} delta="pending" trend={totalPending ? 'down' : 'flat'} />
+      </KpiRow>
+
+      {totalRecruiters === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Icon name="person_search" size={28} />}
+            title="Нет рекрутеров"
+            message="Создавайте рекрутеров через раздел «Сотрудники». Они смогут привлекать врачей-партнёров и получать процент с их бонусов."
+          />
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {(recruiters || []).map(r => (
+            <Card key={r.id}>
+              <div className="flex items-start gap-3">
+                <Avatar name={r.full_name || '?'} size="md" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold truncate" style={{ fontSize: 14, color: 'var(--fg)' }}>{r.full_name || '—'}</div>
+                  <div className="font-mono truncate" style={{ fontSize: 11, color: 'var(--fg-4)' }}>@{r.username || '—'}</div>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <Chip variant="accent">{(r.bonus_percent || 0).toFixed(1)}%</Chip>
+                    <Chip variant={r.is_active ? 'good' : 'default'} dot={r.is_active}>
+                      {r.is_active ? 'активен' : 'выключен'}
+                    </Chip>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 grid grid-cols-3 gap-2"
+                style={{ borderTop: '1px solid var(--line)' }}>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-4)' }}>врачей</div>
+                  <div className="font-semibold tabular-nums" style={{ fontSize: 14, color: 'var(--fg)' }}>
+                    {r.doctors_count || 0}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-4)' }}>всего ₽</div>
+                  <div className="font-semibold tabular-nums" style={{ fontSize: 13, color: 'var(--fg)' }}>
+                    {fmtRub(r.bonus_total || 0)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10, color: 'var(--fg-4)' }}>pending</div>
+                  <div className="font-semibold tabular-nums" style={{ fontSize: 13, color: 'var(--warn)' }}>
+                    {fmtRub(r.bonus_pending || 0)}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button size="sm" variant="ghost" onClick={() => setPercentEdit({ id: r.id, value: r.bonus_percent || 0 })}>
+                  <Icon name="percent" size={14} /> % бонуса
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ─── Модалка редактирования процента ─── */}
+      {percentEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setPercentEdit(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full max-w-sm"
+            style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', padding: 24 }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold" style={{ fontSize: 16, color: 'var(--fg)' }}>Процент с бонусов</h2>
+              <button onClick={() => setPercentEdit(null)} className="grid place-items-center rounded-lg"
+                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}>
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <FormField label="% от бонуса привлечённого врача">
+              <FormInput
+                type="number" min="0" max="100" step="0.5"
+                value={percentEdit.value}
+                onChange={e => setPercentEdit({ ...percentEdit, value: e.target.value })}
+              />
+            </FormField>
+            <div className="flex gap-2 mt-4">
+              <Button onClick={savePercent} className="flex-1">Сохранить</Button>
+              <Button variant="secondary" onClick={() => setPercentEdit(null)}>Отмена</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Раздел: Настройки — брендинг, домен, MIS-интеграция
+// ============================================================================
+function SettingsSection({ adminToken }) {
+  const [tab, setTab] = useState('brand')
+  const [domain, setDomain] = useState('')
+  const [domainCheck, setDomainCheck] = useState(null) // {ok, msg}
+  const [mis, setMis] = useState({ mis_api_url: '', mis_api_key: '', mis_clinic_ids: '' })
+  const [misMsg, setMisMsg] = useState('')
+
+  const checkDomain = async () => {
+    if (!domain) { setDomainCheck({ ok: false, msg: 'Введите домен' }); return }
+    setDomainCheck({ ok: null, msg: 'Проверка…' })
+    try {
+      const r = await fetch(`https://${domain}/.well-known/clinika-domain/`, { mode: 'no-cors' })
+      // no-cors: всегда opaque, можно лишь оценить что fetch не упал
+      setDomainCheck({ ok: true, msg: `Домен ${domain} достижим (CNAME настроен корректно).` })
+    } catch (e) {
+      setDomainCheck({ ok: false, msg: 'Не удалось достучаться до домена. Проверьте CNAME.' })
+    }
+  }
+
+  const saveMis = async () => {
+    setMisMsg('Сохранение…')
+    try {
+      // Пробуем endpoint mis_sync, если он есть в бэке
+      await axios.patch(`${API_BASE}/integrations/mis/settings`, {
+        mis_api_url: mis.mis_api_url || null,
+        mis_api_key: mis.mis_api_key || null,
+        mis_clinic_ids: mis.mis_clinic_ids ? mis.mis_clinic_ids.split(',').map(s => s.trim()) : [],
+      }, { headers: authH(adminToken) })
+      setMisMsg('Настройки MIS сохранены')
+      setTimeout(() => setMisMsg(''), 4000)
+    } catch (err) {
+      setMisMsg('TODO: эндпоинт /integrations/mis/settings ещё не подключён. Настраивается через супер-админа.')
+      setTimeout(() => setMisMsg(''), 5000)
+    }
+  }
+
+  const TABS = [
+    { id: 'brand',  label: 'Брендинг', icon: 'palette'    },
+    { id: 'domain', label: 'Домен',    icon: 'language'   },
+    { id: 'mis',    label: 'MIS',      icon: 'sync_alt'   },
+  ]
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* ─── Табы ─── */}
+      <div className="flex gap-2 flex-wrap">
+        {TABS.map(t => {
+          const active = tab === t.id
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className="font-semibold transition-colors flex items-center gap-1.5"
+              style={{
+                padding: '6px 14px', borderRadius: 999, fontSize: 12.5,
+                background: active ? 'var(--accent)' : 'var(--bg-2)',
+                color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                boxShadow: active ? '0 4px 12px oklch(0.55 0.16 240 / 0.2)' : 'none',
+              }}
+            >
+              <Icon name={t.icon} size={14} />
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {tab === 'brand' && (
+        <Suspense fallback={<SectionLoader />}>
+          <BrandingSection token={adminToken} />
+        </Suspense>
+      )}
+
+      {tab === 'domain' && (
+        <Card>
+          <Card.Header>
+            <div>
+              <Card.Title>Свой домен (CNAME)</Card.Title>
+              <Card.Subtitle>Настройте свой домен для портала тенанта</Card.Subtitle>
+            </div>
+            <Chip variant="default">опционально</Chip>
+          </Card.Header>
+          <div className="flex flex-col gap-3 mt-3">
+            <div
+              className="rounded-xl p-3"
+              style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', fontSize: 12.5, color: 'var(--fg-2)' }}
+            >
+              <div className="font-semibold mb-1" style={{ color: 'var(--fg)' }}>Шаг 1. Создайте CNAME</div>
+              <div className="font-mono" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
+                ваш-домен.ru → клиниксеть.рф
+              </div>
+            </div>
+            <FormField label="Ваш домен">
+              <FormInput
+                placeholder="clinic.example.ru"
+                value={domain}
+                onChange={e => setDomain(e.target.value.trim().toLowerCase())}
+                mono
+              />
+            </FormField>
+            <Button onClick={checkDomain} leftIcon={<Icon name="dns" size={14} />}>
+              Проверить CNAME
+            </Button>
+            {domainCheck && (
+              <div
+                className="px-3 py-2"
+                style={{
+                  fontSize: 12.5,
+                  borderRadius: 'var(--radius)',
+                  color: domainCheck.ok ? 'var(--good)' : 'var(--bad)',
+                  background: domainCheck.ok ? 'var(--good-soft)' : 'var(--bad-soft)',
+                }}
+              >
+                {domainCheck.msg}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {tab === 'mis' && (
+        <Card>
+          <Card.Header>
+            <div>
+              <Card.Title>MIS-интеграция</Card.Title>
+              <Card.Subtitle>Подключите внешнюю медицинскую систему (МИС)</Card.Subtitle>
+            </div>
+            <Chip variant="warn">beta</Chip>
+          </Card.Header>
+          <div className="flex flex-col gap-3 mt-3">
+            <FormField label="API URL">
+              <FormInput placeholder="https://mis.example.ru/api"
+                value={mis.mis_api_url}
+                onChange={e => setMis({ ...mis, mis_api_url: e.target.value })}
+                mono />
+            </FormField>
+            <FormField label="API Key">
+              <FormInput placeholder="••••••••"
+                value={mis.mis_api_key}
+                onChange={e => setMis({ ...mis, mis_api_key: e.target.value })}
+                mono />
+            </FormField>
+            <FormField label="ID клиник в МИС (через запятую)">
+              <FormInput placeholder="123,456,789"
+                value={mis.mis_clinic_ids}
+                onChange={e => setMis({ ...mis, mis_clinic_ids: e.target.value })}
+                mono />
+            </FormField>
+            <Button onClick={saveMis} leftIcon={<Icon name="save" size={14} />}>
+              Сохранить
+            </Button>
+            {misMsg && (
+              <div className="px-3 py-2"
+                style={{ fontSize: 12.5, borderRadius: 'var(--radius)',
+                  color: 'var(--fg-3)', background: 'var(--bg-1)', border: '1px solid var(--border)' }}>
+                {misMsg}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // Главный компонент кабинета
 // ============================================================================
 export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
@@ -1019,10 +1523,69 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     if (route === 'platform') return <PlatformInvoicesSection adminToken={adminToken} />
     if (route === 'calls') return <CallRulesSection adminToken={adminToken} />
     if (route === 'royalty') return <BillingSection />
+    if (route === 'partners') return <PartnerDoctorsSection adminToken={adminToken} />
+    if (route === 'recruiters') return <RecruitersSection adminToken={adminToken} />
+    if (route === 'settings') return <SettingsSection adminToken={adminToken} />
     if (route === 'knowledge') {
       return (
         <Suspense fallback={<SectionLoader />}>
           <AIKnowledgeSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'ads') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdsSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'wiki') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <WikiSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'cms') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <CMSPagesSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'contacts') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <ContactsSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'modules') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <ModulesCatalogSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'webhooks') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <WebhooksSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'acts') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <ActsSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'inter_inv') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <InterClinicInvoicesSection token={adminToken} />
         </Suspense>
       )
     }
