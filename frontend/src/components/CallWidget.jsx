@@ -67,7 +67,7 @@ export default function CallWidget() {
   // ── WebSocket — подключаем всегда для presence, не только при telephony ──
   useEffect(() => {
     if (!user?.id || !token) return
-    const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}`
+    const wsUrl = API_BASE.replace(/^http/, 'ws') + `/presence/ws/${user.id}?token=${encodeURIComponent(token)}`
     const ws = new WebSocket(wsUrl)
     wsRef.current = ws
 
