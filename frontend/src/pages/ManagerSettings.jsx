@@ -7,7 +7,7 @@ function PageHeader({ title, icon, color }) {
   return (
     <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
       <div className="flex items-center gap-3">
-        <button onClick={() => nav('/manager')} className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+        <button onClick={() => nav('/manager')} className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform flex-shrink-0">
           <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
         </button>
         <div className="flex items-center gap-2">
@@ -85,7 +85,7 @@ export default function ManagerSettings() {
                       className="bg-[#f7f9fb] dark:bg-gray-700 border-2 border-transparent focus:border-[#0097A7]/40 rounded-xl p-2 text-sm w-24 text-right outline-none text-[#191c1e] dark:text-white transition-all"
                       placeholder="Б" />
                     <button onClick={() => handleSave(svc.id)} disabled={savingService===svc.id}
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-xs disabled:opacity-50 active:scale-95 transition-transform"
+                      className="w-11 h-11 flex-shrink-0 rounded-xl flex items-center justify-center text-white font-bold text-sm disabled:opacity-50 active:scale-95 transition-transform"
                       style={{ background:'linear-gradient(135deg,#0097A7,#006173)' }}>
                       {savingService===svc.id ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : 'OK'}
                     </button>
