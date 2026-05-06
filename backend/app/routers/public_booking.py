@@ -95,7 +95,7 @@ async def public_get_slots(
     db: AsyncSession = Depends(get_db),
 ):
     """Свободные слоты врача на конкретную дату (без авторизации)."""
-    await _get_tenant(slug, db)
+    tenant = await _get_tenant(slug, db)
     try:
         did = uuid.UUID(doctor_id)
         target = datetime.strptime(date, "%Y-%m-%d").date()
@@ -104,6 +104,13 @@ async def public_get_slots(
     from datetime import date as _date
     if target < _date.today():
         raise HTTPException(400, "Нельзя записаться на прошедшую дату")
+    # Tenant isolation: проверяем что врач принадлежит тенанту slug
+    doc_row = (await db.execute(
+        select(Doctor).join(Clinic, Doctor.clinic_id == Clinic.id)
+        .where(Doctor.id == did, Clinic.tenant_id == tenant.id)
+    )).scalar_one_or_none()
+    if not doc_row:
+        raise HTTPException(404, "Врач не найден")
     return await get_available_slots(db, did, target)
 
 
@@ -120,11 +127,18 @@ async def public_get_availability(
     и флаг has_schedule. По умолчанию диапазон: сегодня..сегодня+14.
     Возвращает: [{date: 'YYYY-MM-DD', free_slots: int, has_schedule: bool}, ...]
     """
-    await _get_tenant(slug, db)
+    tenant = await _get_tenant(slug, db)
     try:
         did = uuid.UUID(doctor_id)
     except (ValueError, AttributeError):
         raise HTTPException(400, "Неверный ID врача")
+    # Tenant isolation: врач должен принадлежать тенанту slug
+    doc_row = (await db.execute(
+        select(Doctor).join(Clinic, Doctor.clinic_id == Clinic.id)
+        .where(Doctor.id == did, Clinic.tenant_id == tenant.id)
+    )).scalar_one_or_none()
+    if not doc_row:
+        raise HTTPException(404, "Врач не найден")
 
     from datetime import date as _date, timedelta as _td
     today = _date.today()

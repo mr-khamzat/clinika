@@ -218,7 +218,7 @@ async def request_cancel(
     """Администратор запрашивает отмену направления — уходит на подтверждение руководителю."""
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()
-    if not referral:
+    if not referral or (current_user.tenant_id is not None and referral.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Направление не найдено")
     if referral.created_by_admin_id != current_user.id and current_user.role != UserRole.MANAGER:
         raise HTTPException(status_code=403, detail="Нет доступа")
@@ -245,6 +245,10 @@ async def get_comments(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    # Tenant isolation
+    ref_obj = (await db.execute(select(Referral).where(Referral.id == referral_id))).scalar_one_or_none()
+    if not ref_obj or (current_user.tenant_id is not None and ref_obj.tenant_id != current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Направление не найдено")
     result = await db.execute(
         select(ReferralComment)
         .where(ReferralComment.referral_id == referral_id)
@@ -273,7 +277,8 @@ async def add_comment(
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="Пустой комментарий")
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
-    if not result.scalar_one_or_none():
+    ref_obj = result.scalar_one_or_none()
+    if not ref_obj or (current_user.tenant_id is not None and ref_obj.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Направление не найдено")
 
     comment = ReferralComment(

@@ -116,9 +116,9 @@ async def list_doctors(
 
 
 @router.get("/doctors/{doctor_id}", response_model=DoctorOut, dependencies=_FEAT)
-async def get_doctor(doctor_id: uuid.UUID, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_doctor(doctor_id: uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     d = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not d:
+    if not d or (current_user.tenant_id is not None and d.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Врач не найден")
     return d
 
@@ -144,7 +144,7 @@ async def update_doctor(
     db: AsyncSession = Depends(get_db),
 ):
     doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not doctor:
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Врач не найден")
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(doctor, k, v)
@@ -185,7 +185,7 @@ async def upload_doctor_photo(
 ):
     """Загрузить фото врача (multipart). Принимает jpeg/png/webp ≤ 5 MB."""
     doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not doctor:
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Врач не найден")
 
     # Проверка MIME-типа
@@ -230,7 +230,7 @@ async def delete_doctor_photo(
 ):
     """Удалить фото врача (файл + photo_url)."""
     doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not doctor:
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Врач не найден")
     path = _find_existing_photo(doctor_id)
     if path:
@@ -259,9 +259,13 @@ async def serve_doctor_photo(filename: str):
 
 @router.get("/doctors/{doctor_id}/schedule", dependencies=_FEAT)
 async def get_doctor_schedule(
-    doctor_id: uuid.UUID, _=Depends(get_current_user), db: AsyncSession = Depends(get_db)
+    doctor_id: uuid.UUID, current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
     """Шаблонное расписание врача по дням недели."""
+    # Tenant isolation
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Врач не найден")
     rows = (await db.execute(
         select(DoctorSchedule).where(DoctorSchedule.doctor_id == doctor_id).order_by(DoctorSchedule.day_of_week)
     )).scalars().all()
@@ -287,6 +291,10 @@ async def update_doctor_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     """Полная замена шаблона расписания врача."""
+    # Tenant isolation
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Врач не найден")
     from sqlalchemy import delete
     await db.execute(delete(DoctorSchedule).where(DoctorSchedule.doctor_id == doctor_id))
     for day in days:
@@ -308,12 +316,16 @@ async def update_doctor_schedule(
 async def get_slots(
     doctor_id: uuid.UUID,
     target_date: date = Query(..., description="Дата в формате YYYY-MM-DD"),
-    _=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Свободные и занятые слоты врача на конкретную дату."""
     if target_date < date.today():
         raise HTTPException(400, "Нельзя смотреть слоты в прошлом")
+    # Tenant isolation
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Врач не найден")
     return await get_available_slots(db, doctor_id, target_date)
 
 
@@ -405,7 +417,7 @@ async def update_appointment_status(
 ):
     """Изменить статус записи (подтвердить / отменить / завершить)."""
     appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
-    if not appt:
+    if not appt or (current_user.tenant_id is not None and appt.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Запись не найдена")
     appt.status = data.status
     from datetime import datetime
@@ -492,7 +504,7 @@ async def move_appointment(
 async def get_doctor_week(
     doctor_id: uuid.UUID,
     start_date: date = Query(..., description="Понедельник недели, YYYY-MM-DD"),
-    _=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -505,7 +517,7 @@ async def get_doctor_week(
     DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
     doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not doctor:
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Врач не найден")
 
     # Шаблон расписания

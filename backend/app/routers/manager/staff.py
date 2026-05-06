@@ -34,11 +34,12 @@ async def assign_clinic(
 ):
     result = await db.execute(select(User).where(User.id == admin_id))
     admin = result.scalar_one_or_none()
-    if not admin:
+    if not admin or (current_user.tenant_id is not None and admin.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Администратор не найден")
     if body.clinic_id is not None:
         clinic_result = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
-        if not clinic_result.scalar_one_or_none():
+        clinic_obj = clinic_result.scalar_one_or_none()
+        if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
             raise HTTPException(status_code=404, detail="Клиника не найдена")
     _before_clinic = str(admin.clinic_id) if admin.clinic_id else None
     admin.clinic_id = body.clinic_id
@@ -111,7 +112,7 @@ async def update_admin(
     from app.core.security import hash_password
     result = await db.execute(select(User).where(User.id == admin_id))
     admin = result.scalar_one_or_none()
-    if not admin:
+    if not admin or (current_user.tenant_id is not None and admin.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Администратор не найден")
     if current_user.clinic_id is not None and admin.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому сотруднику")
@@ -133,7 +134,8 @@ async def update_admin(
         admin.clinic_id = None
     elif body.clinic_id is not None:
         clinic_check = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
-        if not clinic_check.scalar_one_or_none():
+        clinic_obj = clinic_check.scalar_one_or_none()
+        if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
             raise HTTPException(status_code=404, detail="Клиника не найдена")
         admin.clinic_id = body.clinic_id
     if body.category is not None: admin.category = body.category
@@ -167,7 +169,7 @@ async def deactivate_admin(
         raise HTTPException(status_code=400, detail="Нельзя удалить собственный аккаунт")
     result = await db.execute(select(User).where(User.id == admin_id))
     admin = result.scalar_one_or_none()
-    if not admin:
+    if not admin or (current_user.tenant_id is not None and admin.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Администратор не найден")
     if current_user.clinic_id is not None and admin.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому сотруднику")

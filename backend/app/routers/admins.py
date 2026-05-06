@@ -255,7 +255,7 @@ async def get_admin_stats(
     """Stats for a specific admin: referral counts and bonus totals. Manager only."""
     result = await db.execute(select(User).where(User.id == admin_id))
     admin = result.scalar_one_or_none()
-    if not admin:
+    if not admin or (current_user.tenant_id is not None and admin.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Администратор не найден")
 
     # Referral counts by status

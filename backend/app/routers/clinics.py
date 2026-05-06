@@ -35,6 +35,10 @@ async def get_clinic_services(
     db: AsyncSession = Depends(get_db)
 ):
     """Услуги клиники для формы направления — только с настроенным бонусом."""
+    # Tenant isolation: проверяем что клиника принадлежит тенанту пользователя
+    clinic_obj = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
+    if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
     result = await db.execute(
         select(Service).where(
             Service.clinic_id == clinic_id,
@@ -67,6 +71,10 @@ async def get_clinic_schedule(
     db: AsyncSession = Depends(get_db)
 ):
     """Возвращает расписание клиники (7 дней). Отсутствующие дни — выходные."""
+    # Tenant isolation
+    clinic_obj = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
+    if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
     result = await db.execute(
         select(ClinicSchedule)
         .where(ClinicSchedule.clinic_id == clinic_id)
@@ -104,7 +112,7 @@ async def update_clinic_schedule(
 ):
     """Полная замена расписания клиники (только менеджер)."""
     clinic = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
-    if not clinic:
+    if not clinic or (current_user.tenant_id is not None and clinic.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Клиника не найдена")
 
     await db.execute(delete(ClinicSchedule).where(ClinicSchedule.clinic_id == clinic_id))

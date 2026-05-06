@@ -69,8 +69,15 @@ async def submit_review(
         if existing:
             raise HTTPException(409, "Отзыв для этой записи уже существует")
 
+    # Игнорируем body.tenant_id, выводим из doctor.tenant_id, чтобы клиент не подделал тенант
+    from app.models.doctor import Doctor as _Doctor
+    doctor_obj = (await db.execute(select(_Doctor).where(_Doctor.id == body.doctor_id))).scalar_one_or_none()
+    if not doctor_obj:
+        raise HTTPException(404, "Врач не найден")
+    derived_tenant_id = doctor_obj.tenant_id
+
     r = Review(
-        tenant_id      = body.tenant_id,
+        tenant_id      = derived_tenant_id,
         appointment_id = body.appointment_id,
         doctor_id      = body.doctor_id,
         clinic_id      = body.clinic_id,
@@ -141,14 +148,14 @@ async def list_reviews(
     return {"total": total, "items": [_out(r) for r in rows]}
 
 
-@router.patch("/{review_id}/approve", dependencies=[_mgr])
+@router.patch("/{review_id}/approve")
 async def approve_review(
     review_id: uuid.UUID,
     current_user = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     r = await db.get(Review, review_id)
-    if not r:
+    if not r or (current_user.tenant_id is not None and r.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Отзыв не найден")
     r.status = ReviewStatus.APPROVED
     r.moderator_id = current_user.id
@@ -157,14 +164,14 @@ async def approve_review(
     return _out(r)
 
 
-@router.patch("/{review_id}/reject", dependencies=[_mgr])
+@router.patch("/{review_id}/reject")
 async def reject_review(
     review_id: uuid.UUID,
     current_user = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     r = await db.get(Review, review_id)
-    if not r:
+    if not r or (current_user.tenant_id is not None and r.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Отзыв не найден")
     r.status = ReviewStatus.REJECTED
     r.moderator_id = current_user.id
@@ -173,13 +180,14 @@ async def reject_review(
     return _out(r)
 
 
-@router.delete("/{review_id}", status_code=204, dependencies=[_mgr])
+@router.delete("/{review_id}", status_code=204)
 async def delete_review(
     review_id: uuid.UUID,
+    current_user = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     r = await db.get(Review, review_id)
-    if not r:
+    if not r or (current_user.tenant_id is not None and r.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Отзыв не найден")
     await db.delete(r)
     await db.commit()

@@ -20,11 +20,11 @@ from app.database import get_db
 from app.core.deps import require_manager
 from app.core.tenant import require_feature
 from app.models.audit import AuditEntry
+from app.models.user import User
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
 _feat = Depends(require_feature("audit_log"))
-_mgr  = Depends(require_manager)
 
 
 def _entry_out(e: AuditEntry) -> dict:
@@ -50,18 +50,22 @@ def _entry_out(e: AuditEntry) -> dict:
     }
 
 
-@router.get("/log", dependencies=[_feat, _mgr])
+@router.get("/log", dependencies=[_feat])
 async def get_audit_log(
     action: Optional[str]  = Query(None, description="Фильтр по типу действия"),
     entity_type: Optional[str] = Query(None),
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Общий журнал аудита с фильтрацией."""
     d_from = datetime.utcnow() - timedelta(days=days)
     filters = [AuditEntry.created_at >= d_from]
+    # Tenant isolation
+    if current_user.tenant_id is not None:
+        filters.append(AuditEntry.tenant_id == current_user.tenant_id)
     if action:
         filters.append(AuditEntry.action == action)
     if entity_type:
@@ -90,58 +94,66 @@ async def get_audit_log(
     }
 
 
-@router.get("/log/{entity_type}/{entity_id}", dependencies=[_feat, _mgr])
+@router.get("/log/{entity_type}/{entity_id}", dependencies=[_feat])
 async def get_entity_history(
     entity_type: str,
     entity_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """История изменений конкретной сущности."""
+    filters = [AuditEntry.entity_type == entity_type, AuditEntry.entity_id == entity_id]
+    if current_user.tenant_id is not None:
+        filters.append(AuditEntry.tenant_id == current_user.tenant_id)
     q = await db.execute(
         select(AuditEntry)
-        .where(
-            AuditEntry.entity_type == entity_type,
-            AuditEntry.entity_id   == entity_id,
-        )
+        .where(*filters)
         .order_by(AuditEntry.created_at.desc())
         .limit(limit)
     )
     return [_entry_out(e) for e in q.scalars().all()]
 
 
-@router.get("/log/actor/{actor_id}", dependencies=[_feat, _mgr])
+@router.get("/log/actor/{actor_id}", dependencies=[_feat])
 async def get_actor_history(
     actor_id: uuid.UUID,
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Все действия конкретного пользователя."""
+    # Tenant isolation: проверяем принадлежность актора нашему тенанту
+    if current_user.tenant_id is not None:
+        actor_obj = (await db.execute(select(User).where(User.id == actor_id))).scalar_one_or_none()
+        if not actor_obj or actor_obj.tenant_id != current_user.tenant_id:
+            return []
     d_from = datetime.utcnow() - timedelta(days=days)
+    filters = [AuditEntry.actor_id == actor_id, AuditEntry.created_at >= d_from]
+    if current_user.tenant_id is not None:
+        filters.append(AuditEntry.tenant_id == current_user.tenant_id)
     q = await db.execute(
         select(AuditEntry)
-        .where(
-            AuditEntry.actor_id   == actor_id,
-            AuditEntry.created_at >= d_from,
-        )
+        .where(*filters)
         .order_by(AuditEntry.created_at.desc())
         .limit(limit)
     )
     return [_entry_out(e) for e in q.scalars().all()]
 
 
-@router.get("/actions", dependencies=[_feat, _mgr])
+@router.get("/actions", dependencies=[_feat, Depends(require_manager)])
 async def list_audit_actions():
     """Список всех известных типов действий."""
     from app.services.audit_service import AuditAction
     actions = [v for k, v in vars(AuditAction).items() if not k.startswith("_")]
     return sorted(actions)
 
-@router.get("/feed", dependencies=[_mgr])
+@router.get("/feed")
 async def get_audit_feed(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(100, ge=1, le=500),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Объединённый журнал: audit_log + activity_log, сортировка по времени."""
@@ -153,9 +165,12 @@ async def get_audit_feed(
     d_from = (datetime.utcnow() - timedelta(days=days)).isoformat()
 
     # audit_log
+    audit_filters = [AuditEntry.created_at >= datetime.utcnow() - timedelta(days=days)]
+    if current_user.tenant_id is not None:
+        audit_filters.append(AuditEntry.tenant_id == current_user.tenant_id)
     aq = await db.execute(
         select(AuditEntry)
-        .where(AuditEntry.created_at >= datetime.utcnow() - timedelta(days=days))
+        .where(*audit_filters)
         .order_by(AuditEntry.created_at.desc())
         .limit(limit)
     )
@@ -183,9 +198,12 @@ async def get_audit_feed(
     ]
 
     # activity_log
+    activity_filters = [ActivityLog.created_at >= datetime.utcnow() - timedelta(days=days)]
+    if current_user.tenant_id is not None:
+        activity_filters.append(ActivityLog.tenant_id == current_user.tenant_id)
     lq = await db.execute(
         select(ActivityLog)
-        .where(ActivityLog.created_at >= datetime.utcnow() - timedelta(days=days))
+        .where(*activity_filters)
         .order_by(ActivityLog.created_at.desc())
         .limit(limit)
     )

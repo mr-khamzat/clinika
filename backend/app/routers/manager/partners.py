@@ -98,7 +98,7 @@ async def update_partner(
     from app.core.security import hash_password
     result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER))
     partner = result.scalar_one_or_none()
-    if not partner:
+    if not partner or (current_user.tenant_id is not None and partner.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Партнёр не найден")
     if body.full_name is not None: partner.full_name = body.full_name
     if body.username is not None: partner.username = body.username
@@ -125,7 +125,7 @@ async def delete_partner(
 ):
     result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER))
     partner = result.scalar_one_or_none()
-    if not partner:
+    if not partner or (current_user.tenant_id is not None and partner.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Партнёр не найден")
     if hard:
         partner.is_active = False; partner.username = None; partner.telegram_id = None
@@ -170,7 +170,10 @@ async def list_invitations(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    # Tenant isolation: фильтруем JOIN'ом по invited_by.tenant_id
     q = select(Invitation).order_by(Invitation.created_at.desc())
+    if current_user.tenant_id is not None:
+        q = q.join(User, User.id == Invitation.invited_by_id).where(User.tenant_id == current_user.tenant_id)
     if current_user.clinic_id: q = q.where(Invitation.clinic_id == current_user.clinic_id)
     result = await db.execute(q)
     invites = result.scalars().all()
@@ -196,6 +199,11 @@ async def delete_invitation(
     invite = result.scalar_one_or_none()
     if not invite:
         raise HTTPException(status_code=404, detail="Инвайт не найден")
+    # Tenant isolation: проверяем что инвайт создан внутри нашего тенанта
+    if current_user.tenant_id is not None:
+        inviter = (await db.execute(select(User).where(User.id == invite.invited_by_id))).scalar_one_or_none()
+        if not inviter or inviter.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=404, detail="Инвайт не найден")
     if current_user.clinic_id and invite.clinic_id != current_user.clinic_id:
         raise HTTPException(status_code=403, detail="Нет доступа")
     await db.delete(invite)
