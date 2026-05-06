@@ -402,13 +402,17 @@ export default function Landing() {
               Запись, ЭМК, биллинг, AI-аналитика, бонусы и кабинеты для пациентов, врачей и управляющих —
               без зоопарка интеграций.
             </p>
-            <div className="ks-hero-actions">
+            <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
               <button onClick={() => setShowContact(true)} className="ks-btn-primary">
                 Получить демо <span aria-hidden>{ICONS.arrow}</span>
               </button>
               <a href="/downloads/KliniknetCalls-Setup-1.0.4.exe" download className="ks-btn-secondary">
                 {ICONS.download}
-                Calls для Windows
+                Calls Windows
+              </a>
+              <a href="/downloads/KliniknetCalls-1.0.4-mac-arm64.zip" download className="ks-btn-secondary">
+                {ICONS.download}
+                Calls macOS
               </a>
             </div>
             <div className="ks-hero-trust">
