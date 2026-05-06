@@ -22,11 +22,18 @@ export default function Login() {
     try {
       const res = await loginPassword(username.trim(), password.trim())
       const token = res.data.access_token
+      const redirectUrl = res.data?.redirect_url   // backend подсказывает куда идти по роли
       setToken(token)
       localStorage.setItem('clinika_token_' + SLUG, token)
       const me = await getMe()
       setUser(me.data)
-      window.location.reload()
+      // Редирект по роли (franchise_owner→/{slug}/admin, super_admin→/admin, manager→/{slug}/manager и т.д.)
+      // Если backend не вернул redirect_url или он указывает на текущую страницу — обычный reload.
+      if (redirectUrl && redirectUrl !== window.location.pathname) {
+        window.location.href = redirectUrl
+      } else {
+        window.location.reload()
+      }
     } catch (e) {
       const msg = e?.response?.data?.detail
       setError(typeof msg === 'string' ? msg : 'Неверный логин или пароль')

@@ -82,11 +82,23 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
     role = user.role.value
     superadmin_uname = settings.superadmin_username if hasattr(settings, "superadmin_username") else "khamzat"
     is_super = (role == "super_admin" or user.username == superadmin_uname)
+    # Все «admin-кабинетные» роли идут на /{slug}/admin — там AdminRoot
+    # выбирает компонент кабинета по роли (FranchiseOwner / Doctor /
+    # OperationalCabinet для reg+nurse / Recruiter / PartnerDoctor / VisitingDoctor).
+    ADMIN_CABINET_ROLES = {
+        "franchise_owner",
+        "doctor",
+        "reg",
+        "nurse",
+        "recruiter",
+        "visiting_doctor",
+        "partner_doctor",
+    }
     if is_super:
         redirect_url = "/admin"
     elif role == "manager" and tenant_slug:
         redirect_url = f"/{tenant_slug}/manager"
-    elif role in ("doctor", "recruiter", "visiting_doctor", "partner_doctor") and tenant_slug:
+    elif role in ADMIN_CABINET_ROLES and tenant_slug:
         redirect_url = f"/{tenant_slug}/admin"
     elif tenant_slug:
         redirect_url = f"/{tenant_slug}/"
