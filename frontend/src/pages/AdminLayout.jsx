@@ -28,6 +28,16 @@ import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+// ── Premium дизайн-система (design-preview-2) ─────────────────────────────
+// Используется для обёртки секций в Page/PageHeader и для KPI/Chip/Avatar
+// в premium-оболочке AdminLayout. Inline-секции стилизуются через
+// CSS-переменные из tokens.css.
+import {
+  Page as DSPage,
+  PageHeader as DSPageHeader,
+  Chip as DSChip,
+  Avatar as DSAvatar,
+} from '../design'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,6 +126,87 @@ const NAV = [
   { key: 'platform_analytics', label: 'Аналитика платформы', icon: 'insights' },
   { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
 ]
+
+// ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
+// Сами видимые элементы фильтруются позже (visibleNav), здесь только
+// логическая группировка для отрисовки заголовков групп.
+const NAV_GROUP_TITLES = {
+  PLATFORM:  'Платформа',
+  FINANCE:   'Финансы',
+  ANALYTICS: 'Аналитика',
+  CONTENT:   'Контент',
+  SYSTEM:    'Система',
+  TENANT:    'Тенант',
+}
+const NAV_GROUP_OF = {
+  home:               'PLATFORM',
+  super_admin:        'PLATFORM',
+  franchises:         'PLATFORM',
+  modules_catalog:    'PLATFORM',
+
+  billing:            'FINANCE',
+  billing_ledger:     'FINANCE',
+  platform_billing:   'FINANCE',
+  acts:               'FINANCE',
+  payment_gateways:   'FINANCE',
+
+  analytics:          'ANALYTICS',
+  ai_analytics:       'ANALYTICS',
+  ai_knowledge:       'ANALYTICS',
+  platform_analytics: 'ANALYTICS',
+  monitoring:         'ANALYTICS',
+  audit:              'ANALYTICS',
+
+  reviews:            'CONTENT',
+  contacts:           'CONTENT',
+  patient_chats:      'CONTENT',
+  cms:                'CONTENT',
+  branding:           'CONTENT',
+  ads:                'CONTENT',
+  push_notify:        'CONTENT',
+  wiki:               'CONTENT',
+
+  webhooks:           'SYSTEM',
+  plugins:            'SYSTEM',
+  mis_sync:           'SYSTEM',
+  calls_cfg:          'SYSTEM',
+  settings:           'SYSTEM',
+  doctors:            'TENANT',
+}
+const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'SYSTEM', 'TENANT']
+
+// ── Подписи страниц (заголовок + подзаголовок для PageHeader) ──────────────
+const PAGE_TITLES = {
+  home:               { title: 'Главная',              subtitle: 'Сводка по платформе и состояние системы' },
+  super_admin:        { title: 'Тенанты',              subtitle: 'Управление клиниками-тенантами платформы' },
+  franchises:         { title: 'Франшизы',             subtitle: 'Сети клиник и владельцы франшиз' },
+  billing:            { title: 'Биллинг',              subtitle: 'Подписки тенантов, начисления и выплаты' },
+  billing_ledger:     { title: 'Финансовый реестр',    subtitle: 'Полная книга проводок по платформе' },
+  analytics:          { title: 'Аналитика',            subtitle: 'Drill-down по клиникам, врачам, услугам' },
+  ai_analytics:       { title: 'AI-анализ',            subtitle: 'Модели, инсайты и автообработка обращений' },
+  ai_knowledge:       { title: 'База знаний AI',       subtitle: 'FAQ-ответы для AI-чата пациентов' },
+  audit:              { title: 'Аудит',                subtitle: 'Журнал действий пользователей платформы' },
+  monitoring:         { title: 'Мониторинг',           subtitle: 'Состояние сервисов и API в реальном времени' },
+  ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
+  webhooks:           { title: 'Вебхуки',              subtitle: 'Платформенные интеграции и события' },
+  modules_catalog:    { title: 'Каталог модулей',      subtitle: 'Подключаемые тарифные модули платформы' },
+  reviews:            { title: 'Отзывы',               subtitle: 'Модерация публичных отзывов' },
+  contacts:           { title: 'Обращения',            subtitle: 'Входящие сообщения от посетителей лендингов' },
+  plugins:            { title: 'Плагины',              subtitle: 'Внешние интеграции тенанта' },
+  mis_sync:           { title: 'МИС Sync',             subtitle: 'Синхронизация с медицинскими информационными системами' },
+  doctors:            { title: 'Врачи',                subtitle: 'Управление врачебным составом' },
+  patient_chats:      { title: 'Чаты пациентов',       subtitle: 'Все чаты пациентов на платформе' },
+  calls_cfg:          { title: 'Звонки и SMS',         subtitle: 'Правила обзвонов и подключение шлюзов' },
+  push_notify:        { title: 'Push-уведомления',     subtitle: 'Рассылки пациентам и сотрудникам' },
+  wiki:               { title: 'Документация',         subtitle: 'Справочник по платформе' },
+  settings:           { title: 'Настройки',            subtitle: 'Параметры тенанта и платформы' },
+  branding:           { title: 'Брендинг',             subtitle: 'Логотип, цвета и фирменный стиль тенанта' },
+  cms:                { title: 'CMS Страницы',         subtitle: 'Контент публичного сайта тенанта' },
+  acts:               { title: 'Акты',                 subtitle: 'Расчётные акты для бухгалтерии' },
+  platform_billing:   { title: 'Биллинг платформы',    subtitle: 'Финансы платформы КлиникСеть' },
+  platform_analytics: { title: 'Аналитика платформы',  subtitle: 'Сводная статистика по всем тенантам' },
+  payment_gateways:   { title: 'Платёжные шлюзы',      subtitle: 'YooKassa, ЮMoney, Stripe и др.' },
+}
 
 // ---------------------------------------------------------------------------
 // Staff section
@@ -7371,6 +7462,30 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const [helpOpen, setHelpOpen]   = useState(false)
   const [branding, setBranding]   = useState(null)
 
+  // ── Sidebar: expanded (≥1024px) → collapsed (768-1023px) → mobile (<768px) ─
+  // Состояние пересчитывается при ресайзе. На мобильном сайдбар открывается
+  // как drawer; при выборе пункта drawer закрывается.
+  const [sidebarMode, setSidebarMode] = useState(() => {
+    if (typeof window === 'undefined') return 'expanded'
+    const w = window.innerWidth
+    if (w < 768) return 'mobile'
+    if (w < 1024) return 'collapsed'
+    return 'expanded'
+  })
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  useEffect(() => {
+    const onResize = () => {
+      const w = window.innerWidth
+      if (w < 768) setSidebarMode('mobile')
+      else if (w < 1024) setSidebarMode('collapsed')
+      else setSidebarMode('expanded')
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  // Закрытие drawer при смене раздела (мобильный UX)
+  useEffect(() => { setDrawerOpen(false) }, [activeSection])
+
   useEffect(() => {
     apiFetch('get', '/tenant/branding', adminToken).then(r => {
       const b = r.data
@@ -7503,254 +7618,617 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const bottomItems = BOTTOM_KEYS.map(k => visibleNav.find(n => n.key === k)).filter(Boolean)
   const moreItems   = visibleNav.filter(n => !BOTTOM_KEYS.includes(n.key))
 
-  return (
-    <div className="flex min-h-screen font-sans dark:bg-gray-950" style={{ background: '#F0F4F8' }}>
+  // ── Подпись страницы для PageHeader (premium-обёртка над секциями) ──────
+  const pageMeta = PAGE_TITLES[activeSection] || { title: activeNavItem?.label || 'Обзор', subtitle: '' }
 
-      {/* ════════ DESKTOP SIDEBAR ════════ */}
-      <aside className="hidden md:flex flex-col w-64 flex-shrink-0 sticky top-0 h-screen"
-        style={{ background: 'linear-gradient(180deg,#0a1628 0%,#0d2040 100%)' }}>
+  // ── Группировка nav-item'ов сайдбара по логическим группам ──────────────
+  const navGroups = NAV_GROUP_ORDER
+    .map(g => ({
+      key:   g,
+      title: NAV_GROUP_TITLES[g],
+      items: visibleNav.filter(n => (NAV_GROUP_OF[n.key] || 'PLATFORM') === g),
+    }))
+    .filter(g => g.items.length > 0)
 
-        {/* Логотип */}
-        <div className="px-5 pt-7 pb-5 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shadow-lg flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
-            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>health_and_safety</span>
-          </div>
-          <div>
-            <div className="text-[15px] font-bold text-white leading-tight tracking-tight">{brandName}</div>
-            <div className="text-[10px] uppercase tracking-widest mt-0.5 font-semibold" style={{ color: '#1565c0' }}>Medical Fintech</div>
-          </div>
-        </div>
+  // ── Геометрия sidebar ──────────────────────────────────────────────────
+  const sidebarWidth = sidebarMode === 'collapsed' ? 68 : 240
+  const isMobile = sidebarMode === 'mobile'
+  const sidebarCollapsed = sidebarMode === 'collapsed'
 
-        {/* Навигация */}
-        <nav className="flex-1 px-3 overflow-y-auto space-y-0.5 pb-4">
-          {visibleNav.map(item => {
-            const isActive = activeSection === item.key
-            const badge    = navBadge[item.key] || 0
-            return (
-              <button key={item.key} onClick={() => handleNav(item.key)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-left transition-all duration-150"
-                style={isActive ? {
-                  background: 'linear-gradient(90deg,rgba(21,101,192,0.3),rgba(21,101,192,0.1))',
-                  color: '#90caf9',
-                } : { color: '#8ba0b8' }}>
-                <span className="material-symbols-outlined text-[19px] flex-shrink-0"
-                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
-                    color: isActive ? '#90caf9' : undefined }}>
-                  {item.icon}
-                </span>
-                <span className={'flex-1 leading-none font-' + (isActive ? 'semibold' : 'medium')}>{item.label}</span>
-                {badge > 0 && (
-                  <span className="text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
-                    style={{ background: '#ef4444', color: '#fff' }}>
-                    {badge > 99 ? '99+' : badge}
-                  </span>
-                )}
-                {isActive && !badge && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#1565c0' }} />}
-              </button>
-            )
-          })}
-        </nav>
-
-        {/* Пользователь */}
-        <div className="px-3 pb-4 mt-auto">
-          <div className="rounded-2xl p-3 space-y-1" style={{ background: 'rgba(255,255,255,0.06)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
-                {userInit}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-semibold text-white truncate">{userName}</div>
-                <div className="text-[10px] mt-0.5" style={{ color: '#90caf9' }}>{roleLabel}</div>
-              </div>
+  // ── Sidebar (рендерится и в desktop, и внутри drawer'а) ────────────────
+  const sidebarBody = (
+    <aside
+      className="flex flex-col"
+      style={{
+        background: 'var(--bg-1)',
+        borderRight: '1px solid var(--border)',
+        padding: sidebarCollapsed ? '14px 8px' : '18px 12px',
+        position: isMobile ? 'static' : 'sticky',
+        top: 0,
+        height: isMobile ? '100vh' : '100vh',
+        overflowY: 'auto',
+      }}
+    >
+      {/* ─── Бренд-марка ─── */}
+      <div
+        className="flex items-center gap-2.5"
+        style={{ padding: sidebarCollapsed ? '4px 4px 14px' : '4px 10px 18px' }}
+      >
+        <div
+          className="grid place-items-center flex-shrink-0"
+          style={{
+            width: 36, height: 36, borderRadius: 11,
+            background: 'linear-gradient(140deg, var(--accent), var(--accent-2))',
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: 16,
+            boxShadow: '0 6px 18px oklch(0.55 0.16 240 / 0.32)',
+          }}
+        >⌬</div>
+        {!sidebarCollapsed && (
+          <div className="min-w-0 flex-1">
+            <div
+              className="font-semibold truncate"
+              style={{ fontSize: 14.5, color: 'var(--fg)', letterSpacing: '-0.01em' }}
+            >
+              {brandName}
             </div>
-            <div className="flex gap-1 pt-1">
-              <button onClick={() => setDark(d => !d)} title={dark ? 'Светлая тема' : 'Тёмная тема'}
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
-                <span className="material-symbols-outlined text-[15px]">{dark ? 'light_mode' : 'dark_mode'}</span>
-                {dark ? 'Светлая' : 'Тёмная'}
-              </button>
-              <button onClick={() => setHelpOpen(true)} title="Справка"
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
-                <span className="material-symbols-outlined text-[15px]">help</span>
-                Справка
-              </button>
-              <button onClick={onLogout} title="Выйти"
-                className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-medium transition"
-                style={{ background: 'rgba(255,255,255,0.06)', color: '#8ba0b8' }}>
-                <span className="material-symbols-outlined text-[15px]">logout</span>
-                Выйти
-              </button>
+            <div
+              className="font-semibold uppercase"
+              style={{ fontSize: 9.5, color: 'var(--accent)', letterSpacing: '0.12em', marginTop: 2 }}
+            >
+              ПЛАТФОРМА
             </div>
           </div>
-        </div>
-      </aside>
+        )}
+      </div>
 
-      {/* ════════ MAIN AREA ════════ */}
-      <div className="flex-1 flex flex-col min-w-0">
-
-        {/* MOBILE TOP HEADER */}
-        <header className="md:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-white/10"
-          style={{ background: 'linear-gradient(135deg,#0a1628,#0d2040)', backdropFilter: 'blur(12px)' }}>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: '#90caf9' }}>{brandName}</div>
-            <div className="text-white font-bold text-base leading-tight truncate">{activeNavItem?.label || 'Обзор'}</div>
+      {/* ─── Навигация по группам ─── */}
+      <nav className="flex-1" style={{ minHeight: 0 }}>
+        {navGroups.map(group => (
+          <div key={group.key}>
+            {!sidebarCollapsed && (
+              <div
+                className="font-semibold uppercase"
+                style={{
+                  fontSize: 10, color: 'var(--fg-4)',
+                  letterSpacing: '0.08em',
+                  padding: '14px 10px 6px',
+                }}
+              >{group.title}</div>
+            )}
+            {sidebarCollapsed && <div style={{ height: 10 }} />}
+            {group.items.map(item => {
+              const active = activeSection === item.key
+              const badge = navBadge[item.key] || 0
+              return (
+                <button
+                  key={item.key}
+                  onClick={() => handleNav(item.key)}
+                  title={sidebarCollapsed ? item.label : undefined}
+                  className="flex items-center font-medium w-full"
+                  style={{
+                    gap: 10,
+                    padding: sidebarCollapsed ? '9px' : '8px 10px',
+                    marginBottom: 2,
+                    borderRadius: 10,
+                    fontSize: 13,
+                    color: active ? 'var(--accent)' : 'var(--fg-2)',
+                    background: active ? 'var(--accent-soft)' : 'transparent',
+                    border: '1px solid transparent',
+                    fontWeight: active ? 600 : 500,
+                    justifyContent: sidebarCollapsed ? 'center' : 'flex-start',
+                    cursor: 'pointer',
+                    minHeight: 36,
+                    transition: 'background .15s, color .15s',
+                  }}
+                  onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-2)'; e.currentTarget.style.color = 'var(--fg)' } }}
+                  onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--fg-2)' } }}
+                >
+                  <span
+                    className="material-symbols-outlined flex-shrink-0"
+                    style={{
+                      fontSize: 19,
+                      fontVariationSettings: `'FILL' ${active ? 1 : 0}, 'wght' 500, 'opsz' 24`,
+                      lineHeight: 1,
+                    }}
+                  >{item.icon}</span>
+                  {!sidebarCollapsed && (
+                    <span className="flex-1 text-left truncate">{item.label}</span>
+                  )}
+                  {!sidebarCollapsed && badge > 0 && (
+                    <span
+                      className="font-bold rounded-full grid place-items-center flex-shrink-0"
+                      style={{
+                        fontSize: 10,
+                        minWidth: 18, height: 18, padding: '0 5px',
+                        background: 'var(--bad)', color: '#fff',
+                      }}
+                    >{badge > 99 ? '99+' : badge}</span>
+                  )}
+                  {sidebarCollapsed && badge > 0 && (
+                    <span
+                      className="absolute"
+                      style={{
+                        position: 'absolute', top: 4, right: 4,
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: 'var(--bad)',
+                      }}
+                    />
+                  )}
+                </button>
+              )
+            })}
           </div>
-          {contactsBadge > 0 && (
-            <button onClick={() => handleNav('contacts')}
-              className="relative w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: 'rgba(239,68,68,0.15)' }}>
-              <span className="material-symbols-outlined text-[18px] text-red-400">mail</span>
-              <span className="absolute -top-0.5 -right-0.5 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
-                style={{ background: '#ef4444', color: '#fff' }}>
-                {contactsBadge > 9 ? '9+' : contactsBadge}
-              </span>
-            </button>
+        ))}
+      </nav>
+
+      {/* ─── Подвал: пользователь ─── */}
+      <div
+        className="mt-auto"
+        style={{
+          padding: sidebarCollapsed ? '10px 0 0' : '12px 4px 0',
+          borderTop: '1px solid var(--border)',
+        }}
+      >
+        <div
+          className="flex items-center gap-2.5"
+          style={{ padding: sidebarCollapsed ? '6px 0' : '8px' }}
+        >
+          <DSAvatar name={userName} size="md" />
+          {!sidebarCollapsed && (
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold truncate" style={{ fontSize: 12.5, color: 'var(--fg)' }}>
+                {userName}
+              </div>
+              <div className="truncate" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                {roleLabel}
+              </div>
+            </div>
           )}
-          <button onClick={() => setDark(d => !d)}
-            className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(255,255,255,0.08)' }}>
-            <span className="material-symbols-outlined text-[18px] text-white">{dark ? 'light_mode' : 'dark_mode'}</span>
-          </button>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
-            {userInit}
-          </div>
-        </header>
-
-        {/* DESKTOP TOP BAR */}
-        <header className="hidden md:flex items-center justify-between px-8 py-4 bg-white/80 dark:bg-gray-900/80 sticky top-0 z-10 border-b border-gray-100 dark:border-gray-800"
-          style={{ backdropFilter: 'blur(12px)' }}>
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg,rgba(21,101,192,0.1),rgba(0,151,167,0.08))' }}>
-              <span className="material-symbols-outlined text-[18px]"
-                style={{ color: '#1565c0', fontVariationSettings:"'FILL' 1" }}>
-                {activeNavItem?.icon || 'dashboard'}
+        </div>
+        {!sidebarCollapsed && (
+          <div className="flex gap-1 mt-2">
+            <button
+              onClick={() => setDark(d => !d)}
+              title={dark ? 'Светлая тема' : 'Тёмная тема'}
+              className="flex-1 grid place-items-center"
+              style={{
+                height: 30, borderRadius: 8,
+                background: 'var(--bg-2)', color: 'var(--fg-3)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                {dark ? 'light_mode' : 'dark_mode'}
               </span>
-            </div>
-            <h1 className="font-bold text-gray-900 dark:text-white text-lg tracking-tight">{activeNavItem?.label || 'Обзор'}</h1>
+            </button>
+            <button
+              onClick={() => setHelpOpen(true)}
+              title="Справка"
+              className="flex-1 grid place-items-center"
+              style={{
+                height: 30, borderRadius: 8,
+                background: 'var(--bg-2)', color: 'var(--fg-3)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>help</span>
+            </button>
+            <button
+              onClick={onLogout}
+              title="Выйти"
+              className="flex-1 grid place-items-center"
+              style={{
+                height: 30, borderRadius: 8,
+                background: 'var(--bg-2)', color: 'var(--fg-3)',
+                border: '1px solid var(--border)',
+                cursor: 'pointer',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>logout</span>
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setDark(d => !d)}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-              <span className="material-symbols-outlined text-[19px]">{dark ? 'light_mode' : 'dark_mode'}</span>
-            </button>
-            <button onClick={() => setHelpOpen(true)}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-              <span className="material-symbols-outlined text-[19px]">help</span>
-            </button>
-            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1" />
-            <div className="flex items-center gap-2.5">
-              <div className="text-right hidden sm:block">
-                <div className="text-sm font-semibold text-gray-900 dark:text-white leading-tight">{userName}</div>
-                <div className="text-[11px] text-gray-400">{roleLabel}</div>
-              </div>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
-                style={{ background: 'linear-gradient(135deg,#1565c0,#0097A7)' }}>
-                {userInit}
-              </div>
-            </div>
-            <button onClick={onLogout}
-              className="w-9 h-9 rounded-xl flex items-center justify-center text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-              <span className="material-symbols-outlined text-[19px]">logout</span>
-            </button>
-          </div>
-        </header>
+        )}
+      </div>
+    </aside>
+  )
 
-        {/* PAGE CONTENT */}
-        <main className="flex-1 px-4 md:px-8 py-5 md:py-7 pb-24 md:pb-8 w-full max-w-6xl mx-auto dark:text-white">
-          {renderSection()}
-        </main>
+  return (
+    <DSPage>
+      <div
+        className="min-h-screen ks-app"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : `${sidebarWidth}px 1fr`,
+          background: 'var(--bg)',
+          transition: 'grid-template-columns 0.18s ease',
+          fontFamily: 'var(--font-sans)',
+          color: 'var(--fg)',
+        }}
+      >
+        {/* ════════ DESKTOP / TABLET SIDEBAR ════════ */}
+        {!isMobile && sidebarBody}
+
+        {/* ════════ MOBILE DRAWER ════════ */}
+        {isMobile && drawerOpen && (
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setDrawerOpen(false)}
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              className="h-full"
+              style={{
+                width: 264,
+                animation: 'admin-slide-in .18s ease',
+              }}
+            >
+              {sidebarBody}
+            </div>
+          </div>
+        )}
+
+        {/* ════════ MAIN COLUMN ════════ */}
+        <div className="min-w-0 flex flex-col">
+          {/* ─── Topbar ─── */}
+          <header
+            className="flex items-center gap-3 px-4 sm:px-6 py-3"
+            style={{
+              borderBottom: '1px solid var(--border)',
+              background: 'oklch(1 0 0 / 0.85)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              position: 'sticky',
+              top: 0,
+              zIndex: 20,
+            }}
+          >
+            {/* Mobile: бургер */}
+            {isMobile && (
+              <button
+                onClick={() => setDrawerOpen(true)}
+                className="grid place-items-center flex-shrink-0"
+                style={{
+                  width: 40, height: 40, borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-1)', color: 'var(--fg-2)', cursor: 'pointer',
+                }}
+                aria-label="Меню"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>menu</span>
+              </button>
+            )}
+
+            {/* Поиск */}
+            <div
+              className="hidden sm:flex items-center gap-2 flex-1"
+              style={{
+                maxWidth: 460,
+                background: 'var(--bg-1)',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: '8px 12px',
+                minHeight: 40,
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 18, color: 'var(--fg-3)' }}
+              >search</span>
+              <input
+                type="text"
+                placeholder="Тенант, врач, счёт, пациент…"
+                className="flex-1 bg-transparent outline-none"
+                style={{ fontSize: 13, color: 'var(--fg)' }}
+              />
+              <span
+                className="font-mono"
+                style={{
+                  fontSize: 10.5, padding: '1px 6px', borderRadius: 4,
+                  background: 'var(--bg-2)', color: 'var(--fg-3)',
+                  border: '1px solid var(--border)',
+                }}
+              >⌘K</span>
+            </div>
+            <div className="flex-1 sm:hidden" />
+
+            {/* Бейдж «ПЛАТФОРМА» */}
+            <span
+              className="hidden md:inline-flex items-center gap-1.5 flex-shrink-0"
+              style={{
+                fontSize: 11, color: 'var(--fg-3)',
+                padding: '4px 10px', borderRadius: 999,
+                background: 'linear-gradient(140deg, var(--accent-soft), transparent)',
+                border: '1px solid var(--accent-line)',
+                fontWeight: 600,
+              }}
+            >
+              <span
+                style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: 'var(--accent)',
+                  boxShadow: '0 0 6px var(--accent)',
+                }}
+              />
+              <span style={{ color: 'var(--accent)', letterSpacing: '0.06em' }}>ПЛАТФОРМА</span>
+            </span>
+
+            {/* Уведомления (бейдж обращений) */}
+            <button
+              onClick={() => contactsBadge > 0 && handleNav('contacts')}
+              className="grid place-items-center flex-shrink-0 relative"
+              style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: contactsBadge > 0 ? 'pointer' : 'default',
+              }}
+              aria-label="Уведомления"
+              title={contactsBadge > 0 ? `Новых обращений: ${contactsBadge}` : 'Уведомлений нет'}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>notifications</span>
+              {contactsBadge > 0 && (
+                <span
+                  className="absolute font-bold grid place-items-center"
+                  style={{
+                    top: -3, right: -3,
+                    minWidth: 18, height: 18, padding: '0 5px', borderRadius: 999,
+                    background: 'var(--bad)', color: '#fff',
+                    fontSize: 10,
+                    boxShadow: '0 0 0 2px var(--surface)',
+                  }}
+                >{contactsBadge > 99 ? '99+' : contactsBadge}</span>
+              )}
+            </button>
+
+            {/* Тёмная тема */}
+            <button
+              onClick={() => setDark(d => !d)}
+              className="grid place-items-center flex-shrink-0"
+              style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: 'pointer',
+              }}
+              title={dark ? 'Светлая тема' : 'Тёмная тема'}
+              aria-label="Тема"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>
+                {dark ? 'light_mode' : 'dark_mode'}
+              </span>
+            </button>
+
+            {/* Справка (только desktop) */}
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="hidden sm:grid place-items-center flex-shrink-0"
+              style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: 'pointer',
+              }}
+              title="Справка"
+              aria-label="Справка"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>help</span>
+            </button>
+
+            {/* Выйти */}
+            <button
+              onClick={onLogout}
+              className="hidden sm:grid place-items-center flex-shrink-0"
+              style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: 'pointer',
+              }}
+              title="Выйти"
+              aria-label="Выйти"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>logout</span>
+            </button>
+
+            {/* Аватар + имя (только sm+) */}
+            <div className="hidden md:flex items-center gap-2.5 flex-shrink-0 pl-1">
+              <div className="text-right">
+                <div className="font-semibold leading-tight" style={{ fontSize: 13, color: 'var(--fg)' }}>{userName}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{roleLabel}</div>
+              </div>
+              <DSAvatar name={userName} size="md" />
+            </div>
+            {/* Аватар (mobile) */}
+            <div className="md:hidden flex-shrink-0">
+              <DSAvatar name={userName} size="sm" />
+            </div>
+          </header>
+
+          {/* ─── Page Content ─── */}
+          <main
+            className="flex-1 px-4 sm:px-6 py-6 sm:py-8 pb-24 md:pb-10"
+            style={{ overflowX: 'hidden', maxWidth: '100%' }}
+          >
+            <div className="mx-auto" style={{ maxWidth: 1280 }}>
+              <DSPageHeader
+                title={pageMeta.title}
+                subtitle={pageMeta.subtitle}
+                actions={
+                  <DSChip variant="accent" dot>
+                    {activeNavItem?.label || 'раздел'}
+                  </DSChip>
+                }
+              />
+              {renderSection()}
+            </div>
+          </main>
+        </div>
       </div>
 
       {/* ════════ MOBILE BOTTOM NAV ════════ */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch"
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex items-stretch"
         style={{
-          background: 'rgba(10,22,40,0.97)',
+          background: 'oklch(1 0 0 / 0.92)',
           backdropFilter: 'blur(20px)',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderTop: '1px solid var(--border)',
           paddingBottom: 'env(safe-area-inset-bottom)',
-          boxShadow: '0 -8px 32px rgba(0,0,0,0.3)',
-        }}>
+          boxShadow: '0 -4px 20px oklch(0.18 0.014 220 / 0.08)',
+        }}
+      >
         {bottomItems.map(item => {
           const isActive = activeSection === item.key
           const badge    = navBadge[item.key] || 0
           return (
-            <button key={item.key} onClick={() => handleNav(item.key)}
-              className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 relative">
-              {isActive && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background: '#90caf9' }} />}
+            <button
+              key={item.key}
+              onClick={() => handleNav(item.key)}
+              className="flex-1 flex flex-col items-center justify-center gap-0.5 relative"
+              style={{ minHeight: 52, padding: '8px 4px', cursor: 'pointer' }}
+            >
+              {isActive && (
+                <span
+                  className="absolute"
+                  style={{
+                    top: 0, left: '50%', transform: 'translateX(-50%)',
+                    width: 28, height: 3, borderRadius: 99,
+                    background: 'var(--accent)',
+                  }}
+                />
+              )}
               <span className="relative">
-                <span className="material-symbols-outlined text-[22px] transition-all"
-                  style={{ color: isActive ? '#90caf9' : '#4a6080', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
-                  {item.icon}
-                </span>
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 22,
+                    color: isActive ? 'var(--accent)' : 'var(--fg-3)',
+                    fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                  }}
+                >{item.icon}</span>
                 {badge > 0 && (
-                  <span className="absolute -top-1 -right-1 text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center"
-                    style={{ background: '#ef4444', color: '#fff' }}>
-                    {badge > 9 ? '9+' : badge}
-                  </span>
+                  <span
+                    className="absolute font-bold grid place-items-center"
+                    style={{
+                      top: -3, right: -6,
+                      minWidth: 14, height: 14, padding: '0 4px', borderRadius: 999,
+                      background: 'var(--bad)', color: '#fff', fontSize: 9,
+                      boxShadow: '0 0 0 1.5px oklch(1 0 0)',
+                    }}
+                  >{badge > 9 ? '9+' : badge}</span>
                 )}
               </span>
-              <span className="text-[10px] font-semibold leading-none" style={{ color: isActive ? '#90caf9' : '#4a6080' }}>
-                {item.label}
-              </span>
+              <span
+                className="font-semibold leading-none"
+                style={{
+                  fontSize: 10,
+                  color: isActive ? 'var(--accent)' : 'var(--fg-3)',
+                }}
+              >{item.label}</span>
             </button>
           )
         })}
-        <button onClick={() => setMoreOpen(true)}
-          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5">
-          <span className="material-symbols-outlined text-[22px]" style={{ color: '#4a6080' }}>more_horiz</span>
-          <span className="text-[10px] font-semibold leading-none" style={{ color: '#4a6080' }}>Ещё</span>
+        <button
+          onClick={() => setMoreOpen(true)}
+          className="flex-1 flex flex-col items-center justify-center gap-0.5"
+          style={{ minHeight: 52, padding: '8px 4px', cursor: 'pointer' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 22, color: 'var(--fg-3)' }}>more_horiz</span>
+          <span className="font-semibold leading-none" style={{ fontSize: 10, color: 'var(--fg-3)' }}>Ещё</span>
         </button>
       </nav>
 
-      {/* ════════ MOBILE "ЕЩЁ" DRAWER ════════ */}
+      {/* ════════ MOBILE «ЕЩЁ» DRAWER ════════ */}
       {moreOpen && (
         <div className="md:hidden fixed inset-0 z-40 flex flex-col justify-end">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
-          <div className="relative rounded-t-3xl overflow-hidden"
-            style={{ background: 'linear-gradient(180deg,#0d2040,#0a1628)', maxHeight: '80vh' }}>
+          <div
+            className="absolute inset-0"
+            onClick={() => setMoreOpen(false)}
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
+          />
+          <div
+            className="relative overflow-hidden"
+            style={{
+              background: 'var(--bg-1)',
+              maxHeight: '80vh',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              borderTop: '1px solid var(--border)',
+              boxShadow: '0 -20px 60px oklch(0.18 0.014 220 / 0.18)',
+            }}
+          >
             <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-white/20" />
+              <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--bg-3)' }} />
             </div>
-            <div className="flex items-center justify-between px-6 py-3 border-b border-white/10">
-              <span className="text-white font-bold text-base">Все разделы</span>
-              <button onClick={() => setMoreOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center"
-                style={{ background: 'rgba(255,255,255,0.1)' }}>
-                <span className="material-symbols-outlined text-white text-[18px]">close</span>
+            <div
+              className="flex items-center justify-between px-6 py-3"
+              style={{ borderBottom: '1px solid var(--border)' }}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="font-bold"
+                  style={{ fontSize: 15, color: 'var(--fg)', letterSpacing: '-0.01em' }}
+                >Все разделы</span>
+                <DSChip variant="accent">{moreItems.length}</DSChip>
+              </div>
+              <button
+                onClick={() => setMoreOpen(false)}
+                className="grid place-items-center"
+                style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: 'var(--bg-2)', color: 'var(--fg-2)', cursor: 'pointer',
+                }}
+                aria-label="Закрыть"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
-            <div className="overflow-y-auto px-4 py-4 grid grid-cols-3 gap-2"
-              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}>
+            <div
+              className="overflow-y-auto px-4 py-4 grid grid-cols-3 gap-2"
+              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 16px)' }}
+            >
               {moreItems.map(item => {
                 const isActive = activeSection === item.key
                 const badge    = navBadge[item.key] || 0
                 return (
-                  <button key={item.key} onClick={() => handleNav(item.key)}
-                    className="flex flex-col items-center gap-2 p-3 rounded-2xl transition-all relative"
+                  <button
+                    key={item.key}
+                    onClick={() => handleNav(item.key)}
+                    className="flex flex-col items-center gap-2 p-3 relative"
                     style={{
-                      background: isActive ? 'linear-gradient(135deg,rgba(21,101,192,0.3),rgba(21,101,192,0.1))' : 'rgba(255,255,255,0.06)',
-                      border: isActive ? '1px solid rgba(21,101,192,0.4)' : '1px solid rgba(255,255,255,0.08)',
-                    }}>
+                      borderRadius: 'var(--radius-lg)',
+                      background: isActive ? 'var(--accent-soft)' : 'var(--bg-2)',
+                      border: isActive ? '1px solid var(--accent-line)' : '1px solid var(--border)',
+                      minHeight: 88,
+                      cursor: 'pointer',
+                    }}
+                  >
                     {badge > 0 && (
-                      <span className="absolute top-2 right-2 text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center"
-                        style={{ background: '#ef4444', color: '#fff' }}>
-                        {badge}
-                      </span>
+                      <span
+                        className="absolute font-bold grid place-items-center"
+                        style={{
+                          top: 6, right: 6,
+                          minWidth: 16, height: 16, padding: '0 4px', borderRadius: 999,
+                          background: 'var(--bad)', color: '#fff', fontSize: 9,
+                        }}
+                      >{badge > 9 ? '9+' : badge}</span>
                     )}
-                    <span className="material-symbols-outlined text-[24px]"
-                      style={{ color: isActive ? '#90caf9' : '#8ba0b8', fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0" }}>
-                      {item.icon}
-                    </span>
-                    <span className="text-[11px] font-semibold text-center leading-tight"
-                      style={{ color: isActive ? '#90caf9' : '#8ba0b8' }}>
-                      {item.label}
-                    </span>
+                    <span
+                      className="material-symbols-outlined"
+                      style={{
+                        fontSize: 24,
+                        color: isActive ? 'var(--accent)' : 'var(--fg-2)',
+                        fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0",
+                      }}
+                    >{item.icon}</span>
+                    <span
+                      className="font-semibold text-center leading-tight"
+                      style={{
+                        fontSize: 11,
+                        color: isActive ? 'var(--accent)' : 'var(--fg-2)',
+                      }}
+                    >{item.label}</span>
                   </button>
                 )
               })}
@@ -7760,6 +8238,12 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       )}
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
-    </div>
+
+      {/* ─── inline keyframes для drawer ─── */}
+      <style>{`
+        @keyframes admin-slide-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+      `}</style>
+    </DSPage>
   )
 }
+
