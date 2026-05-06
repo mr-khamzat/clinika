@@ -406,7 +406,7 @@ export default function Landing() {
               <button onClick={() => setShowContact(true)} className="ks-btn-primary">
                 Получить демо <span aria-hidden>{ICONS.arrow}</span>
               </button>
-              <a href="/downloads/KliniknetCalls-Setup-1.0.1.exe" download className="ks-btn-secondary">
+              <a href="/downloads/KliniknetCalls-Setup-1.0.2.exe" download className="ks-btn-secondary">
                 {ICONS.download}
                 Calls для Windows
               </a>
@@ -748,7 +748,7 @@ export default function Landing() {
                 Без сторонних облачных провайдеров. Версия 1.0.1.
               </p>
               <div className="ks-hero-actions">
-                <a href="/downloads/KliniknetCalls-Setup-1.0.1.exe" download className="ks-btn-primary">
+                <a href="/downloads/KliniknetCalls-Setup-1.0.2.exe" download className="ks-btn-primary">
                   {ICONS.download}
                   Скачать .exe · 78 МБ
                 </a>
