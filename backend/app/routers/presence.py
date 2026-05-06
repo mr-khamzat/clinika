@@ -273,6 +273,9 @@ async def presence_ws(
     Протокол:
       CLIENT → SERVER: {"type": "heartbeat"} | {"type": "call_invite", "callee_id": "...", "call_type": "audio"}
       SERVER → CLIENT: {"type": "presence_update", ...} | {"type": "call_invite", ...} | {"type": "call_response", ...}
+
+    Авторизация: JWT-токен в query (?token=...) или в заголовке Sec-WebSocket-Protocol.
+    Декодируем его и проверяем что sub == user_id из URL.
     """
     # Простая авторизация по user_id
     try:
@@ -281,8 +284,39 @@ async def presence_ws(
         await ws.close(code=4001)
         return
 
+    # ── Шаг 1: извлекаем JWT-токен ─────────────────────────────────────────────
+    token = ws.query_params.get("token")
+    if not token:
+        # fallback: subprotocol (Sec-WebSocket-Protocol)
+        subprotos = ws.headers.get("sec-websocket-protocol", "")
+        if subprotos:
+            token = subprotos.split(",")[0].strip() or None
+
+    if not token:
+        await ws.accept()
+        await ws.close(code=4001)
+        return
+
+    # ── Шаг 2: декодируем и валидируем токен ──────────────────────────────────
+    from app.core.security import decode_token
+    try:
+        payload = decode_token(token)
+    except Exception:
+        payload = None
+    if not payload:
+        await ws.accept()
+        await ws.close(code=4001)
+        return
+    token_sub = str(payload.get("sub") or "")
+    if token_sub != user_id:
+        # JWT валиден, но user из URL не совпадает с владельцем токена
+        await ws.accept()
+        await ws.close(code=4001)
+        return
+
     user = (await db.execute(select(User).where(User.id == uid))).scalar_one_or_none()
     if not user:
+        await ws.accept()
         await ws.close(code=4004)
         return
 
@@ -332,9 +366,26 @@ async def presence_ws(
                     await ws.send_json({"type": "error", "msg": "callee_id required"})
                     continue
 
+                # Cross-tenant guard: callee должен быть в одном тенанте с caller
+                try:
+                    callee_uuid = uuid.UUID(callee_id)
+                except (ValueError, TypeError):
+                    await ws.send_json({"type": "error", "msg": "bad callee_id"})
+                    continue
+                callee_user = (await db.execute(
+                    select(User).where(User.id == callee_uuid)
+                )).scalar_one_or_none()
+                if not callee_user or callee_user.tenant_id != user.tenant_id:
+                    await ws.send_json({
+                        "type": "call_failed",
+                        "reason": "cross_tenant",
+                        "callee_id": callee_id,
+                    })
+                    continue
+
                 # Проверяем статус вызываемого
                 callee_presence = (await db.execute(
-                    select(UserPresence).where(UserPresence.user_id == uuid.UUID(callee_id))
+                    select(UserPresence).where(UserPresence.user_id == callee_uuid)
                 )).scalar_one_or_none()
 
                 callee_ws_online = presence_manager.is_online(callee_id)
@@ -389,6 +440,25 @@ async def presence_ws(
             elif msg_type in ("call_accept", "call_reject", "call_end", "call_busy"):
                 # Ответ на звонок — пересылаем инициатору
                 target_id = data.get("caller_id") or data.get("target_id")
+                # Cross-tenant guard
+                if target_id:
+                    try:
+                        target_uuid = uuid.UUID(target_id)
+                    except (ValueError, TypeError):
+                        target_uuid = None
+                    if target_uuid:
+                        target_user = (await db.execute(
+                            select(User).where(User.id == target_uuid)
+                        )).scalar_one_or_none()
+                        if not target_user or target_user.tenant_id != user.tenant_id:
+                            await ws.send_json({
+                                "type": "call_failed",
+                                "reason": "cross_tenant",
+                                "target_id": target_id,
+                            })
+                            continue
+                    else:
+                        target_id = None
                 if target_id:
                     await presence_manager.send_to_user(target_id, {
                         **data,
@@ -415,11 +485,21 @@ async def presence_ws(
                 # WebRTC ICE candidate relay
                 target_id = data.get("target_id")
                 if target_id:
-                    await presence_manager.send_to_user(target_id, {
-                        "type": "ice_candidate",
-                        "candidate": data.get("candidate"),
-                        "from_id": user_id,
-                    })
+                    # Cross-tenant guard
+                    try:
+                        ice_target_uuid = uuid.UUID(target_id)
+                    except (ValueError, TypeError):
+                        ice_target_uuid = None
+                    if ice_target_uuid:
+                        ice_target_user = (await db.execute(
+                            select(User).where(User.id == ice_target_uuid)
+                        )).scalar_one_or_none()
+                        if ice_target_user and ice_target_user.tenant_id == user.tenant_id:
+                            await presence_manager.send_to_user(target_id, {
+                                "type": "ice_candidate",
+                                "candidate": data.get("candidate"),
+                                "from_id": user_id,
+                            })
 
     except WebSocketDisconnect:
         pass
