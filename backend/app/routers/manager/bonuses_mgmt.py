@@ -33,7 +33,7 @@ async def mark_bonus_paid(
 ):
     result = await db.execute(select(Bonus).where(Bonus.id == bonus_id))
     bonus = result.scalar_one_or_none()
-    if not bonus:
+    if not bonus or (current_user.tenant_id is not None and bonus.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Бонус не найден")
     if bonus.status == BonusStatus.PAID:
         raise HTTPException(status_code=400, detail="Бонус уже оплачен")
@@ -56,7 +56,14 @@ async def mark_all_paid(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Bonus).where(Bonus.admin_id == admin_id, Bonus.status == BonusStatus.PENDING))
+    # Tenant isolation: проверяем что admin принадлежит нашему тенанту
+    admin_obj = (await db.execute(select(User).where(User.id == admin_id))).scalar_one_or_none()
+    if not admin_obj or (current_user.tenant_id is not None and admin_obj.tenant_id != current_user.tenant_id):
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    bonus_filters = [Bonus.admin_id == admin_id, Bonus.status == BonusStatus.PENDING]
+    if current_user.tenant_id is not None:
+        bonus_filters.append(Bonus.tenant_id == current_user.tenant_id)
+    result = await db.execute(select(Bonus).where(*bonus_filters))
     bonuses = result.scalars().all()
     if not bonuses:
         raise HTTPException(status_code=404, detail="Нет ожидающих бонусов")
@@ -108,7 +115,8 @@ async def approve_cancel(
 ):
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()
-    if not referral or referral.status != ReferralStatus.CANCEL_REQUESTED:
+    if (not referral or referral.status != ReferralStatus.CANCEL_REQUESTED
+        or (current_user.tenant_id is not None and referral.tenant_id != current_user.tenant_id)):
         raise HTTPException(status_code=404, detail="Запрос не найден")
     referral.status = ReferralStatus.CANCELLED
     referral.cancelled_at = datetime.utcnow()
@@ -129,7 +137,8 @@ async def reject_cancel(
 ):
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()
-    if not referral or referral.status != ReferralStatus.CANCEL_REQUESTED:
+    if (not referral or referral.status != ReferralStatus.CANCEL_REQUESTED
+        or (current_user.tenant_id is not None and referral.tenant_id != current_user.tenant_id)):
         raise HTTPException(status_code=404, detail="Запрос не найден")
     bonus = (await db.execute(select(Bonus).where(Bonus.referral_id == referral_id).limit(1))).scalars().first()
     referral.status = ReferralStatus.CONFIRMED if bonus else ReferralStatus.CREATED

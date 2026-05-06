@@ -107,12 +107,18 @@ async def my_history(
 
 # ── Менеджерские эндпоинты ────────────────────────────────────────────────────
 
-@router.get("/users/{user_id}/balance", dependencies=[_feature, Depends(require_manager)])
+@router.get("/users/{user_id}/balance", dependencies=[_feature])
 async def user_balance(
     user_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """Баланс конкретного пользователя (только manager)."""
+    # Tenant isolation: проверяем принадлежность пользователя тенанту менеджера
+    from sqlalchemy import select as _select
+    target = (await db.execute(_select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not target or (current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Пользователь не найден")
     balance = await ledger_service.get_balance(db, user_id)
     pending = await ledger_service.get_pending_balance(db, user_id)
     summary = await ledger_service.get_summary(db, user_id)
@@ -122,15 +128,21 @@ async def user_balance(
 @router.get(
     "/users/{user_id}/history",
     response_model=list[LedgerEntryOut],
-    dependencies=[_feature, Depends(require_manager)],
+    dependencies=[_feature],
 )
 async def user_history(
     user_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """История операций конкретного пользователя (только manager)."""
+    # Tenant isolation
+    from sqlalchemy import select as _select
+    target = (await db.execute(_select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not target or (current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Пользователь не найден")
     entries = await ledger_service.get_history(db, user_id, limit=limit, offset=offset)
     return [
         LedgerEntryOut(
@@ -146,10 +158,10 @@ async def user_history(
     ]
 
 
-@router.post("/adjust", dependencies=[_feature, Depends(require_manager)])
+@router.post("/adjust", dependencies=[_feature])
 async def manual_adjust(
     body: AdjustRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -158,6 +170,12 @@ async def manual_adjust(
     """
     if body.amount == 0:
         raise HTTPException(status_code=400, detail="Сумма не может быть равна нулю")
+
+    # Tenant isolation: запрет правки баланса чужого тенанта
+    from sqlalchemy import select as _select
+    target = (await db.execute(_select(User).where(User.id == body.user_id))).scalar_one_or_none()
+    if not target or (current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Пользователь не найден")
 
     op_type = OpType.MANUAL_CREDIT if body.amount > 0 else OpType.MANUAL_DEBIT
     entry = await ledger_service.add_entry(

@@ -287,6 +287,7 @@ async def confirm_referral(
     db: AsyncSession,
     qr_string: str,
     confirmed_by_admin_id: uuid.UUID | None = None,
+    confirming_user_tenant_id: uuid.UUID | None = None,
 ) -> Referral:
     from app.services.qr_service import parse_qr_data
     parsed = parse_qr_data(qr_string)
@@ -303,6 +304,10 @@ async def confirm_referral(
     referral = result.scalar_one_or_none()
     if not referral:
         raise ValueError("Направление не найдено")
+    # Tenant isolation: super_admin (confirming_user_tenant_id is None) пропускается;
+    # обычный пользователь может подтвердить только направление своего тенанта.
+    if confirming_user_tenant_id is not None and referral.tenant_id != confirming_user_tenant_id:
+        raise ValueError("Направление не найдено")
     return await _apply_confirmation(db, referral, confirmed_by_admin_id)
 
 
@@ -310,10 +315,14 @@ async def confirm_referral_by_short_code(
     db: AsyncSession,
     short_code: int,
     confirmed_by_admin_id: uuid.UUID | None = None,
+    confirming_user_tenant_id: uuid.UUID | None = None,
 ) -> Referral:
     """Подтвердить направление по 5-значному коду (альтернатива QR-сканированию)."""
     result = await db.execute(select(Referral).where(Referral.short_code == short_code))
     referral = result.scalar_one_or_none()
     if not referral:
+        raise ValueError("Направление с таким кодом не найдено")
+    # Tenant isolation
+    if confirming_user_tenant_id is not None and referral.tenant_id != confirming_user_tenant_id:
         raise ValueError("Направление с таким кодом не найдено")
     return await _apply_confirmation(db, referral, confirmed_by_admin_id)

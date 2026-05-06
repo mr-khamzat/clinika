@@ -41,6 +41,9 @@ async def list_service_categories(
     db: AsyncSession = Depends(get_db),
 ):
     filters = [Service.is_active == True]
+    # Tenant isolation: super_admin (tenant_id is None) видит всё
+    if current_user.tenant_id is not None:
+        filters.append(Service.tenant_id == current_user.tenant_id)
     if clinic_id:
         filters.append(Service.clinic_id == clinic_id)
     result = await db.execute(
@@ -63,6 +66,9 @@ async def list_services(
     db: AsyncSession = Depends(get_db),
 ):
     filters = [Service.is_active == True]
+    # Tenant isolation
+    if current_user.tenant_id is not None:
+        filters.append(Service.tenant_id == current_user.tenant_id)
     if clinic_id: filters.append(Service.clinic_id == clinic_id)
     if category is not None:
         filters.append(Service.category.is_(None) if category == "Без категории" else Service.category == category)
@@ -86,10 +92,16 @@ async def create_service(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    # Tenant isolation: проверяем что клиника принадлежит текущему тенанту
+    if body.clinic_id is not None and current_user.tenant_id is not None:
+        clinic_check = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
+        clinic_obj = clinic_check.scalar_one_or_none()
+        if not clinic_obj or clinic_obj.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=404, detail="Клиника не найдена")
     existing = await db.execute(select(Service).where(Service.code == body.code.upper(), Service.clinic_id == body.clinic_id))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Услуга с таким кодом уже есть у этой клиники")
-    svc = Service(name=body.name, code=body.code.upper(), bonus_amount=body.bonus_amount, clinic_id=body.clinic_id)
+    svc = Service(name=body.name, code=body.code.upper(), bonus_amount=body.bonus_amount, clinic_id=body.clinic_id, tenant_id=current_user.tenant_id)
     db.add(svc)
     await db.commit()
     await db.refresh(svc)
@@ -105,8 +117,14 @@ async def update_service(
 ):
     result = await db.execute(select(Service).where(Service.id == service_id))
     svc = result.scalar_one_or_none()
-    if not svc:
+    if not svc or (current_user.tenant_id is not None and svc.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Услуга не найдена")
+    # При изменении clinic_id проверяем что новая клиника тенанта
+    if body.clinic_id is not None and current_user.tenant_id is not None:
+        clinic_check = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
+        clinic_obj = clinic_check.scalar_one_or_none()
+        if not clinic_obj or clinic_obj.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=404, detail="Клиника не найдена")
     if body.name is not None: svc.name = body.name
     if body.code is not None: svc.code = body.code.upper()
     if body.clinic_id is not None: svc.clinic_id = body.clinic_id
@@ -126,7 +144,7 @@ async def deactivate_service(
 ):
     result = await db.execute(select(Service).where(Service.id == service_id))
     svc = result.scalar_one_or_none()
-    if not svc:
+    if not svc or (current_user.tenant_id is not None and svc.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Услуга не найдена")
     svc.is_active = False
     await db.commit()
@@ -141,6 +159,9 @@ async def set_category_bonus(
 ):
     cat_filter = Service.category.is_(None) if body.category == "Без категории" else Service.category == body.category
     filters = [cat_filter, Service.is_active == True]
+    # Tenant isolation: bulk-update только в рамках своего тенанта
+    if current_user.tenant_id is not None:
+        filters.append(Service.tenant_id == current_user.tenant_id)
     if body.clinic_id: filters.append(Service.clinic_id == body.clinic_id)
     await db.execute(sa_update(Service).where(and_(*filters)).values(bonus_amount=body.bonus_amount))
     await db.commit()

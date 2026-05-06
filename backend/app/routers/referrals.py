@@ -117,7 +117,10 @@ async def confirm_by_short_code(
 ):
     """Подтвердить направление по 5-значному коду (без сканирования QR)."""
     try:
-        referral = await confirm_referral_by_short_code(db, data.short_code, current_user.id)
+        referral = await confirm_referral_by_short_code(
+            db, data.short_code, current_user.id,
+            confirming_user_tenant_id=current_user.tenant_id,
+        )
         await _log(db, current_user, "Подтверждено направление по коду", "referral", referral.id)
         await db.commit()
         return await _enrich_referral(referral, db)
@@ -132,7 +135,10 @@ async def scan_qr(
     db: AsyncSession = Depends(get_db)
 ):
     try:
-        referral = await confirm_referral(db, data.qr_data, current_user.id)
+        referral = await confirm_referral(
+            db, data.qr_data, current_user.id,
+            confirming_user_tenant_id=current_user.tenant_id,
+        )
         await _log(db, current_user, "Подтверждено направление", "referral", referral.id)
         await db.commit()
         return await _enrich_referral(referral, db)
