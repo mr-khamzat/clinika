@@ -1,16 +1,46 @@
+/**
+ * ========================================
+ * БЛОК: ManagerHistory (premium редизайн)
+ * ========================================
+ * История направлений — фильтр по статусу/датам, разворачиваемые карточки.
+ * Бизнес-логика не изменена.
+ * ========================================
+ */
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getManagerReferrals } from '../api'
-import StatusBadge from '../components/StatusBadge'
+import { Card, Chip, Button, EmptyState } from '../design'
+import ManagerShell from './_ManagerShell'
 
 const STATUS_TABS = [
-  { key: 'all',               label: 'Все' },
-  { key: 'created',           label: 'Создано' },
-  { key: 'confirmed',         label: 'Подтверждено' },
-  { key: 'expired',           label: 'Истекло' },
-  { key: 'cancel_requested',  label: 'На отмене' },
-  { key: 'cancelled',         label: 'Удалено' },
+  { key: 'all',              label: 'Все' },
+  { key: 'created',          label: 'Создано' },
+  { key: 'confirmed',        label: 'Подтверждено' },
+  { key: 'expired',          label: 'Истекло' },
+  { key: 'cancel_requested', label: 'На отмене' },
+  { key: 'cancelled',        label: 'Удалено' },
 ]
+
+const STATUS_VARIANT = {
+  created: 'accent',
+  confirmed: 'good',
+  expired: 'default',
+  cancel_requested: 'warn',
+  cancelled: 'bad',
+}
+const STATUS_LABEL = {
+  created: 'создано',
+  confirmed: 'подтверждено',
+  expired: 'истекло',
+  cancel_requested: 'на отмене',
+  cancelled: 'удалено',
+}
+const STATUS_BORDER = {
+  created: 'var(--accent)',
+  confirmed: 'var(--good)',
+  expired: 'var(--fg-4)',
+  cancel_requested: 'var(--warn)',
+  cancelled: 'var(--bad)',
+}
 
 function fmt(iso) {
   if (!iso) return '—'
@@ -22,32 +52,28 @@ function fmtFull(iso) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
+function today() { return new Date().toISOString().slice(0, 10) }
+function weekAgo() { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10) }
+function monthAgo() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10) }
 
-function weekAgo() {
-  const d = new Date()
-  d.setDate(d.getDate() - 7)
-  return d.toISOString().slice(0, 10)
-}
-
-function monthAgo() {
-  const d = new Date()
-  d.setDate(1)
-  return d.toISOString().slice(0, 10)
+function Row({ label, value, color }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-xs flex-shrink-0" style={{ color: 'var(--fg-3)' }}>{label}</span>
+      <span className="text-xs font-medium text-right" style={{ color: color || 'var(--fg-2)' }}>{value || '—'}</span>
+    </div>
+  )
 }
 
 export default function ManagerHistory() {
-  const nav = useNavigate()
   const [referrals, setReferrals] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState('all')
-  const [dateFrom, setDateFrom] = useState(monthAgo())
-  const [dateTo, setDateTo] = useState(today())
-  const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(false)
-  const [expanded, setExpanded] = useState(null)
+  const [loading, setLoading]     = useState(false)
+  const [status, setStatus]       = useState('all')
+  const [dateFrom, setDateFrom]   = useState(monthAgo())
+  const [dateTo, setDateTo]       = useState(today())
+  const [page, setPage]           = useState(1)
+  const [hasMore, setHasMore]     = useState(false)
+  const [expanded, setExpanded]   = useState(null)
   const LIMIT = 50
 
   const load = useCallback(async (reset = true) => {
@@ -61,11 +87,9 @@ export default function ManagerHistory() {
       const res = await getManagerReferrals(params)
       const data = Array.isArray(res.data) ? res.data : []
       if (reset) {
-        setReferrals(data)
-        setPage(1)
+        setReferrals(data); setPage(1)
       } else {
-        setReferrals(prev => [...prev, ...data])
-        setPage(p)
+        setReferrals(prev => [...prev, ...data]); setPage(p)
       }
       setHasMore(data.length === LIMIT)
     } catch {
@@ -85,165 +109,160 @@ export default function ManagerHistory() {
   }
 
   return (
-    <div className="p-4 pb-24">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => nav('/manager')} className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-        <h1 className="text-xl font-bold text-gray-800">История направлений</h1>
-      </div>
-
-      {/* Quick presets */}
-      <div className="flex gap-2 mb-3 flex-wrap">
-        {[['today','Сегодня'],['week','7 дней'],['month','Месяц'],['all','Все время']].map(([p,l]) => (
-          <button
-            key={p}
-            onClick={() => setPreset(p)}
-            className="text-sm px-4 py-2 min-h-[40px] rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 active:bg-gray-100"
-          >{l}</button>
-        ))}
-      </div>
-
-      {/* Date range */}
-      <div className="flex gap-2 mb-4">
-        <div className="flex-1">
-          <label className="block text-xs text-gray-400 mb-1">С даты</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary" />
+    <ManagerShell
+      active="history"
+      title="История направлений"
+      subtitle={!loading && (referrals.length === 0 ? 'Нет записей' : `Найдено: ${referrals.length}${hasMore ? '+' : ''}`)}
+      icon="history"
+    >
+      {/* ─── Пресеты периода ─── */}
+      <Card className="mb-3">
+        <div className="flex flex-wrap gap-2">
+          {[['today', 'Сегодня'], ['week', '7 дней'], ['month', 'Месяц'], ['all', 'Всё время']].map(([p, l]) => (
+            <button
+              key={p}
+              onClick={() => setPreset(p)}
+              className="text-xs font-semibold transition-colors"
+              style={{
+                padding: '7px 14px', borderRadius: 999,
+                background: 'var(--bg-1)', border: '1px solid var(--border)', color: 'var(--fg-2)',
+              }}
+            >
+              {l}
+            </button>
+          ))}
+          <div className="flex gap-2 flex-1 min-w-[260px]">
+            <input
+              type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="text-xs outline-none flex-1 min-w-[120px]"
+              style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '7px 10px', color: 'var(--fg)' }}
+            />
+            <input
+              type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="text-xs outline-none flex-1 min-w-[120px]"
+              style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '7px 10px', color: 'var(--fg)' }}
+            />
+          </div>
         </div>
-        <div className="flex-1">
-          <label className="block text-xs text-gray-400 mb-1">По дату</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-primary" />
-        </div>
+      </Card>
+
+      {/* ─── Статус-табы ─── */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
+        {STATUS_TABS.map(t => {
+          const active = status === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => setStatus(t.key)}
+              className="flex-shrink-0 text-xs font-semibold transition-colors"
+              style={{
+                padding: '8px 14px', borderRadius: 999,
+                background: active ? 'var(--accent)' : 'var(--bg-1)',
+                color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
+                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                boxShadow: active ? '0 4px 12px oklch(0.55 0.16 240 / 0.20)' : 'none',
+              }}
+            >
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* Status tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4">
-        {STATUS_TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setStatus(t.key)}
-            className={`flex-shrink-0 text-sm px-4 py-2 min-h-[40px] rounded-full font-medium transition-colors ${
-              status === t.key
-                ? 'bg-primary text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-          >{t.label}</button>
-        ))}
-      </div>
-
-      {/* Count */}
-      {!loading && (
-        <p className="text-xs text-gray-400 mb-3">
-          {referrals.length === 0 ? 'Нет записей' : `Найдено: ${referrals.length}${hasMore ? '+' : ''}`}
-        </p>
-      )}
-
-      {/* List */}
+      {/* ─── Список ─── */}
       {loading && referrals.length === 0 ? (
-        <div className="text-center text-gray-400 text-sm py-12">Загрузка...</div>
+        <Card>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+          </div>
+        </Card>
       ) : referrals.length === 0 ? (
-        <div className="text-center text-gray-400 text-sm py-12">Направлений не найдено</div>
+        <Card>
+          <EmptyState
+            icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>history</span>}
+            title="Направлений не найдено"
+            message="Попробуйте сменить период или фильтр статуса."
+          />
+        </Card>
       ) : (
-        <div className="space-y-2">
+        <div className="grid gap-2">
           {referrals.map(r => {
             const isOpen = expanded === r.id
             const isCancelled = r.status === 'cancelled'
             const isCancelReq = r.status === 'cancel_requested'
             return (
-              <div
+              <Card
                 key={r.id}
-                className={`bg-white rounded-2xl shadow-sm overflow-hidden border-l-4 ${
-                  isCancelled ? 'border-red-300' :
-                  isCancelReq ? 'border-orange-400' :
-                  r.status === 'confirmed' ? 'border-green-400' :
-                  r.status === 'expired' ? 'border-gray-300' :
-                  'border-blue-300'
-                }`}
+                padded={false}
+                style={{ borderLeft: `3px solid ${STATUS_BORDER[r.status] || 'var(--accent)'}` }}
               >
-                {/* Card header — always visible */}
-                <button
-                  className="w-full text-left p-4"
-                  onClick={() => setExpanded(isOpen ? null : r.id)}
-                >
-                  <div className="flex justify-between items-start">
+                <button className="w-full text-left p-4" onClick={() => setExpanded(isOpen ? null : r.id)}>
+                  <div className="flex justify-between items-start gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-800 truncate">{r.service_name}</p>
-                      <p className="text-sm text-gray-500 mt-0.5">📞 {r.patient_phone}</p>
+                      <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{r.service_name}</div>
+                      <div className="text-xs mt-0.5" style={{ color: 'var(--fg-3)' }}>{r.patient_phone}</div>
                     </div>
-                    <div className="flex flex-col items-end gap-1 ml-2 flex-shrink-0">
-                      <StatusBadge status={r.status} />
-                      <span className="text-xs text-gray-400">{fmt(r.created_at)}</span>
+                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                      <Chip variant={STATUS_VARIANT[r.status] || 'default'}>
+                        {STATUS_LABEL[r.status] || r.status}
+                      </Chip>
+                      <span className="text-xs" style={{ color: 'var(--fg-3)' }}>{fmt(r.created_at)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    <span className="text-xs text-gray-400">{r.from_clinic_name}</span>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="text-gray-300 flex-shrink-0">
-                      <path d="M3 8h10M10 5l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <span className="text-xs text-gray-400 truncate">{r.to_clinic_name}</span>
+                  <div className="flex items-center gap-2 mt-2 text-xs" style={{ color: 'var(--fg-3)' }}>
+                    <span className="truncate">{r.from_clinic_name}</span>
+                    <span>→</span>
+                    <span className="truncate">{r.to_clinic_name}</span>
                   </div>
                 </button>
 
-                {/* Expanded details */}
                 {isOpen && (
-                  <div className="px-4 pb-4 border-t border-gray-50 pt-3 space-y-2">
+                  <div className="px-4 pb-4 pt-3 space-y-2" style={{ borderTop: '1px solid var(--line)' }}>
                     <Row label="Сотрудник" value={r.creator_name} />
                     <Row label="Создано" value={fmtFull(r.created_at)} />
-                    {r.confirmed_at && <Row label="Подтверждено" value={fmtFull(r.confirmed_at)} />}
+                    {r.confirmed_at && <Row label="Подтверждено" value={fmtFull(r.confirmed_at)} color="var(--good)" />}
                     {r.expires_at && r.status === 'created' && <Row label="Истекает" value={fmtFull(r.expires_at)} />}
                     {r.bonus_amount != null && (
                       <Row
                         label="Бонус"
                         value={`${r.bonus_amount} Б (${r.bonus_status === 'PAID' ? 'выплачен' : 'в ожидании'})`}
-                        color={r.bonus_status === 'PAID' ? 'text-green-600' : 'text-amber-600'}
+                        color={r.bonus_status === 'PAID' ? 'var(--good)' : 'var(--warn)'}
                       />
                     )}
                     {(isCancelReq || isCancelled) && (
                       <>
                         {r.cancel_requested_at && <Row label="Запрос на удаление" value={fmtFull(r.cancel_requested_at)} />}
                         {r.cancel_reason && (
-                          <div className="bg-orange-50 rounded-xl p-3">
-                            <p className="text-xs font-medium text-orange-700 mb-1">Причина:</p>
-                            <p className="text-sm text-orange-800">«{r.cancel_reason}»</p>
+                          <div className="p-2.5 mt-1" style={{ background: 'var(--warn-soft)', borderRadius: 9 }}>
+                            <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5" style={{ color: 'var(--warn)' }}>Причина</div>
+                            <div className="text-sm" style={{ color: 'var(--warn)' }}>«{r.cancel_reason}»</div>
                           </div>
                         )}
                         {isCancelled && r.cancelled_at && (
-                          <Row label="Удалено" value={`${fmtFull(r.cancelled_at)}${r.canceller_name ? ` (${r.canceller_name})` : ''}`} color="text-red-500" />
+                          <Row
+                            label="Удалено"
+                            value={`${fmtFull(r.cancelled_at)}${r.canceller_name ? ` (${r.canceller_name})` : ''}`}
+                            color="var(--bad)"
+                          />
                         )}
                       </>
                     )}
                     {r.notes && <Row label="Примечание" value={r.notes} />}
                   </div>
                 )}
-              </div>
+              </Card>
             )
           })}
 
           {hasMore && (
-            <button
-              onClick={() => load(false)}
-              disabled={loading}
-              className="w-full py-3 text-sm text-primary font-medium border border-primary/30 rounded-2xl hover:bg-primary/5 disabled:opacity-50"
-            >
-              {loading ? 'Загрузка...' : 'Загрузить ещё'}
-            </button>
+            <div className="mt-2">
+              <Button variant="secondary" size="md" className="w-full" onClick={() => load(false)} disabled={loading}>
+                {loading ? 'Загрузка…' : 'Загрузить ещё'}
+              </Button>
+            </div>
           )}
         </div>
       )}
-    </div>
-  )
-}
-
-function Row({ label, value, color }) {
-  return (
-    <div className="flex justify-between gap-3">
-      <span className="text-xs text-gray-400 flex-shrink-0">{label}</span>
-      <span className={`text-xs font-medium text-right ${color || 'text-gray-700'}`}>{value || '—'}</span>
-    </div>
+    </ManagerShell>
   )
 }

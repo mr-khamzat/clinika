@@ -1,59 +1,75 @@
+/**
+ * ========================================
+ * БЛОК: ManagerAnalytics (premium редизайн)
+ * ========================================
+ * Аналитика менеджера — конверсия, дин. графики, топ услуг, сравнение клиник.
+ * Бизнес-логика и API не изменены.
+ * ========================================
+ */
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { getAnalytics } from '../api'
+import { Card, Chip, KpiCard, KpiRow, EmptyState } from '../design'
+import ManagerShell from './_ManagerShell'
 
 function fmt(n) { return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—' }
 
-function PageHeader({ title, icon, color }) {
-  const nav = useNavigate()
+function DailyChart({ data }) {
+  if (!data || data.length === 0) {
+    return <div className="text-center py-8 text-sm" style={{ color: 'var(--fg-3)' }}>Нет данных</div>
+  }
+  const W = 500, H = 160, PAD = { top: 12, right: 12, bottom: 28, left: 36 }
+  const chartW = W - PAD.left - PAD.right, chartH = H - PAD.top - PAD.bottom
+  const maxVal = Math.max(...data.map(d => d.total), 1)
+  const step = chartW / (data.length - 1 || 1)
+  const toX = (i) => PAD.left + i * step
+  const toY = (v) => PAD.top + chartH - (v / maxVal) * chartH
+  const polyTotal = data.map((d, i) => `${toX(i)},${toY(d.total)}`).join(' ')
+  const polyConf  = data.map((d, i) => `${toX(i)},${toY(d.confirmed)}`).join(' ')
+  const grid = [0, .25, .5, .75, 1].map(p => ({ y: toY(Math.round(maxVal * p)), val: Math.round(maxVal * p) }))
+  const labels = data.map((d, i) => ({ i, label: d.date.slice(8) })).filter(({ i }) => i % 5 === 0 || i === data.length - 1)
+  const areaPath = data.length > 1
+    ? `${polyTotal.replace(/,/g, ' ').split(' ').reduce((acc, v, i, arr) => {
+        if (i === 0) return `M ${v} ${arr[1]}`
+        if (i % 2 === 1) return acc
+        return `${acc} L ${v} ${arr[i + 1]}`
+      }, '')} L ${toX(data.length - 1)} ${PAD.top + chartH} L ${PAD.left} ${PAD.top + chartH} Z`
+    : ''
   return (
-    <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => nav('/manager')}
-          className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform flex-shrink-0">
-          <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <span className={`material-symbols-outlined text-xl ${color}`} style={{ fontVariationSettings:"'FILL' 1" }}>{icon}</span>
-          <h1 className="text-lg font-extrabold text-[#191c1e] dark:text-white font-headline">{title}</h1>
-        </div>
-      </div>
-    </div>
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+      {grid.map(({ y, val }) => (
+        <g key={y}>
+          <line x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke="var(--line)" strokeWidth="1" />
+          <text x={PAD.left - 6} y={y + 4} textAnchor="end" fontSize="9" fill="var(--fg-4)">{val}</text>
+        </g>
+      ))}
+      {areaPath && <path d={areaPath} fill="var(--accent-soft)" stroke="none" />}
+      <polyline points={polyTotal} fill="none" stroke="var(--accent)" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={polyConf}  fill="none" stroke="var(--good)"   strokeWidth="2"   strokeLinejoin="round" strokeLinecap="round" strokeDasharray="4,3" />
+      {data.map((d, i) => (
+        <g key={i}>
+          <circle cx={toX(i)} cy={toY(d.total)}     r="2.5" fill="var(--accent)" />
+          <circle cx={toX(i)} cy={toY(d.confirmed)} r="2"   fill="var(--good)" />
+        </g>
+      ))}
+      {labels.map(({ i, label }) => (
+        <text key={i} x={toX(i)} y={H - 8} textAnchor="middle" fontSize="9" fill="var(--fg-3)">{label}</text>
+      ))}
+    </svg>
   )
 }
 
-function DailyChart({ data }) {
-  if (!data || data.length === 0) return <div className="text-center text-[#727783] text-sm py-8">Нет данных</div>
-  const W=340, H=120, PAD={top:10,right:10,bottom:30,left:36}
-  const chartW=W-PAD.left-PAD.right, chartH=H-PAD.top-PAD.bottom
-  const maxVal=Math.max(...data.map(d=>d.total),1)
-  const step=chartW/(data.length-1||1)
-  const toX=(i)=>PAD.left+i*step
-  const toY=(v)=>PAD.top+chartH-(v/maxVal)*chartH
-  const polylineTotal=data.map((d,i)=>`${toX(i)},${toY(d.total)}`).join(' ')
-  const polylineConf=data.map((d,i)=>`${toX(i)},${toY(d.confirmed)}`).join(' ')
-  const gridLines=[0,.25,.5,.75,1].map(pct=>({ y:toY(Math.round(maxVal*pct)), val:Math.round(maxVal*pct) }))
-  const labels=data.map((d,i)=>({i,label:d.date.slice(8)})).filter(({i})=>i%5===0||i===data.length-1)
+function Bar({ pct, label, value, color = 'var(--accent)' }) {
+  const safe = Math.min(Math.max(pct || 0, 0), 100)
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight:140 }}>
-      {gridLines.map(({y,val})=>(
-        <g key={y}>
-          <line x1={PAD.left} y1={y} x2={W-PAD.right} y2={y} stroke="#f0f0f0" strokeWidth="1"/>
-          <text x={PAD.left-4} y={y+4} textAnchor="end" fontSize="9" fill="#aaa">{val}</text>
-        </g>
-      ))}
-      <polyline points={polylineTotal} fill="none" stroke="#0097A7" strokeWidth="2.5" strokeLinejoin="round"/>
-      <polyline points={polylineConf} fill="none" stroke="#16A34A" strokeWidth="2" strokeLinejoin="round" strokeDasharray="4,2"/>
-      {data.map((d,i)=>(
-        <g key={i}>
-          <circle cx={toX(i)} cy={toY(d.total)} r="2.5" fill="#0097A7"/>
-          <circle cx={toX(i)} cy={toY(d.confirmed)} r="2" fill="#16A34A"/>
-        </g>
-      ))}
-      {labels.map(({i,label})=>(
-        <text key={i} x={toX(i)} y={H-6} textAnchor="middle" fontSize="9" fill="#999">{label}</text>
-      ))}
-    </svg>
+    <div className="mb-3">
+      <div className="flex justify-between text-xs mb-1" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        <span style={{ color: 'var(--fg-2)' }}>{label}</span>
+        <span style={{ color: 'var(--fg)', fontWeight: 700 }}>{value}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 999, background: 'var(--bg-2)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${safe}%`, background: `linear-gradient(90deg, ${color}, var(--accent-2))`, borderRadius: 999, transition: 'width 600ms ease' }} />
+      </div>
+    </div>
   )
 }
 
@@ -64,169 +80,256 @@ export default function ManagerAnalytics() {
 
   useEffect(() => {
     setLoading(true)
-    getAnalytics().then(r => setData(r.data)).catch(() => setError('Ошибка загрузки аналитики')).finally(() => setLoading(false))
+    getAnalytics()
+      .then(r => setData(r.data))
+      .catch(() => setError('Ошибка загрузки аналитики'))
+      .finally(() => setLoading(false))
   }, [])
 
   const conv      = data?.conversion_rate ?? 0
   const thisMonth = data?.this_month ?? {}
   const lastMonth = data?.last_month ?? {}
+  const totalRefs = data?.daily?.reduce((s, d) => s + d.total, 0) ?? 0
+  const totalConf = data?.daily?.reduce((s, d) => s + d.confirmed, 0) ?? 0
 
   return (
-    <div className="bg-[#f7f9fb] dark:bg-gray-900 min-h-screen pb-24">
-      <PageHeader title="Аналитика" icon="bar_chart" color="text-[#0097A7]" />
+    <ManagerShell
+      active="analytics"
+      title="Аналитика"
+      subtitle="Конверсия, динамика, сравнение клиник"
+      icon="bar_chart"
+    >
+      {error && (
+        <div
+          className="mb-4 rounded-xl p-3"
+          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
+        >
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
 
-      <div className="px-4">
-        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4"><p className="text-red-600 text-sm">{error}</p></div>}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-8 h-8 rounded-full border-4 border-[#0097A7]/20 border-t-[#0097A7] animate-spin" />
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
           </div>
-        ) : (
-          <>
-            {/* Конверсия — hero */}
-            <div className="rounded-2xl p-5 mb-4 text-white" style={{ background:'linear-gradient(135deg,#0097A7,#006173)', boxShadow:'0 8px 24px rgba(0,151,167,0.25)' }}>
-              <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-1">Конверсия за 30 дней</p>
-              <p className="text-5xl font-extrabold font-headline mb-1">{conv}%</p>
-              <p className="text-white/60 text-xs">подтверждено / создано</p>
-              <div className="flex gap-6 mt-4 pt-4 border-t border-white/15">
-                <div>
-                  <p className="text-xl font-bold">{fmt(data?.daily?.reduce((s,d)=>s+d.total,0))}</p>
-                  <p className="text-white/60 text-xs">направлений</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-emerald-300">{fmt(data?.daily?.reduce((s,d)=>s+d.confirmed,0))}</p>
-                  <p className="text-white/60 text-xs">подтверждено</p>
-                </div>
+        </Card>
+      ) : (
+        <>
+          {/* ─── Hero ─── */}
+          <div
+            className="mb-4 p-5 text-white"
+            style={{
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: '0 14px 40px oklch(0.55 0.16 240 / 0.25)',
+            }}
+          >
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              Конверсия за 30 дней
+            </div>
+            <div className="font-semibold mt-1" style={{ fontSize: 48, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+              {conv}%
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
+              подтверждено / создано
+            </div>
+            <div className="flex gap-6 mt-4 pt-4" style={{ borderTop: '1px solid oklch(1 0 0 / 0.15)' }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{fmt(totalRefs)}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>направлений</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: 'oklch(0.92 0.18 150)' }}>{fmt(totalConf)}</div>
+                <div style={{ fontSize: 11, opacity: 0.8 }}>подтверждено</div>
               </div>
             </div>
+          </div>
 
-            {/* График */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-bold text-[#191c1e] dark:text-white">График за 30 дней</p>
-                <div className="flex gap-3 text-xs text-[#727783]">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-[#0097A7] inline-block" />Всего</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-[#16A34A] inline-block" />Подтв.</span>
+          {/* ─── KPI Row ─── */}
+          <KpiRow cols={4} className="mb-4">
+            <KpiCard label="Месяц текущий" value={fmt(thisMonth.total)} delta={`${fmt(thisMonth.confirmed)} подтв.`} trend="up" />
+            <KpiCard label="Месяц прошлый" value={fmt(lastMonth.total)} delta={`${fmt(lastMonth.confirmed)} подтв.`} trend="flat" />
+            <KpiCard label="Бонусы (мес.)"  value={`${fmt(thisMonth.bonuses)} Б`} delta={`пред: ${fmt(lastMonth.bonuses)} Б`} trend="up" />
+            <KpiCard label="Конверсия"      value={`${conv}%`} delta="за 30 дней" trend={conv >= 50 ? 'up' : 'flat'} />
+          </KpiRow>
+
+          {/* ─── График + сравнение месяцев ─── */}
+          <div className="grid gap-4 md:grid-cols-3 mb-4">
+            <Card className="md:col-span-2">
+              <Card.Header>
+                <div>
+                  <Card.Title>Динамика 30 дней</Card.Title>
+                  <Card.Subtitle>Создано · Подтверждено</Card.Subtitle>
                 </div>
-              </div>
+                <div className="flex gap-3 text-xs" style={{ color: 'var(--fg-3)' }}>
+                  <span className="flex items-center gap-1.5">
+                    <span style={{ width: 10, height: 10, borderRadius: 999, background: 'var(--accent)' }} />Всего
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span style={{ width: 10, height: 10, borderRadius: 999, background: 'var(--good)' }} />Подтв.
+                  </span>
+                </div>
+              </Card.Header>
               <DailyChart data={data?.daily} />
-            </div>
+            </Card>
 
-            {/* Сравнение месяцев */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-4" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <p className="text-sm font-bold text-[#191c1e] dark:text-white mb-3">Сравнение месяцев</p>
-              <div className="grid grid-cols-2 gap-3">
-                {[['Этот месяц', thisMonth, 'border-[#0097A7]', 'text-[#0097A7]'], ['Прошлый', lastMonth, 'border-[#eceef0]', 'text-[#727783]']].map(([label, d, border, titleColor]) => (
-                  <div key={label} className={`rounded-xl p-3 border-2 ${border} bg-[#f7f9fb] dark:bg-gray-700`}>
-                    <p className={`text-xs font-bold ${titleColor} mb-2`}>{label}</p>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-xs"><span className="text-[#727783]">Направлений</span><span className="font-bold text-[#191c1e] dark:text-white">{fmt(d.total)}</span></div>
-                      <div className="flex justify-between text-xs"><span className="text-[#727783]">Подтверждено</span><span className="font-bold text-[#16A34A]">{fmt(d.confirmed)}</span></div>
-                      <div className="flex justify-between text-xs"><span className="text-[#727783]">Бонусы</span><span className="font-bold text-amber-600">{fmt(d.bonuses)} Б</span></div>
+            <Card>
+              <Card.Header>
+                <Card.Title>Сравнение месяцев</Card.Title>
+              </Card.Header>
+              {[
+                ['Этот месяц', thisMonth, 'var(--accent)'],
+                ['Прошлый',    lastMonth, 'var(--fg-4)'],
+              ].map(([label, d, color]) => (
+                <div
+                  key={label}
+                  className="rounded-xl p-3 mb-2"
+                  style={{ background: 'var(--bg-1)', border: `1px solid var(--border)` }}
+                >
+                  <div className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color }}>{label}</div>
+                  <div className="space-y-1.5 text-xs" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <div className="flex justify-between"><span style={{ color: 'var(--fg-3)' }}>Направлений</span><b style={{ color: 'var(--fg)' }}>{fmt(d.total)}</b></div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--fg-3)' }}>Подтверждено</span><b style={{ color: 'var(--good)' }}>{fmt(d.confirmed)}</b></div>
+                    <div className="flex justify-between"><span style={{ color: 'var(--fg-3)' }}>Бонусы</span><b style={{ color: 'var(--warn)' }}>{fmt(d.bonuses)} Б</b></div>
+                  </div>
+                </div>
+              ))}
+            </Card>
+          </div>
+
+          {/* ─── Топ услуг ─── */}
+          <Card padded={false} className="mb-4">
+            <div className="flex items-center justify-between p-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+              <div>
+                <Card.Title>Топ услуг</Card.Title>
+                <Card.Subtitle>По количеству направлений</Card.Subtitle>
+              </div>
+              <span
+                className="inline-grid place-items-center"
+                style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--warn-soft)', color: 'var(--warn)' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>star</span>
+              </span>
+            </div>
+            {(data?.top_services ?? []).length === 0 ? (
+              <EmptyState
+                icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>star</span>}
+                title="Нет данных"
+                message="Услуги ещё не выбирались в направлениях."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: 'var(--bg-1)' }}>
+                      <th className="text-left px-4 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Услуга</th>
+                      <th className="text-right px-2 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Всего</th>
+                      <th className="text-right px-2 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Подтв.</th>
+                      <th className="text-right px-4 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Бонусы</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.top_services ?? []).map((s, i, arr) => (
+                      <tr key={s.service_id} style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                        <td className="px-4 py-3 text-xs font-semibold" style={{ color: 'var(--fg)' }}>{s.name}</td>
+                        <td className="px-2 py-3 text-right text-xs" style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{s.total}</td>
+                        <td className="px-2 py-3 text-right text-xs font-semibold" style={{ color: 'var(--good)', fontVariantNumeric: 'tabular-nums' }}>{s.confirmed}</td>
+                        <td className="px-4 py-3 text-right text-xs font-semibold" style={{ color: 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>{fmt(s.bonus_total)} Б</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {/* ─── Конверсия по сотрудникам ─── */}
+          <Card padded={false} className="mb-4">
+            <div className="flex items-center justify-between p-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+              <div>
+                <Card.Title>Конверсия по сотрудникам</Card.Title>
+                <Card.Subtitle>Подтверждено / создано</Card.Subtitle>
+              </div>
+              <span
+                className="inline-grid place-items-center"
+                style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>person_check</span>
+              </span>
+            </div>
+            {(data?.admin_conversion ?? []).length === 0 ? (
+              <EmptyState title="Нет данных" message="Сотрудники ещё не оформляли направления." />
+            ) : (
+              <div>
+                {(data?.admin_conversion ?? []).map((a, i, arr) => (
+                  <div
+                    key={a.admin_id}
+                    className="px-4 py-3"
+                    style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}
+                  >
+                    <div className="flex justify-between items-center mb-2 gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold truncate" style={{ color: 'var(--fg)' }}>{a.full_name}</div>
+                        <div className="text-xs truncate" style={{ color: 'var(--fg-3)' }}>{a.clinic_name}</div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-base font-bold" style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{a.conversion_pct}%</div>
+                        <div className="text-xs" style={{ color: 'var(--fg-3)' }}>{a.confirmed}/{a.total}</div>
+                      </div>
+                    </div>
+                    <div style={{ height: 5, borderRadius: 999, background: 'var(--bg-2)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(a.conversion_pct, 100)}%`, background: 'linear-gradient(90deg, var(--accent), var(--accent-2))', borderRadius: 999 }} />
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            )}
+          </Card>
 
-            {/* Топ услуг */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden mb-4" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <div className="px-4 py-3 border-b border-[#eceef0] dark:border-gray-700 flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-500 text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>star</span>
-                <p className="text-sm font-bold text-[#191c1e] dark:text-white">Топ услуг</p>
+          {/* ─── Сравнение клиник ─── */}
+          <Card padded={false}>
+            <div className="flex items-center justify-between p-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
+              <div>
+                <Card.Title>Сравнение клиник</Card.Title>
+                <Card.Subtitle>Поток и конверсия</Card.Subtitle>
               </div>
-              {(data?.top_services ?? []).length === 0 ? (
-                <div className="p-4 text-center text-[#727783] text-sm">Нет данных</div>
-              ) : (
-                <div className="overflow-x-auto">
-                <table className="min-w-full text-sm whitespace-nowrap">
-                  <thead><tr className="border-b border-[#eceef0] dark:border-gray-700">
-                    <th className="text-left text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Услуга</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Всего</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Подтв.</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Бонусы</th>
-                  </tr></thead>
+              <span
+                className="inline-grid place-items-center"
+                style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--accent-soft)', color: 'var(--accent)' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>business</span>
+              </span>
+            </div>
+            {(data?.clinic_comparison ?? []).length === 0 ? (
+              <EmptyState title="Нет данных" />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ background: 'var(--bg-1)' }}>
+                      <th className="text-left px-4 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Клиника</th>
+                      <th className="text-right px-2 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Напр.</th>
+                      <th className="text-right px-2 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Подтв.</th>
+                      <th className="text-right px-4 py-2.5" style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)' }}>Конв.</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    {(data?.top_services ?? []).map((s,i) => (
-                      <tr key={s.service_id} className="border-b border-[#f7f9fb] dark:border-gray-700/50 last:border-0">
-                        <td className="px-4 py-2.5 text-[#191c1e] dark:text-white font-medium text-xs">{s.name}</td>
-                        <td className="px-2 py-2.5 text-right text-[#191c1e] dark:text-white">{s.total}</td>
-                        <td className="px-2 py-2.5 text-right text-[#16A34A] font-semibold">{s.confirmed}</td>
-                        <td className="px-4 py-2.5 text-right text-amber-600 font-semibold">{fmt(s.bonus_total)} Б</td>
+                    {(data?.clinic_comparison ?? []).map((c, i, arr) => (
+                      <tr key={c.clinic_id} style={{ borderBottom: i < arr.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                        <td className="px-4 py-3 text-xs font-medium" style={{ color: 'var(--fg)' }}>{c.name}</td>
+                        <td className="px-2 py-3 text-right text-xs" style={{ color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>{c.total}</td>
+                        <td className="px-2 py-3 text-right text-xs" style={{ color: 'var(--good)', fontVariantNumeric: 'tabular-nums' }}>{c.confirmed}</td>
+                        <td className="px-4 py-3 text-right text-xs font-bold" style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>{c.conversion_pct}%</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                </div>
-              )}
-            </div>
-
-            {/* Конверсия по сотрудникам */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden mb-4" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <div className="px-4 py-3 border-b border-[#eceef0] dark:border-gray-700 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#1565c0] text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>person_check</span>
-                <p className="text-sm font-bold text-[#191c1e] dark:text-white">Конверсия по сотрудникам</p>
               </div>
-              {(data?.admin_conversion ?? []).length === 0 ? (
-                <div className="p-4 text-center text-[#727783] text-sm">Нет данных</div>
-              ) : (
-                <div className="divide-y divide-[#f7f9fb] dark:divide-gray-700/50">
-                  {(data?.admin_conversion ?? []).map(a => (
-                    <div key={a.admin_id} className="px-4 py-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <div>
-                          <p className="text-sm font-semibold text-[#191c1e] dark:text-white">{a.full_name}</p>
-                          <p className="text-xs text-[#727783]">{a.clinic_name}</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-base font-extrabold text-[#0097A7]">{a.conversion_pct}%</p>
-                          <p className="text-xs text-[#727783]">{a.confirmed}/{a.total}</p>
-                        </div>
-                      </div>
-                      <div className="w-full bg-[#f7f9fb] dark:bg-gray-700 rounded-full h-1.5">
-                        <div className="bg-[#0097A7] h-1.5 rounded-full transition-all" style={{ width:`${Math.min(a.conversion_pct,100)}%` }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Сравнение клиник */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-              <div className="px-4 py-3 border-b border-[#eceef0] dark:border-gray-700 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#7c3aed] text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>business</span>
-                <p className="text-sm font-bold text-[#191c1e] dark:text-white">Сравнение клиник</p>
-              </div>
-              {(data?.clinic_comparison ?? []).length === 0 ? (
-                <div className="p-4 text-center text-[#727783] text-sm">Нет данных</div>
-              ) : (
-                <div className="overflow-x-auto">
-                <table className="min-w-full text-sm whitespace-nowrap">
-                  <thead><tr className="border-b border-[#eceef0] dark:border-gray-700">
-                    <th className="text-left text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Клиника</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Напр.</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Подтв.</th>
-                    <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Конв.</th>
-                  </tr></thead>
-                  <tbody>
-                    {(data?.clinic_comparison ?? []).map((c,i) => (
-                      <tr key={c.clinic_id} className="border-b border-[#f7f9fb] dark:border-gray-700/50 last:border-0">
-                        <td className="px-4 py-2.5 text-[#191c1e] dark:text-white text-xs font-medium">{c.name}</td>
-                        <td className="px-2 py-2.5 text-right text-[#191c1e] dark:text-white">{c.total}</td>
-                        <td className="px-2 py-2.5 text-right text-[#16A34A]">{c.confirmed}</td>
-                        <td className="px-4 py-2.5 text-right text-[#0097A7] font-bold">{c.conversion_pct}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+            )}
+          </Card>
+        </>
+      )}
+    </ManagerShell>
   )
 }

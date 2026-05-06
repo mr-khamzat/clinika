@@ -1,15 +1,16 @@
 /**
- * Приезжие врачи — управление из панели менеджера
- * /manager/recruit-doctors
+ * ========================================
+ * БЛОК: ManagerRecruitDoctors (premium редизайн)
+ * ========================================
+ * Управление приезжими врачами: добавление, выдача QR/credentials,
+ * переключение активности, смена данных. Бизнес-логика не изменена.
+ * ========================================
  */
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
-
-const P  = '#0097A7'
-const D  = '#004D5F'
-const BG = '#F0F5F6'
+import { Card, Chip, Button, Avatar, EmptyState } from '../design'
+import ManagerShell from './_ManagerShell'
 
 function apiFetch(token, path, opts = {}) {
   return fetch(API_BASE + path, {
@@ -18,114 +19,178 @@ function apiFetch(token, path, opts = {}) {
   })
 }
 
-// ─── QR-попап ────────────────────────────────────────────────
-function QRPopup({ data, onClose }) {
-  const [copied, setCopied] = useState('')
-  const copy = (v, k) => { navigator.clipboard.writeText(v); setCopied(k); setTimeout(() => setCopied(''), 2000) }
+// ─── Поле формы ───
+function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:380, width:'100%' }}>
-        <div style={{ fontWeight:700, fontSize:16, color:D, marginBottom:4 }}>✅ {data.message}</div>
-        <div style={{ textAlign:'center', margin:'16px 0' }}>
-          <img src={`data:image/png;base64,${data.qr_code}`} alt="QR"
-            style={{ width:160, height:160, borderRadius:10, border:`2px solid #e0eaec` }} />
-          <div style={{ fontSize:12, color:'#607d8b', marginTop:6 }}>QR для входа в кабинет</div>
-        </div>
-        <div style={{ background:'#f0f9fa', borderRadius:10, padding:'12px 14px', marginBottom:14 }}>
-          {[
-            { label:'Логин',  value: data.credentials?.username, k:'u' },
-            { label:'Пароль', value: data.credentials?.password,  k:'p' },
-            { label:'Ссылка', value: data.credentials?.login_url, k:'l' },
-          ].map(r => r.value ? (
-            <div key={r.k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-              <div>
-                <div style={{ fontSize:10, color:'#90a4ae', textTransform:'uppercase', fontWeight:600 }}>{r.label}</div>
-                <div style={{ fontSize:13, fontWeight:600, color:D, wordBreak:'break-all' }}>{r.value}</div>
-              </div>
-              <button onClick={() => copy(r.value, r.k)}
-                style={{ background: copied===r.k?'#e0f7fa':'#fff', border:'1px solid #b2dfdb', borderRadius:8, padding:'3px 8px', fontSize:12, color:P, cursor:'pointer', marginLeft:8 }}>
-                {copied===r.k ? '✓' : '📋'}
-              </button>
-            </div>
-          ) : null)}
-        </div>
-        <button onClick={onClose} style={{ width:'100%', background:P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor:'pointer' }}>
-          Закрыть
-        </button>
+    <div className="mb-3">
+      <label
+        className="block mb-1.5"
+        style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}
+      >
+        {label}
+      </label>
+      <input
+        type={type} value={value} onChange={onChange} placeholder={placeholder}
+        className="w-full text-sm outline-none"
+        style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px', color: 'var(--fg)' }}
+      />
+    </div>
+  )
+}
+
+// ─── Модалка-обёртка ───
+function ModalShell({ children, onClose, maxWidth = 460 }) {
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'oklch(0 0 0 / 0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16, overflowY: 'auto',
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--surface)',
+          borderRadius: 'var(--radius-lg)',
+          border: '1px solid var(--border)',
+          padding: 20,
+          maxWidth, width: '100%', maxHeight: '90vh', overflowY: 'auto',
+          boxShadow: 'var(--shadow-lg)',
+        }}
+      >
+        {children}
       </div>
     </div>
   )
 }
 
-// ─── Смена данных ─────────────────────────────────────────────
+// ─── QR-попап ───
+function QRPopup({ data, onClose }) {
+  const [copied, setCopied] = useState('')
+  const copy = (v, k) => { navigator.clipboard.writeText(v); setCopied(k); setTimeout(() => setCopied(''), 2000) }
+  return (
+    <ModalShell onClose={onClose} maxWidth={400}>
+      <div className="flex items-center gap-2 mb-3">
+        <span
+          className="inline-grid place-items-center"
+          style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--good-soft)', color: 'var(--good)' }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+        </span>
+        <div className="font-semibold" style={{ fontSize: 15, color: 'var(--fg)' }}>{data.message}</div>
+      </div>
+      <div className="text-center mb-4">
+        <img
+          src={`data:image/png;base64,${data.qr_code}`} alt="QR"
+          style={{ width: 168, height: 168, borderRadius: 12, border: '2px solid var(--border)', display: 'inline-block' }}
+        />
+        <div className="text-xs mt-2" style={{ color: 'var(--fg-3)' }}>QR для входа в кабинет</div>
+      </div>
+      <div
+        className="p-3 mb-3"
+        style={{ background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)' }}
+      >
+        {[
+          { label: 'Логин',  value: data.credentials?.username,  k: 'u' },
+          { label: 'Пароль', value: data.credentials?.password,  k: 'p' },
+          { label: 'Ссылка', value: data.credentials?.login_url, k: 'l' },
+        ].map(r => r.value ? (
+          <div key={r.k} className="flex justify-between items-center mb-2 last:mb-0 gap-2">
+            <div className="min-w-0 flex-1">
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--fg-4)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{r.label}</div>
+              <div className="text-xs font-semibold break-all" style={{ color: 'var(--fg)' }}>{r.value}</div>
+            </div>
+            <button
+              onClick={() => copy(r.value, r.k)}
+              className="flex-shrink-0 transition-colors"
+              style={{
+                background: copied === r.k ? 'var(--accent-soft)' : 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, padding: '5px 10px', fontSize: 12, color: 'var(--accent)',
+              }}
+            >
+              {copied === r.k ? '✓' : '📋'}
+            </button>
+          </div>
+        ) : null)}
+      </div>
+      <Button variant="primary" size="md" className="w-full" onClick={onClose}>
+        Закрыть
+      </Button>
+    </ModalShell>
+  )
+}
+
+// ─── Смена данных ───
 function ResetModal({ doctor, token, onClose, onDone }) {
-  const [form, setForm] = useState({ username: doctor.username||'', password:'' })
+  const [form, setForm] = useState({ username: doctor.username || '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
   const submit = async () => {
     if (!form.username.trim() && !form.password.trim()) { setError('Заполните логин или пароль'); return }
     setLoading(true); setError('')
     try {
       const r = await apiFetch(token, `/manager/recruiter-doctors/${doctor.id}/reset-credentials`, {
-        method:'POST', body: JSON.stringify({ username: form.username||null, password: form.password||null }),
+        method: 'POST', body: JSON.stringify({ username: form.username || null, password: form.password || null }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail||'Ошибка')
+      if (!r.ok) throw new Error(data.detail || 'Ошибка')
       onDone(data)
-    } catch(e) { setError(e.message) }
+    } catch (e) { setError(e.message) }
     setLoading(false)
   }
+
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:380, width:'100%' }}>
-        <div style={{ fontWeight:700, fontSize:16, color:D, marginBottom:4 }}>🔑 Сменить данные входа</div>
-        <div style={{ fontSize:13, color:'#607d8b', marginBottom:16 }}>{doctor.full_name}</div>
-        {error && <div style={{ background:'#ffeaea', border:'1px solid #ffcdd2', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#c62828', marginBottom:12 }}>{error}</div>}
-        {[
-          { label:'Новый логин',  key:'username', placeholder: doctor.username||'' },
-          { label:'Новый пароль', key:'password', placeholder:'Оставьте пустым, чтобы не менять' },
-        ].map(f => (
-          <div key={f.key} style={{ marginBottom:12 }}>
-            <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:6, textTransform:'uppercase' }}>{f.label}</label>
-            <input value={form[f.key]} onChange={e => setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.placeholder}
-              style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'9px 12px', fontSize:14, outline:'none', boxSizing:'border-box' }} />
-          </div>
-        ))}
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={submit} disabled={loading}
-            style={{ flex:1, background: loading?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'10px 0', fontWeight:700, cursor: loading?'not-allowed':'pointer' }}>
-            {loading?'...':'Сохранить'}
-          </button>
-          <button onClick={onClose}
-            style={{ flex:1, background:'#f0f5f6', color:D, border:'1px solid #e0eaec', borderRadius:10, padding:'10px 0', fontWeight:600, cursor:'pointer' }}>
-            Отмена
-          </button>
+    <ModalShell onClose={onClose} maxWidth={400}>
+      <div className="font-semibold mb-1" style={{ fontSize: 16, color: 'var(--fg)' }}>Сменить данные входа</div>
+      <div className="text-xs mb-4" style={{ color: 'var(--fg-3)' }}>{doctor.full_name}</div>
+      {error && (
+        <div
+          className="rounded-lg p-2.5 mb-3 text-sm"
+          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
+        >
+          {error}
         </div>
+      )}
+      <Field label="Новый логин" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder={doctor.username || ''} />
+      <Field label="Новый пароль" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Оставьте пустым, чтобы не менять" />
+      <div className="flex gap-2 mt-4">
+        <Button variant="primary" size="md" className="flex-1" onClick={submit} disabled={loading}>
+          {loading ? '…' : 'Сохранить'}
+        </Button>
+        <Button variant="secondary" size="md" className="flex-1" onClick={onClose}>
+          Отмена
+        </Button>
       </div>
-    </div>
+    </ModalShell>
   )
 }
 
-// ─── Форма добавления ─────────────────────────────────────────
+// ─── Форма добавления врача ───
 function AddModal({ token, clinics, onClose, onDone }) {
   const [form, setForm] = useState({
-    full_name:'', phone_number:'', email:'', specialization:'', address:'',
-    username:'', password:'', clinic_ids:[],
-    price_per_visit:'', doctor_percent:'70',
+    full_name: '', phone_number: '', email: '', specialization: '', address: '',
+    username: '', password: '', clinic_ids: [],
+    price_per_visit: '', doctor_percent: '70',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const set = (k,v) => setForm(p=>({...p,[k]:v}))
-  const toggle = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x=>x!==id) : [...form.clinic_ids,id])
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
+  const toggle = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x => x !== id) : [...form.clinic_ids, id])
 
   const submit = async () => {
-    if (!form.full_name.trim())   { setError('Введите ФИО'); return }
-    if (!form.username.trim())    { setError('Введите логин'); return }
-    if (!form.password.trim())    { setError('Введите пароль'); return }
+    if (!form.full_name.trim()) { setError('Введите ФИО'); return }
+    if (!form.username.trim())  { setError('Введите логин'); return }
+    if (!form.password.trim())  { setError('Введите пароль'); return }
     setLoading(true); setError('')
     try {
       const r = await apiFetch(token, '/manager/register-external-doctor', {
-        method:'POST', body: JSON.stringify({
+        method: 'POST',
+        body: JSON.stringify({
           ...form,
           doctor_type: 'visiting',
           price_per_visit: form.price_per_visit ? parseFloat(form.price_per_visit) : null,
@@ -133,90 +198,93 @@ function AddModal({ token, clinics, onClose, onDone }) {
         }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail||'Ошибка')
+      if (!r.ok) throw new Error(data.detail || 'Ошибка')
       onDone(data)
-    } catch(e) { setError(e.message) }
+    } catch (e) { setError(e.message) }
     setLoading(false)
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16, overflowY:'auto' }}>
-      <div style={{ background:'#fff', borderRadius:20, padding:24, maxWidth:440, width:'100%', maxHeight:'90vh', overflowY:'auto' }}>
-        <div style={{ fontWeight:700, fontSize:17, color:D, marginBottom:16 }}>Добавить приезжего врача</div>
-        {error && <div style={{ background:'#ffeaea', border:'1px solid #ffcdd2', borderRadius:8, padding:'8px 12px', fontSize:13, color:'#c62828', marginBottom:12 }}>{error}</div>}
-
-        {[
-          { label:'ФИО *',           key:'full_name',      ph:'Иванов Иван Иванович' },
-          { label:'Телефон',          key:'phone_number',   ph:'+7 900 000 00 00' },
-          { label:'Email',            key:'email',          ph:'doctor@mail.ru' },
-          { label:'Специализация',    key:'specialization', ph:'Хирург, терапевт...' },
-          { label:'Адрес/Организация',key:'address',        ph:'Место работы' },
-          { label:'Логин *',          key:'username',       ph:'doc_login' },
-          { label:'Пароль *',         key:'password',       ph:'Минимум 4 символа' },
-        ].map(f => (
-          <div key={f.key} style={{ marginBottom:12 }}>
-            <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:5, textTransform:'uppercase' }}>{f.label}</label>
-            <input value={form[f.key]} onChange={e => set(f.key, e.target.value)} placeholder={f.ph}
-              style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'9px 12px', fontSize:14, outline:'none', boxSizing:'border-box' }} />
-          </div>
-        ))}
-
-        {/* Условия работы */}
-        <div style={{ background:'#f0f9fa', borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:D, marginBottom:10 }}>Условия работы</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            {[
-              { label:'Цена за приём ₽', key:'price_per_visit', ph:'3000' },
-              { label:'Доля врача %',    key:'doctor_percent',  ph:'70' },
-            ].map(f => (
-              <div key={f.key}>
-                <label style={{ display:'block', fontSize:11, fontWeight:600, color:'#607d8b', marginBottom:5, textTransform:'uppercase' }}>{f.label}</label>
-                <input type="number" value={form[f.key]} onChange={e => set(f.key, e.target.value)} placeholder={f.ph}
-                  style={{ width:'100%', border:'1.5px solid #cdd8da', borderRadius:8, padding:'9px 10px', fontSize:14, outline:'none', boxSizing:'border-box' }} />
-              </div>
-            ))}
-          </div>
-          {form.price_per_visit && form.doctor_percent && (
-            <div style={{ marginTop:8, fontSize:13, color:'#2e7d32', fontWeight:600 }}>
-              Врач получит: {Math.round(parseFloat(form.price_per_visit)*parseFloat(form.doctor_percent)/100).toLocaleString('ru')} ₽ за приём
-            </div>
-          )}
+    <ModalShell onClose={onClose} maxWidth={480}>
+      <div className="font-semibold mb-4" style={{ fontSize: 17, color: 'var(--fg)' }}>Добавить приезжего врача</div>
+      {error && (
+        <div
+          className="rounded-lg p-2.5 mb-3 text-sm"
+          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
+        >
+          {error}
         </div>
+      )}
+      <Field label="ФИО *"            value={form.full_name}      onChange={e => set('full_name', e.target.value)}      placeholder="Иванов Иван Иванович" />
+      <Field label="Телефон"           value={form.phone_number}   onChange={e => set('phone_number', e.target.value)}   placeholder="+7 900 000 00 00" />
+      <Field label="Email"             value={form.email}          onChange={e => set('email', e.target.value)}          placeholder="doctor@mail.ru" />
+      <Field label="Специализация"     value={form.specialization} onChange={e => set('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
+      <Field label="Адрес/Организация" value={form.address}        onChange={e => set('address', e.target.value)}        placeholder="Место работы" />
+      <Field label="Логин *"           value={form.username}       onChange={e => set('username', e.target.value)}       placeholder="doc_login" />
+      <Field label="Пароль *"          value={form.password}       onChange={e => set('password', e.target.value)}       placeholder="Минимум 4 символа" />
 
-        {/* Клиники */}
-        {clinics.length > 0 && (
-          <div style={{ marginBottom:16 }}>
-            <label style={{ display:'block', fontSize:11, fontWeight:700, color:'#607d8b', marginBottom:8, textTransform:'uppercase' }}>Клиники доступа</label>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {clinics.map(c => (
-                <button key={c.id} onClick={() => toggle(c.id)}
-                  style={{ padding:'5px 12px', borderRadius:20, border:`1.5px solid ${form.clinic_ids.includes(c.id)?P:'#e0eaec'}`, background: form.clinic_ids.includes(c.id)?'#e0f7fa':'#fff', color: form.clinic_ids.includes(c.id)?D:'#607d8b', fontSize:12, fontWeight:600, cursor:'pointer' }}>
-                  {c.name}
-                </button>
-              ))}
-            </div>
+      {/* ─── Условия работы ─── */}
+      <div
+        className="p-3 mb-3"
+        style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
+      >
+        <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          Условия работы
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Цена за приём ₽" type="number" value={form.price_per_visit} onChange={e => set('price_per_visit', e.target.value)} placeholder="3000" />
+          <Field label="Доля врача %"    type="number" value={form.doctor_percent}  onChange={e => set('doctor_percent', e.target.value)}  placeholder="70" />
+        </div>
+        {form.price_per_visit && form.doctor_percent && (
+          <div className="text-sm font-semibold mt-1" style={{ color: 'var(--good)' }}>
+            Врач получит: {Math.round(parseFloat(form.price_per_visit) * parseFloat(form.doctor_percent) / 100).toLocaleString('ru-RU')} ₽ за приём
           </div>
         )}
-
-        <div style={{ display:'flex', gap:8 }}>
-          <button onClick={submit} disabled={loading}
-            style={{ flex:1, background: loading?'#b2dfdb':P, color:'#fff', border:'none', borderRadius:10, padding:'11px 0', fontWeight:700, fontSize:14, cursor: loading?'not-allowed':'pointer' }}>
-            {loading ? '...' : 'Зарегистрировать'}
-          </button>
-          <button onClick={onClose}
-            style={{ flex:1, background:'#f0f5f6', color:D, border:'1px solid #e0eaec', borderRadius:10, padding:'11px 0', fontWeight:600, fontSize:14, cursor:'pointer' }}>
-            Отмена
-          </button>
-        </div>
       </div>
-    </div>
+
+      {/* ─── Клиники доступа ─── */}
+      {clinics.length > 0 && (
+        <div className="mb-4">
+          <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Клиники доступа
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {clinics.map(c => {
+              const on = form.clinic_ids.includes(c.id)
+              return (
+                <button
+                  key={c.id} onClick={() => toggle(c.id)}
+                  className="text-xs font-semibold transition-colors"
+                  style={{
+                    padding: '6px 12px', borderRadius: 999,
+                    background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                    color: on ? 'var(--accent)' : 'var(--fg-3)',
+                    border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}`,
+                  }}
+                >
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-2">
+        <Button variant="primary" size="md" className="flex-1" onClick={submit} disabled={loading}>
+          {loading ? '…' : 'Зарегистрировать'}
+        </Button>
+        <Button variant="secondary" size="md" className="flex-1" onClick={onClose}>
+          Отмена
+        </Button>
+      </div>
+    </ModalShell>
   )
 }
 
-// ─── Главный компонент ────────────────────────────────────────
+// ─── Главный компонент ───
 export default function ManagerRecruitDoctors() {
   const { token } = useAuthStore()
-  const nav = useNavigate()
   const [doctors, setDoctors]   = useState([])
   const [clinics, setClinics]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -228,19 +296,19 @@ export default function ManagerRecruitDoctors() {
 
   const load = () => {
     setLoading(true)
-    apiFetch(token, '/manager/all-external-doctors').then(r=>r.json())
-      .then(d => { setDoctors(Array.isArray(d)?d:[]); setLoading(false) })
+    apiFetch(token, '/manager/all-external-doctors').then(r => r.json())
+      .then(d => { setDoctors(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    apiFetch(token, '/manager/clinics/').then(r=>r.json()).then(d => setClinics(Array.isArray(d)?d:[])).catch(()=>{})
+    apiFetch(token, '/manager/clinics/').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
   }, [token])
 
   const toggleActive = async (doc) => {
     setToggling(doc.id)
-    await apiFetch(token, `/manager/recruiter-doctors/${doc.id}/toggle-active`, { method:'PATCH' })
+    await apiFetch(token, `/manager/recruiter-doctors/${doc.id}/toggle-active`, { method: 'PATCH' })
     load()
     setToggling(null)
   }
@@ -252,105 +320,154 @@ export default function ManagerRecruitDoctors() {
   })
 
   return (
-    <div style={{ minHeight:'100vh', background:BG, fontFamily:"'Inter',sans-serif" }}>
-      {resetDoc  && <ResetModal  doctor={resetDoc} token={token} onClose={()=>setResetDoc(null)}  onDone={d=>{setQrResult(d);setResetDoc(null);load()}} />}
-      {qrResult  && <QRPopup    data={qrResult}   onClose={()=>setQrResult(null)} />}
-      {showAdd   && <AddModal   token={token} clinics={clinics} onClose={()=>setShowAdd(false)} onDone={d=>{setQrResult(d);setShowAdd(false);load()}} />}
+    <ManagerShell
+      active="recruit"
+      title="Приезжие врачи"
+      subtitle={`${doctors.length} врачей зарегистрировано`}
+      icon="groups"
+      topbarRight={
+        <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person_add</span>
+          Добавить
+        </Button>
+      }
+    >
+      {resetDoc && <ResetModal doctor={resetDoc} token={token} onClose={() => setResetDoc(null)} onDone={d => { setQrResult(d); setResetDoc(null); load() }} />}
+      {qrResult && <QRPopup    data={qrResult}   onClose={() => setQrResult(null)} />}
+      {showAdd  && <AddModal   token={token} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />}
 
-      {/* Шапка */}
-      <div style={{ background:D, padding:'14px 16px', position:'sticky', top:0, zIndex:50 }}>
-        <div style={{ maxWidth:860, margin:'0 auto', display:'flex', alignItems:'center', gap:12 }}>
-          <button onClick={()=>nav('/manager')} style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:8, padding:'10px 14px', minHeight:44, color:'#fff', cursor:'pointer', fontSize:14 }}>
-            ← Назад
-          </button>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>Приезжие врачи</div>
-            <div style={{ fontSize:11, color:'#80cfd6' }}>{doctors.length} врачей зарегистрировано</div>
-          </div>
-          <button onClick={()=>setShowAdd(true)}
-            style={{ background:P, border:'none', borderRadius:10, padding:'10px 14px', minHeight:44, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
-            <span className="material-symbols-outlined" style={{ fontSize:16 }}>person_add</span>
-            Добавить
-          </button>
-        </div>
+      {/* ─── Mobile add button ─── */}
+      <div className="mb-4 sm:hidden">
+        <Button variant="primary" size="md" className="w-full" onClick={() => setShowAdd(true)}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
+          Добавить врача
+        </Button>
       </div>
 
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'16px' }}>
-        {/* Поиск */}
-        <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e0eaec', padding:'10px 14px', marginBottom:14, display:'flex', gap:8, alignItems:'center' }}>
-          <span className="material-symbols-outlined" style={{ color:'#90a4ae', fontSize:18 }}>search</span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск по имени, логину, специализации..."
-            style={{ flex:1, border:'none', outline:'none', fontSize:14, color:'#1a2332', background:'transparent' }} />
-          {search && <button onClick={()=>setSearch('')} style={{ background:'none', border:'none', color:'#90a4ae', cursor:'pointer', fontSize:18 }}>✕</button>}
-        </div>
-
-        {loading ? (
-          <div style={{ display:'flex', justifyContent:'center', padding:48 }}>
-            <div style={{ width:32, height:32, border:`3px solid ${P}`, borderTopColor:'transparent', borderRadius:'50%', animation:'spin .7s linear infinite' }} />
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'48px 16px', color:'#90a4ae' }}>
-            <span className="material-symbols-outlined" style={{ fontSize:48, display:'block', marginBottom:12 }}>group_off</span>
-            <div style={{ fontSize:15, fontWeight:600 }}>{search ? 'Ничего не найдено' : 'Нет приезжих врачей'}</div>
-            {!search && (
-              <button onClick={()=>setShowAdd(true)} style={{ marginTop:16, background:P, color:'#fff', border:'none', borderRadius:10, padding:'10px 20px', fontWeight:700, cursor:'pointer' }}>
-                Добавить первого врача
-              </button>
-            )}
-          </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {filtered.map(doc => (
-              <div key={doc.id} style={{ background:'#fff', borderRadius:14, border:`1px solid ${doc.is_active?'#e0eaec':'#ffd7d7'}`, padding:'14px 16px', opacity: doc.is_active?1:0.75 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:8, marginBottom:10 }}>
-                  <div>
-                    <div style={{ fontWeight:700, fontSize:15, color:D }}>{doc.full_name}</div>
-                    {doc.specialization && <div style={{ fontSize:12, color:P, marginTop:2, fontWeight:500 }}>{doc.specialization}</div>}
-                  </div>
-                  <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, background: doc.is_active?'#e0f7fa':'#ffeaea', color: doc.is_active?P:'#c62828' }}>
-                    {doc.is_active ? 'Активен' : 'Заблокирован'}
-                  </span>
-                </div>
-
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(170px, 1fr))', gap:6, marginBottom:10 }}>
-                  {[
-                    { label:'Логин',   value: doc.username,     mono:true },
-                    { label:'Телефон', value: doc.phone_number },
-                    { label:'Email',   value: doc.email },
-                    { label:'Адрес',   value: doc.address },
-                  ].filter(f=>f.value).map(f => (
-                    <div key={f.label} style={{ background:'#f0f9fa', borderRadius:8, padding:'6px 10px' }}>
-                      <div style={{ fontSize:10, color:'#90a4ae', textTransform:'uppercase', fontWeight:600 }}>{f.label}</div>
-                      <div style={{ fontSize:13, color: f.mono?D:'#1a2332', fontFamily: f.mono?'monospace':'inherit', fontWeight: f.mono?600:400, wordBreak:'break-all' }}>{f.value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                {doc.clinics?.length > 0 && (
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:10 }}>
-                    {doc.clinics.map(c => (
-                      <span key={c.id} style={{ fontSize:11, background:'#e0f7fa', color:D, padding:'2px 10px', borderRadius:20, fontWeight:600 }}>{c.name}</span>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display:'flex', gap:8, flexWrap:'wrap', paddingTop:10, borderTop:'1px solid #f0f5f6', alignItems:'center' }}>
-                  <button onClick={()=>setResetDoc(doc)}
-                    style={{ background:'#f0f9fa', border:'1px solid #b2dfdb', borderRadius:8, padding:'10px 14px', minHeight:40, fontSize:13, fontWeight:600, color:P, cursor:'pointer' }}>
-                    🔑 Сменить данные
-                  </button>
-                  <button onClick={()=>toggleActive(doc)} disabled={toggling===doc.id}
-                    style={{ background: doc.is_active?'#fff3f3':'#f0f9fa', border:`1px solid ${doc.is_active?'#ffcdd2':'#b2dfdb'}`, borderRadius:8, padding:'10px 14px', minHeight:40, fontSize:13, fontWeight:600, color: doc.is_active?'#c62828':P, cursor: toggling===doc.id?'not-allowed':'pointer' }}>
-                    {toggling===doc.id ? '...' : doc.is_active ? '🚫 Заблокировать' : '✓ Активировать'}
-                  </button>
-                  <div style={{ marginLeft:'auto', fontSize:11, color:'#b0bec5' }}>{new Date(doc.created_at).toLocaleDateString('ru')}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* ─── Поиск ─── */}
+      <div
+        className="flex items-center gap-2 mb-4"
+        style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '10px 14px',
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ color: 'var(--fg-3)', fontSize: 18 }}>search</span>
+        <input
+          value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Поиск по имени, логину, специализации…"
+          className="flex-1 text-sm outline-none bg-transparent"
+          style={{ color: 'var(--fg)' }}
+        />
+        {search && (
+          <button onClick={() => setSearch('')} style={{ background: 'transparent', color: 'var(--fg-3)', fontSize: 16 }}>✕</button>
         )}
       </div>
-    </div>
+
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+          </div>
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>group_off</span>}
+            title={search ? 'Ничего не найдено' : 'Нет приезжих врачей'}
+            message={search ? 'Попробуйте изменить запрос.' : 'Добавьте первого врача, чтобы начать работу.'}
+            action={!search ? (
+              <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>
+                Добавить первого врача
+              </Button>
+            ) : null}
+          />
+        </Card>
+      ) : (
+        <div className="grid gap-3">
+          {filtered.map(doc => (
+            <Card
+              key={doc.id}
+              style={{
+                opacity: doc.is_active ? 1 : 0.78,
+                borderColor: doc.is_active ? 'var(--border)' : 'var(--bad-soft)',
+              }}
+            >
+              <div className="flex justify-between items-start gap-3 mb-3 flex-wrap">
+                <div className="flex items-start gap-3 min-w-0">
+                  <Avatar name={doc.full_name} size="md" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{doc.full_name}</div>
+                    {doc.specialization && (
+                      <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--accent)' }}>
+                        {doc.specialization}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <Chip variant={doc.is_active ? 'good' : 'bad'} dot>
+                  {doc.is_active ? 'Активен' : 'Заблокирован'}
+                </Chip>
+              </div>
+
+              {/* ─── Контакты ─── */}
+              <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+                {[
+                  { label: 'Логин',   value: doc.username,     mono: true },
+                  { label: 'Телефон', value: doc.phone_number },
+                  { label: 'Email',   value: doc.email },
+                  { label: 'Адрес',   value: doc.address },
+                ].filter(f => f.value).map(f => (
+                  <div
+                    key={f.label}
+                    style={{ background: 'var(--bg-1)', borderRadius: 9, padding: '7px 10px' }}
+                  >
+                    <div style={{ fontSize: 10, color: 'var(--fg-4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
+                      {f.label}
+                    </div>
+                    <div
+                      className="text-xs break-all"
+                      style={{
+                        color: 'var(--fg)',
+                        fontFamily: f.mono ? 'SF Mono, Consolas, monospace' : 'inherit',
+                        fontWeight: f.mono ? 600 : 500,
+                      }}
+                    >
+                      {f.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* ─── Клиники ─── */}
+              {doc.clinics?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {doc.clinics.map(c => (
+                    <Chip key={c.id} variant="accent">{c.name}</Chip>
+                  ))}
+                </div>
+              )}
+
+              {/* ─── Действия ─── */}
+              <div className="flex flex-wrap gap-2 items-center pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+                <Button variant="secondary" size="sm" onClick={() => setResetDoc(doc)}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>vpn_key</span>
+                  Сменить данные
+                </Button>
+                <Button
+                  variant={doc.is_active ? 'secondary' : 'primary'} size="sm"
+                  onClick={() => toggleActive(doc)} disabled={toggling === doc.id}
+                >
+                  {toggling === doc.id ? '…' : (doc.is_active ? 'Заблокировать' : 'Активировать')}
+                </Button>
+                <span className="ml-auto text-[11px]" style={{ color: 'var(--fg-4)' }}>
+                  {new Date(doc.created_at).toLocaleDateString('ru-RU')}
+                </span>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </ManagerShell>
   )
 }

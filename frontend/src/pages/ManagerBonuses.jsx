@@ -1,27 +1,19 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+/**
+ * ========================================
+ * БЛОК: ManagerBonuses (premium редизайн)
+ * ========================================
+ * Выплаты сотрудникам — список агрегированных бонусов с раскрытием деталей,
+ * массовой выплатой и печатью акта. Бизнес-логика не изменена.
+ * ========================================
+ */
+import { useEffect, useState, useMemo } from 'react'
 import { getManagerBonuses, markAllPaid } from '../api'
+import { Card, Chip, Button, Avatar, EmptyState, Tabs } from '../design'
+import ManagerShell from './_ManagerShell'
 
 function fmt(iso) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'2-digit' })
-}
-
-function PageHeader({ title, icon, color }) {
-  const nav = useNavigate()
-  return (
-    <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => nav('/manager')} className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform flex-shrink-0">
-          <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <span className={`material-symbols-outlined text-xl ${color}`} style={{ fontVariationSettings:"'FILL' 1" }}>{icon}</span>
-          <h1 className="text-lg font-extrabold text-[#191c1e] dark:text-white font-headline">{title}</h1>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 export default function ManagerBonuses() {
@@ -34,8 +26,10 @@ export default function ManagerBonuses() {
 
   const load = async () => {
     setLoading(true); setError('')
-    try { const r = await getManagerBonuses({ only_pending: filter==='pending' }); setAdmins(Array.isArray(r.data) ? r.data : []) }
-    catch { setError('Ошибка загрузки данных') } finally { setLoading(false) }
+    try {
+      const r = await getManagerBonuses({ only_pending: filter === 'pending' })
+      setAdmins(Array.isArray(r.data) ? r.data : [])
+    } catch { setError('Ошибка загрузки данных') } finally { setLoading(false) }
   }
 
   useEffect(() => { load() }, [filter])
@@ -57,118 +51,175 @@ export default function ManagerBonuses() {
     const w = window.open('', '_blank'); w.document.write(html); w.document.close(); w.focus(); w.print()
   }
 
-  const pendingTotal = admins.reduce((s,a) => s + a.pending_total, 0)
+  const pendingTotal = useMemo(() => admins.reduce((s, a) => s + (a.pending_total || 0), 0), [admins])
 
   return (
-    <div className="bg-[#f7f9fb] dark:bg-gray-900 min-h-screen pb-24">
-      <PageHeader title="Выплаты сотрудникам" icon="payments" color="text-amber-500" />
-      <div className="px-4">
-
-        {/* Итого к выплате */}
-        {pendingTotal > 0 && (
-          <div className="rounded-2xl p-4 mb-4 flex items-center justify-between text-white"
-            style={{ background:'linear-gradient(135deg,#d97706,#b45309)', boxShadow:'0 8px 24px rgba(217,119,6,0.25)' }}>
-            <div>
-              <p className="text-white/70 text-xs font-semibold uppercase tracking-wider mb-1">К выплате всего</p>
-              <p className="text-3xl font-extrabold font-headline">{pendingTotal.toLocaleString('ru-RU')} Б</p>
+    <ManagerShell
+      active="bonuses"
+      title="Выплаты сотрудникам"
+      subtitle={pendingTotal > 0 ? `К выплате: ${pendingTotal.toLocaleString('ru-RU')} Б` : 'Нет ожидающих выплат'}
+      icon="payments"
+      badge={admins.length > 0 ? <Chip variant="warn">{admins.length}</Chip> : null}
+    >
+      {/* ─── Hero: К выплате всего ─── */}
+      {pendingTotal > 0 && (
+        <div
+          className="mb-4 p-5 flex items-center justify-between text-white"
+          style={{
+            background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: '0 14px 40px oklch(0.55 0.16 240 / 0.25)',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.85, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+              К выплате всего
             </div>
-            <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center">
-              <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
+            <div className="font-semibold mt-1" style={{ fontSize: 36, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+              {pendingTotal.toLocaleString('ru-RU')} Б
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>
+              {admins.length} {admins.length === 1 ? 'сотрудник' : 'сотрудников'} ожидает выплат
             </div>
           </div>
-        )}
-
-        {/* Фильтр */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-1.5 mb-4 flex gap-1.5" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-          {[['pending','Ожидают выплаты'],['all','Все бонусы']].map(([k,l]) => (
-            <button key={k} onClick={() => setFilter(k)}
-              className={`flex-1 py-3 min-h-[44px] rounded-xl text-sm font-bold transition-all ${filter===k ? 'text-white shadow-sm' : 'text-[#727783]'}`}
-              style={filter===k ? { background:'linear-gradient(135deg,#0097A7,#006173)' } : {}}>
-              {l}
-            </button>
-          ))}
+          <div
+            className="inline-grid place-items-center"
+            style={{ width: 56, height: 56, borderRadius: 18, background: 'oklch(1 0 0 / 0.15)' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 30, fontVariationSettings: "'FILL' 1" }}>
+              payments
+            </span>
+          </div>
         </div>
+      )}
 
-        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4"><p className="text-red-600 text-sm">{error}</p></div>}
+      {/* ─── Фильтр ─── */}
+      <div className="mb-4">
+        <Tabs
+          items={[
+            { id: 'pending', label: 'Ожидают выплаты' },
+            { id: 'all',     label: 'Все бонусы' },
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
+      </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-24"><div className="w-8 h-8 rounded-full border-4 border-[#0097A7]/20 border-t-[#0097A7] animate-spin" /></div>
-        ) : admins.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-            <span className="material-symbols-outlined text-5xl text-[#eceef0] dark:text-gray-600 block mb-3">payments</span>
-            <p className="text-[#727783] text-sm">{filter==='pending' ? 'Нет ожидающих выплат' : 'Бонусы не найдены'}</p>
+      {error && (
+        <div
+          className="mb-4 rounded-xl p-3"
+          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
+        >
+          <p className="text-sm">{error}</p>
+        </div>
+      )}
+
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
           </div>
-        ) : (
-          <div className="space-y-3">
-            {admins.map(a => {
-              const isOpen = expanded === a.admin_id
-              const bonusList = filter==='pending' ? a.pending_bonuses : [...a.pending_bonuses, ...a.paid_bonuses]
-              return (
-                <div key={a.admin_id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden" style={{ boxShadow:'0 4px 16px rgba(25,28,30,0.05)' }}>
-                  <button className="w-full text-left p-4" onClick={() => setExpanded(isOpen ? null : a.admin_id)}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-                          style={{ background:'linear-gradient(135deg,#d97706,#b45309)' }}>
-                          {(a.full_name||'?')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-bold text-[#191c1e] dark:text-white text-sm">{a.full_name}</p>
-                          <p className="text-xs text-[#727783]">{a.clinic_name}</p>
-                        </div>
+        </Card>
+      ) : admins.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>payments</span>}
+            title={filter === 'pending' ? 'Нет ожидающих выплат' : 'Бонусы не найдены'}
+            message="Все начисленные бонусы уже выплачены либо ещё не накоплены."
+          />
+        </Card>
+      ) : (
+        <div className="grid gap-3">
+          {admins.map(a => {
+            const isOpen = expanded === a.admin_id
+            const bonusList = filter === 'pending' ? a.pending_bonuses : [...a.pending_bonuses, ...a.paid_bonuses]
+            return (
+              <Card key={a.admin_id} padded={false}>
+                <button
+                  className="w-full text-left p-4 transition-colors"
+                  onClick={() => setExpanded(isOpen ? null : a.admin_id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar name={a.full_name || '?'} size="md" />
+                      <div className="min-w-0">
+                        <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{a.full_name}</div>
+                        <div className="text-xs truncate" style={{ color: 'var(--fg-3)' }}>{a.clinic_name}</div>
                       </div>
-                      <div className="text-right">
-                        {a.pending_total > 0 && <p className="text-lg font-extrabold text-amber-600">{a.pending_total.toLocaleString('ru-RU')} Б</p>}
-                        {a.paid_total > 0 && <p className="text-xs text-[#16A34A] font-semibold">выплачено: {a.paid_total.toLocaleString('ru-RU')} Б</p>}
-                      </div>
                     </div>
-                    <div className="flex gap-2 mt-2">
-                      {a.pending_bonuses.length > 0 && <span className="text-[10px] bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 font-semibold">{a.pending_bonuses.length} ожидает</span>}
-                      {a.paid_bonuses.length > 0 && <span className="text-[10px] bg-green-100 text-green-700 rounded-full px-2 py-0.5 font-semibold">{a.paid_bonuses.length} выплачено</span>}
-                      <span className="text-xs text-[#727783] ml-auto">{isOpen ? '▲' : '▼'}</span>
+                    <div className="text-right flex-shrink-0">
+                      {a.pending_total > 0 && (
+                        <div className="font-bold" style={{ fontSize: 18, color: 'var(--warn)', fontVariantNumeric: 'tabular-nums' }}>
+                          {a.pending_total.toLocaleString('ru-RU')} Б
+                        </div>
+                      )}
+                      {a.paid_total > 0 && (
+                        <div className="text-[11px] font-semibold" style={{ color: 'var(--good)' }}>
+                          выплачено: {a.paid_total.toLocaleString('ru-RU')} Б
+                        </div>
+                      )}
                     </div>
-                  </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3 items-center">
+                    {a.pending_bonuses.length > 0 && <Chip variant="warn">{a.pending_bonuses.length} ожидает</Chip>}
+                    {a.paid_bonuses.length > 0 && <Chip variant="good">{a.paid_bonuses.length} выплачено</Chip>}
+                    <span className="ml-auto text-xs" style={{ color: 'var(--fg-3)' }}>
+                      {isOpen ? 'свернуть ▲' : 'развернуть ▼'}
+                    </span>
+                  </div>
+                </button>
 
-                  {a.pending_total > 0 && (
-                    <div className="px-4 pb-3 flex gap-2">
-                      <button onClick={() => handlePayAll(a.admin_id)} disabled={paying===a.admin_id}
-                        className="flex-1 text-white rounded-xl py-2.5 text-sm font-bold disabled:opacity-50 active:scale-95 transition-transform"
-                        style={{ background:'linear-gradient(135deg,#16A34A,#15803d)' }}>
-                        {paying===a.admin_id ? 'Выплата...' : `Выплатить ${a.pending_total.toLocaleString('ru-RU')} Б`}
-                      </button>
-                      <button onClick={() => handlePrintAct(a)}
-                        className="border-2 border-[#eceef0] dark:border-gray-600 text-[#727783] dark:text-gray-300 rounded-xl px-3 py-2.5 text-sm font-bold">
-                        Акт
-                      </button>
-                    </div>
-                  )}
+                {a.pending_total > 0 && (
+                  <div className="px-4 pb-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="primary" size="sm" className="flex-1"
+                      onClick={() => handlePayAll(a.admin_id)}
+                      disabled={paying === a.admin_id}
+                    >
+                      {paying === a.admin_id ? 'Выплата…' : `Выплатить ${a.pending_total.toLocaleString('ru-RU')} Б`}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => handlePrintAct(a)}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>print</span>
+                      Акт
+                    </Button>
+                  </div>
+                )}
 
-                  {isOpen && bonusList.length > 0 && (
-                    <div className="border-t border-[#f7f9fb] dark:border-gray-700">
-                      {bonusList.map((b,idx) => {
-                        const isPaid = !!b.paid_at
-                        return (
-                          <div key={b.bonus_id} className={`px-4 py-3 flex items-start justify-between ${idx%2===0 ? 'bg-white dark:bg-gray-800' : 'bg-[#f7f9fb] dark:bg-gray-700/50'}`}>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-[#191c1e] dark:text-white truncate">{b.service_name}</p>
-                              <p className="text-xs text-[#727783]">{b.patient_phone}</p>
-                              <p className="text-xs text-[#727783]">подтв. {fmt(b.confirmed_at)}{isPaid && ` · выплачено ${fmt(b.paid_at)}`}</p>
-                            </div>
-                            <div className="ml-3 flex-shrink-0 text-right">
-                              <p className={`text-sm font-bold ${isPaid ? 'text-[#16A34A]' : 'text-amber-600'}`}>{b.amount.toLocaleString('ru-RU')} Б</p>
-                              <p className={`text-[10px] font-semibold ${isPaid ? 'text-[#16A34A]' : 'text-amber-500'}`}>{isPaid ? 'выплачено' : 'ожидает'}</p>
+                {isOpen && bonusList.length > 0 && (
+                  <div style={{ borderTop: '1px solid var(--line)' }}>
+                    {bonusList.map((b, idx) => {
+                      const isPaid = !!b.paid_at
+                      return (
+                        <div
+                          key={b.bonus_id}
+                          className="px-4 py-3 flex items-start justify-between gap-3"
+                          style={{ background: idx % 2 === 0 ? 'var(--surface)' : 'var(--bg-1)' }}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold truncate" style={{ color: 'var(--fg)' }}>{b.service_name}</div>
+                            <div className="text-xs" style={{ color: 'var(--fg-3)' }}>{b.patient_phone}</div>
+                            <div className="text-[11px]" style={{ color: 'var(--fg-3)' }}>
+                              подтв. {fmt(b.confirmed_at)}{isPaid && ` · выплачено ${fmt(b.paid_at)}`}
                             </div>
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-sm font-bold" style={{ color: isPaid ? 'var(--good)' : 'var(--warn)' }}>
+                              {b.amount.toLocaleString('ru-RU')} Б
+                            </div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: isPaid ? 'var(--good)' : 'var(--warn)' }}>
+                              {isPaid ? 'выплачено' : 'ожидает'}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </Card>
+            )
+          })}
+        </div>
+      )}
+    </ManagerShell>
   )
 }
