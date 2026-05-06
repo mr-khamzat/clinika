@@ -3,6 +3,7 @@
 Управляет включением/выключением фич, биллинговыми событиями, видимостью клиник.
 """
 import uuid
+import warnings
 from datetime import datetime, timedelta
 from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,10 @@ from app.models.plugin import (
 # ── Чтение ────────────────────────────────────────────────────────────────────
 
 async def get_all_plugins(db: AsyncSession) -> list[PluginCatalog]:
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     r = await db.execute(
         select(PluginCatalog)
         .where(PluginCatalog.is_active == True)
@@ -26,6 +31,10 @@ async def get_all_plugins(db: AsyncSession) -> list[PluginCatalog]:
 
 async def get_tenant_features_map(tenant_id: uuid.UUID, db: AsyncSession) -> dict[str, TenantPluginFeature]:
     """Возвращает словарь feature_key → TenantPluginFeature для тенанта."""
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     r = await db.execute(
         select(TenantPluginFeature)
         .where(TenantPluginFeature.tenant_id == tenant_id)
@@ -39,6 +48,10 @@ async def get_features_with_status(tenant_id: uuid.UUID, db: AsyncSession) -> li
     Бесплатные фичи — всегда доступны (is_available=True).
     Платные — только если явно включены.
     """
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     plugins_r = await db.execute(
         select(PluginCatalog)
         .where(PluginCatalog.is_active == True)
@@ -96,6 +109,10 @@ async def get_features_with_status(tenant_id: uuid.UUID, db: AsyncSession) -> li
 
 async def has_feature(tenant_id: uuid.UUID, feature_key: str, db: AsyncSession) -> bool:
     """Проверяет доступность фичи для тенанта."""
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     # Сначала проверяем в каталоге — может быть бесплатной
     feat_r = await db.execute(select(PluginFeature).where(PluginFeature.key == feature_key))
     feat = feat_r.scalar_one_or_none()
@@ -123,6 +140,10 @@ async def enable_feature(
     trial_days: int | None = None,
 ) -> dict:
     """Включает фичу для тенанта. Создаёт billing_event."""
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     feat_r = await db.execute(select(PluginFeature).where(PluginFeature.key == feature_key))
     feat = feat_r.scalar_one_or_none()
     if feat is None:
@@ -177,6 +198,10 @@ async def enable_feature(
 
 async def disable_feature(tenant_id: uuid.UUID, feature_key: str, db: AsyncSession) -> dict:
     """Отключает фичу для тенанта."""
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     feat_r = await db.execute(select(PluginFeature).where(PluginFeature.key == feature_key))
     feat = feat_r.scalar_one_or_none()
     if feat is None:
@@ -205,6 +230,10 @@ async def disable_feature(tenant_id: uuid.UUID, feature_key: str, db: AsyncSessi
 
 
 async def get_billing_events(tenant_id: uuid.UUID, db: AsyncSession, limit: int = 50) -> list[dict]:
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     r = await db.execute(
         select(BillingEvent)
         .where(BillingEvent.tenant_id == tenant_id)
@@ -227,6 +256,10 @@ async def get_billing_events(tenant_id: uuid.UUID, db: AsyncSession, limit: int 
 # ── Видимость клиник ──────────────────────────────────────────────────────────
 
 async def get_visibility_matrix(tenant_id: uuid.UUID, db: AsyncSession) -> list[dict]:
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     r = await db.execute(
         select(ClinicVisibility).where(ClinicVisibility.tenant_id == tenant_id)
     )
@@ -251,6 +284,10 @@ async def upsert_visibility(
     allow_manager: bool,
     db: AsyncSession,
 ) -> dict:
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     r = await db.execute(
         select(ClinicVisibility).where(
             ClinicVisibility.tenant_id == tenant_id,
@@ -279,6 +316,10 @@ async def upsert_visibility(
 
 async def get_p2p_settings(tenant_id: uuid.UUID, db: AsyncSession) -> dict:
     """P2P настройки: включены ли звонки глобально, какие клиники участвуют."""
+    warnings.warn(
+        "plugin_service is deprecated, use commercial_service via /commercial endpoints. Старая plugin_*-система будет удалена. См. BACKLOG.md",
+        DeprecationWarning, stacklevel=2,
+    )
     calls_on = await has_feature(tenant_id, "internal_calls", db)
     cross = await has_feature(tenant_id, "cross_clinic_calls", db)
     # Клиники с доступом к P2P — все у которых есть хоть одно visibility правило

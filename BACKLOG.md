@@ -61,3 +61,46 @@
 - Skeleton loaders вместо spinner
 - Pull-to-refresh для списков
 - Native-like transitions (slide-in, scale-out)
+
+
+## 2026-05-06: Депрекация старой `plugin_*` системы (Этап 7 ROADMAP, продолжение)
+
+Старая система `PluginCatalog` / `PluginFeature` / `TenantPluginFeature` /
+`BillingEvent` дублирует новую `CommercialModule` / `TenantModuleSubscription` /
+`BillingLedger`. Все эндпоинты `/plugins/*` помечены `deprecated=True`,
+отдают заголовки `Deprecation: true`, `Sunset: 2026-08-01`,
+`Link: ...rel="successor-version"`. Сервисный слой `app/services/plugin_service.py`
+вызывает `warnings.warn(DeprecationWarning)` в каждой функции.
+
+План полного удаления (≥30 дней warning-периода, не раньше августа 2026):
+
+- [ ] Миграция данных `plugin_features` → `commercial_modules`
+      (массовый INSERT с маппингом ключей: `feature.key` → `module.key`)
+- [ ] Перенос `tenant_plugin_features` → `tenant_module_subscriptions`
+      (история включений и trial-периоды)
+- [ ] Перенос `billing_events` → `billing_ledger` (или оставить read-only для аудита)
+- [ ] Удалить роутер `app/routers/plugins.py` + регистрацию в `main.py`
+- [ ] Удалить модели `PluginCatalog/PluginFeature/TenantPluginFeature/BillingEvent`
+- [ ] Удалить миграции таблиц старой системы (или оставить как archive-only)
+- [ ] Удалить сервис `app/services/plugin_service.py`
+- [ ] Удалить сидер `seed_plugins.py` / любые scripts ссылки
+- [ ] Frontend: заменить `PluginsSection` в `AdminLayout` на `ModulesSection`
+- [ ] Документация: BILLING_ARCHITECTURE.md — выписать только новую систему
+
+### Минимум до удаления
+За 30 дней до удаления отправить email-нотификацию супер-админам
+тенантов, использующих устаревшие endpoints. Считать обращения через
+`Deprecation: true` header в логах nginx / access-log.
+
+### Связанные «неоплачиваемые ещё» гейты
+Закрыто Этапом 7:
+- `webhooks` → `require_module("webhooks")`
+- `ai_assistant` → `require_module("ai_assistant")` (бывшая FAQ-фича)
+- `white_label` → `require_module("white_label")` (CMS write-endpoints)
+- `mis_sync` → `require_module("mis_sync")` (импорт пациентов/визитов)
+
+Проверить позже:
+- [ ] `ads.py` — рекламные кампании (модуль уже есть, гейт в роутере?)
+- [ ] `referrals_advanced` — массовая аналитика партнёров (drill-down)
+- [ ] `recruiter.py` — модуль найма врачей, нужен ли отдельный гейт
+- [ ] Patient-portal premium-фичи (vitals, medcard) — что бесплатно, что нет

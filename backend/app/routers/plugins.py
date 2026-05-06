@@ -4,7 +4,7 @@
 """
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -19,7 +19,18 @@ from app.models.clinic import Clinic
 from app.services import plugin_service
 from app.services import billing_service
 
-router = APIRouter(prefix="/plugins", tags=["plugins"])
+def _set_deprecation_headers(response: Response):
+    """Mark all /plugins responses as deprecated (RFC 8594)."""
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "2026-08-01"
+    response.headers["Link"] = '</docs#tag/commercial>; rel="successor-version"'
+    return None
+
+
+router = APIRouter(
+    prefix="/plugins", tags=["plugins"],
+    dependencies=[Depends(_set_deprecation_headers)],
+)
 
 
 def _tid(tenant: Tenant | None, user: User) -> uuid.UUID | None:
@@ -33,7 +44,7 @@ def _tid(tenant: Tenant | None, user: User) -> uuid.UUID | None:
 
 # ── Каталог плагинов ──────────────────────────────────────────────────────────
 
-@router.get("")
+@router.get("", deprecated=True)
 async def list_plugins(
     current_user: User = Depends(get_current_user),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -47,7 +58,7 @@ async def list_plugins(
     return await plugin_service.get_features_with_status(tid, db)
 
 
-@router.get("/features")
+@router.get("/features", deprecated=True)
 async def list_features(
     current_user: User = Depends(get_current_user),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -75,7 +86,7 @@ class FeatureToggleRequest(BaseModel):
     trial_days: Optional[int] = None  # 14 для trial
 
 
-@router.post("/features/enable")
+@router.post("/features/enable", deprecated=True)
 async def enable_feature(
     req: FeatureToggleRequest,
     current_user: User = Depends(require_manager),
@@ -103,7 +114,7 @@ async def enable_feature(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/features/disable")
+@router.post("/features/disable", deprecated=True)
 async def disable_feature(
     req: FeatureToggleRequest,
     current_user: User = Depends(require_manager),
@@ -120,7 +131,7 @@ async def disable_feature(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/features/{feature_key}/check")
+@router.get("/features/{feature_key}/check", deprecated=True)
 async def check_feature(
     feature_key: str,
     current_user: User = Depends(get_current_user),
@@ -137,7 +148,7 @@ async def check_feature(
 
 # ── Биллинговые события ───────────────────────────────────────────────────────
 
-@router.get("/billing-events")
+@router.get("/billing-events", deprecated=True)
 async def billing_events(
     current_user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -152,7 +163,7 @@ async def billing_events(
 
 # ── Интеграции ────────────────────────────────────────────────────────────────
 
-@router.get("/integrations")
+@router.get("/integrations", deprecated=True)
 async def get_integrations(
     current_user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -190,7 +201,7 @@ class P2PSettingsRequest(BaseModel):
     p2p_clinic_ids: list[str] = []
 
 
-@router.get("/p2p/settings")
+@router.get("/p2p/settings", deprecated=True)
 async def get_p2p_settings(
     current_user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -202,7 +213,7 @@ async def get_p2p_settings(
     return await plugin_service.get_p2p_settings(tid, db)
 
 
-@router.post("/p2p/settings")
+@router.post("/p2p/settings", deprecated=True)
 async def save_p2p_settings(
     req: P2PSettingsRequest,
     current_user: User = Depends(require_manager),
@@ -222,7 +233,7 @@ async def save_p2p_settings(
 
 # ── Матрица видимости клиник ──────────────────────────────────────────────────
 
-@router.get("/visibility")
+@router.get("/visibility", deprecated=True)
 async def get_visibility(
     current_user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
@@ -252,7 +263,7 @@ class VisibilityUpdateRequest(BaseModel):
     allow_manager: bool = False
 
 
-@router.post("/visibility")
+@router.post("/visibility", deprecated=True)
 async def update_visibility(
     req: VisibilityUpdateRequest,
     current_user: User = Depends(require_manager),
@@ -271,7 +282,7 @@ async def update_visibility(
 
 # ── Health check (совместимость со старым API) ────────────────────────────────
 
-@router.get("/{name}/health")
+@router.get("/{name}/health", deprecated=True)
 async def plugin_health(name: str, _=Depends(require_manager)):
     from app.plugins.registry import plugin_registry
     plugin = plugin_registry.get(name)
@@ -288,7 +299,7 @@ class PluginTrialRequest(BaseModel):
     price_monthly: float | None = None  # переопределить цену
 
 
-@router.post("/{slug}/trial")
+@router.post("/{slug}/trial", deprecated=True)
 async def start_plugin_trial(
     slug: str,
     req: PluginTrialRequest,
@@ -350,7 +361,7 @@ async def start_plugin_trial(
     }
 
 
-@router.get("/{slug}/billing")
+@router.get("/{slug}/billing", deprecated=True)
 async def get_plugin_billing(
     slug: str,
     current_user: User = Depends(require_manager),
@@ -396,7 +407,7 @@ async def get_plugin_billing(
     }
 
 
-@router.get("/billing/summary")
+@router.get("/billing/summary", deprecated=True)
 async def plugin_billing_summary(
     current_user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
