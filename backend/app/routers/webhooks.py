@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.core.tenant import require_module
 from app.models.user import User
 from app.models.webhook import WebhookEndpoint, WebhookDelivery
 from app.services.webhook_service import WEBHOOK_EVENTS
@@ -47,13 +48,13 @@ def _ep_out(ep: WebhookEndpoint) -> dict:
     }
 
 
-@router.get("/events")
+@router.get("/events", dependencies=[Depends(require_module("webhooks"))])
 async def list_events(_: User = Depends(require_manager)):
     """Список всех доступных событий для подписки."""
     return {"events": WEBHOOK_EVENTS}
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(require_module("webhooks"))])
 async def list_webhooks(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
@@ -67,7 +68,7 @@ async def list_webhooks(
     return [_ep_out(ep) for ep in result.scalars().all()]
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[Depends(require_module("webhooks"))])
 async def create_webhook(
     body: WebhookCreateRequest,
     current_user: User = Depends(require_manager),
@@ -100,7 +101,7 @@ async def create_webhook(
     return _ep_out(ep)
 
 
-@router.patch("/{webhook_id}")
+@router.patch("/{webhook_id}", dependencies=[Depends(require_module("webhooks"))])
 async def update_webhook(
     webhook_id: uuid.UUID,
     body: WebhookUpdateRequest,
@@ -128,7 +129,7 @@ async def update_webhook(
     return _ep_out(ep)
 
 
-@router.delete("/{webhook_id}")
+@router.delete("/{webhook_id}", dependencies=[Depends(require_module("webhooks"))])
 async def delete_webhook(
     webhook_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -148,7 +149,7 @@ async def delete_webhook(
     return {"status": "deleted"}
 
 
-@router.get("/{webhook_id}/deliveries")
+@router.get("/{webhook_id}/deliveries", dependencies=[Depends(require_module("webhooks"))])
 async def get_deliveries(
     webhook_id: uuid.UUID,
     limit: int = Query(20, ge=1, le=100),
@@ -186,7 +187,7 @@ async def get_deliveries(
     ]
 
 
-@router.post("/{webhook_id}/test")
+@router.post("/{webhook_id}/test", dependencies=[Depends(require_module("webhooks"))])
 async def test_webhook(
     webhook_id: uuid.UUID,
     current_user: User = Depends(require_manager),

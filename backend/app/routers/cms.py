@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from app.database import get_db
-from app.core.tenant import get_current_tenant
+from app.core.tenant import get_current_tenant, require_module
 from app.services.cms_service import CmsService
 from app.services.theme_service import ThemeService
 from app.core.deps import get_current_user
@@ -97,7 +97,7 @@ async def get_page(
     return page
 
 
-@router.post("/pages")
+@router.post("/pages", dependencies=[Depends(require_module("white_label"))])
 async def create_page(
     data: PageCreate,
     db: AsyncSession = Depends(get_db),
@@ -111,7 +111,7 @@ async def create_page(
     return await CmsService.create_page(db, str(tenant.id), str(current_user.id), data.dict())
 
 
-@router.put("/pages/{slug}")
+@router.put("/pages/{slug}", dependencies=[Depends(require_module("white_label"))])
 async def update_page(
     slug: str,
     data: PageUpdate,
@@ -129,7 +129,7 @@ async def update_page(
     return await CmsService.update_page(db, page, data.dict(exclude_unset=True))
 
 
-@router.delete("/pages/{slug}")
+@router.delete("/pages/{slug}", dependencies=[Depends(require_module("white_label"))])
 async def delete_page(
     slug: str,
     db: AsyncSession = Depends(get_db),

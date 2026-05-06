@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db
 from app.core.deps import get_current_user
+from app.core.tenant import require_module
 from app.services.settings_service import get_setting
 from app.models.user import User, UserRole
 from app.services.mis_sync_service import (
@@ -34,7 +35,7 @@ def _require_manager(current_user: User = Depends(get_current_user)) -> User:
 
 # ── Клиники ──────────────────────────────────────────────────────────────────
 
-@router.get("/clinics")
+@router.get("/clinics", dependencies=[Depends(require_module("mis_sync"))])
 async def list_mis_clinics(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех клиник в МИС (для выбора перед импортом)."""
     tid = current_user.tenant_id
@@ -61,7 +62,7 @@ class SyncClinicsRequest(BaseModel):
     mis_ids: list[int]
 
 
-@router.post("/clinics/sync")
+@router.post("/clinics/sync", dependencies=[Depends(require_module("mis_sync"))])
 async def sync_mis_clinics(
     body: SyncClinicsRequest,
     current_user: User = Depends(_require_manager),
@@ -83,7 +84,7 @@ async def sync_mis_clinics(
 
 # ── Врачи ────────────────────────────────────────────────────────────────────
 
-@router.get("/doctors")
+@router.get("/doctors", dependencies=[Depends(require_module("mis_sync"))])
 async def list_mis_doctors(current_user: User = Depends(_require_manager), db: AsyncSession = Depends(get_db)):
     """Список всех врачей из МИС."""
     tid2 = current_user.tenant_id
@@ -112,7 +113,7 @@ class SyncDoctorsRequest(BaseModel):
     mis_ids: Optional[list[int]] = None  # None = все
 
 
-@router.post("/doctors/sync")
+@router.post("/doctors/sync", dependencies=[Depends(require_module("mis_sync"))])
 async def sync_mis_doctors(
     body: SyncDoctorsRequest,
     current_user: User = Depends(_require_manager),
@@ -133,7 +134,7 @@ async def sync_mis_doctors(
 
 # ── Услуги ───────────────────────────────────────────────────────────────────
 
-@router.get("/services")
+@router.get("/services", dependencies=[Depends(require_module("mis_sync"))])
 async def list_mis_services(
     clinic_mis_id: int = 1,
     current_user: User = Depends(_require_manager),
@@ -181,7 +182,7 @@ class SyncServicesRequest(BaseModel):
     service_mis_ids: Optional[list[int]] = None  # None = все услуги
 
 
-@router.post("/services/sync")
+@router.post("/services/sync", dependencies=[Depends(require_module("mis_sync"))])
 async def sync_mis_services(
     body: SyncServicesRequest,
     current_user: User = Depends(_require_manager),
@@ -206,7 +207,7 @@ async def sync_mis_services(
 
 # ── Данные пациента ───────────────────────────────────────────────────────────
 
-@router.get("/patient/profile")
+@router.get("/patient/profile", dependencies=[Depends(require_module("mis_sync"))])
 async def get_patient_profile(
     phone: str,
     current_user: User = Depends(get_current_user),
@@ -244,7 +245,7 @@ async def get_patient_profile(
     }
 
 
-@router.get("/patient/appointments")
+@router.get("/patient/appointments", dependencies=[Depends(require_module("mis_sync"))])
 async def get_patient_appointments(
     phone: str,
     months_back: int = 12,
@@ -293,7 +294,7 @@ async def get_patient_appointments(
 
 # ── Поллинг (авто-подтверждение направлений) ─────────────────────────────────
 
-@router.post("/poll-referrals")
+@router.post("/poll-referrals", dependencies=[Depends(require_module("mis_sync"))])
 async def trigger_poll(
     current_user: User = Depends(_require_manager),
     db: AsyncSession = Depends(get_db),
@@ -312,7 +313,7 @@ class CreateDoctorAccountRequest(BaseModel):
     full_name: str | None = None
 
 
-@router.post("/doctors/create-account")
+@router.post("/doctors/create-account", dependencies=[Depends(require_module("mis_sync"))])
 async def create_doctor_account(
     body: CreateDoctorAccountRequest,
     current_user: User = Depends(_require_manager),
@@ -369,7 +370,7 @@ async def create_doctor_account(
     }
 
 
-@router.get("/doctors/accounts")
+@router.get("/doctors/accounts", dependencies=[Depends(require_module("mis_sync"))])
 async def list_doctor_accounts(
     current_user: User = Depends(_require_manager),
     db: AsyncSession = Depends(get_db),

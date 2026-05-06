@@ -17,7 +17,6 @@ CRUD для базы знаний AI (FAQ).
 * GET    /ai/knowledge/stats      — топ по hits (аналитика экономии токенов)
 * POST   /ai/knowledge/import     — массовый импорт CSV/JSON
 
-TODO: подключить require_feature('ai_assistant') когда модуль будет добавлен.
 """
 from __future__ import annotations
 
@@ -36,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import get_current_user
+from app.core.tenant import require_module
 from app.models.user import User, UserRole
 from app.models.ai_knowledge import AIKnowledgeEntry
 
@@ -123,7 +123,7 @@ def _entry_belongs_to_user(entry: AIKnowledgeEntry, user: User) -> bool:
 
 # ── GET /ai/knowledge ──────────────────────────────────────────────────────
 
-@router.get("", response_model=list[KnowledgeOut])
+@router.get("", response_model=list[KnowledgeOut], dependencies=[Depends(require_module("ai_assistant"))])
 async def list_entries(
     q: Optional[str] = Query(None, description="Поиск по question/keywords (ILIKE)"),
     tenant_id: Optional[uuid.UUID] = Query(None, description="Фильтр по тенанту (super_admin)"),
@@ -176,7 +176,7 @@ async def list_entries(
 
 # ── POST /ai/knowledge ──────────────────────────────────────────────────────
 
-@router.post("", response_model=KnowledgeOut, status_code=201)
+@router.post("", response_model=KnowledgeOut, status_code=201, dependencies=[Depends(require_module("ai_assistant"))])
 async def create_entry(
     body: KnowledgeCreate,
     user: User = Depends(get_current_user),
@@ -218,7 +218,7 @@ async def create_entry(
 
 # ── PATCH /ai/knowledge/{id} ────────────────────────────────────────────────
 
-@router.patch("/{entry_id}", response_model=KnowledgeOut)
+@router.patch("/{entry_id}", response_model=KnowledgeOut, dependencies=[Depends(require_module("ai_assistant"))])
 async def patch_entry(
     entry_id: uuid.UUID,
     body: KnowledgePatch,
@@ -251,7 +251,7 @@ async def patch_entry(
 
 # ── DELETE /ai/knowledge/{id} ───────────────────────────────────────────────
 
-@router.delete("/{entry_id}", status_code=204)
+@router.delete("/{entry_id}", status_code=204, dependencies=[Depends(require_module("ai_assistant"))])
 async def delete_entry(
     entry_id: uuid.UUID,
     user: User = Depends(get_current_user),
@@ -272,7 +272,7 @@ async def delete_entry(
 
 # ── GET /ai/knowledge/stats ─────────────────────────────────────────────────
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(require_module("ai_assistant"))])
 async def get_stats(
     limit: int = Query(20, ge=1, le=200),
     user: User = Depends(get_current_user),
@@ -320,7 +320,7 @@ async def get_stats(
 
 # ── POST /ai/knowledge/import ───────────────────────────────────────────────
 
-@router.post("/import")
+@router.post("/import", dependencies=[Depends(require_module("ai_assistant"))])
 async def import_entries(
     items: Optional[list[ImportItem]] = Body(None),
     file: Optional[UploadFile] = File(None),
