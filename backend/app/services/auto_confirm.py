@@ -130,7 +130,7 @@ async def run_auto_confirm() -> int:
                             ))
                             applied_commission = True
                         except Exception:
-                            pass
+                            logger.exception("Не удалось применить комиссию (auto-confirm) для referral_id=%s receiver_id=%s", referral.id, receiver_id_str)
                 if not applied_commission:
                     db.add(Bonus(
                         admin_id=referral.created_by_admin_id,

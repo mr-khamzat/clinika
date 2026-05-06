@@ -1,8 +1,11 @@
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.bonus import Bonus, BonusStatus
 from datetime import datetime
 import uuid
+
+logger = logging.getLogger(__name__)
 
 
 async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None:
@@ -25,13 +28,13 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
                 tenant_id=bonus.tenant_id if hasattr(bonus, 'tenant_id') else None,
             )
         except Exception:
-            pass  # Реестр не мешает основной логике
+            logger.exception("Не удалось записать ledger BONUS_PAID для bonus_id=%s", bonus.id)
         # Биллинг платформы — fee с франшизы за выплаченный бонус
         try:
             from app.services.franchise_billing_service import record_platform_fee_for_bonus
             await record_platform_fee_for_bonus(db, bonus, direction="charge")
         except Exception:
-            pass
+            logger.exception("Не удалось списать platform fee (charge) для bonus_id=%s", bonus.id)
         # Вебхук bonus_paid
         try:
             from app.services.webhook_service import send_event
@@ -40,7 +43,7 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
                     {'bonus_id': str(bonus.id), 'amount': float(bonus.amount),
                      'admin_id': str(bonus.admin_id) if bonus.admin_id else None})
         except Exception:
-            pass
+            logger.exception("Не удалось отправить webhook bonus_paid для bonus_id=%s tenant_id=%s", bonus.id, getattr(bonus, 'tenant_id', None))
         await db.commit()
         await db.refresh(bonus)
     return bonus
@@ -65,13 +68,13 @@ async def mark_bonus_cancelled(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus |
                 tenant_id=bonus.tenant_id if hasattr(bonus, 'tenant_id') else None,
             )
         except Exception:
-            pass
+            logger.exception("Не удалось записать ledger BONUS_CANCELLED для bonus_id=%s", bonus.id)
         # Биллинг платформы — refund fee франшизе если так настроено
         try:
             from app.services.franchise_billing_service import record_platform_fee_for_bonus
             await record_platform_fee_for_bonus(db, bonus, direction="refund")
         except Exception:
-            pass
+            logger.exception("Не удалось вернуть platform fee (refund) для bonus_id=%s", bonus.id)
         await db.commit()
         await db.refresh(bonus)
     return bonus

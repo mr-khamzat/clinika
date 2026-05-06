@@ -1,3 +1,4 @@
+import logging
 import uuid
 import random
 from datetime import datetime
@@ -10,6 +11,8 @@ from app.models.settings import SystemSettings
 from app.services.qr_service import generate_qr_image_base64, generate_url_qr_base64
 from app.core.security import verify_qr_signature, make_patient_token
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 async def _generate_short_code(db: AsyncSession) -> int:
@@ -103,7 +106,7 @@ async def create_referral(
                     referral.mis_appointment_id = int(_r["data"])
                     await db.commit()
     except Exception:
-        pass  # МИС недоступен — направление всё равно создано
+        logger.exception("Не удалось создать запись в МИС для referral_id=%s phone=%s", referral.id, patient_phone)
 
     return referral
 
@@ -164,7 +167,7 @@ async def _apply_confirmation(
                     ))
                     applied_commission = True
                 except Exception:
-                    pass
+                    logger.exception("Не удалось применить комиссию для referral_id=%s receiver_id=%s", referral.id, receiver_id_str)
 
         if not applied_commission:
             db.add(Bonus(
@@ -194,7 +197,7 @@ async def _apply_confirmation(
                 description=f'Начисление по направлению #{str(referral.id)[:8]}',
             )
     except Exception:
-        pass
+        logger.exception("Не удалось записать ledger BONUS_ACCRUED для referral_id=%s", referral.id)
 
     # Начисление бонуса рекрутеру (если у автора направления есть рекрутер с %)
     try:
@@ -235,7 +238,7 @@ async def _apply_confirmation(
                         db.add(rec_bonus)
                         await db.flush()
     except Exception:
-        pass
+        logger.exception("Не удалось начислить бонус рекрутеру для referral_id=%s author_id=%s", referral.id, referral.created_by_admin_id)
 
     # Автоматически создаём межклиничный счёт при начислении бонуса
     try:
@@ -258,7 +261,7 @@ async def _apply_confirmation(
                 created_by_id=referral.created_by_admin_id,
             )
     except Exception:
-        pass  # Межклиничный счёт не блокирует подтверждение
+        logger.exception("Не удалось создать межклиничный счёт для referral_id=%s from=%s to=%s", referral.id, referral.from_clinic_id, referral.to_clinic_id)
 
     await db.commit()
     await db.refresh(referral)
@@ -275,7 +278,7 @@ async def _apply_confirmation(
                 appointment_id=referral.mis_appointment_id,
             )
     except Exception:
-        pass  # МИС подтверждение не критично
+        logger.exception("Не удалось подтвердить запись в МИС для referral_id=%s mis_appointment_id=%s", referral.id, referral.mis_appointment_id)
 
     return referral
 
