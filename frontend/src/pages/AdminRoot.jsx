@@ -136,11 +136,9 @@ export default function AdminRoot() {
     return <><RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
-  // ── Владелец франшизы → AdminLayout (он сам фильтрует секции по роли).
-  // Старый FranchiseOwnerCabinet оставлен в репозитории, но юзер получает
-  // полный premium-сайдбар как у super_admin (без секций платформы).
+  // ── Владелец франшизы → отдельный кабинет (НЕ AdminLayout — это платформа).
   if (role === 'franchise_owner') {
-    return <><AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return <><FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
