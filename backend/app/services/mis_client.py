@@ -10,6 +10,9 @@ from app.config import settings
 log = logging.getLogger("mis_client")
 
 DEFAULT_MIS_BASE = "https://mis.stoclinic.ru:3010/api/public"
+# DEPRECATED: per-tenant список МИС clinic_id теперь хранится в Tenant.mis_clinic_ids (JSONB).
+# Оставлен для обратной совместимости с существующими вызовами get_patient_visits;
+# в auto_confirm уже не используется. Не добавлять новые ссылки на эту константу.
 MIS_CLINIC_IDS = {1, 4, 26}
 
 

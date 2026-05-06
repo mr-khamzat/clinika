@@ -27,47 +27,92 @@ def _normalize_name(name: str) -> str:
 async def run_auto_confirm() -> int:
     """
     Один цикл автоподтверждения. Возвращает количество подтверждённых направлений.
+
+    Архитектура (Волна 2.4): итерируемся по тенантам — у каждого свой mis_clinic_ids
+    в Tenant.mis_clinic_ids (JSONB). Если у тенанта поле NULL — пропускаем,
+    МИС не настроен.
     """
     from app.database import AsyncSessionLocal
+    from app.models.tenant import Tenant
     from app.models.referral import Referral, ReferralStatus
     from app.models.service import Service
     from app.models.settings import SystemSettings
     from app.models.bonus import Bonus, BonusType
-    from app.services.mis_client import get_appointments, MIS_CLINIC_IDS
+    from app.services.mis_client import get_appointments
+    from app.services.settings_service import get_setting as _get_s
     from sqlalchemy import select
 
     now = datetime.utcnow()
-    # Запрашиваем визиты за последние 2 часа + 1 день назад (на случай задержек)
     date_from = (now - timedelta(days=1)).strftime("%d.%m.%Y")
     date_to = now.strftime("%d.%m.%Y")
-
-    # Собираем все выполненные визиты из всех клиник МИС
-    appointments: list[dict] = []
-    for clinic_id in MIS_CLINIC_IDS:
-        try:
-            items = await get_appointments(clinic_id, date_from, date_to)
-            appointments.extend(items)
-        except Exception as e:
-            logger.warning(f"МИС клиника {clinic_id}: ошибка получения визитов — {e}")
-
-    if not appointments:
-        return 0
-
-    # Фильтруем только выполненные визиты
-    done = [
-        a for a in appointments
-        if str(a.get("status_id")) == "4"
-        or str(a.get("status", "")).lower() in ("выполнено", "завершено", "completed")
-    ]
-    if not done:
-        return 0
 
     confirmed_count = 0
 
     async with AsyncSessionLocal() as db:
-        # Открытые направления
+        tenants = (await db.execute(
+            select(Tenant).where(Tenant.is_active == True)
+        )).scalars().all()
+
+        if not tenants:
+            return 0
+
+        for tenant in tenants:
+            tenant_clinic_ids = tenant.mis_clinic_ids or []
+            if not tenant_clinic_ids:
+                continue
+
+            # MIS-настройки тенанта (если нет — пропустим этот тенант)
+            try:
+                tenant_api_url = await _get_s(db, "mis_api_url", "", tenant_id=tenant.id)
+                tenant_api_key = await _get_s(db, "mis_api_key", "", tenant_id=tenant.id)
+            except Exception:
+                tenant_api_url, tenant_api_key = "", ""
+
+            # Собираем выполненные визиты по клиникам тенанта
+            appointments: list[dict] = []
+            for clinic_id in tenant_clinic_ids:
+                try:
+                    items = await get_appointments(
+                        int(clinic_id), date_from, date_to,
+                        api_url=tenant_api_url, api_key=tenant_api_key,
+                    )
+                    appointments.extend(items)
+                except Exception as e:
+                    logger.warning(f"Тенант {tenant.slug} МИС клиника {clinic_id}: ошибка — {e}")
+
+            if not appointments:
+                continue
+
+            done = [
+                a for a in appointments
+                if str(a.get("status_id")) == "4"
+                or str(a.get("status", "")).lower() in ("выполнено", "завершено", "completed")
+            ]
+            if not done:
+                continue
+
+            tenant_confirmed = await _process_tenant_confirmations(db, tenant, done)
+            confirmed_count += tenant_confirmed
+
+    return confirmed_count
+
+
+async def _process_tenant_confirmations(db, tenant, done: list[dict]) -> int:
+    """Подтверждение направлений конкретного тенанта по списку выполненных МИС-визитов."""
+    from app.models.referral import Referral, ReferralStatus
+    from app.models.service import Service
+    from app.models.settings import SystemSettings
+    from app.models.bonus import Bonus, BonusType
+    from sqlalchemy import select
+
+    confirmed_count = 0
+    if True:
+        # Открытые направления только этого тенанта
         result = await db.execute(
-            select(Referral).where(Referral.status == ReferralStatus.CREATED)
+            select(Referral).where(
+                Referral.status == ReferralStatus.CREATED,
+                Referral.tenant_id == tenant.id,
+            )
         )
         open_referrals: list[Referral] = list(result.scalars().all())
 

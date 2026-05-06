@@ -375,11 +375,11 @@ async def daily_invoices_job():
 async def archive_audit_job():
     """Архивация audit_log: записи старше 90 дней переносятся в audit_log_archive."""
     try:
-        from app.database import async_session
+        from app.database import AsyncSessionLocal
         from sqlalchemy import text
         from datetime import datetime, timedelta
         cutoff = datetime.utcnow() - timedelta(days=90)
-        async with async_session() as db:
+        async with AsyncSessionLocal() as db:
             # Создаём архивную таблицу если нет
             await db.execute(text(
                 "CREATE TABLE IF NOT EXISTS audit_log_archive (LIKE audit_log INCLUDING ALL)"

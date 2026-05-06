@@ -41,6 +41,8 @@ class Tenant(Base):
     legal_signer_pos:   Mapped[str | None] = mapped_column(String(200), nullable=True)
     stamp_url:          Mapped[str | None] = mapped_column(String(500), nullable=True)
     royalty_percent:    Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True, default=0)
+    # Идентификаторы клиник в МИС Renovatio для opross МИС в auto_confirm. NULL — МИС не настроен для тенанта.
+    mis_clinic_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     license: Mapped["TenantLicense | None"] = relationship(
