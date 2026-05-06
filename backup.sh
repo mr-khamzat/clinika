@@ -96,9 +96,10 @@ log "Архив конфигов..."
 CFG_PATHS=()
 [ -f /opt/clinika/.env ]                    && CFG_PATHS+=(-C /opt/clinika .env)
 [ -f /opt/clinika/docker-compose.yml ]      && CFG_PATHS+=(-C /opt/clinika docker-compose.yml)
-[ -d /etc/nginx/sites-enabled ]             && CFG_PATHS+=(-C /etc/nginx sites-enabled)
-[ -d /etc/nginx/stream.d ]                  && CFG_PATHS+=(-C /etc/nginx stream.d)
+[ -d /etc/nginx ]                           && CFG_PATHS+=(-C /etc nginx)
+[ -d /etc/letsencrypt ]                     && CFG_PATHS+=(--exclude='archive/*/[0-9][0-9].pem' -C /etc letsencrypt)
 [ -f /etc/clinika-backup.env ]              && CFG_PATHS+=(-C /etc clinika-backup.env)
+[ -f /etc/cron.d/clinika-backup ]           && CFG_PATHS+=(-C /etc/cron.d clinika-backup)
 if [ ${#CFG_PATHS[@]} -gt 0 ]; then
   tar -czf "$CFG_FILE" "${CFG_PATHS[@]}" 2>>"$LOG_FILE" || true
   CFG_SIZE=$(du -sh "$CFG_FILE" 2>/dev/null | cut -f1)
