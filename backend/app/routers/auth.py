@@ -86,7 +86,7 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
         redirect_url = "/admin"
     elif role == "manager" and tenant_slug:
         redirect_url = f"/{tenant_slug}/manager"
-    elif role in ("doctor", "recruiter", "supervisor", "visiting_doctor", "external_doctor") and tenant_slug:
+    elif role in ("doctor", "recruiter", "visiting_doctor", "partner_doctor") and tenant_slug:
         redirect_url = f"/{tenant_slug}/admin"
     elif tenant_slug:
         redirect_url = f"/{tenant_slug}/"
@@ -142,7 +142,7 @@ async def telegram_auth(data: TelegramAuthData, request: Request, db: AsyncSessi
     if data.last_name:
         full_name += f" {data.last_name}"
 
-    auto_role = UserRole.MANAGER if tg_id in settings.get_manager_ids() else UserRole.ADMIN
+    auto_role = UserRole.MANAGER if tg_id in settings.get_manager_ids() else UserRole.REG
 
     if not user:
         user = User(

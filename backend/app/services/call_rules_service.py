@@ -12,21 +12,17 @@ from app.models.user import User, UserRole
 EXCLUDED_ROLES = {
     UserRole.SUPER_ADMIN,
     UserRole.VISITING_DOCTOR,
-    UserRole.EXTERNAL_DOCTOR,
-    UserRole.PARTNER,           # партнёр (Telegram Mini App) — не для звонков
-    UserRole.ACQUISITION_MANAGER,  # CRM роль, не звонит
+    UserRole.PARTNER_DOCTOR,     # врач-партнёр (Telegram Mini App) — не для звонков
 }
 
 # Роли которые участвуют в звонках (для дефолтной матрицы и UI).
 ACTIVE_ROLES = [
     UserRole.FRANCHISE_OWNER,
     UserRole.MANAGER,
-    UserRole.SUPERVISOR,
-    UserRole.ADMIN,
+    UserRole.REG,
     UserRole.NURSE,
     UserRole.DOCTOR,
     UserRole.RECRUITER,
-    UserRole.ACCOUNTANT,
 ]
 
 

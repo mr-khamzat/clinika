@@ -32,8 +32,8 @@ ROLE_PERMISSIONS: dict[UserRole, set[str]] = {
         "discounts:read", "discounts:write",
         "consent:admin",
     },
-    UserRole.ADMIN: {
-        # Сотрудник клиники
+    UserRole.REG: {
+        # Регистратор клиники
         "referrals:read", "referrals:write",
         "bonuses:read",
         "staff:read",
@@ -43,8 +43,8 @@ ROLE_PERMISSIONS: dict[UserRole, set[str]] = {
         "scheduling:read", "scheduling:write",
         "consent:own",
     },
-    UserRole.PARTNER: {
-        # Партнёр
+    UserRole.PARTNER_DOCTOR: {
+        # Врач-партнёр (бывший external_doctor)
         "referrals:read", "referrals:write",
         "bonuses:read",
         "services:read",

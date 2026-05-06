@@ -27,7 +27,7 @@ router = APIRouter(prefix="/mis", tags=["mis"])
 
 
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:
-    if current_user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
+    if current_user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(status_code=403, detail="Только менеджер или супер-админ")
     return current_user
 

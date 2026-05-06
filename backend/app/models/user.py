@@ -7,19 +7,16 @@ import enum
 from app.database import Base
 
 class UserRole(str, enum.Enum):
-    ADMIN = "admin"
-    MANAGER = "manager"
-    PARTNER = "partner"
     SUPER_ADMIN = "super_admin"
+    FRANCHISE_OWNER = "franchise_owner"
+    MANAGER = "manager"
     DOCTOR = "doctor"
+    REG = "reg"
     NURSE = "nurse"
     RECRUITER = "recruiter"
-    SUPERVISOR = "supervisor"
-    ACQUISITION_MANAGER = "acquisition_manager"
-    EXTERNAL_DOCTOR = "external_doctor"
+    PARTNER_DOCTOR = "partner_doctor"
     VISITING_DOCTOR = "visiting_doctor"
-    FRANCHISE_OWNER = "franchise_owner"
-    ACCOUNTANT = "accountant"
+    PATIENT = "patient"
 
 class User(Base):
     __tablename__ = "users"
@@ -34,7 +31,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(200), index=True, nullable=True)
     category: Mapped[str | None] = mapped_column(String(30), nullable=True)
     date_of_birth: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, values_callable=lambda x: [e.value for e in x], create_type=False), default=UserRole.ADMIN)
+    role: Mapped[UserRole] = mapped_column(SAEnum(UserRole, values_callable=lambda x: [e.value for e in x], create_type=False), default=UserRole.REG)
     clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -50,7 +47,7 @@ class User(Base):
     doctor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     address: Mapped[str | None] = mapped_column(String(300), nullable=True)
     specialization: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    # Менеджер привлечения (для external_doctor/visiting_doctor)
+    # Менеджер привлечения (для partner_doctor/visiting_doctor)
     manager_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

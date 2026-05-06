@@ -729,7 +729,7 @@ POST /manager/staff/invite
 
 {
   "email": "doctor@clinic.ru",
-  "role": "admin",
+  "role": "reg",
   "clinic_id": "uuid",
   "full_name": "Иванов Иван"
 }

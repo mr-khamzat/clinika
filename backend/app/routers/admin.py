@@ -610,7 +610,7 @@ async def reset_tenant_admin_password(
     r = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMIN]),
+            User.role.in_([UserRole.MANAGER, UserRole.REG]),
             User.is_active == True,
         ).order_by(User.created_at.asc()).limit(1)
     )
@@ -854,7 +854,7 @@ async def get_tenant_credentials(
     r = await db.execute(
         select(User).where(
             User.tenant_id == tenant_id,
-            User.role.in_([UserRole.MANAGER, UserRole.ADMIN]),
+            User.role.in_([UserRole.MANAGER, UserRole.REG]),
             User.is_active == True,
         ).order_by(User.created_at.asc()).limit(1)
     )

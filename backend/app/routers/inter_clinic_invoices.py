@@ -27,8 +27,8 @@ import app.services.inter_clinic_invoice_service as ici_svc
 
 router = APIRouter(tags=["inter_clinic_invoices"])
 
-MANAGER_ROLES = {UserRole.MANAGER, UserRole.SUPERVISOR, UserRole.SUPER_ADMIN}
-SUPERVISOR_ROLES = {UserRole.SUPERVISOR, UserRole.SUPER_ADMIN}
+MANAGER_ROLES = {UserRole.MANAGER, UserRole.SUPER_ADMIN}
+SUPERVISOR_ROLES = {UserRole.SUPER_ADMIN}
 
 
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:

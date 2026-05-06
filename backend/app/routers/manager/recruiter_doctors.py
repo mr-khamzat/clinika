@@ -219,7 +219,7 @@ async def register_external_doctor(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Логин уже занят")
 
-    role = UserRole.EXTERNAL_DOCTOR if body.doctor_type == "external" else UserRole.VISITING_DOCTOR
+    role = UserRole.PARTNER_DOCTOR if body.doctor_type == "external" else UserRole.VISITING_DOCTOR
 
     new_user = User(
         id=_uuid.uuid4(),
@@ -422,7 +422,7 @@ async def delete_external_doctor(
     doctor = await db.get(User, doctor_id)
     if not doctor or doctor.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=404, detail="Врач не найден")
-    if doctor.role not in (UserRole.VISITING_DOCTOR, UserRole.EXTERNAL_DOCTOR):
+    if doctor.role not in (UserRole.VISITING_DOCTOR, UserRole.PARTNER_DOCTOR):
         raise HTTPException(status_code=400, detail="Можно удалять только внешних/приезжих врачей")
     await db.delete(doctor)
     await db.commit()

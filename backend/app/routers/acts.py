@@ -48,7 +48,7 @@ async def generate_act(
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ("super_admin", "admin", "manager"):
+    if current_user.role not in ("super_admin", "reg", "manager"):
         raise HTTPException(403)
     if not tenant:
         raise HTTPException(400, "Tenant required")
@@ -75,7 +75,7 @@ async def sign_act(
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in ("super_admin", "admin", "manager"):
+    if current_user.role not in ("super_admin", "reg", "manager"):
         raise HTTPException(403)
     inv_r = await db.execute(select(Invoice).where(Invoice.act_number == act_number))
     invoice = inv_r.scalar_one_or_none()

@@ -42,7 +42,7 @@ async def _ensure_access(tenant_id: uuid.UUID, current_user: User, db: AsyncSess
         return tenant
     if current_user.role == UserRole.MANAGER and current_user.tenant_id == tenant_id:
         return tenant
-    if current_user.role == UserRole.SUPERVISOR and current_user.tenant_id == tenant_id:
+    if current_user.role == UserRole.MANAGER and current_user.tenant_id == tenant_id:
         return tenant
     if current_user.role == UserRole.FRANCHISE_OWNER:
         # тенанты своей франшизы

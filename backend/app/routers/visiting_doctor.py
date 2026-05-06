@@ -24,7 +24,7 @@ from app.models.ledger import LedgerEntry
 
 router = APIRouter(prefix="/visiting", tags=["visiting_doctor"])
 
-_admin = Depends(require_role("admin", "manager", "super_admin", "supervisor"))
+_admin = Depends(require_role("reg", "manager", "super_admin"))
 
 
 class VisitingSettingsCreate(BaseModel):

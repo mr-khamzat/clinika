@@ -534,7 +534,7 @@ async def get_analytics(
         )
         .join(Referral, Referral.created_by_admin_id == User.id)
         .outerjoin(Clinic, Clinic.id == User.clinic_id)
-        .where(User.role == UserRole.ADMIN)
+        .where(User.role == UserRole.REG)
         .group_by(User.id, User.full_name, Clinic.name)
         .order_by(func.count(Referral.id).desc())
     )

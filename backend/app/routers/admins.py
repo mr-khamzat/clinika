@@ -36,7 +36,7 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
         data["redirect_url"] = "/admin"
     elif role == "manager" and tenant_slug:
         data["redirect_url"] = f"/{tenant_slug}/manager"
-    elif role in ("doctor", "recruiter", "supervisor") and tenant_slug:
+    elif role in ("doctor", "recruiter") and tenant_slug:
         data["redirect_url"] = f"/{tenant_slug}/admin"
     elif tenant_slug:
         data["redirect_url"] = f"/{tenant_slug}/"
@@ -235,7 +235,7 @@ async def list_admins(
 ):
     """Список сотрудников (admin/manager). Партнёры исключены — они в /manager/partners/."""
     # Только активные сотрудники (деактивированные видит только super_admin)
-    q = select(User).where(User.role != UserRole.PARTNER, User.is_active == True).order_by(User.full_name)
+    q = select(User).where(User.is_active == True).order_by(User.full_name)
     # Тенант-изоляция
     if current_user.tenant_id is not None:
         q = q.where(User.tenant_id == current_user.tenant_id)
@@ -365,7 +365,7 @@ async def approve_doctor_request(
         full_name=req.doctor_name,
         username=username,
         hashed_password=hashed,
-        role=UserRole.EXTERNAL_DOCTOR,
+        role=UserRole.PARTNER_DOCTOR,
         tenant_id=current_user.tenant_id,
         manager_id=req.manager_id,
         is_active=True,
@@ -416,7 +416,7 @@ async def list_external_doctors(
     """Список всех external/visiting врачей тенанта."""
     q = select(User).where(
         User.tenant_id == current_user.tenant_id,
-        User.role.in_([UserRole.EXTERNAL_DOCTOR, UserRole.VISITING_DOCTOR]),
+        User.role.in_([UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR]),
         User.is_active == True,
     ).order_by(User.full_name)
     rows = (await db.execute(q)).scalars().all()

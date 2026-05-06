@@ -119,8 +119,8 @@ async def patient_doc_download(
 
 # ── Staff: загрузка / удаление / список ─────────────────────────────────────
 
-_uploader_dep = Depends(require_role("manager", "admin", "doctor"))
-_manager_dep = Depends(require_role("manager", "admin"))
+_uploader_dep = Depends(require_role("manager", "reg", "doctor"))
+_manager_dep = Depends(require_role("manager", "reg"))
 
 
 @router.post("/documents/upload", dependencies=[_uploader_dep])

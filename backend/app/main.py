@@ -39,9 +39,7 @@ from app.routers.commercial import router as commercial_router
 from app.routers.ai import router as ai_router
 from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
-from app.routers.acquisition_manager import router as acquisition_router
 from app.routers.visiting_doctor import router as visiting_router
-from app.routers.supervisor import router as supervisor_router
 from app.routers.cms import router as cms_router
 from app.routers.acts import router as acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
@@ -709,9 +707,7 @@ app.include_router(commercial_router)
 app.include_router(ai_router)
 app.include_router(ai_platform_router)
 app.include_router(recruiter_router)
-app.include_router(acquisition_router)
 app.include_router(visiting_router)
-app.include_router(supervisor_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
 app.include_router(public_booking_router)

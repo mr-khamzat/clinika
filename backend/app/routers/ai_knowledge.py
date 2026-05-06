@@ -106,7 +106,6 @@ def _can_manage(user: User) -> bool:
         return True
     return user.role in (
         UserRole.FRANCHISE_OWNER,
-        UserRole.SUPERVISOR,
         UserRole.MANAGER,
     )
 

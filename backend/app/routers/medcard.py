@@ -143,7 +143,7 @@ async def patient_vaccinations(
 
 # ── Manager / doctor / nurse / admin: CRUD ──────────────────────────────────
 
-_staff_dep = Depends(require_role("manager", "doctor", "admin", "nurse"))
+_staff_dep = Depends(require_role("manager", "doctor", "reg", "nurse"))
 
 
 def _parse_dt(value: Optional[str]) -> Optional[datetime]:

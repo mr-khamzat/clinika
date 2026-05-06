@@ -377,7 +377,7 @@ async def analytics_top_staff(
         .outerjoin(Clinic, Clinic.id == User.clinic_id)
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
         .where(
-            User.role == UserRole.ADMIN,
+            User.role == UserRole.REG,
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
             *([Referral.tenant_id == _tenant_id] if _tenant_id else []),

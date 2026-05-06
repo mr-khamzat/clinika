@@ -19,7 +19,7 @@ class Invitation(Base):
     # Email которому отправлено приглашение (для врачей от рекрутера)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True, index=True)
     clinic_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("clinics.id"), nullable=True)
-    role: Mapped[str] = mapped_column(String(30), nullable=False, default="partner")
+    role: Mapped[str] = mapped_column(String(30), nullable=False, default="partner_doctor")
     invited_by_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     # Рекрутер-владелец (заполняется когда рекрутер приглашает врача)
     recruiter_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)

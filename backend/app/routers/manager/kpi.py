@@ -40,7 +40,7 @@ async def list_kpi(
     last_day = calendar.monthrange(target_month.year, target_month.month)[1]
     month_end = target_month.replace(day=last_day)
 
-    admins_filters = [User.role == UserRole.ADMIN, User.is_active == True]
+    admins_filters = [User.role == UserRole.REG, User.is_active == True]
     # Tenant isolation: видим только своих сотрудников
     if current_user.tenant_id is not None:
         admins_filters.append(User.tenant_id == current_user.tenant_id)

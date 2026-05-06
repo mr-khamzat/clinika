@@ -214,7 +214,7 @@ async def get_all_presence(
     q = q.where(UserModel.role.not_in([r.value for r in EXCLUDED_ROLES]))
 
     # Врач видит только свою клинику
-    if current_user.role == UserRole.ADMIN and current_user.clinic_id:
+    if current_user.role == UserRole.REG and current_user.clinic_id:
         q = q.where(UserModel.clinic_id == current_user.clinic_id)
     elif clinic_id:
         try:
@@ -624,7 +624,7 @@ async def get_notification_settings(
     )).scalars().all()
 
     by_role = {s.role: s for s in settings}
-    roles = ["admin", "manager", "partner"]
+    roles = ["reg", "manager", "partner_doctor"]
 
     result = []
     for role in roles:

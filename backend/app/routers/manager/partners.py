@@ -35,7 +35,7 @@ async def list_partners(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(User).where(User.role == UserRole.PARTNER).order_by(User.full_name)
+    q = select(User).where(User.role == UserRole.PARTNER_DOCTOR).order_by(User.full_name)
     if current_user.tenant_id is not None:
         q = q.where(User.tenant_id == current_user.tenant_id)
     if current_user.clinic_id is not None:
@@ -74,7 +74,7 @@ async def create_partner(
         telegram_id=body.telegram_id or None, username=body.username or None,
         password_hash=hash_password(body.password) if body.password else None,
         full_name=body.full_name, phone_number=body.phone_number,
-        clinic_id=clinic_id, role=UserRole.PARTNER, is_active=True,
+        clinic_id=clinic_id, role=UserRole.PARTNER_DOCTOR, is_active=True,
     )
     db.add(new_partner)
     await db.commit()
@@ -96,7 +96,7 @@ async def update_partner(
     db: AsyncSession = Depends(get_db),
 ):
     from app.core.security import hash_password
-    result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER))
+    result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER_DOCTOR))
     partner = result.scalar_one_or_none()
     if not partner or (current_user.tenant_id is not None and partner.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Партнёр не найден")
@@ -123,7 +123,7 @@ async def delete_partner(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER))
+    result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER_DOCTOR))
     partner = result.scalar_one_or_none()
     if not partner or (current_user.tenant_id is not None and partner.tenant_id != current_user.tenant_id):
         raise HTTPException(status_code=404, detail="Партнёр не найден")
@@ -154,7 +154,7 @@ async def create_invitation(
     if not clinic:
         raise HTTPException(status_code=404, detail="Клиника не найдена")
     expires_at = datetime.utcnow() + timedelta(days=body.expires_days) if body.expires_days else None
-    invite = Invitation(code=secrets.token_urlsafe(16), clinic_id=clinic_id, role="partner",
+    invite = Invitation(code=secrets.token_urlsafe(16), clinic_id=clinic_id, role="partner_doctor",
         invited_by_id=current_user.id, expires_at=expires_at, max_uses=body.max_uses)
     db.add(invite)
     await db.commit()

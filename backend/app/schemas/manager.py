@@ -66,7 +66,7 @@ class CreateAdminRequest(BaseModel):
     phone_number: Optional[str] = None
     date_of_birth: Optional[str] = None
     clinic_id: Optional[UUID] = None
-    role: UserRole = UserRole.ADMIN
+    role: UserRole = UserRole.REG
     category: Optional[str] = None
 
 

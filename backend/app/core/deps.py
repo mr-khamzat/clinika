@@ -31,7 +31,7 @@ async def get_current_user(
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     """Администраторы или super_admin."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
+    if user.role not in (UserRole.REG, UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для администраторов"
@@ -41,7 +41,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 
 async def require_manager(user: User = Depends(get_current_user)) -> User:
     """Системный администратор (manager) или super_admin."""
-    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR, UserRole.FRANCHISE_OWNER):
+    if user.role not in (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Доступ только для системного администратора"
@@ -51,7 +51,7 @@ async def require_manager(user: User = Depends(get_current_user)) -> User:
 
 async def require_reports_access(user: User = Depends(get_current_user)) -> User:
     """Отчёты: доступны и Администраторам клиники, и Системному администратору."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.SUPERVISOR):
+    if user.role not in (UserRole.REG, UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав"
@@ -61,7 +61,7 @@ async def require_reports_access(user: User = Depends(get_current_user)) -> User
 
 async def require_partner_or_above(user: User = Depends(get_current_user)) -> User:
     """Доступ для партнёров, администраторов и системного администратора."""
-    if user.role not in (UserRole.ADMIN, UserRole.MANAGER, UserRole.PARTNER, UserRole.SUPER_ADMIN):
+    if user.role not in (UserRole.REG, UserRole.MANAGER, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Недостаточно прав"

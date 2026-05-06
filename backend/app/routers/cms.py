@@ -79,7 +79,7 @@ async def list_pages(
 ):
     if not tenant:
         return []
-    published_only = not all or current_user.role not in ("admin", "super_admin", "manager")
+    published_only = not all or current_user.role not in ("reg", "super_admin", "manager")
     return await CmsService.list_pages(db, str(tenant.id), published_only=published_only)
 
 
@@ -106,7 +106,7 @@ async def create_page(
 ):
     if not tenant:
         raise HTTPException(403)
-    if current_user.role not in ("admin", "super_admin", "manager"):
+    if current_user.role not in ("reg", "super_admin", "manager"):
         raise HTTPException(403, "Insufficient role")
     return await CmsService.create_page(db, str(tenant.id), str(current_user.id), data.dict())
 
@@ -121,7 +121,7 @@ async def update_page(
 ):
     if not tenant:
         raise HTTPException(403)
-    if current_user.role not in ("admin", "super_admin", "manager"):
+    if current_user.role not in ("reg", "super_admin", "manager"):
         raise HTTPException(403, "Insufficient role")
     page = await CmsService.get_page(db, str(tenant.id), slug)
     if not page:
@@ -138,7 +138,7 @@ async def delete_page(
 ):
     if not tenant:
         raise HTTPException(403)
-    if current_user.role not in ("admin", "super_admin", "manager"):
+    if current_user.role not in ("reg", "super_admin", "manager"):
         raise HTTPException(403, "Insufficient role")
     page = await CmsService.get_page(db, str(tenant.id), slug)
     if not page:

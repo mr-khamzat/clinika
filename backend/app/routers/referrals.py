@@ -75,7 +75,7 @@ async def create_new_referral(
 ):
     from_clinic_id = current_user.clinic_id or data.from_clinic_id
     # Партнёры (role=partner) не привязаны к клинике — from_clinic_id остаётся None
-    if not from_clinic_id and current_user.role != UserRole.PARTNER:
+    if not from_clinic_id and current_user.role != UserRole.PARTNER_DOCTOR:
         raise HTTPException(status_code=400, detail="Укажите клинику-отправителя")
 
     # Получаем slug тенанта для URL пациента

@@ -89,7 +89,7 @@ async def send_message(
     db.add(msg)
     await db.commit()
 
-    role_labels = {"admin": "Администратор", "manager": "Системный адм.", "partner": "Партнёр"}
+    role_labels = {"reg": "Регистратор", "manager": "Системный адм.", "partner_doctor": "Врач-партнёр"}
     role_label = role_labels.get(current_user.role.value, current_user.role.value)
     tg_text = (
         f"💬 <b>Поддержка</b> — {current_user.full_name} ({role_label})\n"
@@ -155,7 +155,7 @@ async def upload_file(
     await db.refresh(msg)
 
     # Пересылаем в Telegram
-    role_labels = {"admin": "Администратор", "manager": "Сист. адм.", "partner": "Партнёр"}
+    role_labels = {"reg": "Регистратор", "manager": "Сист. адм.", "partner_doctor": "Врач-партнёр"}
     role_label = role_labels.get(current_user.role.value, current_user.role.value)
     caption = f"📎 {current_user.full_name} ({role_label}): {file.filename}"
     try:
