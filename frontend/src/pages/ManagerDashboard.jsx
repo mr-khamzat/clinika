@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getManagerSummary, getManagerAdmins, getManagerClinics, exportCSV, getCancelRequests, approveCancelRequest, rejectCancelRequest } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
+import CallWidget from '../components/CallWidget'
 
 const ACCENT = '#0097A7'
 
@@ -381,6 +382,7 @@ export default function ManagerDashboard() {
           </div>
         </>
       )}
+    <CallWidget />
     </div>
   )
 }

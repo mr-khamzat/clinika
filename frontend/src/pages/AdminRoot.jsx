@@ -108,12 +108,12 @@ export default function AdminRoot() {
 
   // ── Врач → личный кабинет врача
   if (role === 'doctor') {
-    return <DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // ── Регистратор / Медсестра → операционный кабинет
   if (role === 'reg' || role === 'nurse') {
-    return <OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // ── Врач-партнёр (бывший external_doctor)
@@ -133,14 +133,14 @@ export default function AdminRoot() {
 
   // ── Рекрутер → кабинет рекрутера
   if (role === 'recruiter') {
-    return <RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // ── Владелец франшизы → AdminLayout (он сам фильтрует секции по роли).
   // Старый FranchiseOwnerCabinet оставлен в репозитории, но юзер получает
   // полный premium-сайдбар как у super_admin (без секций платформы).
   if (role === 'franchise_owner') {
-    return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
@@ -153,7 +153,7 @@ export default function AdminRoot() {
 
   // ── Super Admin → панель платформы
   if (role === 'super_admin') {
-    return <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
   }
 
   // Неизвестная роль
