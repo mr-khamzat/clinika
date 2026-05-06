@@ -2,6 +2,9 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
+// ─── Дизайн-токены КлиникСеть (design-preview-2) ───
+// Загружаются глобально один раз; CSS-переменные используются в /src/design/ и tailwind.
+import './design/tokens.css'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {

@@ -46,6 +46,9 @@ import OnlineBooking from './pages/OnlineBooking'
 import ClinicPage from './pages/ClinicPage'
 import DesignPreview from './pages/DesignPreview'
 import DesignPreview2 from './pages/DesignPreview2'
+// ─── Новый этап: дизайн-токены + базовые компоненты (Этап 4 ROADMAP) ───
+// Lazy: бандл с компонентами и tokens.css не грузится для обычных пользователей.
+const DesignSystem = lazy(() => import('./pages/DesignSystem'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -167,6 +170,18 @@ function MiniApp() {
           {/* ─── Превью дизайн-токенов (публичный пилот, без auth) ─── */}
           <Route path="design-preview" element={<DesignPreview />} />
           <Route path="design-preview-2" element={<DesignPreview2 />} />
+
+          {/* ─── Витрина дизайн-системы (Этап 4): только super_admin ─── */}
+          {user?.role === 'super_admin' && (
+            <Route
+              path="design-system"
+              element={
+                <Suspense fallback={<div style={{ background: 'var(--bg)', minHeight: '100vh' }} />}>
+                  <DesignSystem />
+                </Suspense>
+              }
+            />
+          )}
 
           {/* ─── Маршруты для партнёра ─── */}
           <Route path="partner/create" element={<PartnerCreateReferral />} />

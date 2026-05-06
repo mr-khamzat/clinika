@@ -1,0 +1,134 @@
+/**
+ * ========================================
+ * КлиникСеть · Дизайн-токены (design-preview-2)
+ * ========================================
+ * Извлечены из /public/design2/{patient,doctor,admin,manager,klinikset}.html
+ * Используются в:
+ *   - Tailwind config (через colors: 'var(--accent)' и т.д.)
+ *   - Базовых компонентах из /src/design/components/
+ *   - Кабинетах при их миграции на новый дизайн (этап 5+)
+ *
+ * Светлая тема (по умолчанию): doctor/admin/manager/klinikset кабинеты.
+ * Тёмная тема (.dark / [data-theme="dark"]): patient cabinet (premium dark).
+ * ========================================
+ */
+
+:root {
+  /* ─── Базовый оттенок (для oklch) ─── */
+  --hue: 220;
+
+  /* ─── Поверхности ─── */
+  --bg-deep: oklch(0.985 0.004 var(--hue));
+  --bg: oklch(0.985 0.004 var(--hue));
+  --bg-1: oklch(0.97 0.005 var(--hue));
+  --bg-2: oklch(0.955 0.006 var(--hue));
+  --bg-3: oklch(0.93 0.008 var(--hue));
+  --surface: oklch(1 0 0);
+  --surface-hi: oklch(0.98 0.004 var(--hue));
+
+  /* ─── Структура ─── */
+  --border: oklch(0.90 0.008 var(--hue));
+  --border-strong: oklch(0.84 0.01 var(--hue));
+  --line: oklch(0.93 0.008 var(--hue));
+
+  /* ─── Текст ─── */
+  --fg: oklch(0.18 0.014 var(--hue));
+  --fg-2: oklch(0.36 0.012 var(--hue));
+  --fg-3: oklch(0.52 0.012 var(--hue));
+  --fg-4: oklch(0.65 0.012 var(--hue));
+
+  /* ─── Акцент (clinical blue) ─── */
+  --accent: oklch(0.55 0.16 240);
+  --accent-2: oklch(0.62 0.15 220);
+  --accent-soft: oklch(0.55 0.16 240 / 0.10);
+  --accent-line: oklch(0.55 0.16 240 / 0.28);
+  --accent-fg: #fff;
+
+  /* ─── Семантика ─── */
+  --good: oklch(0.55 0.15 150);
+  --good-soft: oklch(0.55 0.15 150 / 0.10);
+  --warn: oklch(0.65 0.15 65);
+  --warn-soft: oklch(0.65 0.15 65 / 0.12);
+  --bad: oklch(0.55 0.20 25);
+  --bad-soft: oklch(0.55 0.20 25 / 0.10);
+  --gold: oklch(0.62 0.13 75);
+
+  /* ─── Радиусы ─── */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+
+  /* ─── Тени ─── */
+  --shadow-sm: 0 1px 2px oklch(0.18 0.014 220 / 0.06);
+  --shadow-md: 0 4px 14px oklch(0.18 0.014 220 / 0.08);
+  --shadow-lg: 0 20px 50px oklch(0.18 0.014 220 / 0.12);
+
+  /* ─── Плотность (compact/comfortable) ─── */
+  --density-pad: 14px;
+  --density-row: 12px;
+
+  /* ─── Типографика ─── */
+  --font-sans: 'Golos Text', 'Inter', -apple-system, system-ui, sans-serif;
+}
+
+/* ─── Compact density ─── */
+[data-density="compact"] {
+  --density-pad: 10px;
+  --density-row: 8px;
+}
+
+/* ─── Тёмная тема (Patient premium dark) ─── */
+:root[data-theme="dark"],
+.ks-dark {
+  --hue: 215;
+
+  --bg-deep: oklch(0.16 0.012 var(--hue));
+  --bg: oklch(0.16 0.012 var(--hue));
+  --bg-1: oklch(0.19 0.014 var(--hue));
+  --bg-2: oklch(0.22 0.016 var(--hue));
+  --bg-3: oklch(0.26 0.018 var(--hue));
+  --surface: oklch(0.21 0.014 var(--hue));
+  --surface-hi: oklch(0.25 0.018 var(--hue));
+
+  --border: oklch(0.30 0.014 var(--hue) / 0.6);
+  --border-strong: oklch(0.36 0.018 var(--hue));
+  --line: oklch(0.30 0.014 var(--hue) / 0.4);
+
+  --fg: oklch(0.97 0.005 var(--hue));
+  --fg-2: oklch(0.78 0.012 var(--hue));
+  --fg-3: oklch(0.62 0.014 var(--hue));
+  --fg-4: oklch(0.48 0.014 var(--hue));
+
+  --accent: oklch(0.78 0.14 200);
+  --accent-2: oklch(0.86 0.13 180);
+  --accent-soft: oklch(0.78 0.14 200 / 0.14);
+  --accent-line: oklch(0.78 0.14 200 / 0.32);
+  --accent-fg: oklch(0.20 0.04 220);
+
+  --good: oklch(0.82 0.16 150);
+  --good-soft: oklch(0.82 0.16 150 / 0.14);
+  --warn: oklch(0.85 0.14 75);
+  --warn-soft: oklch(0.85 0.14 75 / 0.14);
+  --bad: oklch(0.74 0.16 25);
+  --bad-soft: oklch(0.74 0.16 25 / 0.14);
+  --gold: oklch(0.85 0.14 85);
+
+  --radius-sm: 10px;
+  --radius: 14px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --shadow-sm: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-md: 0 1px 0 oklch(1 0 0 / 0.04) inset, 0 8px 24px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 1px 0 oklch(1 0 0 / 0.05) inset, 0 24px 60px oklch(0 0 0 / 0.5);
+}
+
+/* ─── Корень дизайн-системы ─── */
+.ks-app {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
