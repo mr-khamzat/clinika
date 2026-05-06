@@ -260,15 +260,15 @@ export default function ManagerRecruitDoctors() {
       {/* Шапка */}
       <div style={{ background:D, padding:'14px 16px', position:'sticky', top:0, zIndex:50 }}>
         <div style={{ maxWidth:860, margin:'0 auto', display:'flex', alignItems:'center', gap:12 }}>
-          <button onClick={()=>nav('/manager')} style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:8, padding:'6px 10px', color:'#fff', cursor:'pointer', fontSize:13 }}>
+          <button onClick={()=>nav('/manager')} style={{ background:'rgba(255,255,255,0.12)', border:'none', borderRadius:8, padding:'10px 14px', minHeight:44, color:'#fff', cursor:'pointer', fontSize:14 }}>
             ← Назад
           </button>
-          <div style={{ flex:1 }}>
+          <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>Приезжие врачи</div>
             <div style={{ fontSize:11, color:'#80cfd6' }}>{doctors.length} врачей зарегистрировано</div>
           </div>
           <button onClick={()=>setShowAdd(true)}
-            style={{ background:P, border:'none', borderRadius:10, padding:'8px 14px', color:'#fff', fontWeight:700, fontSize:13, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+            style={{ background:P, border:'none', borderRadius:10, padding:'10px 14px', minHeight:44, color:'#fff', fontWeight:700, fontSize:14, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
             <span className="material-symbols-outlined" style={{ fontSize:16 }}>person_add</span>
             Добавить
           </button>
@@ -337,11 +337,11 @@ export default function ManagerRecruitDoctors() {
 
                 <div style={{ display:'flex', gap:8, flexWrap:'wrap', paddingTop:10, borderTop:'1px solid #f0f5f6', alignItems:'center' }}>
                   <button onClick={()=>setResetDoc(doc)}
-                    style={{ background:'#f0f9fa', border:'1px solid #b2dfdb', borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, color:P, cursor:'pointer' }}>
+                    style={{ background:'#f0f9fa', border:'1px solid #b2dfdb', borderRadius:8, padding:'10px 14px', minHeight:40, fontSize:13, fontWeight:600, color:P, cursor:'pointer' }}>
                     🔑 Сменить данные
                   </button>
                   <button onClick={()=>toggleActive(doc)} disabled={toggling===doc.id}
-                    style={{ background: doc.is_active?'#fff3f3':'#f0f9fa', border:`1px solid ${doc.is_active?'#ffcdd2':'#b2dfdb'}`, borderRadius:8, padding:'6px 12px', fontSize:12, fontWeight:600, color: doc.is_active?'#c62828':P, cursor: toggling===doc.id?'not-allowed':'pointer' }}>
+                    style={{ background: doc.is_active?'#fff3f3':'#f0f9fa', border:`1px solid ${doc.is_active?'#ffcdd2':'#b2dfdb'}`, borderRadius:8, padding:'10px 14px', minHeight:40, fontSize:13, fontWeight:600, color: doc.is_active?'#c62828':P, cursor: toggling===doc.id?'not-allowed':'pointer' }}>
                     {toggling===doc.id ? '...' : doc.is_active ? '🚫 Заблокировать' : '✓ Активировать'}
                   </button>
                   <div style={{ marginLeft:'auto', fontSize:11, color:'#b0bec5' }}>{new Date(doc.created_at).toLocaleDateString('ru')}</div>

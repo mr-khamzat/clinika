@@ -10,7 +10,7 @@ function PageHeader({ title, icon, color }) {
     <div className="sticky top-14 z-30 bg-[#f7f9fb]/90 dark:bg-gray-900/90 backdrop-blur-sm px-4 pt-4 pb-3 border-b border-[#eceef0]/60 dark:border-gray-700/60 mb-4">
       <div className="flex items-center gap-3">
         <button onClick={() => nav('/manager')}
-          className="w-8 h-8 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform">
+          className="w-11 h-11 rounded-xl bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm active:scale-95 transition-transform flex-shrink-0">
           <span className="material-symbols-outlined text-[#727783] text-xl">arrow_back_ios_new</span>
         </button>
         <div className="flex items-center gap-2">
@@ -139,7 +139,8 @@ export default function ManagerAnalytics() {
               {(data?.top_services ?? []).length === 0 ? (
                 <div className="p-4 text-center text-[#727783] text-sm">Нет данных</div>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="min-w-full text-sm whitespace-nowrap">
                   <thead><tr className="border-b border-[#eceef0] dark:border-gray-700">
                     <th className="text-left text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Услуга</th>
                     <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Всего</th>
@@ -157,6 +158,7 @@ export default function ManagerAnalytics() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
 
@@ -200,7 +202,8 @@ export default function ManagerAnalytics() {
               {(data?.clinic_comparison ?? []).length === 0 ? (
                 <div className="p-4 text-center text-[#727783] text-sm">Нет данных</div>
               ) : (
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="min-w-full text-sm whitespace-nowrap">
                   <thead><tr className="border-b border-[#eceef0] dark:border-gray-700">
                     <th className="text-left text-[10px] font-bold text-[#727783] uppercase tracking-wider px-4 py-2">Клиника</th>
                     <th className="text-right text-[10px] font-bold text-[#727783] uppercase tracking-wider px-2 py-2">Напр.</th>
@@ -218,6 +221,7 @@ export default function ManagerAnalytics() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </>

@@ -88,7 +88,7 @@ export default function ManagerHistory() {
     <div className="p-4 pb-24">
       {/* Header */}
       <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => nav('/manager')} className="text-gray-400 hover:text-gray-600">
+        <button onClick={() => nav('/manager')} className="w-11 h-11 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 flex-shrink-0">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6"/>
           </svg>
@@ -102,7 +102,7 @@ export default function ManagerHistory() {
           <button
             key={p}
             onClick={() => setPreset(p)}
-            className="text-xs px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+            className="text-sm px-4 py-2 min-h-[40px] rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 active:bg-gray-100"
           >{l}</button>
         ))}
       </div>
@@ -122,12 +122,12 @@ export default function ManagerHistory() {
       </div>
 
       {/* Status tabs */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4">
         {STATUS_TABS.map(t => (
           <button
             key={t.key}
             onClick={() => setStatus(t.key)}
-            className={`flex-shrink-0 text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
+            className={`flex-shrink-0 text-sm px-4 py-2 min-h-[40px] rounded-full font-medium transition-colors ${
               status === t.key
                 ? 'bg-primary text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
