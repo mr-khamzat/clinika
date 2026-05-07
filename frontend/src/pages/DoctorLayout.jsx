@@ -49,6 +49,9 @@ import {
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
 // Единый хук переключения темы (общий для всех кабинетов)
 import useTheme from '../lib/useTheme'
+// W3: глобальный поиск Cmd+K и центр уведомлений
+import CommandPalette from '../components/CommandPalette'
+import NotificationsBell from '../components/NotificationsBell'
 
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -1009,6 +1012,8 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               </div>
             </div>
             <Chip variant="default" dot>{userName}</Chip>
+            {/* W3: центр уведомлений (общий dropdown) */}
+            <NotificationsBell size={36} variant="square" />
             {/* Переключатель темы — единый хук useTheme */}
             <button
               onClick={toggleTheme}
@@ -1182,6 +1187,8 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
           )
         })}
       </nav>
+      {/* W3: глобальный поиск Cmd+K — слушает hotkey на window */}
+      <CommandPalette />
     </Page>
   )
 }

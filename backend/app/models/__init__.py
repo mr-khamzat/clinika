@@ -103,3 +103,6 @@ from app.models.payments_clinic import (
     ClinicPaymentStatus,
     FiscalOperationType,
 )
+
+# Notifications center — отметка прочитанности уведомлений (audit/activity/contact)
+from app.models.notification_read import NotificationRead

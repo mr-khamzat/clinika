@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import ActPrintModal from './ActPrintModal'
 import { useEffect, useState } from 'react'
 import api from '../api'
-import { useToast } from '../design'
+import { useToast, EmptyState } from '../design'
 
 const STATUS_LABEL = {
   draft:     { text: 'Черновик',    color: '#6b7280' },
@@ -28,7 +28,15 @@ function Badge({ status }) {
 }
 
 function InvoiceTable({ invoices, onAction, onPrint, isSupervisor }) {
-  if (!Array.isArray(invoices) || !invoices.length) return <p style={{ color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '24px 0' }}>Счетов нет</p>
+  if (!Array.isArray(invoices) || !invoices.length) {
+    return (
+      <EmptyState
+        icon={<span className="material-symbols-outlined" style={{ fontSize: 24 }}>receipt_long</span>}
+        title="Счетов нет"
+        message="Создайте первый счёт между клиниками для расчётов по реферальным бонусам или роялти."
+      />
+    )
+  }
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

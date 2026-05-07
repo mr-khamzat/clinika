@@ -26,3 +26,5 @@ export { ToastProvider, useToast } from './components/ToastContext'
 export { default as useConfirm } from './components/useConfirm'
 export { default as InfoHint } from './components/InfoHint'
 export { default as ClinicScopeSelector } from './components/ClinicScopeSelector'
+// Skeleton loaders — shimmer-плейсхолдеры (W3 UX-улучшения)
+export { default as Skeleton, TableSkeleton } from './components/Skeleton'

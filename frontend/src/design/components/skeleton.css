@@ -1,0 +1,27 @@
+/* ====================================================================
+   <Skeleton> — shimmer-анимация
+   ==================================================================== */
+.ks-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--bg-2) 0%,
+    var(--bg-3) 50%,
+    var(--bg-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: ks-shimmer 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes ks-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* На случай отсутствия токенов — fallback */
+:root .ks-skeleton {
+  --_sk-from: var(--bg-2, #eef0f3);
+  --_sk-mid:  var(--bg-3, #d9dce3);
+}

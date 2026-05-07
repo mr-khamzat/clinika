@@ -28,6 +28,7 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '../../api'
 import {
   Card, KpiCard, KpiRow, Tabs, Button, Chip, Avatar, EmptyState, useToast,
+  Skeleton, TableSkeleton,
 } from '../../design'
 
 // ─── Хелперы форматирования ───────────────────────────────────────────────
@@ -454,11 +455,9 @@ export default function CallLogSection({ clinicId, brandShort = 'Клиника'
               <div className="p-3" style={{ color: 'var(--bad)', fontSize: 13 }}>{error}</div>
             )}
             {loading && items.length === 0 ? (
-              <div className="flex items-center justify-center py-16">
-                <div
-                  className="w-8 h-8 rounded-full animate-spin"
-                  style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }}
-                />
+              // W3: shimmer-плейсхолдер вместо спиннера при первичной загрузке
+              <div style={{ padding: 16 }}>
+                <TableSkeleton rows={6} cols={6} rowHeight={20} />
               </div>
             ) : items.length === 0 ? (
               <EmptyState

@@ -4,6 +4,9 @@ import BottomNav from './BottomNav'
 import HelpModal from './HelpModal'
 import SupportChat from './SupportChat'
 import CallWidget from './CallWidget'
+// W3: глобальный поиск Cmd+K и центр уведомлений
+import CommandPalette from './CommandPalette'
+import NotificationsBell from './NotificationsBell'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 import { useConfirm, useToast } from '../design'
@@ -184,6 +187,8 @@ export default function Layout() {
 
             {/* Правая часть — push, тема, справка, выйти */}
             <div className="flex items-center gap-1">
+              {/* Центр уведомлений (W3) — колокольчик с dropdown */}
+              <NotificationsBell size={36} variant="round" />
               {/* Включить уведомления — показывается только если permission != granted */}
               {pushState !== 'granted' && pushState !== 'unsupported' && (
                 <button
@@ -232,6 +237,8 @@ export default function Layout() {
         {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <SupportChat />}
         {/* Хост Modal-диалога подтверждения для logout */}
         <ConfirmHost />
+        {/* Глобальный поиск Cmd+K — слушает hotkey на window */}
+        <CommandPalette />
       </HelpContext.Provider>
     </ThemeContext.Provider>
   )

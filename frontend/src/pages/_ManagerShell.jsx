@@ -18,6 +18,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Page, Chip } from '../design'
+// W3: глобальный поиск Cmd+K и центр уведомлений
+import CommandPalette from '../components/CommandPalette'
+import NotificationsBell from '../components/NotificationsBell'
 
 // ─── Карта разделов (синхронизирована с ManagerDashboard) ───
 export const MGR_NAV = [
@@ -95,6 +98,8 @@ export default function ManagerShell({
               </div>
             )}
           </div>
+          {/* W3: центр уведомлений — общий dropdown в шапке менеджера */}
+          <NotificationsBell size={36} variant="square" />
           {topbarRight && <div className="hidden sm:flex flex-shrink-0">{topbarRight}</div>}
         </div>
       </header>
@@ -230,6 +235,8 @@ export default function ManagerShell({
           </div>
         </>
       )}
+      {/* W3: глобальный поиск Cmd+K — слушает hotkey на window */}
+      <CommandPalette />
     </Page>
   )
 }

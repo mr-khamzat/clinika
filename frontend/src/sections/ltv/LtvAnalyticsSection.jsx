@@ -23,7 +23,7 @@ import api from '../../api'
 import { API_BASE, SLUG } from '../../config'
 import {
   Card, KpiCard, KpiRow, Tabs, Button, Chip, EmptyState, useToast,
-  ClinicScopeSelector,
+  ClinicScopeSelector, Skeleton, TableSkeleton,
 } from '../../design'
 import useClinicScope from '../../lib/useClinicScope'
 
@@ -559,10 +559,25 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
   }
 
   if (loading) {
+    // W3: shimmer-плейсхолдеры вместо текстового «Загрузка…»
     return (
-      <Card>
-        <div style={{ padding: 24, color: 'var(--fg-3)' }}>Загрузка LTV-аналитики…</div>
-      </Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <Card>
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Skeleton width={180} height={14} />
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {[0, 1, 2, 3].map(i => (
+                <Skeleton key={i} width={160} height={72} variant="rect" />
+              ))}
+            </div>
+          </div>
+        </Card>
+        <Card>
+          <div style={{ padding: 16 }}>
+            <TableSkeleton rows={6} cols={5} rowHeight={20} />
+          </div>
+        </Card>
+      </div>
     )
   }
 

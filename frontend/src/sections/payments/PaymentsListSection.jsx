@@ -12,6 +12,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import api from '../../api'
+import { useConfirm, EmptyState } from '../../design'
 
 const STATUS_LABEL = {
   pending: { text: 'Ожидает', color: '#f59e0b' },
@@ -27,6 +28,8 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
   const [statusFilter, setStatusFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [refundingId, setRefundingId] = useState(null)
+  // Замена window.confirm на Modal-диалог из design-system
+  const { confirm, ConfirmHost } = useConfirm()
 
   const _toast = (kind, msg) => {
     if (typeof showToast === 'function') showToast(kind, msg)
@@ -52,7 +55,8 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
   }, [load])
 
   const handleRefund = async (id) => {
-    if (!window.confirm('Сделать полный возврат?')) return
+    const ok = await confirm('Сделать полный возврат?', { okText: 'Вернуть', danger: true })
+    if (!ok) return
     setRefundingId(id)
     try {
       await api.post(`/payments/${id}/refund`, {})
@@ -89,7 +93,11 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
           <div className="w-7 h-7 border-4 border-[#0097A7] border-t-transparent rounded-full animate-spin" />
         </div>
       ) : items.length === 0 ? (
-        <div className="text-sm text-gray-500 py-8 text-center">Нет платежей</div>
+        <EmptyState
+          icon={<span className="material-symbols-outlined" style={{ fontSize: 24 }}>payments</span>}
+          title="Нет платежей"
+          message="Здесь появятся оплаты пациентов после первой транзакции."
+        />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
           <table className="w-full text-sm">
@@ -146,6 +154,7 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
           </table>
         </div>
       )}
+      <ConfirmHost />
     </div>
   )
 }

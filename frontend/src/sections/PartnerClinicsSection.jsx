@@ -114,7 +114,7 @@ const HINT_TEXT = (
 
 // ── Модалка редактирования контракта ─────────────────────────────────────────
 function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
-  const toast = useToast()
+  const { toast } = useToast()
   const [form, setForm] = useState({
     contract_type: '',
     royalty_percent: '',
@@ -144,17 +144,17 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
   const submit = async () => {
     // ── Валидация: тип контракта обязателен; ставки соответствуют типу ────
     if (!form.contract_type) {
-      toast?.error?.('Выберите тип контракта') || alert('Выберите тип контракта')
+      toast?.('Выберите тип контракта', 'error')
       return
     }
     if ((form.contract_type === 'royalty' || form.contract_type === 'hybrid')
         && (form.royalty_percent === '' || Number.isNaN(Number(form.royalty_percent)))) {
-      toast?.error?.('Укажите процент роялти')
+      toast?.('Укажите процент роялти', 'error')
       return
     }
     if ((form.contract_type === 'per_referral' || form.contract_type === 'hybrid')
         && (form.bonus_per_referral === '' || Number.isNaN(Number(form.bonus_per_referral)))) {
-      toast?.error?.('Укажите бонус за направление')
+      toast?.('Укажите бонус за направление', 'error')
       return
     }
 
@@ -172,12 +172,12 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
         `/franchise-owner/partner-clinics/${partner.id}/contract`,
         body,
       )
-      toast?.success?.('Контракт обновлён')
+      toast?.('Контракт обновлён', 'success')
       onSaved?.()
       onClose?.()
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
-      toast?.error?.('Ошибка: ' + msg)
+      toast?.('Ошибка: ' + msg, 'error')
     } finally {
       setSaving(false)
     }
@@ -278,7 +278,7 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
 
 // ── Главный экспорт секции ───────────────────────────────────────────────────
 export default function PartnerClinicsSection({ adminToken }) {
-  const toast = useToast()
+  const { toast } = useToast()
   const confirm = useConfirm()
   const [partners, setPartners] = useState([])
   const [loading, setLoading] = useState(true)
@@ -325,11 +325,11 @@ export default function PartnerClinicsSection({ adminToken }) {
         `/admin/tenants/${tenantId}/modules/ltv_pro/enable`,
         { billing_cycle: 'monthly', trial_days: 14 },
       )
-      toast?.success?.('LTV-аналитика подключена (trial 14 дней)')
+      toast?.('LTV-аналитика подключена (trial 14 дней, 'success')')
       setLtvByTenant(prev => ({ ...prev, [tenantId]: true }))
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
-      toast?.error?.('Ошибка подключения: ' + msg)
+      toast?.('Ошибка подключения: ' + msg, 'error')
     } finally {
       setEnablingLtv(s => ({ ...s, [tenantId]: false }))
     }
@@ -342,7 +342,7 @@ export default function PartnerClinicsSection({ adminToken }) {
       setPartners(Array.isArray(r.data) ? r.data : [])
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
-      toast?.error?.('Не удалось загрузить партнёров: ' + msg)
+      toast?.('Не удалось загрузить партнёров: ' + msg, 'error')
       setPartners([])
     } finally {
       setLoading(false)
@@ -362,7 +362,7 @@ export default function PartnerClinicsSection({ adminToken }) {
       return r.data
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
-      toast?.error?.('Ошибка расчёта: ' + msg)
+      toast?.('Ошибка расчёта: ' + msg, 'error')
       return null
     }
   }
@@ -402,11 +402,11 @@ export default function PartnerClinicsSection({ adminToken }) {
         `/franchise-owner/partner-clinics/${partner.id}/${action}`,
         null,
       )
-      toast?.success?.(`Готово: ${label.toLowerCase()}`)
+      toast?.(`Готово: ${label.toLowerCase(, 'success')}`)
       await reload()
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
-      toast?.error?.('Ошибка: ' + msg)
+      toast?.('Ошибка: ' + msg, 'error')
     }
   }
 

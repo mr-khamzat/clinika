@@ -158,7 +158,10 @@ function googleCalendarUrl(apt) {
 
 // "Чек" визита — открываем красивую HTML-страницу для печати/сохранения в PDF
 // (window.print() поддерживает любые шрифты браузера, включая кириллицу).
-// Принимает опциональный toast(message, level) для уведомлений вместо alert
+// Принимает опциональный toast(message, level) для уведомлений вместо alert.
+// TODO(W3): функция top-level — нет доступа к хуку useToast.
+//   Передаём toast через notify-параметр из вызывающего компонента;
+//   alert() остаётся как deep-fallback на случай вызова без notify.
 function downloadVisitPdf(visit, patient, notify) {
   try {
     const services = Array.isArray(visit.services) ? visit.services : []

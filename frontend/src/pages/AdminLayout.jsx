@@ -32,6 +32,9 @@ const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatri
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
+// W3: глобальный поиск Cmd+K и центр уведомлений
+import CommandPalette from '../components/CommandPalette'
+import NotificationsBell from '../components/NotificationsBell'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 // ── Единый хук переключения темы (общий для всех кабинетов) ─────────────
 import useTheme from '../lib/useTheme'
@@ -7733,7 +7736,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               <span style={{ color: 'var(--accent)', letterSpacing: '0.06em' }}>ПЛАТФОРМА</span>
             </span>
 
-            {/* Уведомления (бейдж обращений) */}
+            {/* Центр уведомлений (W3) — общий dropdown для audit/activity/contacts */}
+            <NotificationsBell size={40} variant="square" />
+
+            {/* Уведомления (бейдж обращений) — старая кнопка, ведёт в раздел /contacts */}
             <button
               onClick={() => contactsBadge > 0 && handleNav('contacts')}
               className="admin-tap-44 grid place-items-center flex-shrink-0 relative"
@@ -7742,10 +7748,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
                 background: 'var(--bg-1)', border: '1px solid var(--border)',
                 color: 'var(--fg-2)', cursor: contactsBadge > 0 ? 'pointer' : 'default',
               }}
-              aria-label="Уведомления"
-              title={contactsBadge > 0 ? `Новых обращений: ${contactsBadge}` : 'Уведомлений нет'}
+              aria-label="Обращения клиентов"
+              title={contactsBadge > 0 ? `Новых обращений: ${contactsBadge}` : 'Обращений нет'}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>notifications</span>
+              <span className="material-symbols-outlined" style={{ fontSize: 19 }}>support_agent</span>
               {contactsBadge > 0 && (
                 <span
                   className="absolute font-bold grid place-items-center"
@@ -8014,6 +8020,9 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       )}
 
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
+
+      {/* W3: глобальный поиск Cmd+K */}
+      <CommandPalette />
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`

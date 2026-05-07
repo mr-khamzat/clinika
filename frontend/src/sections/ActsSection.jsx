@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import { useConfirm } from '../design';
 
 const STATUS_LABELS = {
   draft: { label: 'Черновик', color: '#9e9e9e' },
@@ -18,6 +19,8 @@ export default function ActsSection({ token, isSuperAdmin }) {
   const [signModal, setSignModal] = useState(null);
   const [signerName, setSignerName] = useState('');
   const [msg, setMsg] = useState('');
+  // Замена window.confirm на Modal-диалог из design-system
+  const { confirm, ConfirmHost } = useConfirm();
 
   useEffect(() => { load(); }, [filter]);
 
@@ -85,7 +88,8 @@ export default function ActsSection({ token, isSuperAdmin }) {
 
   // Электронная подпись (внутренняя, без КЭП — TODO: реальная ЭЦП)
   async function signElectronic(act) {
-    if (!window.confirm('Подписать акт электронной подписью? Это действие необратимо.')) return;
+    const ok = await confirm('Подписать акт электронной подписью? Это действие необратимо.', { okText: 'Подписать', danger: true });
+    if (!ok) return;
     try {
       await api.post(`/acts/${act.id || act.act_number}/sign-electronic`, {});
       setMsg('Акт подписан электронно ✓');
@@ -187,6 +191,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
           </div>
         </div>
       )}
+      <ConfirmHost />
     </div>
   );
 }

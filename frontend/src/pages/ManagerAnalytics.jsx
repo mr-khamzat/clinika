@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { getAnalytics } from '../api'
-import { Card, Chip, KpiCard, KpiRow, EmptyState, Tabs, ClinicScopeSelector } from '../design'
+import { Card, Chip, KpiCard, KpiRow, EmptyState, Tabs, ClinicScopeSelector, Skeleton, TableSkeleton } from '../design'
 import useClinicScope from '../lib/useClinicScope'
 import ManagerShell from './_ManagerShell'
 
@@ -176,11 +176,26 @@ export default function ManagerAnalytics() {
       )}
 
       {tab === 'overview' && (loading ? (
-        <Card>
-          <div className="flex items-center justify-center py-16">
-            <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+        // W3: shimmer-плейсхолдеры вместо спиннера при загрузке всей секции
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <Card>
+            <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Skeleton width={140} height={11} />
+              <Skeleton width={200} height={48} variant="rect" />
+              <Skeleton width="60%" height={12} />
+            </div>
+          </Card>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12 }}>
+            {[0, 1, 2, 3].map(i => (
+              <Skeleton key={i} width="100%" height={84} variant="rect" />
+            ))}
           </div>
-        </Card>
+          <Card>
+            <div style={{ padding: 16 }}>
+              <TableSkeleton rows={5} cols={4} rowHeight={20} />
+            </div>
+          </Card>
+        </div>
       ) : (
         <>
           {/* ─── Hero ─── */}

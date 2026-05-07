@@ -80,6 +80,9 @@ from app.routers.ltv import router as ltv_router
 from app.routers.clinic_payments import router as clinic_payments_router
 from app.routers.fiscal_receipts import router as fiscal_receipts_router
 from app.routers.admin_logs import router as admin_logs_router
+# Глобальный поиск Cmd+K и центр уведомлений (W3 UX-улучшения)
+from app.routers.search import router as search_router
+from app.routers.notifications import router as notifications_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -1071,6 +1074,9 @@ app.include_router(clinic_payments_router)
 app.include_router(fiscal_receipts_router)
 # Live tail логов backend для super_admin (debug инструмент)
 app.include_router(admin_logs_router)
+# W3: глобальный поиск /search (Cmd+K) + центр уведомлений
+app.include_router(search_router)
+app.include_router(notifications_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
