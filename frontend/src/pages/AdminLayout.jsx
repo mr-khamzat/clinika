@@ -30,7 +30,7 @@ const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekSchedu
 // В /admin (super_admin) используем mode="admin" + селектор тенанта внутри секции.
 const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
 // W4 — Аудит-лог как отдельная секция с Tabs «Лента» / «Поиск» + экспорт CSV.
-const AuditLogSection = lazy(() => import('../sections/AuditLogSection'))
+// AuditLogSection lazy откатили — был баг, используется inline AuditSection
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -55,7 +55,6 @@ import {
   Button as DSButton,
   KpiCard as DSKpiCard,
   KpiRow as DSKpiRow,
-  Breadcrumbs as DSBreadcrumbs,
   useToast,
   useConfirm,
 } from '../design'
@@ -7354,7 +7353,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       // W4: новый journal с Tabs «Лента» / «Поиск» + экспорт CSV.
       // Inline-компонент <AuditSection> сохранён ниже как fallback / источник
       // helpers (flagFromCountry, formatGeoLocation), но рендерится новый.
-      case 'audit':          return <Suspense fallback={<SectionLoader />}><AuditLogSection token={adminToken} /></Suspense>
+      case "audit": return <AuditSection token={adminToken} />
       case 'billing':        return <BillingSection token={adminToken} />
       case 'billing_ledger': return <Suspense fallback={<SectionLoader />}><BillingLedgerSection token={adminToken} /></Suspense>
       case 'monitoring':     return <MonitoringSection token={adminToken} />
