@@ -9,6 +9,7 @@
  */
 import { useState } from 'react'
 import api from '../api'
+import { SLUG } from '../config'
 import AppointmentsCalendarSection from '../sections/AppointmentsCalendarSection'
 import AppointmentsStatsSection from '../sections/AppointmentsStatsSection'
 import { Tabs } from '../design'
@@ -16,8 +17,11 @@ import ManagerShell from './_ManagerShell'
 
 export default function ManagerAppointments() {
   const [view, setView] = useState('calendar')
+  // Получаем токен динамически по slug текущего тенанта (а не хардкод 'arc'),
+  // чтобы запись работала для любого тенанта (#23).
   const token =
     api.defaults?.headers?.common?.Authorization?.replace(/^Bearer\s+/, '') ||
+    localStorage.getItem('clinika_token_' + SLUG) ||
     localStorage.getItem('clinika_token_arc') ||
     localStorage.getItem('clinika_token')
 

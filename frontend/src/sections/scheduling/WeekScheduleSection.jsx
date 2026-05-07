@@ -150,19 +150,33 @@ export default function WeekScheduleSection({
 
   // Действия
   const onCreate = async (form) => {
+    // Защита от race-condition: запрос на /doctors ещё не вернулся → doctorId='' → 422
+    if (!doctorId) {
+      throw new Error('Сначала выберите врача (список ещё загружается)')
+    }
+    if (!form.patient_phone || !form.patient_phone.trim()) {
+      throw new Error('Укажите телефон пациента')
+    }
     try {
       await axios.post(`${API_BASE}/appointments`, {
         doctor_id: doctorId,
         appointment_date: bookModal.date,
         start_time: bookModal.start_time,
-        patient_phone: form.patient_phone,
-        patient_name: form.patient_name,
-        notes: form.notes,
+        patient_phone: form.patient_phone.trim(),
+        patient_name: form.patient_name || null,
+        notes: form.notes || null,
       }, { headers: authH(token) })
       setBookModal(null)
       reload()
     } catch (e) {
-      throw new Error(e?.response?.data?.detail || 'Ошибка создания')
+      // FastAPI 422 возвращает detail как массив объектов — превращаем в строку,
+      // иначе пользователь видел "[object Object]" (#23).
+      const det = e?.response?.data?.detail
+      let msg = 'Ошибка создания'
+      if (typeof det === 'string') msg = det
+      else if (Array.isArray(det) && det.length) msg = det.map(x => x?.msg || JSON.stringify(x)).join('; ')
+      else if (e?.message) msg = e.message
+      throw new Error(msg)
     }
   }
 
