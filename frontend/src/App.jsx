@@ -24,6 +24,7 @@ import ScanScreen from './pages/ScanScreen'
 import History from './pages/History'
 import Bonuses from './pages/Bonuses'
 import Landing from './pages/Landing'
+import Franchise from './pages/Franchise'
 import ProfileSetup from './pages/ProfileSetup'
 import InviteRegister from './pages/InviteRegister'
 import InviteAccept from './pages/InviteAccept'
@@ -250,6 +251,12 @@ function AppRouter() {
         </Suspense>
       </BrowserRouter>
     )
+  }
+
+  // ─── Публичная страница франшизы (/franchise) — без auth ───
+  // Этап 6 ROADMAP: отдельный лендинг для будущих франчайзи.
+  if (path === '/franchise' || path === '/franchise/') {
+    return <Franchise />
   }
 
   // Корневой лендинг (/) — показываем Landing без slug-роутинга.
