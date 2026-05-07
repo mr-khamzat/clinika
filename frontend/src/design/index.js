@@ -28,3 +28,4 @@ export { default as InfoHint } from './components/InfoHint'
 export { default as ClinicScopeSelector } from './components/ClinicScopeSelector'
 // Skeleton loaders — shimmer-плейсхолдеры (W3 UX-улучшения)
 export { default as Skeleton, TableSkeleton } from './components/Skeleton'
+export { default as Breadcrumbs } from './components/Breadcrumbs'

@@ -29,6 +29,8 @@ const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekSchedu
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 // В /admin (super_admin) используем mode="admin" + селектор тенанта внутри секции.
 const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
+// W4 — Аудит-лог как отдельная секция с Tabs «Лента» / «Поиск» + экспорт CSV.
+const AuditLogSection = lazy(() => import('../sections/AuditLogSection'))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -53,6 +55,7 @@ import {
   Button as DSButton,
   KpiCard as DSKpiCard,
   KpiRow as DSKpiRow,
+  Breadcrumbs as DSBreadcrumbs,
   useToast,
   useConfirm,
 } from '../design'
@@ -7219,6 +7222,9 @@ function CallsConfigSection({ token }) {
 
 export default function AdminLayout({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
+  // W4: третий уровень хлебных крошек — для выбранного тенанта/счёта/события.
+  // Дочерние секции могут вызывать setBreadcrumbExtra(label) при детализации.
+  const [breadcrumbExtra, setBreadcrumbExtra] = useState(null)
   const [moreOpen, setMoreOpen]   = useState(false)
   // Единая тема (localStorage 'clinika-theme') — общий хук с другими кабинетами
   const { isDark: dark, toggle: toggleDark } = useTheme()
@@ -7249,6 +7255,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   }, [])
   // Закрытие drawer при смене раздела (мобильный UX)
   useEffect(() => { setDrawerOpen(false) }, [activeSection])
+  // W4: сбрасываем третий уровень breadcrumbs при переходе между разделами
+  useEffect(() => { setBreadcrumbExtra(null) }, [activeSection])
 
   // ── Загрузка брендинга тенанта (цвета, шрифт, лого) ─────────────────────
   // Использует общий applyTenantTheme из utils/ThemeLoader, чтобы CSS-переменные
@@ -7343,7 +7351,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'wiki':           return <Suspense fallback={null}><WikiSection token={adminToken} /></Suspense>
       case 'settings':       return <SettingsSection token={adminToken} />
       case 'analytics':      return <AnalyticsDrillSection token={adminToken} />
-      case 'audit':          return <AuditSection token={adminToken} />
+      // W4: новый journal с Tabs «Лента» / «Поиск» + экспорт CSV.
+      // Inline-компонент <AuditSection> сохранён ниже как fallback / источник
+      // helpers (flagFromCountry, formatGeoLocation), но рендерится новый.
+      case 'audit':          return <Suspense fallback={<SectionLoader />}><AuditLogSection token={adminToken} /></Suspense>
       case 'billing':        return <BillingSection token={adminToken} />
       case 'billing_ledger': return <Suspense fallback={<SectionLoader />}><BillingLedgerSection token={adminToken} /></Suspense>
       case 'monitoring':     return <MonitoringSection token={adminToken} />
@@ -7399,6 +7410,31 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
   // ── Подпись страницы для PageHeader (premium-обёртка над секциями) ──────
   const pageMeta = PAGE_TITLES[activeSection] || { title: activeNavItem?.label || 'Обзор', subtitle: '' }
+
+  // ── Breadcrumbs (W4) ──────────────────────────────────────────────────────
+  // Формируем цепочку «Группа → Раздел → [подэлемент]».
+  // Подэлемент задаётся через `breadcrumbExtra` (state) — заполняется из
+  // дочерних секций при выборе сущности (тенант / счёт / событие аудита).
+  // Сейчас извлекаем только первые два уровня; третий — пустой по умолчанию.
+  const navGroupKey = NAV_GROUP_OF[activeSection] || 'PLATFORM'
+  const navGroupTitle = NAV_GROUP_TITLES[navGroupKey] || ''
+  const breadcrumbItems = (() => {
+    const items = []
+    if (navGroupTitle) items.push({ label: navGroupTitle })
+    if (pageMeta?.title) items.push({ label: pageMeta.title })
+    // Если в state есть extra (например выбранная сущность) — добавляем
+    if (breadcrumbExtra) {
+      // Заменяем последний пункт на link, чтобы кликом возвращаться к разделу
+      if (items.length >= 1) {
+        items[items.length - 1] = {
+          label: items[items.length - 1].label,
+          to: () => setBreadcrumbExtra(null),
+        }
+      }
+      items.push({ label: breadcrumbExtra })
+    }
+    return items
+  })()
 
   // ── Группировка nav-item'ов сайдбара по логическим группам ──────────────
   const navGroups = NAV_GROUP_ORDER
@@ -7737,7 +7773,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             </span>
 
             {/* Центр уведомлений (W3) — общий dropdown для audit/activity/contacts */}
-            {/* <NotificationsBell size={40} variant="square" /> временно отключён, infinite re-render */}
+            <NotificationsBell size={40} variant="square" />
 
             {/* Уведомления (бейдж обращений) — старая кнопка, ведёт в раздел /contacts */}
             <button
@@ -7833,6 +7869,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             style={{ overflowX: 'hidden', maxWidth: '100%' }}
           >
             <div className="mx-auto" style={{ maxWidth: 1280 }}>
+              {/* W4 — Breadcrumbs: «Группа → Раздел → [подэлемент]» */}
+              <DSBreadcrumbs items={breadcrumbItems} />
               <DSPageHeader
                 title={pageMeta.title}
                 subtitle={pageMeta.subtitle}
@@ -8022,7 +8060,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
 
       {/* W3: глобальный поиск Cmd+K */}
-      {/* <CommandPalette /> временно отключён, infinite re-render */}
+      <CommandPalette />
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`

@@ -4,15 +4,19 @@
 
 Эндпоинты:
   GET /audit/log                         — все события (manager)
+  GET /audit/log/export.csv              — выгрузка журнала в CSV (UTF-8 BOM)
   GET /audit/log/{entity_type}/{id}      — история конкретной сущности
   GET /audit/log/actor/{user_id}         — действия конкретного актора
   GET /audit/actions                     — список известных типов действий
 """
+import csv
+import io
 import uuid
 from typing import Optional
 from datetime import datetime, date, timedelta
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,6 +96,71 @@ async def get_audit_log(
         "offset":  offset,
         "items":   [_entry_out(e) for e in entries],
     }
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# GET /audit/log/export.csv — выгрузка журнала в CSV (UTF-8 BOM, ; для Excel)
+# Зарегистрирован ДО /log/{entity_type}/{entity_id}, чтобы FastAPI выбирал
+# статический путь "export.csv" — хотя сегментов разное число, явный порядок
+# защищает от регрессий при будущих правках сигнатур.
+# ───────────────────────────────────────────────────────────────────────────
+@router.get("/log/export.csv", dependencies=[_feat])
+async def export_audit_log_csv(
+    action: Optional[str]      = Query(None, description="Фильтр по типу действия"),
+    entity_type: Optional[str] = Query(None),
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(5000, ge=1, le=20000),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """CSV-выгрузка аудит-журнала. UTF-8 BOM + разделитель «;» для Excel."""
+    d_from = datetime.utcnow() - timedelta(days=days)
+    filters = [AuditEntry.created_at >= d_from]
+    if current_user.tenant_id is not None:
+        filters.append(AuditEntry.tenant_id == current_user.tenant_id)
+    if action:
+        filters.append(AuditEntry.action == action)
+    if entity_type:
+        filters.append(AuditEntry.entity_type == entity_type)
+
+    q = await db.execute(
+        select(AuditEntry)
+        .where(and_(*filters))
+        .order_by(AuditEntry.created_at.desc())
+        .limit(limit)
+    )
+    rows = q.scalars().all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, delimiter=";", quoting=csv.QUOTE_MINIMAL)
+    writer.writerow([
+        "Дата", "Действие", "Тип сущности", "ID сущности",
+        "Актор", "IP", "Страна", "Город",
+        "Состояние до", "Состояние после", "Комментарий",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.created_at.strftime("%d.%m.%Y %H:%M:%S") if r.created_at else "",
+            r.action or "",
+            r.entity_type or "",
+            str(r.entity_id) if r.entity_id else "",
+            r.actor_name or (str(r.actor_id) if r.actor_id else ""),
+            r.ip_address or "",
+            r.geo_country_name or r.geo_country or "",
+            r.geo_city or "",
+            (str(r.before)[:500] if r.before else ""),
+            (str(r.after)[:500]  if r.after  else ""),
+            (r.comment or "")[:300],
+        ])
+
+    # UTF-8 BOM для корректного Excel
+    body = ("﻿" + buf.getvalue()).encode("utf-8")
+    filename = f"audit-{datetime.utcnow().strftime('%Y-%m-%d')}.csv"
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/log/{entity_type}/{entity_id}", dependencies=[_feat])
