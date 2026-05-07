@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import api from '../api'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
@@ -10,6 +10,8 @@ import VisitingDoctorCabinet from './VisitingDoctorCabinet'
 import InviteAccept from './InviteAccept'
 import PatientCabinet from './PatientCabinet'
 import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
+// W4: Onboarding wizard — показывается franchise_owner до завершения первичной настройки
+const OnboardingWizard = lazy(() => import('./onboarding/OnboardingWizard'))
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 import CallWidget from '../components/CallWidget'
 import { loadTheme } from '../utils/ThemeLoader'
@@ -143,8 +145,15 @@ export default function AdminRoot() {
   }
 
   // ── Владелец франшизы → отдельный кабинет (НЕ AdminLayout — это платформа).
+  // W4: Если онбординг ещё не завершён — показываем мастер вместо обычного кабинета.
+  // Состояние мастера определяется через GET /onboarding/status (см. ниже Wrapper).
   if (role === 'franchise_owner') {
-    return <><FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return (
+      <>
+        <FranchiseOwnerWithOnboarding adminToken={adminToken} user={user} onLogout={handleLogout} />
+        <CallWidget />
+      </>
+    )
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
@@ -176,4 +185,62 @@ export default function AdminRoot() {
       </div>
     </div>
   )
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// W4: FranchiseOwnerWithOnboarding
+// Wrapper для franchise_owner: проверяет состояние мастера онбординга
+// (GET /onboarding/status). Если не завершён — показывает <OnboardingWizard>,
+// иначе — обычный <FranchiseOwnerCabinet>.
+// super_admin может зайти в кабинет в любой момент через query ?skip_onboarding=1
+// ───────────────────────────────────────────────────────────────────────────
+function FranchiseOwnerWithOnboarding({ adminToken, user, onLogout }) {
+  const [status, setStatus] = useState(null) // null=loading, false=загружен и не нужен, true=показать wizard
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    // ?skip_onboarding=1 в URL — экстренно пропустить мастер (для super_admin)
+    const skipFlag = new URLSearchParams(window.location.search).get('skip_onboarding')
+    if (skipFlag === '1') { setStatus(false); setLoading(false); return }
+
+    api.get('/onboarding/status')
+      .then((res) => {
+        if (cancelled) return
+        // Если completed=true — кабинет, иначе — wizard
+        setStatus(!res.data?.completed)
+      })
+      .catch((err) => {
+        // 404 «нет франшизы» — пропускаем мастер, чтобы кабинет показал свою ошибку
+        if (cancelled) return
+        console.warn('[onboarding/status]', err?.response?.status)
+        setStatus(false)
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg, #f6f7fa)' }}>
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Проверка настройки франшизы...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === true) {
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
+        <OnboardingWizard
+          user={user}
+          onComplete={() => setStatus(false)}
+        />
+      </Suspense>
+    )
+  }
+
+  return <FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={onLogout} />
 }

@@ -15,7 +15,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 from sqlalchemy import Numeric, Integer, String, Boolean, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
@@ -52,6 +52,14 @@ class Franchise(Base):
     billing_period_days:    Mapped[int]     = mapped_column(Integer, nullable=False, default=30)
     last_invoice_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # ── Onboarding wizard (W4) ─────────────────────────────────────────────────
+    # Состояние пошагового мастера для нового franchise_owner. После завершения
+    # `onboarding_done=True` — кабинет открывается в обычном режиме.
+    onboarding_done: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    onboarding_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    onboarding_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False

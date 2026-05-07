@@ -83,6 +83,8 @@ from app.routers.admin_logs import router as admin_logs_router
 # Глобальный поиск Cmd+K и центр уведомлений (W3 UX-улучшения)
 from app.routers.search import router as search_router
 from app.routers.notifications import router as notifications_router
+# W4: Пошаговый wizard онбординга для franchise_owner
+from app.routers.onboarding import router as onboarding_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -1077,6 +1079,8 @@ app.include_router(admin_logs_router)
 # W3: глобальный поиск /search (Cmd+K) + центр уведомлений
 app.include_router(search_router)
 app.include_router(notifications_router)
+# W4: Onboarding wizard для franchise_owner
+app.include_router(onboarding_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
