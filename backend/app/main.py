@@ -79,6 +79,7 @@ from app.routers.ltv import router as ltv_router
 # Платёжный каркас (online_payments_pro + fiscal_54fz_pro)
 from app.routers.clinic_payments import router as clinic_payments_router
 from app.routers.fiscal_receipts import router as fiscal_receipts_router
+from app.routers.admin_logs import router as admin_logs_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -540,6 +541,42 @@ async def referral_reminder_author_job():
         log.error(f"referral_reminder_author: {e}")
 
 
+async def health_watchdog_job():
+    """APScheduler: каждые 5 мин дёргаем /health сами себя.
+
+    После 5 фейлов подряд — шлём Telegram-алерт админу. После восстановления —
+    отдельное «✅ Сервер восстановился». Состояние храним прямо в атрибутах
+    функции (fail_count, alert_sent), чтобы не плодить глобалы.
+    """
+    import httpx as _httpx
+    from app.services.alert_service import send_alert_health, send_alert_recovery
+
+    state = health_watchdog_job  # храним состояние в самой функции
+    if not hasattr(state, "fail_count"):
+        state.fail_count = 0
+        state.alert_sent = False
+
+    ok = False
+    try:
+        async with _httpx.AsyncClient(timeout=5) as client:
+            r = await client.get("http://localhost:8000/health")
+            ok = (r.status_code == 200)
+    except Exception:
+        ok = False
+
+    if ok:
+        if state.alert_sent:
+            await send_alert_recovery()
+        state.fail_count = 0
+        state.alert_sent = False
+        return
+
+    state.fail_count += 1
+    if state.fail_count >= 5 and not state.alert_sent:
+        await send_alert_health(state.fail_count)
+        state.alert_sent = True
+
+
 async def geoip_initial_download_if_missing():
     """При первом старте после деплоя — скачать mmdb если файла ещё нет."""
     import logging, os
@@ -600,6 +637,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(geoip_update_job, 'cron', day_of_week='mon', hour=3, minute=0, id='geoip_update', replace_existing=True)
     # LTV-аналитика: ежедневный пересчёт снапшотов в 04:00 UTC
     scheduler.add_job(run_ltv_job, 'cron', hour=4, minute=0, id='ltv_recompute', replace_existing=True)
+    # Мониторинг: watchdog /health → Telegram-алерт после 5 фейлов подряд
+    scheduler.add_job(health_watchdog_job, 'interval', minutes=5, id='health_watchdog', replace_existing=True)
     scheduler.start()
     # При первом запуске (если mmdb ещё нет) — скачать в фоне, чтобы не блокировать старт
     asyncio.create_task(geoip_initial_download_if_missing())
@@ -934,6 +973,39 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 @app.middleware("http")
+async def telegram_alert_middleware(request: Request, call_next):
+    """Catch-all 500: при любой 5xx или unhandled exception шлём Telegram-алерт.
+
+    Внутренняя логика — в app.services.alert_service. Дедупликация (10 минут)
+    защищает чат от спама при сломанном endpoint'е.
+    """
+    try:
+        response = await call_next(request)
+        if response.status_code >= 500:
+            from app.services.alert_service import send_alert_500
+            asyncio.create_task(send_alert_500(
+                method=request.method,
+                path=str(request.url.path),
+                status=response.status_code,
+                client_ip=request.client.host if request.client else "?",
+            ))
+        return response
+    except Exception as e:
+        # Поймали unhandled exception — отдаём дальше FastAPI, но успеваем
+        # уведомить Telegram (asyncio.create_task → не блокируем raise).
+        import traceback
+        from app.services.alert_service import send_alert_exception
+        asyncio.create_task(send_alert_exception(
+            method=request.method,
+            path=str(request.url.path),
+            exc=e,
+            tb=traceback.format_exc(),
+            client_ip=request.client.host if request.client else "?",
+        ))
+        raise  # пусть дальше обрабатывает FastAPI
+
+
+@app.middleware("http")
 async def prometheus_middleware(request: Request, call_next):
     return await metrics_middleware(request, call_next)
 
@@ -997,6 +1069,8 @@ app.include_router(ltv_router)
 # Платёжный каркас (online_payments_pro + fiscal_54fz_pro)
 app.include_router(clinic_payments_router)
 app.include_router(fiscal_receipts_router)
+# Live tail логов backend для super_admin (debug инструмент)
+app.include_router(admin_logs_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
@@ -1008,3 +1082,10 @@ plugin_registry.register(ReviewsPlugin())
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "clinika-backend"}
+
+
+@app.get("/_test_alert_500", include_in_schema=False)
+async def _test_alert_500():
+    """Тестовый endpoint — намеренно бросает исключение, чтобы проверить
+    Telegram-алерт через telegram_alert_middleware. Не светим в Swagger."""
+    raise RuntimeError("Тестовый алерт: проверка Telegram-уведомлений (это не баг)")
