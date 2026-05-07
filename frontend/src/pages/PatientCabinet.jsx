@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
-import { useToast, useConfirm } from '../design'
+// Дизайн-система: Card/Button/Chip/Tabs/EmptyState/Modal + хуки уведомлений
+import { Card, Button, Chip, Tabs, EmptyState, Modal, useToast, useConfirm } from '../design'
 
 // Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
 const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
@@ -349,6 +350,9 @@ function QrFullscreen({ qr, onClose }) {
 }
 
 // ── Login Screen ──────────────────────────────────────────────────────────────
+// TODO(design-system): Логин-экран сохраняем с собственным премиум-glassmorphism дизайном
+//   (gradient background, blur-card). Переход на <Card>/<Button> сломает уникальный
+//   look-and-feel брендового экрана входа. Будет переосмыслено отдельно в рамках Этапа 6.
 function LoginScreen({ onLogin, errorMsg }) {
   const [code, setCode] = useState('')
   const [phone, setPhone] = useState('+7')
@@ -416,14 +420,22 @@ function LoginScreen({ onLogin, errorMsg }) {
   )
 }
 
-// ── Status Badge ──────────────────────────────────────────────────────────────
+// ===== БЛОК: Status Badge — статус направления =====
+// Маппинг статусов на Chip-варианты дизайн-системы (good/warn/bad/default).
+const STATUS_VARIANT = {
+  created:          'accent',
+  confirmed:        'good',
+  expired:          'default',
+  cancel_requested: 'warn',
+  cancelled:        'bad',
+}
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || { label: status, dot: '#9CA3AF', bg: 'rgba(156,163,175,.1)', text: '#6B7280' }
+  const cfg = STATUS_CFG[status] || { label: status }
+  const variant = STATUS_VARIANT[status] || 'default'
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: c.bg, color: c.text }}>
-      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.dot }} />
-      {c.label}
-    </span>
+    <Chip variant={variant} dot className="font-bold">
+      {cfg.label}
+    </Chip>
   )
 }
 
@@ -749,29 +761,27 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
         )}
       </div>
 
-      {/* Confirm-модалка отмены */}
-      {confirming && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={() => !cancelling && setConfirming(false)}>
-          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 text-base mb-1">Отменить запись?</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              {apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)}{startHHMM ? `, ${startHHMM}` : ''}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setConfirming(false)} disabled={cancelling}
-                className="h-11 rounded-xl border text-sm font-semibold"
-                style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
-                Передумал
-              </button>
-              <button onClick={doCancel} disabled={cancelling}
-                className="h-11 rounded-xl text-sm font-bold text-white"
-                style={{ background: cancelling ? '#FCA5A5' : '#DC2626' }}>
-                {cancelling ? 'Отмена...' : 'Да, отменить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ===== БЛОК: Confirm-модалка отмены через дизайн-систему ===== */}
+      <Modal
+        open={confirming}
+        onClose={() => !cancelling && setConfirming(false)}
+        title="Отменить запись?"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)} disabled={cancelling}>
+              Передумал
+            </Button>
+            <Button variant="danger" onClick={doCancel} disabled={cancelling}>
+              {cancelling ? 'Отмена…' : 'Да, отменить'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm" style={{ color: 'var(--fg-2)' }}>
+          {apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)}{startHHMM ? `, ${startHHMM}` : ''}
+        </p>
+      </Modal>
     </div>
   )
 }
@@ -829,24 +839,27 @@ function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
         </button>
       </div>
 
-      {confirming && (
-        <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={() => !cancelling && setConfirming(false)}>
-          <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl p-5" onClick={e => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 text-base mb-1">Отменить запись?</h3>
-            <p className="text-sm text-gray-500 mb-4">{apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)} {(apt.start_time||'').slice(0,5)}</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setConfirming(false)} disabled={cancelling}
-                className="h-11 rounded-xl border text-sm font-semibold" style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
-                Передумал
-              </button>
-              <button onClick={doCancel} disabled={cancelling}
-                className="h-11 rounded-xl text-sm font-bold text-white" style={{ background: cancelling ? '#FCA5A5' : '#DC2626' }}>
-                {cancelling ? 'Отмена...' : 'Да, отменить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ===== БЛОК: Confirm-модалка отмены через дизайн-систему ===== */}
+      <Modal
+        open={confirming}
+        onClose={() => !cancelling && setConfirming(false)}
+        title="Отменить запись?"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirming(false)} disabled={cancelling}>
+              Передумал
+            </Button>
+            <Button variant="danger" onClick={doCancel} disabled={cancelling}>
+              {cancelling ? 'Отмена…' : 'Да, отменить'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm" style={{ color: 'var(--fg-2)' }}>
+          {apt.doctor_name || 'Врач'} · {fmtAptDate(apt.appointment_date)} {(apt.start_time||'').slice(0,5)}
+        </p>
+      </Modal>
     </>
   )
 }
@@ -1010,15 +1023,11 @@ function ChatTab({ phone, sessionToken }) {
       ) : (
         <div className="flex-1 overflow-y-auto space-y-2 pb-2 -mx-1 px-1">
           {msgs.length === 0 && (
-            <div className="flex flex-col items-center py-10 sm:py-12 text-center">
-              <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-3 sm:mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
-                <span className="material-symbols-outlined text-blue-400 text-3xl">chat_bubble</span>
-              </div>
-              <p className="text-gray-600 font-semibold text-sm">Начните диалог с клиникой</p>
-              <p className="text-gray-400 text-xs mt-1 max-w-xs px-4">
-                Спросите про услуги, цены, расписание врачей. AI-ассистент ответит сразу.
-              </p>
-            </div>
+            <EmptyState
+              icon={<span className="material-symbols-outlined text-3xl">chat_bubble</span>}
+              title="Начните диалог с клиникой"
+              message="Спросите про услуги, цены, расписание врачей. AI-ассистент ответит сразу."
+            />
           )}
           {msgs.map((m, i) => {
             const isPatient = m.sender === 'patient'
@@ -1168,6 +1177,10 @@ function RatingBar({ star, count, total, primary }) {
   )
 }
 
+// TODO(design-system): SheetModal — кастомная bottom-sheet модалка для booking/review
+//   форм. Замена на <Modal> возможна, но эти формы (QuickBook, ReviewForm) активно
+//   используют собственные стили; перевод требует совместного переосмысления формы.
+//   Оставляем как есть до отдельного редизайна форм записи к врачу.
 function SheetModal({ open, onClose, title, children }) {
   if (!open) return null
   return (
@@ -1441,6 +1454,10 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
 }
 
 // ── Перенос записи: модалка с выбором нового слота к тому же врачу ──────────
+// TODO(design-system): RescheduleModal — bottom-sheet с горизонтальным списком
+//   дней и сеткой слотов; на <Modal> легко уносится, но потеряется специфичная
+//   мобильная динамика (max-height, overflow). Переведём при редизайне формы
+//   записи (вместе с QuickBook/SheetModal).
 function RescheduleModal({ apt, primary, onClose, onDone }) {
   // Подгружаем доступность по тому же doctor_id что и в записи
   const dates = Array.from({length:14},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return d })
@@ -1561,6 +1578,11 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
 }
 
 // ── Полноэкранный профиль врача ─────────────────────────────────────────────
+// TODO(design-system): DoctorProfileModal — полноэкранный экран профиля врача
+//   с фиксированным header/footer и сложной структурой. Переход на <Modal>
+//   сломает плавающий action-bar и safe-area inset обработку. Оставляем
+//   с собственной разметкой; компоненты <Card>/<Button> внедрим точечно при
+//   следующем редизайне профиля врача.
 function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory, onClose }) {
   const [profile, setProfile] = useState(null)
   const [profLoading, setPL] = useState(true)
@@ -1834,7 +1856,8 @@ function DoctorsTab({ primary, patientName, patientPhone, onRefreshHistory }) {
   )
 }
 
-// ── HealthHub: подвкладки внутри «Здоровье» ────────────────────────────────
+// ===== БЛОК: HealthHub — подвкладки «Здоровье» (Vitals/MedCard/Prescriptions/Documents) =====
+// Подвкладки переключаются через <Tabs> дизайн-системы (горизонтальный список со скроллом).
 function HealthHub({ sessionToken, phone }) {
   const [sub, setSub] = useState('vitals')
   const SUBS = [
@@ -1843,25 +1866,20 @@ function HealthHub({ sessionToken, phone }) {
     { key: 'prescriptions', label: 'Лекарства',  icon: 'medication' },
     { key: 'documents',     label: 'Документы',  icon: 'folder' },
   ]
+  // items для <Tabs> — лейблы с иконками material-symbols
+  const tabItems = SUBS.map(s => ({
+    id: s.key,
+    label: (
+      <span className="inline-flex items-center gap-1">
+        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{s.icon}</span>
+        {s.label}
+      </span>
+    ),
+  }))
   return (
     <div>
-      <div className="flex gap-1.5 mb-4 overflow-x-auto -mx-1 px-1 pb-1">
-        {SUBS.map(s => {
-          const active = sub === s.key
-          return (
-            <button key={s.key} onClick={() => setSub(s.key)}
-              className="flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition"
-              style={active ? {
-                background: 'linear-gradient(135deg,#0097A7,#0e7490)',
-                color: 'white',
-                boxShadow: '0 4px 14px rgba(14,116,144,0.3)',
-              } : { background: 'white', color: '#475569', border: '1px solid #e5e7eb' }}>
-              <span className="material-symbols-outlined text-[16px]"
-                style={{ fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>{s.icon}</span>
-              {s.label}
-            </button>
-          )
-        })}
+      <div className="mb-4 -mx-1 px-1 overflow-x-auto pb-1">
+        <Tabs items={tabItems} value={sub} onChange={setSub} />
       </div>
       <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
         {sub === 'vitals'        && <VitalsTab sessionToken={sessionToken} phone={phone} />}
@@ -2252,8 +2270,10 @@ export default function PatientCabinet() {
               <p className="text-white font-bold text-sm">Добавить на экран «Домой»</p>
               <p className="text-blue-100 text-xs">Открывать как приложение — вход сохранится</p>
             </div>
-            <button onClick={handleInstall} className="bg-white text-blue-700 rounded-xl px-3 py-1.5 text-xs font-bold flex-shrink-0">Добавить</button>
-            <button onClick={() => setShowInstall(false)} className="text-white/60 text-xl leading-none flex-shrink-0">×</button>
+            {/* Кнопки используют дизайн-систему: secondary (на цветной подложке выглядит как «белая») и ghost для закрытия */}
+            <Button size="sm" variant="secondary" onClick={handleInstall} className="flex-shrink-0">Добавить</Button>
+            <button onClick={() => setShowInstall(false)} aria-label="Закрыть"
+              className="text-white/60 text-xl leading-none flex-shrink-0 w-11 h-11 flex items-center justify-center">×</button>
           </div>
         )}
 
@@ -2313,8 +2333,8 @@ export default function PatientCabinet() {
               </div>
             )}
 
-            {/* Детали приёма */}
-            <div className="bg-white rounded-3xl p-5 space-y-4" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
+            {/* ===== БЛОК: Детали приёма — <Card> дизайн-системы ===== */}
+            <Card className="space-y-4">
               {[
                 { icon: 'calendar_today', label: 'Дата',    value: new Date(data.appointment_date + 'T00:00').toLocaleDateString('ru-RU', { weekday:'long', day:'numeric', month:'long', year:'numeric' }), color: '#0097A7', bg: '#e0f7fa' },
                 { icon: 'schedule',       label: 'Время',   value: (data.start_time || '').slice(0,5) + ' — ' + (data.end_time || '').slice(0,5), color: '#0097A7', bg: '#e0f7fa' },
@@ -2331,7 +2351,7 @@ export default function PatientCabinet() {
                   </div>
                 </div>
               ))}
-            </div>
+            </Card>
 
             {/* Код для врача */}
             {!String(data.status).includes('completed') && data.short_code && (
@@ -2341,10 +2361,10 @@ export default function PatientCabinet() {
               </div>
             )}
 
-            {/* Контакты клиники */}
+            {/* ===== БЛОК: Контакты клиники — <Card> дизайн-системы ===== */}
             {(data.clinic_phone || data.clinic_address || data.clinic_latitude) && (
-              <div className="rounded-2xl p-3 bg-white" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
-                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Связь с клиникой</p>
+              <Card padded={false} className="p-3">
+                <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--fg-3)' }}>Связь с клиникой</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {data.clinic_phone && (
                     <a href={buildTel(data.clinic_phone)} className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold" style={{ background:'#E0F7FA', color:'#00838F' }}>
@@ -2362,7 +2382,7 @@ export default function PatientCabinet() {
                     </a>
                   )}
                 </div>
-              </div>
+              </Card>
             )}
 
             {/* Управление: календарь / перенос / отмена (только для активных) */}
@@ -2459,10 +2479,10 @@ export default function PatientCabinet() {
               </div>
             )}
 
-            {/* Контакты клиники активного направления — один клик */}
+            {/* ===== БЛОК: Контакты клиники активного направления — <Card> ===== */}
             {current?.status === 'created' && (current?.to_clinic_phone || current?.to_clinic_address || current?.to_clinic_latitude) && (
-              <div className="rounded-2xl p-3 bg-white" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
-                <p className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Связь с клиникой</p>
+              <Card padded={false} className="p-3">
+                <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: 'var(--fg-3)' }}>Связь с клиникой</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {current.to_clinic_phone && (
                     <a href={buildTel(current.to_clinic_phone)}
@@ -2486,7 +2506,7 @@ export default function PatientCabinet() {
                     </a>
                   )}
                 </div>
-              </div>
+              </Card>
             )}
 
             {/* Recent active referrals */}
@@ -2499,20 +2519,23 @@ export default function PatientCabinet() {
                   </button>
                 </div>
                 <div className="space-y-2">
+                  {/* ===== БЛОК: Краткие карточки активных направлений (используют <Card> из дизайн-системы) ===== */}
                   {activeRefs.slice(0,2).map((r,i) => (
-                    <div key={r.id} className="bg-white rounded-2xl p-3.5 flex items-center gap-3 card-in" style={{ border: '1px solid rgba(0,0,0,.05)', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }}>
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg,${CARD_GRADS[i%CARD_GRADS.length][0]},${CARD_GRADS[i%CARD_GRADS.length][1]})` }}>
-                        <span className="material-symbols-outlined text-white text-base" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
+                    <Card key={r.id} className="card-in" padded={false}>
+                      <div className="p-3.5 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg,${CARD_GRADS[i%CARD_GRADS.length][0]},${CARD_GRADS[i%CARD_GRADS.length][1]})` }}>
+                          <span className="material-symbols-outlined text-white text-base" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: 'var(--fg)' }}>{r.to_clinic_name}</p>
+                          <p className="text-xs truncate" style={{ color: 'var(--fg-3)' }}>{r.service_name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {r.short_code && <span className="text-xs font-bold tracking-wider" style={{ color: 'var(--fg-3)' }}>{r.short_code}</span>}
+                          <StatusBadge status={r.status} />
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">{r.to_clinic_name}</p>
-                        <p className="text-xs text-gray-400 truncate">{r.service_name}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {r.short_code && <span className="text-xs font-bold text-gray-500 tracking-wider">{r.short_code}</span>}
-                        <StatusBadge status={r.status} />
-                      </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
               </div>
@@ -2548,15 +2571,15 @@ export default function PatientCabinet() {
             </div>
             */}
 
-            {/* Empty state */}
+            {/* ===== БЛОК: Empty state — ничего пока нет ===== */}
             {allRefs.length === 0 && mis_visits.length === 0 && appointments.length === 0 && (
-              <div className="bg-white rounded-3xl p-8 text-center" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
-                <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4" style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
-                  <span className="material-symbols-outlined text-blue-400 text-3xl">medical_services</span>
-                </div>
-                <p className="text-gray-700 font-bold">Добро пожаловать!</p>
-                <p className="text-gray-400 text-sm mt-1">Здесь появятся ваши направления и история визитов</p>
-              </div>
+              <Card className="text-center">
+                <EmptyState
+                  icon={<span className="material-symbols-outlined text-3xl">medical_services</span>}
+                  title="Добро пожаловать!"
+                  message="Здесь появятся ваши направления, записи к врачам и история визитов"
+                />
+              </Card>
             )}
           </div>
         )}
@@ -2571,12 +2594,11 @@ export default function PatientCabinet() {
                 style={{ background: 'white', border: '1.5px solid rgba(0,0,0,.08)', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }} />
             </div>
             {searchedRefs.length === 0 ? (
-              <div className="flex flex-col items-center py-16 text-center">
-                <div className="w-16 h-16 rounded-3xl flex items-center justify-center mb-4" style={{ background: '#E5E7EB' }}>
-                  <span className="material-symbols-outlined text-3xl text-gray-400">inbox</span>
-                </div>
-                <p className="text-gray-500 font-semibold">Направлений нет</p>
-              </div>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-3xl">inbox</span>}
+                title="Направлений нет"
+                message={searchQ ? 'По запросу ничего не найдено' : 'Когда врач выпишет направление — оно появится здесь'}
+              />
             ) : (
               <div className="space-y-4">
                 {searchedRefs.map((r, i) => <ReferralCard key={r.id} referral={r} index={i} onQr={setFullscreenQr} />)}
@@ -2589,13 +2611,11 @@ export default function PatientCabinet() {
         {tab === 'history' && !data?.type && (
           <div className="tab-enter">
             {mis_visits.length === 0 ? (
-              <div className="flex flex-col items-center py-20 text-center">
-                <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-5" style={{ background: 'linear-gradient(135deg,#D1FAE5,#A7F3D0)' }}>
-                  <span className="material-symbols-outlined text-4xl text-emerald-500">history</span>
-                </div>
-                <p className="text-gray-700 font-bold text-base">История пуста</p>
-                <p className="text-gray-400 text-sm mt-2 max-w-[240px]">После первого визита в клинику ваша история появится здесь</p>
-              </div>
+              <EmptyState
+                icon={<span className="material-symbols-outlined text-3xl">history</span>}
+                title="История пуста"
+                message="После первого визита в клинику ваша история появится здесь"
+              />
             ) : (
               <>
                 <div className="flex items-center gap-2 mb-4 p-3 rounded-2xl" style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.15)' }}>
@@ -2756,14 +2776,10 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
+    <>
       <ConfirmHost />
-      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-900 text-base">Семья</h3>
-          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
-        </div>
-
+      {/* ===== БЛОК: Семейный аккаунт — переиспользует <Modal> дизайн-системы ===== */}
+      <Modal open={true} onClose={onClose} title="Семья" size="md">
         {/* Owner */}
         <div className="rounded-2xl p-3 mb-3" style={{ background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
           <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide">Текущий профиль</p>
@@ -2806,24 +2822,16 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
             <input value={relation} onChange={e => setRelation(e.target.value)} placeholder="Кто (Супруг, Ребёнок, ...)"
               className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
             {err && <p className="text-xs text-red-500">{err}</p>}
+            {/* Кнопки формы добавления — дизайн-система */}
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setShowAdd(false)} disabled={busy}
-                className="h-10 rounded-xl border text-sm font-semibold" style={{ borderColor:'#E5E7EB' }}>
-                Отмена
-              </button>
-              <button onClick={add} disabled={busy}
-                className="h-10 rounded-xl text-sm font-bold text-white"
-                style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', opacity: busy ? .6 : 1 }}>
-                {busy ? '...' : 'Добавить'}
-              </button>
+              <Button variant="secondary" onClick={() => setShowAdd(false)} disabled={busy}>Отмена</Button>
+              <Button onClick={add} disabled={busy}>{busy ? '...' : 'Добавить'}</Button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setShowAdd(true)}
-            className="w-full h-11 rounded-2xl text-sm font-bold mb-3"
-            style={{ background:'#fff', border:'1.5px dashed #BAE6FD', color:'#0369A1' }}>
+          <Button variant="secondary" onClick={() => setShowAdd(true)} className="w-full mb-3">
             + Добавить члена семьи
-          </button>
+          </Button>
         )}
 
         {/* Switch confirm — нужен short_code (proof of access) */}
@@ -2839,20 +2847,14 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
               maxLength={5} inputMode="numeric"
               className="w-full h-10 px-3 rounded-xl border border-amber-300 text-base font-bold tracking-widest text-center" />
             {err && <p className="text-xs text-red-500">{err}</p>}
+            {/* Кнопки подтверждения переключения профиля — дизайн-система */}
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setSwitchTarget(null)} disabled={busy}
-                className="h-10 rounded-xl border text-sm font-semibold" style={{ borderColor:'#FDE68A', background:'#fff' }}>
-                Отмена
-              </button>
-              <button onClick={doSwitch} disabled={busy || !shortCode}
-                className="h-10 rounded-xl text-sm font-bold text-white"
-                style={{ background:'#D97706', opacity: busy || !shortCode ? .6 : 1 }}>
-                {busy ? '...' : 'Войти'}
-              </button>
+              <Button variant="secondary" onClick={() => setSwitchTarget(null)} disabled={busy}>Отмена</Button>
+              <Button onClick={doSwitch} disabled={busy || !shortCode}>{busy ? '...' : 'Войти'}</Button>
             </div>
           </div>
         )}
-      </div>
-    </div>
+      </Modal>
+    </>
   )
 }
