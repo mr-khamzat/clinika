@@ -57,6 +57,37 @@ const RISK_LABEL = {
   high: { text: 'высокий', tone: 'bad' },
 }
 
+// ─── Фильтр активности (по days_since_last_visit) ──────────────────────────
+// active   — <30 дней с последнего визита (фильтр на клиенте)
+// warm     — ≥30 дней (на бэке inactive_days=30)
+// sleeping — ≥90 дней (inactive_days=90)
+// cold     — ≥180 дней (inactive_days=180)
+const ACTIVITY_TO_INACTIVE_DAYS = { all: null, active: null, warm: 30, sleeping: 90, cold: 180 }
+const ACTIVITY_OPTIONS = [
+  { value: 'all',      label: 'Все' },
+  { value: 'active',   label: 'Активные (<30д)' },
+  { value: 'warm',     label: 'Тёплые (30+)' },
+  { value: 'sleeping', label: 'Спящие (90+)' },
+  { value: 'cold',     label: 'Холодные (180+)' },
+]
+
+// Форматер даты: «ДД.ММ.ГГГГ» либо «—» если нет.
+const fmtDate = (v) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('ru')
+}
+
+// Цвет «Дней назад» — нейтральный/жёлтый/красный.
+const daysAgoColor = (n) => {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return 'var(--fg-4)'
+  if (v <= 30) return 'var(--fg)'
+  if (v <= 90) return 'var(--warn)'
+  return 'var(--bad)'
+}
+
 // ─── Горизонт LTV (1/3/5/10 лет) ───────────────────────────────────────────
 // Бэкенд принимает years=N в /summary, /patients, /export/pdf, /export/xlsx
 // и пересчитывает значения LTV/NetLTV из базовой формулы (3 года) в N лет.
@@ -206,6 +237,9 @@ function PatientsTable({ rows }) {
             <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--fg-3)' }}>
               <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600 }}>Пациент</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Визиты</th>
+              <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600, whiteSpace: 'nowrap' }}>Первый визит</th>
+              <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600, whiteSpace: 'nowrap' }}>Последний визит</th>
+              <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600, whiteSpace: 'nowrap' }} title="Дней с момента последнего визита">Дней назад</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Средний чек</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Total</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>LTV</th>
@@ -216,6 +250,7 @@ function PatientsTable({ rows }) {
           <tbody>
             {rows.map(r => {
               const risk = RISK_LABEL[r.churn_risk] || RISK_LABEL.low
+              const daysAgo = r.days_since_last_visit
               return (
                 <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '10px' }}>
@@ -223,6 +258,11 @@ function PatientsTable({ rows }) {
                     <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{r.patient_phone}</div>
                   </td>
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtNum(r.visits_count)}</td>
+                  <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.first_visit_at)}</td>
+                  <td style={{ padding: '10px', whiteSpace: 'nowrap', color: 'var(--fg-3)', fontVariantNumeric: 'tabular-nums' }}>{fmtDate(r.last_visit_at)}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: daysAgoColor(daysAgo) }}>
+                    {Number.isFinite(Number(daysAgo)) ? fmtNum(daysAgo) : '—'}
+                  </td>
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtRub(r.avg_check)}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtRub(r.total_spent)}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--accent)' }}>
@@ -302,9 +342,14 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
   const [recomputing, setRecomputing] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
   const [exportingXlsx, setExportingXlsx] = useState(false)
+  const [exportingContacts, setExportingContacts] = useState(false)
+  const [contactsOpen, setContactsOpen] = useState(false)
   // Горизонт расчёта LTV (1/3/5/10 лет). По умолчанию — 3 года (старая формула).
   // При смене перезагружаются summary/patients и передаётся в экспорт PDF/Excel.
   const [years, setYears] = useState(3)
+  // Фильтры для топ-пациентов: только повторные (≥2 визитов) и активность.
+  const [repeatOnly, setRepeatOnly] = useState(false)
+  const [activityFilter, setActivityFilter] = useState('all')
 
   // Внутренний scope активен только если родитель не передал clinicId
   const externallyControlled = externalClinicId !== undefined
@@ -331,10 +376,18 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     // ltv_estimate / net_ltv в response без переписывания снапшотов в БД.
     const baseParams = { years }
     if (effectiveClinicId) baseParams.clinic_id = effectiveClinicId
+    // Параметры для /patients: добавляем фильтры повторных и активности.
+    // «active» (<30д) — фильтруем на клиенте (бэк не умеет «строго меньше»).
+    const patientsParams = { ...baseParams, limit: 100, min_visits: 2 }
+    if (repeatOnly) patientsParams.repeat_only = true
+    const inactiveDays = ACTIVITY_TO_INACTIVE_DAYS[activityFilter]
+    if (inactiveDays !== null && activityFilter !== 'active') {
+      patientsParams.inactive_days = inactiveDays
+    }
     try {
       const [s, p, c] = await Promise.all([
         api.get(`/analytics/ltv/summary`, { headers, params: baseParams }),
-        api.get(`/analytics/ltv/patients`, { headers, params: { ...baseParams, limit: 100, min_visits: 2 } }),
+        api.get(`/analytics/ltv/patients`, { headers, params: patientsParams }),
         // Когорты не зависят от horizon — отдельная семантика (avg по когорте за всё время)
         api.get(`/analytics/ltv/cohorts`, { headers }),
       ])
@@ -354,8 +407,9 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     }
   }
 
-  // Перезагружаем данные при смене clinic (внешней/внутренней) или горизонта LTV.
-  useEffect(() => { reload() /* eslint-disable-next-line */ }, [effectiveClinicId, years])
+  // Перезагружаем данные при смене clinic (внешней/внутренней), горизонта LTV
+  // или фильтров (повторные / активность).
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [effectiveClinicId, years, repeatOnly, activityFilter])
 
   const recompute = async () => {
     setRecomputing(true)
@@ -441,6 +495,69 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     }
   }
 
+  // ── Экспорт контактов (CSV / XLSX) с пресетами фильтров ─────────────────
+  // Endpoint: GET /analytics/ltv/contacts.csv?clinic_id&min_visits&inactive_days&format=csv|xlsx
+  // Пресеты:
+  //   - all              — без фильтров (все пациенты)
+  //   - repeat           — только повторные (min_visits=2)
+  //   - sleeping_90      — спящие ≥90 дней (inactive_days=90)
+  // Имя файла: «LTV-контакты-АРЦ-YYYY-MM-DD.{csv|xlsx}»
+  const exportContacts = async (preset, format) => {
+    setExportingContacts(true)
+    setContactsOpen(false)
+    try {
+      const params = { format }
+      if (effectiveClinicId) params.clinic_id = effectiveClinicId
+      if (preset === 'repeat') params.min_visits = 2
+      if (preset === 'sleeping_90') params.inactive_days = 90
+      const resp = await api.get('/analytics/ltv/contacts.csv', {
+        headers,
+        params,
+        responseType: 'blob',
+      })
+
+      const today = new Date().toISOString().slice(0, 10)
+      const ext = format === 'xlsx' ? 'xlsx' : 'csv'
+      let filename = `LTV-контакты-АРЦ-${today}.${ext}`
+      const cd = resp.headers?.['content-disposition'] || resp.headers?.['Content-Disposition']
+      if (cd) {
+        const m = cd.match(/filename\*=UTF-8''([^;]+)/i)
+        if (m) {
+          try { filename = decodeURIComponent(m[1].trim().replace(/^"|"$/g, '')) } catch (_) {}
+        } else {
+          const m2 = cd.match(/filename="?([^";]+)"?/i)
+          if (m2) {
+            try { filename = decodeURIComponent(m2[1]) } catch (_) { filename = m2[1] }
+          }
+        }
+      }
+
+      const mime = ext === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv;charset=utf-8'
+      const blob = new Blob([resp.data], { type: mime })
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
+      toast?.success?.('Контакты скачаны')
+    } catch (e) {
+      const code = e?.response?.status
+      if (code === 402) {
+        setModuleAvailable(false)
+        toast?.error?.('Модуль ltv_pro не подключён')
+      } else {
+        toast?.error?.('Ошибка экспорта контактов: ' + (e?.response?.data?.detail || e.message))
+      }
+    } finally {
+      setExportingContacts(false)
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -458,6 +575,11 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     { id: 'patients', label: 'Топ пациентов', badge: patients.length || null },
     { id: 'cohorts',  label: 'Когорты', badge: cohorts.length || null },
   ]
+
+  // Клиентский фильтр «Активные (<30д)» — бэк не умеет «строго меньше N дней».
+  const visiblePatients = activityFilter === 'active'
+    ? patients.filter(r => Number(r.days_since_last_visit) < 30)
+    : patients
 
   return (
     <div className="flex flex-col gap-4">
@@ -504,14 +626,137 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
         >
           {exportingXlsx ? 'Excel…' : '📊 Excel'}
         </Button>
+        {/* Dropdown «Контакты» — пресеты CSV/XLSX. Без зависимостей: */}
+        {/* state contactsOpen + клик по фону закрывает (onBlur у обёртки). */}
+        <div style={{ position: 'relative' }}>
+          <Button
+            variant="ghost"
+            onClick={() => setContactsOpen(v => !v)}
+            disabled={exportingContacts}
+            title="Скачать контакты (CSV или XLSX)"
+          >
+            {exportingContacts ? 'Контакты…' : '📋 Контакты ▾'}
+          </Button>
+          {contactsOpen && (
+            <>
+              {/* Прозрачная подложка — клик вне → закрытие */}
+              <div
+                onClick={() => setContactsOpen(false)}
+                style={{
+                  position: 'fixed', inset: 0, zIndex: 40, background: 'transparent',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute', right: 0, top: 'calc(100% + 6px)',
+                  zIndex: 50, minWidth: 240,
+                  background: 'var(--bg-1)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                  padding: 4,
+                  display: 'flex', flexDirection: 'column', gap: 2,
+                }}
+              >
+                <ContactsMenuItem onClick={() => exportContacts('all', 'csv')}>CSV — все</ContactsMenuItem>
+                <ContactsMenuItem onClick={() => exportContacts('repeat', 'csv')}>CSV — только повторные</ContactsMenuItem>
+                <ContactsMenuItem onClick={() => exportContacts('sleeping_90', 'csv')}>CSV — спящие 90+</ContactsMenuItem>
+                <div style={{ height: 1, background: 'var(--border)', margin: '4px 6px' }} />
+                <ContactsMenuItem onClick={() => exportContacts('all', 'xlsx')}>XLSX — все</ContactsMenuItem>
+                <ContactsMenuItem onClick={() => exportContacts('repeat', 'xlsx')}>XLSX — только повторные</ContactsMenuItem>
+                <ContactsMenuItem onClick={() => exportContacts('sleeping_90', 'xlsx')}>XLSX — спящие 90+</ContactsMenuItem>
+              </div>
+            </>
+          )}
+        </div>
         <Button variant="primary" onClick={recompute} disabled={recomputing}>
           {recomputing ? 'Пересчёт…' : 'Пересчитать сейчас'}
         </Button>
       </div>
 
       {tab === 'summary'  && <SummaryView data={summary} years={years} />}
-      {tab === 'patients' && <PatientsTable rows={patients} />}
+      {tab === 'patients' && (
+        <>
+          {/* Фильтры топ-пациентов: только повторные + активность */}
+          <div
+            className="flex items-center gap-3 flex-wrap"
+            style={{
+              padding: '10px 12px',
+              background: 'var(--bg-1)',
+              border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}
+          >
+            <label
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 13, color: 'var(--fg-2)', cursor: 'pointer', userSelect: 'none',
+              }}
+              title="Показывать только пациентов с ≥2 визитами"
+            >
+              <input
+                type="checkbox"
+                checked={repeatOnly}
+                onChange={(e) => setRepeatOnly(e.target.checked)}
+                style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+              />
+              Только повторные
+            </label>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>Активность:</span>
+              <select
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value)}
+                style={{
+                  background: 'var(--bg-2)',
+                  color: 'var(--fg)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '6px 10px',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                {ACTIVITY_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ flex: 1 }} />
+            <div style={{ fontSize: 12, color: 'var(--fg-4)' }}>
+              Найдено: {fmtNum(visiblePatients.length)}
+            </div>
+          </div>
+          <PatientsTable rows={visiblePatients} />
+        </>
+      )}
       {tab === 'cohorts'  && <CohortsTable rows={cohorts} />}
     </div>
+  )
+}
+
+// ─── Пункт меню «Контакты» (без зависимостей) ───────────────────────────────
+function ContactsMenuItem({ onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        textAlign: 'left',
+        background: 'transparent',
+        border: 'none',
+        color: 'var(--fg)',
+        fontSize: 13,
+        padding: '8px 10px',
+        borderRadius: 6,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-2)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {children}
+    </button>
   )
 }
