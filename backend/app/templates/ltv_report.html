@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>LTV-отчёт {{ tenant_name }}</title>
+<style>
+  /* ── A4 + поля + футер ───────────────────────────────────────────── */
+  @page {
+    size: A4;
+    margin: 16mm 14mm 18mm 14mm;
+    @bottom-center {
+      content: "КлиникСеть · стр. " counter(page) " из " counter(pages);
+      font-family: "DejaVu Sans", sans-serif;
+      font-size: 9pt;
+      color: #94a3b8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "DejaVu Sans", "Segoe UI", Arial, sans-serif;
+    font-size: 10pt;
+    color: #0f172a;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ── Шапка отчёта ────────────────────────────────────────────────── */
+  .header {
+    background: #f1f5f9;
+    border-left: 4px solid #06b6d4;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+  }
+  .header h1 {
+    font-size: 18pt;
+    font-weight: 700;
+    margin: 0 0 4px;
+    color: #0f172a;
+  }
+  .header .meta {
+    font-size: 9pt;
+    color: #475569;
+  }
+  .header .meta b {
+    color: #0f172a;
+  }
+
+  /* ── Заголовки секций ────────────────────────────────────────────── */
+  h2.section {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #0e7490;
+    border-bottom: 2px solid #06b6d4;
+    padding-bottom: 4px;
+    margin: 18px 0 10px;
+  }
+  .section-desc {
+    font-size: 9pt;
+    color: #64748b;
+    margin-bottom: 10px;
+    font-style: italic;
+  }
+
+  /* ── KPI 2×2 ─────────────────────────────────────────────────────── */
+  table.kpi {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px;
+    margin: 0;
+  }
+  table.kpi td {
+    width: 50%;
+    background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%);
+    border: 1px solid #67e8f9;
+    border-radius: 6px;
+    padding: 12px 14px;
+    vertical-align: top;
+  }
+  table.kpi .kpi-label {
+    font-size: 9pt;
+    color: #0e7490;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  table.kpi .kpi-value {
+    font-size: 18pt;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.1;
+  }
+  table.kpi .kpi-sub {
+    font-size: 8pt;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  /* ── Обычные таблицы ─────────────────────────────────────────────── */
+  table.data {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8.5pt;
+    margin-bottom: 8px;
+  }
+  table.data thead th {
+    background: #06b6d4;
+    color: #fff;
+    font-weight: 700;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid #0891b2;
+  }
+  table.data tbody td {
+    padding: 5px 8px;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  table.data tbody tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+  table.data .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data .center {
+    text-align: center;
+  }
+
+  /* ── Чипсы риска ─────────────────────────────────────────────────── */
+  .chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 8px;
+    font-size: 8pt;
+    font-weight: 600;
+  }
+  .chip-low    { background: #d1fae5; color: #065f46; }
+  .chip-medium { background: #fef3c7; color: #92400e; }
+  .chip-high   { background: #fee2e2; color: #991b1b; }
+
+  /* ── Пустое состояние ────────────────────────────────────────────── */
+  .empty {
+    background: #fef9c3;
+    border: 1px dashed #facc15;
+    color: #713f12;
+    padding: 14px 18px;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 10pt;
+    margin: 16px 0;
+  }
+
+  /* ── Диаграммы ───────────────────────────────────────────────────── */
+  .charts {
+    display: flex;
+    gap: 14px;
+    margin: 12px 0 8px;
+  }
+  .chart-box {
+    flex: 1;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px;
+    background: #ffffff;
+  }
+  .chart-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0e7490;
+    text-align: center;
+    margin-bottom: 6px;
+  }
+  .chart-box svg { display: block; margin: 0 auto; }
+  .legend {
+    font-size: 8pt;
+    color: #475569;
+    margin-top: 6px;
+    text-align: center;
+  }
+  .legend span { display: inline-block; margin: 0 6px; }
+  .legend i {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 3px;
+    vertical-align: middle;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── ШАПКА ──────────────────────────────────────────────────────── -->
+<div class="header">
+  <h1>LTV-отчёт {{ tenant_name }}</h1>
+  <div class="meta">
+    <b>Клиника:</b> {{ clinic_label }} &nbsp;·&nbsp;
+    <b>Период:</b> {{ period_label }} &nbsp;·&nbsp;
+    <b>Создан:</b> {{ generated_at }}
+  </div>
+</div>
+
+{% if not has_data %}
+<div class="empty">
+  Нет данных за период, запустите пересчёт LTV (кнопка «Пересчитать сейчас»).
+</div>
+{% endif %}
+
+<!-- ── СВОДКА ─────────────────────────────────────────────────────── -->
+<h2 class="section">Сводка</h2>
+<div class="section-desc">
+  Ключевые метрики LTV-аналитики по выбранной клинике/периоду.
+  Avg LTV — средний прогнозируемый доход с пациента (горизонт 3 года).
+</div>
+<table class="kpi">
+  <tr>
+    <td>
+      <div class="kpi-label">Avg LTV</div>
+      <div class="kpi-value">{{ kpi.avg_ltv_fmt }}</div>
+      <div class="kpi-sub">средний LTV на пациента</div>
+    </td>
+    <td>
+      <div class="kpi-label">Total Patients</div>
+      <div class="kpi-value">{{ kpi.total_patients_fmt }}</div>
+      <div class="kpi-sub">всего пациентов в выборке</div>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <div class="kpi-label">Churn Rate</div>
+      <div class="kpi-value">{{ kpi.churn_rate_fmt }}</div>
+      <div class="kpi-sub">доля medium+high риска</div>
+    </td>
+    <td>
+      <div class="kpi-label">At-risk Patients</div>
+      <div class="kpi-value">{{ kpi.at_risk_fmt }}</div>
+      <div class="kpi-sub">пациентов в высоком риске</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ── ДИАГРАММЫ ──────────────────────────────────────────────────── -->
+{% if has_data %}
+<div class="charts">
+  <div class="chart-box">
+    <div class="chart-title">LTV avg по когортам</div>
+    {{ bar_chart_svg | safe }}
+    <div class="legend">
+      <span><i style="background:#06b6d4"></i>LTV avg, ₽</span>
+    </div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-title">Распределение по риску оттока</div>
+    {{ pie_chart_svg | safe }}
+    <div class="legend">
+      <span><i style="background:#10b981"></i>low</span>
+      <span><i style="background:#f59e0b"></i>medium</span>
+      <span><i style="background:#ef4444"></i>high</span>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── ТОП-50 ПАЦИЕНТОВ ───────────────────────────────────────────── -->
+<h2 class="section">Топ-50 пациентов</h2>
+<div class="section-desc">
+  Пациенты с наибольшим LTV (минимум 2 визита). Сортировка по LTV убыванием.
+</div>
+{% if patients %}
+<table class="data">
+  <thead>
+    <tr>
+      <th style="width:4%">#</th>
+      <th style="width:20%">Имя</th>
+      <th style="width:13%">Телефон</th>
+      <th class="center" style="width:7%">Визитов</th>
+      <th class="num" style="width:11%">Ср. чек</th>
+      <th class="num" style="width:11%">Total</th>
+      <th class="num" style="width:11%">LTV</th>
+      <th class="num" style="width:11%">NetLTV</th>
+      <th class="center" style="width:8%">Churn</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in patients %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ p.patient_name or '—' }}</td>
+      <td>{{ p.patient_phone }}</td>
+      <td class="center">{{ p.visits_count }}</td>
+      <td class="num">{{ p.avg_check_fmt }}</td>
+      <td class="num">{{ p.total_spent_fmt }}</td>
+      <td class="num">{{ p.ltv_estimate_fmt }}</td>
+      <td class="num">{{ p.net_ltv_fmt }}</td>
+      <td class="center">
+        <span class="chip chip-{{ p.churn_risk }}">{{ p.churn_risk }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Нет пациентов с ≥ 2 визитами.</div>
+{% endif %}
+
+<!-- ── КОГОРТЫ ────────────────────────────────────────────────────── -->
+<h2 class="section">Когорты по кварталам</h2>
+<div class="section-desc">
+  Группировка пациентов по кварталу первого визита. Avg LTV/NetLTV — средние по когорте.
+</div>
+{% if cohorts %}
+<table class="data">
+  <thead>
+    <tr>
+      <th style="width:25%">Квартал</th>
+      <th class="num" style="width:18%">Пациентов</th>
+      <th class="num" style="width:19%">Total</th>
+      <th class="num" style="width:19%">LTV avg</th>
+      <th class="num" style="width:19%">NetLTV avg</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in cohorts %}
+    <tr>
+      <td>{{ c.cohort }}</td>
+      <td class="num">{{ c.patients_fmt }}</td>
+      <td class="num">{{ c.total_spent_fmt }}</td>
+      <td class="num">{{ c.avg_ltv_fmt }}</td>
+      <td class="num">{{ c.avg_net_ltv_fmt }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">Нет когортных данных.</div>
+{% endif %}
+
+</body>
+</html>

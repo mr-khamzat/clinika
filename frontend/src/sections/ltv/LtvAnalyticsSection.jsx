@@ -276,6 +276,8 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
   const [patients, setPatients] = useState([])
   const [cohorts, setCohorts] = useState([])
   const [recomputing, setRecomputing] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [exportingXlsx, setExportingXlsx] = useState(false)
 
   // Берём токен из переданного либо из localStorage. Менеджер логинится через
   // /arc/admin → ключ clinika_admin_token_arc; пациент / партнёр —
@@ -339,6 +341,67 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
     }
   }
 
+  // ── Экспорт отчётов: PDF / Excel ────────────────────────────────────────
+  // Запрашиваем blob, сохраняем через временную ссылку (download attr).
+  // Имя файла берём из Content-Disposition сервера (если есть), иначе
+  // собираем дефолтное «LTV-отчёт-АРЦ-YYYY-MM-DD».
+  const exportReport = async (kind) => {
+    const setBusy = kind === 'pdf' ? setExportingPdf : setExportingXlsx
+    setBusy(true)
+    try {
+      const params = clinicId ? { clinic_id: clinicId } : {}
+      const url = `${API_BASE}/analytics/ltv/export/${kind}`
+      const resp = await axios.get(url, {
+        headers,
+        params,
+        responseType: 'blob',
+      })
+
+      // Имя файла из заголовка (RFC 5987 filename*=UTF-8'')
+      const today = new Date().toISOString().slice(0, 10)
+      const ext = kind === 'pdf' ? 'pdf' : 'xlsx'
+      let filename = `LTV-отчёт-АРЦ-${today}.${ext}`
+      const cd = resp.headers?.['content-disposition'] || resp.headers?.['Content-Disposition']
+      if (cd) {
+        const m = cd.match(/filename\*=UTF-8''([^;]+)/i)
+        if (m) {
+          try { filename = decodeURIComponent(m[1].trim().replace(/^"|"$/g, '')) } catch (_) {}
+        } else {
+          const m2 = cd.match(/filename="?([^";]+)"?/i)
+          if (m2) {
+            try { filename = decodeURIComponent(m2[1]) } catch (_) { filename = m2[1] }
+          }
+        }
+      }
+
+      const blob = new Blob([resp.data], {
+        type: kind === 'pdf'
+          ? 'application/pdf'
+          : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      // Освобождаем URL чуть позже, чтобы браузер успел инициировать загрузку
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500)
+      toast?.success?.('Отчёт скачан')
+    } catch (e) {
+      const code = e?.response?.status
+      if (code === 402) {
+        setModuleAvailable(false)
+        toast?.error?.('Модуль ltv_pro не подключён')
+      } else {
+        toast?.error?.('Ошибка экспорта: ' + (e?.response?.data?.detail || e.message))
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -363,6 +426,22 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
         <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)' }}>LTV-аналитика</div>
         <Tabs items={tabs} value={tab} onChange={setTab} />
         <div className="flex-1" />
+        <Button
+          variant="ghost"
+          onClick={() => exportReport('pdf')}
+          disabled={exportingPdf}
+          title="Скачать PDF-отчёт"
+        >
+          {exportingPdf ? 'PDF…' : '📄 PDF'}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => exportReport('xlsx')}
+          disabled={exportingXlsx}
+          title="Скачать Excel-отчёт"
+        >
+          {exportingXlsx ? 'Excel…' : '📊 Excel'}
+        </Button>
         <Button variant="primary" onClick={recompute} disabled={recomputing}>
           {recomputing ? 'Пересчёт…' : 'Пересчитать сейчас'}
         </Button>

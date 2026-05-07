@@ -5,6 +5,8 @@ LTV-аналитика — endpoints модуля ltv_pro.
   GET  /analytics/ltv/cohorts?period=quarter                    — когорты
   GET  /analytics/ltv/summary?clinic_id                         — сводка
   POST /analytics/ltv/recompute?clinic_id                       — принудительный пересчёт
+  GET  /analytics/ltv/export/pdf?clinic_id&period               — PDF-отчёт
+  GET  /analytics/ltv/export/xlsx?clinic_id                     — Excel-отчёт
 
 Все требуют:
   - роль manager и выше (require_manager)
@@ -13,8 +15,10 @@ LTV-аналитика — endpoints модуля ltv_pro.
 import uuid
 from datetime import datetime, timedelta
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +28,7 @@ from app.database import get_db
 from app.models.ltv import PatientLtvSnapshot
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services.ltv_export_service import generate_ltv_excel, generate_ltv_pdf
 from app.services.ltv_service import compute_cohorts, compute_ltv_for_clinic
 
 router = APIRouter(prefix="/analytics/ltv", tags=["ltv"])
@@ -173,3 +178,61 @@ async def recompute(
         return {"ok": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка пересчёта: {e}")
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Экспорт отчётов (PDF / Excel)
+# ───────────────────────────────────────────────────────────────────────────
+
+
+def _content_disposition(filename: str) -> str:
+    """Content-Disposition с поддержкой UTF-8 (RFC 5987) — для русских имён."""
+    encoded = quote(filename)
+    return f"attachment; filename=\"{encoded}\"; filename*=UTF-8''{encoded}"
+
+
+@router.get("/export/pdf", dependencies=[_mgr, _mod])
+async def export_pdf(
+    clinic_id: Optional[uuid.UUID] = Query(None),
+    period: str = Query("all", description="Метка периода для шапки: all/month/quarter/year"),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """PDF-отчёт LTV: KPI, топ-50 пациентов, когорты, диаграммы."""
+    if tenant is None:
+        raise HTTPException(status_code=400, detail="Тенант не определён")
+    try:
+        pdf_bytes = await generate_ltv_pdf(db, tenant, clinic_id, period)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {e}")
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    filename = f"LTV-отчёт-АРЦ-{today}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": _content_disposition(filename)},
+    )
+
+
+@router.get("/export/xlsx", dependencies=[_mgr, _mod])
+async def export_xlsx(
+    clinic_id: Optional[uuid.UUID] = Query(None),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Excel-отчёт LTV: листы Сводка / Топ пациентов / Когорты."""
+    if tenant is None:
+        raise HTTPException(status_code=400, detail="Тенант не определён")
+    try:
+        xlsx_bytes = await generate_ltv_excel(db, tenant, clinic_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации Excel: {e}")
+
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    filename = f"LTV-отчёт-АРЦ-{today}.xlsx"
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": _content_disposition(filename)},
+    )
