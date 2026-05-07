@@ -23,7 +23,9 @@ import axios from 'axios'
 import { API_BASE, SLUG } from '../../config'
 import {
   Card, KpiCard, KpiRow, Tabs, Button, Chip, EmptyState, useToast,
+  ClinicScopeSelector,
 } from '../../design'
+import useClinicScope from '../../lib/useClinicScope'
 
 // ─── Хелперы форматирования ────────────────────────────────────────────────
 const fmtRub = (v) => {
@@ -267,7 +269,9 @@ function CohortsTable({ rows }) {
 
 
 // ─── Главный компонент ─────────────────────────────────────────────────────
-export default function LtvAnalyticsSection({ adminToken, clinicId }) {
+// Если clinicId передан явно (родитель управляет scope) — он используется;
+// иначе включается внутренний useClinicScope() с собственным селектором.
+export default function LtvAnalyticsSection({ adminToken, clinicId: externalClinicId }) {
   const toast = useToast()
   const [tab, setTab] = useState('summary')
   const [loading, setLoading] = useState(true)
@@ -278,6 +282,11 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
   const [recomputing, setRecomputing] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
   const [exportingXlsx, setExportingXlsx] = useState(false)
+
+  // Внутренний scope активен только если родитель не передал clinicId
+  const externallyControlled = externalClinicId !== undefined
+  const scope = useClinicScope()
+  const effectiveClinicId = externallyControlled ? externalClinicId : scope.selectedId
 
   // Берём токен из переданного либо из localStorage. Менеджер логинится через
   // /arc/admin → ключ clinika_admin_token_arc; пациент / партнёр —
@@ -295,7 +304,7 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
   const reload = async () => {
     setLoading(true)
     setModuleAvailable(true)
-    const params = clinicId ? { clinic_id: clinicId } : {}
+    const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
     try {
       const [s, p, c] = await Promise.all([
         axios.get(`${API_BASE}/analytics/ltv/summary`, { headers, params }),
@@ -318,12 +327,13 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
     }
   }
 
-  useEffect(() => { reload() /* eslint-disable-next-line */ }, [clinicId])
+  // Перезагружаем данные при смене clinic (внешней или внутренней)
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [effectiveClinicId])
 
   const recompute = async () => {
     setRecomputing(true)
     try {
-      const params = clinicId ? { clinic_id: clinicId } : {}
+      const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
       const r = await axios.post(`${API_BASE}/analytics/ltv/recompute`, null, { headers, params })
       const upd = r.data?.updated ?? 0
       toast?.success?.(`Пересчитано: обновлено ${upd} снапшотов`)
@@ -349,7 +359,7 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
     const setBusy = kind === 'pdf' ? setExportingPdf : setExportingXlsx
     setBusy(true)
     try {
-      const params = clinicId ? { clinic_id: clinicId } : {}
+      const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
       const url = `${API_BASE}/analytics/ltv/export/${kind}`
       const resp = await axios.get(url, {
         headers,
@@ -426,6 +436,15 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
         <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)' }}>LTV-аналитика</div>
         <Tabs items={tabs} value={tab} onChange={setTab} />
         <div className="flex-1" />
+        {/* Селектор клиники — только если внутренний scope активен */}
+        {!externallyControlled && scope.clinics.length > 0 && (
+          <ClinicScopeSelector
+            clinics={scope.clinics}
+            selectedId={scope.selectedId}
+            onChange={scope.setSelectedId}
+            allowAll={scope.isMultiClinic}
+          />
+        )}
         <Button
           variant="ghost"
           onClick={() => exportReport('pdf')}

@@ -8,7 +8,8 @@
  */
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { getAnalytics } from '../api'
-import { Card, Chip, KpiCard, KpiRow, EmptyState, Tabs } from '../design'
+import { Card, Chip, KpiCard, KpiRow, EmptyState, Tabs, ClinicScopeSelector } from '../design'
+import useClinicScope from '../lib/useClinicScope'
 import ManagerShell from './_ManagerShell'
 
 // Ленивая загрузка LTV-секции (платный модуль ltv_pro)
@@ -83,14 +84,19 @@ export default function ManagerAnalytics() {
   // Активная вкладка верхнего уровня: 'overview' | 'ltv'
   const [tab, setTab]         = useState('overview')
 
+  // ── Scope: выбор клиники для фильтрации аналитики ───────────────────────
+  // У lika clinic_id=Лорсанова → видит только её. Главный manager без
+  // clinic_id видит все клиники тенанта.
+  const scope = useClinicScope()
+
   useEffect(() => {
     if (tab !== 'overview') return
     setLoading(true)
-    getAnalytics()
+    getAnalytics(scope.selectedId || undefined)
       .then(r => setData(r.data))
       .catch(() => setError('Ошибка загрузки аналитики'))
       .finally(() => setLoading(false))
-  }, [tab])
+  }, [tab, scope.selectedId])
 
   const conv      = data?.conversion_rate ?? 0
   const thisMonth = data?.this_month ?? {}
@@ -105,8 +111,8 @@ export default function ManagerAnalytics() {
       subtitle="Конверсия, динамика, сравнение клиник"
       icon="bar_chart"
     >
-      {/* ─── Переключатель верхнего уровня: Аналитика | LTV ─── */}
-      <div className="mb-4">
+      {/* ─── Переключатель верхнего уровня + селектор клиники ─── */}
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
         <Tabs
           items={[
             { id: 'overview', label: 'Аналитика' },
@@ -115,6 +121,18 @@ export default function ManagerAnalytics() {
           value={tab}
           onChange={setTab}
         />
+        <div className="flex-1" />
+        {/* Селектор клиники для текущего пользователя.
+            Если клиника одна — рендерится статичный label; если несколько —
+            select с опцией «Все клиники» (для manager без user.clinic_id). */}
+        {scope.clinics.length > 0 && (
+          <ClinicScopeSelector
+            clinics={scope.clinics}
+            selectedId={scope.selectedId}
+            onChange={scope.setSelectedId}
+            allowAll={scope.isMultiClinic}
+          />
+        )}
       </div>
 
       {tab === 'ltv' && (
@@ -125,7 +143,10 @@ export default function ManagerAnalytics() {
             </div>
           </Card>
         }>
-          <LtvAnalyticsSection />
+          {/* Прокидываем clinic_id из scope (пустая строка = «все клиники»);
+              передача любого значения, включая '', включает externallyControlled
+              в LtvAnalyticsSection и скрывает её внутренний селектор. */}
+          <LtvAnalyticsSection clinicId={scope.selectedId} />
         </Suspense>
       )}
 

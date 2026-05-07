@@ -492,52 +492,79 @@ async def get_daily_report(
 
 @router.get("/reports/analytics", response_model=dict, dependencies=[Depends(require_feature("analytics"))])
 async def get_analytics(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (фильтр аналитики)"),
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    # ── Применяем scope-фильтр по клиникам с учётом прав пользователя ──
+    # Логика: если clinic_id не передан и у user есть clinic_id (manager
+    # клиники, reg/nurse) — подставляем user.clinic_id; super_admin/
+    # franchise_owner без явного фильтра видят всё. Если clinic_id передан,
+    # проверяем доступ через get_user_clinic_ids().
+    from app.routers.manager.clinics_access import get_user_clinic_ids
+    if clinic_id is None:
+        if current_user.role not in (UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN):
+            if current_user.clinic_id is not None:
+                clinic_id = current_user.clinic_id
+    else:
+        accessible = await get_user_clinic_ids(db, current_user)
+        if current_user.role == UserRole.SUPER_ADMIN and not accessible:
+            if current_user.tenant_id is None:
+                from fastapi import HTTPException as _H
+                raise _H(status_code=403, detail="Тенант не выбран")
+            accessible = await get_user_clinic_ids(db, current_user, tenant_id_param=current_user.tenant_id)
+        if clinic_id not in accessible:
+            from fastapi import HTTPException as _H
+            raise _H(status_code=403, detail="Нет доступа к этой клинике")
+
     from datetime import date
-    from sqlalchemy import cast, Date
+    from sqlalchemy import cast, Date, or_
     today = date.today()
     start_30 = today - timedelta(days=29)
 
-    dq = await db.execute(
-        select(
-            cast(Referral.created_at, Date).label("day"),
-            func.count(Referral.id).label("total"),
-            func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
-        )
-        .where(Referral.created_at >= start_30)
-        .group_by(cast(Referral.created_at, Date)).order_by(cast(Referral.created_at, Date))
-    )
+    # ── Общий фильтр по тенанту + клинике ──
+    base_filters = []
+    if current_user.tenant_id is not None:
+        base_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if clinic_id is not None:
+        # Учитываем как from_clinic_id, так и to_clinic_id (направление в обе стороны)
+        base_filters.append(or_(
+            Referral.from_clinic_id == clinic_id,
+            Referral.to_clinic_id == clinic_id,
+        ))
+
+    daily_q = select(
+        cast(Referral.created_at, Date).label("day"),
+        func.count(Referral.id).label("total"),
+        func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
+    ).where(Referral.created_at >= start_30, *base_filters).group_by(cast(Referral.created_at, Date)).order_by(cast(Referral.created_at, Date))
+    dq = await db.execute(daily_q)
     day_map = {r.day: {"total": r.total, "confirmed": r.confirmed} for r in dq.all()}
     daily = [
         {"date": (start_30 + timedelta(days=i)).isoformat(), **day_map.get(start_30 + timedelta(days=i), {"total": 0, "confirmed": 0})}
         for i in range(30)
     ]
 
-    sq = await db.execute(
-        select(Service.id, Service.name, func.count(Referral.id).label("total"),
-            func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
-            func.coalesce(func.sum(Bonus.amount).filter(Bonus.status != None), 0).label("bonus_total"),
-        )
-        .join(Referral, Referral.service_id == Service.id)
-        .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-        .group_by(Service.id, Service.name)
-        .order_by(func.count(Referral.id).desc()).limit(10)
-    )
+    services_q = select(
+        Service.id, Service.name, func.count(Referral.id).label("total"),
+        func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
+        func.coalesce(func.sum(Bonus.amount).filter(Bonus.status != None), 0).label("bonus_total"),
+    ).join(Referral, Referral.service_id == Service.id).outerjoin(Bonus, Bonus.referral_id == Referral.id)
+    if base_filters:
+        services_q = services_q.where(*base_filters)
+    services_q = services_q.group_by(Service.id, Service.name).order_by(func.count(Referral.id).desc()).limit(10)
+    sq = await db.execute(services_q)
     top_services = [{"service_id": str(r.id), "name": r.name, "total": r.total, "confirmed": r.confirmed, "bonus_total": float(r.bonus_total)} for r in sq.all()]
 
-    cq = await db.execute(
-        select(User.id, User.full_name, Clinic.name.label("clinic_name"),
-            func.count(Referral.id).label("total"),
-            func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
-        )
-        .join(Referral, Referral.created_by_admin_id == User.id)
-        .outerjoin(Clinic, Clinic.id == User.clinic_id)
-        .where(User.role == UserRole.REG)
-        .group_by(User.id, User.full_name, Clinic.name)
-        .order_by(func.count(Referral.id).desc())
-    )
+    admin_q = select(
+        User.id, User.full_name, Clinic.name.label("clinic_name"),
+        func.count(Referral.id).label("total"),
+        func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
+    ).join(Referral, Referral.created_by_admin_id == User.id).outerjoin(Clinic, Clinic.id == User.clinic_id).where(User.role == UserRole.REG)
+    if base_filters:
+        admin_q = admin_q.where(*base_filters)
+    admin_q = admin_q.group_by(User.id, User.full_name, Clinic.name).order_by(func.count(Referral.id).desc())
+    cq = await db.execute(admin_q)
     admin_conversion = [
         {"admin_id": str(r.id), "full_name": r.full_name, "clinic_name": r.clinic_name or "—",
          "total": r.total, "confirmed": r.confirmed,
@@ -556,7 +583,7 @@ async def get_analytics(
                 func.coalesce(func.sum(Bonus.amount), 0).label("bonuses"),
             )
             .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-            .where(Referral.created_at >= d_from, Referral.created_at <= d_to)
+            .where(Referral.created_at >= d_from, Referral.created_at <= d_to, *base_filters)
         )
         row = r.one()
         return {"total": row.total, "confirmed": row.confirmed, "bonuses": float(row.bonuses)}
@@ -564,15 +591,23 @@ async def get_analytics(
     this_month = await _month_stats(first_this, today)
     last_month = await _month_stats(first_last, last_month_end)
 
-    clinic_q = await db.execute(
-        select(Clinic.id, Clinic.name, func.count(Referral.id).label("total"),
-            func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
-            func.coalesce(func.sum(Bonus.amount), 0).label("bonuses"),
-        )
-        .join(Referral, Referral.from_clinic_id == Clinic.id)
-        .outerjoin(Bonus, Bonus.referral_id == Referral.id)
-        .group_by(Clinic.id, Clinic.name).order_by(func.count(Referral.id).desc())
-    )
+    # Сравнение клиник: учитываем тенант, но НЕ фильтруем по clinic_id
+    # (иначе в табличке всегда будет одна строка). Если clinic_id задан —
+    # выводим только эту клинику (manager своей клиники).
+    clinic_filters = []
+    if current_user.tenant_id is not None:
+        clinic_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if clinic_id is not None:
+        clinic_filters.append(Clinic.id == clinic_id)
+    clinic_q_stmt = select(
+        Clinic.id, Clinic.name, func.count(Referral.id).label("total"),
+        func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
+        func.coalesce(func.sum(Bonus.amount), 0).label("bonuses"),
+    ).join(Referral, Referral.from_clinic_id == Clinic.id).outerjoin(Bonus, Bonus.referral_id == Referral.id)
+    if clinic_filters:
+        clinic_q_stmt = clinic_q_stmt.where(*clinic_filters)
+    clinic_q_stmt = clinic_q_stmt.group_by(Clinic.id, Clinic.name).order_by(func.count(Referral.id).desc())
+    clinic_q = await db.execute(clinic_q_stmt)
     clinic_comparison = [
         {"clinic_id": str(r.id), "name": r.name, "total": r.total, "confirmed": r.confirmed,
          "conversion_pct": round(r.confirmed / r.total * 100, 1) if r.total > 0 else 0.0, "bonuses": float(r.bonuses)}

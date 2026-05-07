@@ -15,6 +15,7 @@ from .activity import router as activity_router
 from .partners import router as partners_router
 from .discounts import router as discounts_router
 from .recruiter_doctors import router as recruiter_doctors_router
+from .clinics_access import router as clinics_access_router
 
 router = APIRouter(prefix="/manager", tags=["manager"])
 
@@ -29,3 +30,4 @@ router.include_router(activity_router)
 router.include_router(partners_router)
 router.include_router(discounts_router)
 router.include_router(recruiter_doctors_router)
+router.include_router(clinics_access_router)

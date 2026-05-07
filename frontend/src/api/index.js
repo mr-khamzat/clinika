@@ -52,7 +52,7 @@ export const updateClinic = (id, data) => api.patch(`/manager/clinics/${id}`, da
 
 // Analytics
 export const getDailyReport = () => api.get('/manager/reports/daily')
-export const getAnalytics = () => api.get('/manager/reports/analytics')
+export const getAnalytics = (clinicId) => api.get('/manager/reports/analytics', clinicId ? { params: { clinic_id: clinicId } } : {})
 
 // KPI
 export const getKpi = (month) => api.get('/manager/kpi/', { params: month ? { month } : {} })
