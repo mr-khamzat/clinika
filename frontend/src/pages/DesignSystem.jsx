@@ -21,12 +21,19 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  Modal,
+  useToast,
 } from '../design'
 
 export default function DesignSystem() {
   // ─── Состояние демо ───
   const [theme, setTheme] = useState('light')
   const [tab, setTab] = useState('overview')
+  // ─── Состояние демо: Modal ───
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalSize, setModalSize] = useState('md')
+  // ─── Хук тостов ───
+  const { toast } = useToast()
 
   return (
     <Page theme={theme}>
@@ -217,11 +224,122 @@ export default function DesignSystem() {
           </Card.Body>
         </Card>
 
+        {/* ─── Modal ─── */}
+        <Card className="mb-6">
+          <Card.Header>
+            <div>
+              <Card.Title>Modal</Card.Title>
+              <Card.Subtitle>Backdrop с blur, focus-trap, Esc, на мобильном — bottom-sheet</Card.Subtitle>
+            </div>
+          </Card.Header>
+          <Card.Body>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  setModalSize('sm')
+                  setModalOpen(true)
+                }}
+              >
+                Открыть Small
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setModalSize('md')
+                  setModalOpen(true)
+                }}
+              >
+                Открыть Medium
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setModalSize('lg')
+                  setModalOpen(true)
+                }}
+              >
+                Открыть Large
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+
+        {/* ─── Toast ─── */}
+        <Card className="mb-6">
+          <Card.Header>
+            <div>
+              <Card.Title>Toast</Card.Title>
+              <Card.Subtitle>useToast() — справа-снизу (на мобильном — сверху)</Card.Subtitle>
+            </div>
+          </Card.Header>
+          <Card.Body>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => toast('Информационное сообщение', 'info')}
+              >
+                Info
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => toast('Изменения сохранены', 'success')}
+              >
+                Success
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => toast('Проверьте подключение к сети', 'warn')}
+              >
+                Warn
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => toast('Не удалось загрузить данные', 'error', 6000)}
+              >
+                Error (6с)
+              </Button>
+            </div>
+          </Card.Body>
+        </Card>
+
         {/* ─── Footer note ─── */}
         <p className="text-center mt-8" style={{ fontSize: 12, color: 'var(--fg-4)' }}>
           Этап 4 ROADMAP · Дизайн-токены + базовые компоненты · /src/design/
         </p>
       </div>
+
+      {/* ─── Modal: рендер вне Page-контейнера (portal-like) ─── */}
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={`Пример модалки (${modalSize})`}
+        size={modalSize}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+              Отмена
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                setModalOpen(false)
+                toast('Действие подтверждено', 'success')
+              }}
+            >
+              Подтвердить
+            </Button>
+          </>
+        }
+      >
+        <p>
+          Это переиспользуемая модалка дизайн-системы. Поддерживает три размера
+          ({"'sm'"}, {"'md'"}, {"'lg'"}), backdrop с blur, focus-trap, закрытие по Esc.
+        </p>
+        <p className="mt-3">
+          На экранах уже 640px рендерится как bottom-sheet со slide-up анимацией.
+        </p>
+      </Modal>
     </Page>
   )
 }

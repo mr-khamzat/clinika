@@ -4,7 +4,7 @@
  * ========================================
  * Реэкспорты компонентов и токенов, чтобы импортировать так:
  *
- *   import { Page, Card, KpiCard, Button } from '@/design'
+ *   import { Page, Card, KpiCard, Button, Modal, useToast } from '@/design'
  *
  * Токены подгружаются через ./tokens.css (обычно в main.jsx, один раз глобально).
  * ========================================
@@ -20,3 +20,6 @@ export { default as Tabs } from './components/Tabs'
 export { default as Avatar } from './components/Avatar'
 export { default as EmptyState } from './components/EmptyState'
 export { default as Sparkline } from './components/Sparkline'
+export { default as Modal } from './components/Modal'
+export { default as Toast } from './components/Toast'
+export { ToastProvider, useToast } from './components/ToastContext'

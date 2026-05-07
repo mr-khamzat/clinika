@@ -56,6 +56,9 @@ const WikiArticle = lazy(() => import('./pages/WikiArticle'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
+// ─── Глобальный провайдер тостов (Этап 4 ROADMAP) ───
+// Оборачивает любую точку входа: уведомления доступны во всех кабинетах.
+import { ToastProvider } from './design'
 
 // ─── Применяем тему ДО первого рендера ───
 ;(function applyThemeEarly() {
@@ -222,7 +225,9 @@ function MiniApp() {
 }
 
 // ─── Корневой компонент — определяет точку входа ───
-export default function App() {
+// Внутренний диспетчер: возвращает нужный кабинет/лендинг по URL.
+// Обёрнут в ToastProvider (см. ниже) — тосты доступны во всех ветках.
+function AppRouter() {
   const path = window.location.pathname
 
   // ─── Публичная Wiki (без auth) — глобально и в тенантах ───
@@ -314,4 +319,15 @@ export default function App() {
 
   // Тенантное мини-приложение
   return <MiniApp />
+}
+
+// ─── Корневой компонент-обёртка ───
+// Оборачивает диспетчер в ToastProvider, чтобы хук useToast() работал
+// в любой ветке: AdminRoot, PatientCabinet, MiniApp, OnlineBooking и т.д.
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppRouter />
+    </ToastProvider>
+  )
 }
