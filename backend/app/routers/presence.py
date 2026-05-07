@@ -121,6 +121,64 @@ class PresenceManager:
 presence_manager = PresenceManager()
 
 
+# ── Активные звонки (в памяти) ─────────────────────────────────────────────
+# Ключ — frozenset({caller_id_str, callee_id_str}). Значение — словарь с
+# полями {caller_id, callee_id, call_type, started_at, answered_at}.
+# Используется для записи CallLog при call_end/call_reject/call_busy.
+_ACTIVE_CALLS: dict = {}
+
+
+def _call_key(a: str, b: str) -> frozenset:
+    return frozenset({str(a), str(b)})
+
+
+async def _save_call_log(
+    db: AsyncSession,
+    caller_id: str | uuid.UUID,
+    callee_id: str | uuid.UUID,
+    outcome: str,
+    call_type: str = "audio",
+    started_at: datetime | None = None,
+    answered_at: datetime | None = None,
+    tenant_id: uuid.UUID | None = None,
+) -> None:
+    """Сохраняет запись CallLog. outcome: answered/missed/rejected/busy."""
+    try:
+        if isinstance(caller_id, str):
+            caller_uuid = uuid.UUID(caller_id)
+        else:
+            caller_uuid = caller_id
+        if isinstance(callee_id, str):
+            callee_uuid = uuid.UUID(callee_id)
+        else:
+            callee_uuid = callee_id
+
+        now = datetime.utcnow()
+        s_at = started_at or now
+        duration = 0
+        if outcome == "answered" and answered_at:
+            duration = max(0, int((now - answered_at).total_seconds()))
+
+        log_row = CallLog(
+            tenant_id=tenant_id,
+            caller_id=caller_uuid,
+            callee_id=callee_uuid,
+            outcome=outcome,
+            call_type=call_type or "audio",
+            duration_sec=duration,
+            started_at=s_at,
+            ended_at=now,
+        )
+        db.add(log_row)
+        await db.commit()
+    except Exception:
+        # Логирование звонка не должно ломать сигнализацию
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+
+
 # ── REST: статус присутствия ──────────────────────────────────────────────────
 
 class UpdatePresenceRequest(BaseModel):
@@ -396,6 +454,12 @@ async def presence_ws(
                         "reason": "offline",
                         "callee_id": callee_id,
                     })
+                    # Лог: попытка дозвона до offline → missed
+                    await _save_call_log(
+                        db, user_id, callee_id,
+                        outcome="missed", call_type=call_type,
+                        tenant_id=user.tenant_id,
+                    )
                     continue
 
                 if callee_presence and callee_presence.status == PresenceStatus.BUSY:
@@ -405,6 +469,11 @@ async def presence_ws(
                         "callee_id": callee_id,
                         "status_text": callee_presence.status_text,
                     })
+                    await _save_call_log(
+                        db, user_id, callee_id,
+                        outcome="busy", call_type=call_type,
+                        tenant_id=user.tenant_id,
+                    )
                     continue
 
                 if callee_presence and callee_presence.status == PresenceStatus.AWAY:
@@ -414,6 +483,11 @@ async def presence_ws(
                         "callee_id": callee_id,
                         "status_text": callee_presence.status_text or "Не на месте",
                     })
+                    await _save_call_log(
+                        db, user_id, callee_id,
+                        outcome="missed", call_type=call_type,
+                        tenant_id=user.tenant_id,
+                    )
                     continue
 
                 # Отправляем вызов
@@ -431,11 +505,25 @@ async def presence_ws(
                         "reason": "offline",
                         "callee_id": callee_id,
                     })
+                    await _save_call_log(
+                        db, user_id, callee_id,
+                        outcome="missed", call_type=call_type,
+                        tenant_id=user.tenant_id,
+                    )
                 else:
                     await ws.send_json({
                         "type": "call_ringing",
                         "callee_id": callee_id,
                     })
+                    # Регистрируем звонок как «ringing» — в памяти ждём ответа.
+                    _ACTIVE_CALLS[_call_key(user_id, callee_id)] = {
+                        "caller_id": user_id,
+                        "callee_id": callee_id,
+                        "call_type": call_type,
+                        "started_at": datetime.utcnow(),
+                        "answered_at": None,
+                        "tenant_id": user.tenant_id,
+                    }
 
             elif msg_type in ("call_accept", "call_reject", "call_end", "call_busy"):
                 # Ответ на звонок — пересылаем инициатору
@@ -472,7 +560,13 @@ async def presence_ws(
                         .values(status=PresenceStatus.BUSY)
                     )
                     await db.commit()
-                elif msg_type in ("call_end", "call_reject"):
+                    # Отмечаем время ответа в активном звонке
+                    if target_id:
+                        key = _call_key(user_id, target_id)
+                        info = _ACTIVE_CALLS.get(key)
+                        if info:
+                            info["answered_at"] = datetime.utcnow()
+                elif msg_type in ("call_end", "call_reject", "call_busy"):
                     # Возврат в ONLINE
                     await db.execute(
                         update(UserPresence)
@@ -480,6 +574,29 @@ async def presence_ws(
                         .values(status=PresenceStatus.ONLINE)
                     )
                     await db.commit()
+                    # Лог: финализируем CallLog по активному звонку
+                    if target_id:
+                        key = _call_key(user_id, target_id)
+                        info = _ACTIVE_CALLS.pop(key, None)
+                        if info:
+                            if info.get("answered_at"):
+                                outcome = "answered"
+                            elif msg_type == "call_reject":
+                                outcome = "rejected"
+                            elif msg_type == "call_busy":
+                                outcome = "busy"
+                            else:
+                                outcome = "missed"
+                            await _save_call_log(
+                                db,
+                                info["caller_id"],
+                                info["callee_id"],
+                                outcome=outcome,
+                                call_type=info.get("call_type", "audio"),
+                                started_at=info.get("started_at"),
+                                answered_at=info.get("answered_at"),
+                                tenant_id=info.get("tenant_id"),
+                            )
 
             elif msg_type == "ice_candidate":
                 # WebRTC ICE candidate relay

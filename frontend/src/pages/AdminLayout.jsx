@@ -23,6 +23,8 @@ const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSection'))
 const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
 const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
+// История и аналитика звонков (CallLog) — для super_admin / franchise_owner
+const CallLogSection = lazy(() => import('../sections/calls/CallLogSection'))
 const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekScheduleSection'))
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 // В /admin (super_admin) используем mode="admin" + селектор тенанта внутри секции.
@@ -130,6 +132,7 @@ const NAV = [
   { key: 'doctors',        label: 'Врачи',        icon: 'stethoscope' },
   { key: 'patient_chats',  label: 'Чаты пациентов', icon: 'chat_bubble' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
+  { key: 'calls_log',      label: 'Звонки',       icon: 'call' },
   { key: 'push_notify',    label: 'Push',         icon: 'notifications' },
   { key: 'wiki',           label: 'Документация', icon: 'auto_stories' },
   { key: 'settings',       label: 'Настройки',    icon: 'settings' },
@@ -171,6 +174,7 @@ const NAV_GROUP_OF = {
   platform_analytics: 'ANALYTICS',
   monitoring:         'ANALYTICS',
   audit:              'ANALYTICS',
+  calls_log:          'ANALYTICS',
 
   reviews:            'CONTENT',
   contacts:           'CONTENT',
@@ -213,6 +217,7 @@ const PAGE_TITLES = {
   doctors:            { title: 'Врачи',                subtitle: 'Управление врачебным составом' },
   patient_chats:      { title: 'Чаты пациентов',       subtitle: 'Все чаты пациентов на платформе' },
   calls_cfg:          { title: 'Звонки и SMS',         subtitle: 'Правила обзвонов и подключение шлюзов' },
+  calls_log:          { title: 'Звонки',                subtitle: 'История и аналитика звонков сотрудников' },
   push_notify:        { title: 'Push-уведомления',     subtitle: 'Рассылки пациентам и сотрудникам' },
   wiki:               { title: 'Документация',         subtitle: 'Справочник по платформе' },
   settings:           { title: 'Настройки',            subtitle: 'Параметры тенанта и платформы' },
@@ -7650,6 +7655,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'doctors':        return <Suspense fallback={<SectionLoader />}><DoctorsSection token={adminToken} /></Suspense>
       case 'patient_chats':  return <Suspense fallback={<SectionLoader />}><PatientChatsSection token={adminToken} /></Suspense>
       case 'calls_cfg':      return <CallsConfigSection token={adminToken} />
+      case 'calls_log':      return <Suspense fallback={<SectionLoader />}><CallLogSection /></Suspense>
       case 'push_notify':    return <PushSection token={adminToken} />
       case 'webhooks':       return <Suspense fallback={<SectionLoader />}><WebhooksSection token={adminToken} /></Suspense>
       case 'ads':            return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>

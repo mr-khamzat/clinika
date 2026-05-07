@@ -14,6 +14,8 @@ import ManagerShell from './_ManagerShell'
 
 // Ленивая загрузка LTV-секции (платный модуль ltv_pro)
 const LtvAnalyticsSection = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
+// Ленивая загрузка секции «Звонки» — история CallLog + аналитика
+const CallLogSection = lazy(() => import('../sections/calls/CallLogSection'))
 
 function fmt(n) { return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—' }
 
@@ -116,7 +118,8 @@ export default function ManagerAnalytics() {
         <Tabs
           items={[
             { id: 'overview', label: 'Аналитика' },
-            { id: 'ltv', label: 'LTV' },
+            { id: 'ltv',      label: 'LTV' },
+            { id: 'calls',    label: 'Звонки' },
           ]}
           value={tab}
           onChange={setTab}
@@ -147,6 +150,19 @@ export default function ManagerAnalytics() {
               передача любого значения, включая '', включает externallyControlled
               в LtvAnalyticsSection и скрывает её внутренний селектор. */}
           <LtvAnalyticsSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
+
+      {tab === 'calls' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          {/* Прокидываем clinic_id из scope — фильтр звонков по клинике. */}
+          <CallLogSection clinicId={scope.selectedId} />
         </Suspense>
       )}
 

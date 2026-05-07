@@ -46,6 +46,7 @@ from app.routers.franchise_owner import router as franchise_owner_router
 from app.routers.partner_clinics import router as partner_clinics_router
 from app.routers.mis_sync import router as mis_router
 from app.routers.presence import router as presence_router
+from app.routers.calls import router as calls_router
 from app.routers.contact import router as contact_router
 from app.routers.support import router as support_router
 from app.routers.patient import router as patient_router
@@ -972,6 +973,7 @@ app.include_router(franchise_owner_router)
 app.include_router(partner_clinics_router)
 app.include_router(mis_router)
 app.include_router(presence_router)
+app.include_router(calls_router)
 app.include_router(push_router)
 app.include_router(webhooks_router)
 app.include_router(ads_router)
