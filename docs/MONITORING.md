@@ -127,10 +127,26 @@ ssh -L 3002:127.0.0.1:3002 root@212.57.118.126
 
 Логин: `admin` / `admin` (смени при первом входе через переменную `GRAFANA_ADMIN_PASSWORD` в `.env`).
 
-### Полезные дашборды (импорт по ID)
+### Готовые дашборды в репо
 
-- **PostgreSQL Database**: ID `9628` (postgres_exporter)
-- **Prometheus Stats**: ID `2`
+В `/opt/clinika/monitoring/grafana-dashboards/` лежат JSON для импорта:
+
+| Файл | Что показывает | Источник |
+|------|----------------|----------|
+| `postgres.json` | PostgreSQL Database (ID 9628 от Grafana Labs) | postgres_exporter |
+| `clinika-overview.json` | Сводка: статус PG, активные коннекшены, размер БД, uptime, транзакции, IO по строкам | postgres_exporter (кастомный) |
+
+**Импорт после первого входа** (`admin/admin`, потом смена пароля):
+
+1. **Settings → Data sources → Add data source → Prometheus**
+   - URL: `http://prometheus:9090` (внутри docker network)
+   - Save & Test → должно быть зелёным.
+2. **Dashboards → New → Import → Upload JSON file** → выбрать файл из репо.
+3. При запросе datasource — выбрать ранее созданный Prometheus.
+
+Дополнительные дашборды по ID с <https://grafana.com/grafana/dashboards/>:
+
+- **Prometheus 2.0 Stats**: ID `3662`
 - **Node Exporter Full**: ID `1860` (если добавим node-exporter)
 
 ### Backend метрики (TODO)
@@ -152,66 +168,100 @@ Instrumentator().instrument(app).expose(app)
 
 ## 3. Sentry
 
-См. `.env.example` — переменные `SENTRY_DSN` (backend) и `VITE_SENTRY_DSN` (frontend).
+Полная инструкция в **`docs/SENTRY_SETUP.md`** — там пошагово про регистрацию,
+получение DSN, заполнение `.env`, пересборку и тест.
 
-Структура DSN: `https://<key>@o<org_id>.ingest.sentry.io/<project_id>`
+Кратко:
 
-Получение DSN:
+- SDK уже встроены: `backend/app/main.py` (sentry-sdk[fastapi]) + `frontend/src/main.jsx` (@sentry/react).
+- Без DSN — клиенты неактивны, приложение работает как раньше.
+- Backend читает `SENTRY_DSN`, frontend — `VITE_SENTRY_DSN` (компилируется в бандл, нужна пересборка).
+- Email пользователя: **mrevil9995@gmail.com** (использовать при регистрации Sentry).
 
-1. Регистрация на <https://sentry.io>.
-2. Create Project → Python (для backend) и React (для frontend) — два отдельных проекта.
-3. Settings → Projects → `<project>` → Client Keys (DSN) — копируешь URL.
-4. Вставляешь в `/opt/clinika/.env`:
+## 4. Nginx routes (уже в /etc/nginx/sites-enabled/clinikahttps.conf)
 
-   ```
-   SENTRY_DSN=https://abc123def456@o123456.ingest.sentry.io/7654321
-   VITE_SENTRY_DSN=https://fed987cba654@o123456.ingest.sentry.io/1234567
-   ```
-
-5. Пересборка фронтенда (DSN компилируется в бандл):
-
-   ```bash
-   docker compose build --no-cache clinika-frontend
-   docker compose up -d clinika-frontend
-   ```
-
-Без DSN Sentry не инициализируется, приложение работает как раньше.
-
-## 4. Nginx route для uptime-kuma
-
-Добавлен `location /uptime/` в `/etc/nginx/sites-enabled/clinikahttps.conf`:
+В конфиге уже добавлены два префикс-роута (с приоритетом `^~`, чтобы catch-all `/[^/]+` не перехватил):
 
 ```nginx
-location /uptime/ {
+location ^~ /uptime/ {
     proxy_pass http://127.0.0.1:3001/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    # WebSocket для real-time дашборда
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;   # WebSocket для socket.io
+    proxy_read_timeout 3600s;
+    proxy_buffering off;
+}
+
+location ^~ /grafana/ {
+    proxy_pass http://127.0.0.1:3002/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_read_timeout 3600s;
 }
 ```
 
-Опционально — закрыть Basic Auth или allow-list IP (см. `nginx-http-auth` snippet) если не хочешь публичный доступ.
+Grafana поднята с `GF_SERVER_ROOT_URL=https://клиниксеть.рф/grafana/` и `GF_SERVER_SERVE_FROM_SUB_PATH=true` — sub-path работает корректно.
 
-## 5. Чеклист после установки
+Опционально — закрыть Basic Auth или allow-list IP, если не хочешь публичный доступ.
+
+## 5. Текущее состояние (2026-05-07)
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}'
+```
+
+| Контейнер | Состояние | Назначение |
+|-----------|-----------|------------|
+| uptime-kuma | Up (healthy) | проверки доступности, status-page |
+| prometheus | Up | сбор метрик (postgres + self) |
+| postgres-exporter | Up | экспорт метрик PostgreSQL |
+| grafana | Up | дашборды |
+
+URL после подъёма:
+
+- <https://клиниксеть.рф/uptime/> — Uptime-Kuma (первый вход → создать админа)
+- <https://клиниксеть.рф/grafana/> — Grafana (admin/admin)
+- внутри докера: `http://prometheus:9090`, `http://postgres-exporter:9187/metrics`
+
+Прокачка стека:
+
+```bash
+cd /opt/clinika
+docker compose -f docker-compose.monitoring.yml --profile metrics up -d prometheus postgres-exporter grafana
+```
+
+(Не подавать в один cmd с `uptime-kuma` — он уже запущен через `docker run` и compose ругнётся на конфликт имени.)
+
+## 6. Чеклист после установки
 
 - [ ] Зайти на <https://клиниксеть.рф/uptime/>, создать админ-аккаунт
 - [ ] Добавить 5–7 проверок (см. таблицу в разделе 1)
 - [ ] Создать `@clinika_alerts_bot` через @BotFather
 - [ ] Привязать Telegram-нотификации к default monitor
 - [ ] Тест: остановить `clinika-backend`, проверить что прилетел алерт
-- [ ] (Опц.) поднять Prometheus+Grafana через `--profile metrics`
-- [ ] (Опц.) импортировать дашборд `9628` в Grafana
-- [ ] Прописать Sentry DSN в `.env` (backend + frontend)
-- [ ] Перезапустить backend и пересобрать frontend после Sentry
+- [x] Поднять Prometheus+Grafana через `--profile metrics`
+- [ ] Зайти на <https://клиниксеть.рф/grafana/> (admin/admin), сменить пароль
+- [ ] Добавить data source Prometheus (`http://prometheus:9090`)
+- [ ] Импортировать `monitoring/grafana-dashboards/postgres.json` (PostgreSQL Database)
+- [ ] Импортировать `monitoring/grafana-dashboards/clinika-overview.json` (сводка)
+- [ ] Зарегистрироваться на sentry.io под `mrevil9995@gmail.com`, получить DSN
+- [ ] Прописать `SENTRY_DSN` и `VITE_SENTRY_DSN` в `/opt/clinika/.env`
+- [ ] Перезапустить backend (`docker compose up -d clinika-backend`)
+- [ ] Пересобрать frontend (`docker compose build --no-cache clinika-frontend && docker compose up -d clinika-frontend`)
 
 ## Связанное
 
+- `SENTRY_SETUP.md` — пошаговая инструкция Sentry (регистрация → DSN → тест)
 - `BACKUP.md` — бэкапы и offsite (rclone Yandex.Disk)
 - `ROADMAP.md` Этап 12 — DevOps & Observability
 - `docker-compose.monitoring.yml` — стек мониторинга
+- `monitoring/grafana-dashboards/` — JSON для импорта в Grafana
