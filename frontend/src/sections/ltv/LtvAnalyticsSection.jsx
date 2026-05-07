@@ -50,9 +50,9 @@ const fmtPct = (v) => {
 }
 
 const RISK_LABEL = {
-  low: { text: 'low', tone: 'good' },
-  medium: { text: 'medium', tone: 'warn' },
-  high: { text: 'high', tone: 'bad' },
+  low: { text: 'низкий', tone: 'good' },
+  medium: { text: 'средний', tone: 'warn' },
+  high: { text: 'высокий', tone: 'bad' },
 }
 
 function authH(token) { return token ? { Authorization: `Bearer ${token}` } : {} }
@@ -94,7 +94,7 @@ function SummaryView({ data }) {
           trend="up"
         />
         <KpiCard
-          label="Средний NetLTV"
+          label="Средний чистый LTV"
           value={fmtRubOrDash(data.avg_net_ltv)}
           delta={Number(data.avg_net_ltv || 0) > 0
             ? 'по фактическим оплатам'
@@ -108,7 +108,7 @@ function SummaryView({ data }) {
           trend="flat"
         />
         <KpiCard
-          label="Churn rate"
+          label="Доля оттока"
           value={fmtPct(data.churn_rate)}
           delta={`в зоне риска: ${fmtNum((data.at_risk_patients || 0) + (data.medium_risk_patients || 0))}`}
           trend={Number(data.churn_rate || 0) > 30 ? 'down' : 'flat'}
@@ -118,7 +118,7 @@ function SummaryView({ data }) {
         <KpiCard
           label="At-risk"
           value={fmtNum(data.at_risk_patients)}
-          delta={`medium: ${fmtNum(data.medium_risk_patients)}`}
+          delta={`средний риск: ${fmtNum(data.medium_risk_patients)}`}
           trend="down"
         />
         <KpiCard
@@ -142,7 +142,7 @@ function SummaryView({ data }) {
           <Metric label="Горизонт LTV / NetLTV" value="3 года" />
           <Metric
             label="NetLTV: источник"
-            value={Number(data.avg_net_ltv || 0) > 0 ? 'getPayments (Renovatio)' : 'нет данных (403)'}
+            value={Number(data.avg_net_ltv || 0) > 0 ? 'getPayments (Renovatio)' : 'нет данных от Renovatio'}
           />
         </div>
       </Card>
@@ -187,8 +187,8 @@ function PatientsTable({ rows }) {
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Средний чек</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Total</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>LTV</th>
-              <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }} title="NetLTV — по фактическим оплатам из getPayments. «—» если Renovatio ещё не открыл доступ.">NetLTV</th>
-              <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600 }}>Churn</th>
+              <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }} title="NetLTV — по фактическим оплатам из getPayments. «—» если Renovatio ещё не открыл доступ.">Чистый LTV</th>
+              <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600 }}>Риск оттока</th>
             </tr>
           </thead>
           <tbody>
