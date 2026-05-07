@@ -75,6 +75,9 @@ from app.routers.vitals import router as vitals_router
 from app.routers.loyalty import router as loyalty_router
 from app.routers.permissions import router as permissions_router
 from app.routers.ltv import router as ltv_router
+# Платёжный каркас (online_payments_pro + fiscal_54fz_pro)
+from app.routers.clinic_payments import router as clinic_payments_router
+from app.routers.fiscal_receipts import router as fiscal_receipts_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -989,6 +992,9 @@ app.include_router(vitals_router)
 app.include_router(loyalty_router)
 app.include_router(permissions_router)
 app.include_router(ltv_router)
+# Платёжный каркас (online_payments_pro + fiscal_54fz_pro)
+app.include_router(clinic_payments_router)
+app.include_router(fiscal_receipts_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

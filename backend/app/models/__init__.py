@@ -91,3 +91,16 @@ from app.models.permission_override import TenantPermissionOverride
 
 # LTV-аналитика (модуль ltv_pro) — снапшоты пациентов
 from app.models.ltv import PatientLtvSnapshot
+
+# Платёжный каркас клиники (online_payments_pro + fiscal_54fz_pro)
+# Оплаты пациентов клинике + фискальные чеки 54-ФЗ из ОФД
+from app.models.payments_clinic import (
+    ClinicPayment,
+    PaymentGatewayConfig,
+    FiscalReceipt,
+    OFDConfig,
+    PaymentGateway,
+    OFDProvider,
+    ClinicPaymentStatus,
+    FiscalOperationType,
+)
