@@ -57,6 +57,8 @@ const BrandingSection           = lazy(() => import('../sections/BrandingSection
 const CMSPagesSection           = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection               = lazy(() => import('../sections/ActsSection'))
 const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
+// Этап 14 — клиники-партнёры с контрактами royalty/per_referral/hybrid
+const PartnerClinicsSection      = lazy(() => import('../sections/PartnerClinicsSection'))
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMatrixSection'))
 
@@ -76,6 +78,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'overview',  label: 'Главная',     icon: 'dashboard'             },
       { id: 'tenants',   label: 'Клиники',     icon: 'business'              },
+      { id: 'partners_clinics', label: 'Клиники-партнёры', icon: 'medical_services' },
       { id: 'doctors',   label: 'Сотрудники',  icon: 'stethoscope'           },
       { id: 'partners',  label: 'Партнёрские врачи', icon: 'medical_services'    },
       { id: 'recruiters',label: 'Рекрутеры',   icon: 'person_search'         },
@@ -118,6 +121,7 @@ const NAV_GROUPS = [
 const PAGE_TITLES = {
   overview:   { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
   tenants:    { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
+  partners_clinics: { title: 'Клиники-партнёры', subtitle: 'Контракты royalty / per_referral / hybrid' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
@@ -154,6 +158,7 @@ const PAGE_HINTS = {
   analytics:  'Drill-down по клиникам/врачам/услугам. Метрики: воронка, динамика, топы, ledger-trend.',
   recruiters: 'Менеджеры по привлечению врачей-партнёров. Каждый получает % бонуса от направлений приведённых врачей.',
   partners:   'Внешние врачи (не штатные) которые направляют пациентов в клиники сети. Получают бонус за каждое подтверждённое направление.',
+  partners_clinics: 'Клиники-партнёры в составе ваших тенантов. У каждой свой контракт: % с выручки, ₽ за направление или гибрид.',
 }
 
 const PLAN_LABELS = {
@@ -1726,6 +1731,13 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     if (route === 'calls') return <CallRulesSection adminToken={adminToken} />
     if (route === 'royalty') return <BillingSection />
     if (route === 'partners') return <PartnerDoctorsSection adminToken={adminToken} />
+    if (route === 'partners_clinics') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <PartnerClinicsSection adminToken={adminToken} />
+        </Suspense>
+      )
+    }
     if (route === 'recruiters') return <RecruitersSection adminToken={adminToken} />
     if (route === 'settings') return <SettingsSection adminToken={adminToken} />
     if (route === 'knowledge') {

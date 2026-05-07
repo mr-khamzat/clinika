@@ -43,6 +43,7 @@ from app.routers.billing import router as billing_router
 from app.routers.consent import router as consent_router
 from app.routers.admin import router as admin_router
 from app.routers.franchise_owner import router as franchise_owner_router
+from app.routers.partner_clinics import router as partner_clinics_router
 from app.routers.mis_sync import router as mis_router
 from app.routers.presence import router as presence_router
 from app.routers.contact import router as contact_router
@@ -917,6 +918,7 @@ from app.routers import call_rules as call_rules_router
 app.include_router(call_rules_router.router)
 app.include_router(admin_router)
 app.include_router(franchise_owner_router)
+app.include_router(partner_clinics_router)
 app.include_router(mis_router)
 app.include_router(presence_router)
 app.include_router(push_router)
