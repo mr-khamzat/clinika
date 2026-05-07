@@ -78,7 +78,14 @@ async def write(
     """
     Записать событие в аудит-журнал.
     db.flush() вызывается внутри — commit делает вызывающий код.
+    Если request не передан — пытаемся достать из contextvar (middleware кладёт).
     """
+    if request is None:
+        try:
+            from app.core.request_ctx import current_request
+            request = current_request.get()
+        except Exception:
+            request = None
     ip = _ip(request)
 
     # Гео-IP: graceful degradation — любая ошибка / отсутствие mmdb -> None.

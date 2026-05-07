@@ -938,6 +938,17 @@ async def custom_redoc_html():
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
 app.add_middleware(DomainRouterMiddleware)
 
+# ─── Request ContextVar — кладём request в contextvar чтобы audit_service нашёл по fallback
+@app.middleware("http")
+async def request_ctx_middleware(request: Request, call_next):
+    from app.core.request_ctx import current_request
+    token = current_request.set(request)
+    try:
+        return await call_next(request)
+    finally:
+        current_request.reset(token)
+
+
 # ─── Security headers ───
 @app.middleware("http")
 async def request_metrics_middleware(request: Request, call_next):

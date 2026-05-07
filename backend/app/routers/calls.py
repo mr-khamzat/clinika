@@ -20,7 +20,7 @@ import csv
 import io
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -157,7 +157,12 @@ async def _build_filters(
             return None
         cond.append(CallLog.tenant_id.in_(tenant_ids))
 
-    # Дата
+    # Дата — нормализуем в naive UTC, т.к. колонка started_at — TIMESTAMP WITHOUT TIME ZONE
+    # FastAPI парсит ISO с TZ как aware datetime, asyncpg не может его сравнить с naive колонкой.
+    if date_from and date_from.tzinfo is not None:
+        date_from = date_from.astimezone(timezone.utc).replace(tzinfo=None)
+    if date_to and date_to.tzinfo is not None:
+        date_to = date_to.astimezone(timezone.utc).replace(tzinfo=None)
     if date_from:
         cond.append(CallLog.started_at >= date_from)
     if date_to:

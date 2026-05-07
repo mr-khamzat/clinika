@@ -14,6 +14,7 @@
 Дедупликация (DEDUP_MINUTES=10) — обязательна, иначе сломанный endpoint
 засрёт чат за минуту повторами.
 """
+import html
 import logging
 import httpx
 from datetime import datetime
@@ -83,10 +84,11 @@ async def send_alert_500(method: str, path: str, status: int, client_ip: str):
     key = f"500:{method}:{path}:{status}"
     if not _should_send(key):
         return
+    # Экранируем все user-controlled поля — иначе TG ругается на <class>, <foo> и т.д.
     text = (
         f"🔴 <b>HTTP {status}</b>\n"
-        f"<code>{method} {path}</code>\n"
-        f"IP: <code>{client_ip}</code>\n"
+        f"<code>{html.escape(method)} {html.escape(path)}</code>\n"
+        f"IP: <code>{html.escape(client_ip)}</code>\n"
         f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     )
     await _send_telegram(text)
@@ -99,12 +101,14 @@ async def send_alert_exception(method: str, path: str, exc: Exception, tb: str, 
         return
     # Обрезаем traceback до 1800 символов, чтобы влезло в Telegram (лимит 4096)
     tb_short = tb[-1800:] if len(tb) > 1800 else tb
+    # Экранируем динамические части — в traceback бывают <class 'asyncpg...'> и т.п.,
+    # парсятся TG как HTML-теги и валятся 400.
     text = (
         f"🔴 <b>Unhandled Exception</b>\n"
-        f"<code>{method} {path}</code>\n"
-        f"<b>{type(exc).__name__}:</b> {str(exc)[:200]}\n"
-        f"IP: <code>{client_ip}</code>\n\n"
-        f"<pre>{tb_short}</pre>"
+        f"<code>{html.escape(method)} {html.escape(path)}</code>\n"
+        f"<b>{html.escape(type(exc).__name__)}:</b> {html.escape(str(exc)[:200])}\n"
+        f"IP: <code>{html.escape(client_ip)}</code>\n\n"
+        f"<pre>{html.escape(tb_short)}</pre>"
     )
     await _send_telegram(text)
 
