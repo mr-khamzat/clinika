@@ -22,7 +22,7 @@
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import api from '../../api'
-import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal } from '../../design'
+import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal, QuickActions, buildPatientCardActions } from '../../design'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -638,7 +638,7 @@ function ApptModal({ ctx, canEdit, onClose, onStatus, onMove, weekStart }) {
   return (
     <Modal open onClose={onClose} title="Запись пациента">
       {/* ===== БЛОК: Карточка статуса записи ===== */}
-      <div className="rounded-xl p-3 mb-4" style={{ background: st.bg, color: st.c }}>
+      <div className="rounded-xl p-3 mb-3" style={{ background: st.bg, color: st.c }}>
         <div className="flex items-center justify-between">
           <Chip variant={st.chip}>{st.l}</Chip>
           <span className="text-xs font-mono tabular-nums">{ctx.date} · {ctx.start_time}</span>
@@ -647,6 +647,37 @@ function ApptModal({ ctx, canEdit, onClose, onStatus, onMove, weekStart }) {
         <div className="text-xs opacity-80 mt-0.5">{a.patient_phone}</div>
         {a.notes && <div className="text-xs mt-2 italic opacity-90">«{a.notes}»</div>}
       </div>
+
+      {/* ===== Quick Actions (W4): иконки для быстрого контакта ===== */}
+      {(a.patient_phone || a.qr_code) && (
+        <div className="mb-4">
+          <QuickActions
+            actions={buildPatientCardActions({
+              phone: a.patient_phone,
+              onReschedule: canEdit && ['pending', 'confirmed'].includes(a.status)
+                ? () => setMoveCtx({ date: ctx.date, time: ctx.start_time })
+                : undefined,
+              onCancel: canEdit && ['pending', 'confirmed'].includes(a.status)
+                ? () => onStatus(a.id, 'cancelled')
+                : undefined,
+              onPrintQr: a.qr_code ? () => {
+                const w = window.open('', '_blank', 'width=420,height=600')
+                if (!w) return
+                w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR записи</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;text-align:center;padding:24px;color:#0f172a}
+img{width:280px;height:280px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;margin:16px auto;display:block}
+@media print{body{padding:0}}</style></head><body>
+<h3>${(a.patient_name || a.patient_phone || '—').replace(/[<>&"']/g, '')}</h3>
+<img src="data:image/png;base64,${a.qr_code}" alt="QR"/>
+<p>${ctx.date} ${ctx.start_time}</p>
+<script>setTimeout(()=>{window.print();},200);window.onafterprint=()=>window.close();</script>
+</body></html>`)
+                w.document.close()
+              } : undefined,
+            })}
+          />
+        </div>
+      )}
 
       {!canEdit ? (
         <div className="text-xs text-center py-2" style={{ color: 'var(--fg-3)' }}>Только просмотр</div>

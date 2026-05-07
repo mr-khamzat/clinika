@@ -156,6 +156,7 @@ function Hint({ icon, title, subtitle }) {
 // ─────────────────────────────────────────────────────────────────────
 function TodayPage({ token, doctorId, doctorInfo }) {
   const [apts, setApts] = useState([])
+  const [weekApts, setWeekApts] = useState([])         // W4: для Quick Stats — приёмы за неделю
   const [loading, setLoading] = useState(true)
   const [reloadTick, setReloadTick] = useState(0)
   const { toast } = useToast()
@@ -168,6 +169,13 @@ function TodayPage({ token, doctorId, doctorInfo }) {
       .then(r => setApts(Array.isArray(r.data) ? r.data : r.data?.appointments || []))
       .catch(() => setApts([]))
       .finally(() => setLoading(false))
+
+    // ===== БЛОК (W4): загрузка приёмов за 7 дней для Quick Stats =====
+    const wk = new Date(); wk.setDate(wk.getDate() - 6)
+    const wkStart = wk.toISOString().slice(0, 10)
+    apiFetch('get', `/appointments?doctor_id=${doctorId}&date_from=${wkStart}&date_to=${today}&limit=200`, token)
+      .then(r => setWeekApts(Array.isArray(r.data) ? r.data : r.data?.appointments || []))
+      .catch(() => setWeekApts([]))
   }, [token, doctorId, reloadTick])
 
   // ===== БЛОК: обновление расписания без перезагрузки страницы =====
@@ -214,7 +222,15 @@ function TodayPage({ token, doctorId, doctorInfo }) {
         }
       />
 
-      {/* KPI */}
+      {/* Quick Stats (W4): мини-KPI блок сверху — день/неделя/оценка/доход */}
+      <KpiRow cols={4} className="mb-3">
+        <KpiCard label="Приёмов сегодня" value={total} trend="flat" />
+        <KpiCard label="Этой недели"     value={weekApts.length} trend="up" />
+        <KpiCard label="Средняя оценка"  value={doctorInfo?.avg_rating ? `★ ${Number(doctorInfo.avg_rating).toFixed(1)}` : '—'} trend="flat" />
+        <KpiCard label="Доход месяца"    value={doctorInfo?.month_income != null ? `${Number(doctorInfo.month_income).toLocaleString('ru-RU')} ₽` : '—'} trend="up" />
+      </KpiRow>
+
+      {/* KPI (детальные) */}
       <KpiRow cols={4} className="mb-5">
         <KpiCard label="Запланировано" value={total} delta={`${pluralize(total, ['приём', 'приёма', 'приёмов'])}`} trend="flat" />
         <KpiCard label="Завершено" value={done} delta={done > 0 ? `+${done * 30} мин` : '—'} trend="up" />

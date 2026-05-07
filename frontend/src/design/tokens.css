@@ -216,3 +216,16 @@
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* ===== БЛОК (W4): глобальные dropdown-анимации (slide+fade 200ms) ===== */
+/* Используется в NotificationsBell, ContactsMenu (LTV) и других выпадающих меню */
+@keyframes ks-dd-in  {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ks-dd-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-6px); }
+}
+.ks-dd-enter { animation: ks-dd-in  200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.ks-dd-leave { animation: ks-dd-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }

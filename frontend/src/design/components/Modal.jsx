@@ -23,7 +23,7 @@
  *   - body scroll lock пока open=true
  * ========================================
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 // ===== БЛОК: размеры =====
 const SIZE = {
@@ -40,12 +40,21 @@ function ensureStyles() {
   const css = `
     @keyframes ks-modal-fade-in { from { opacity: 0; } to { opacity: 1; } }
     @keyframes ks-modal-pop-in {
-      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      from { opacity: 0; transform: translateY(20px) scale(0.98); }
       to   { opacity: 1; transform: translateY(0) scale(1); }
     }
+    @keyframes ks-modal-fade-out { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes ks-modal-pop-out {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to   { opacity: 0; transform: translateY(20px) scale(0.98); }
+    }
     @keyframes ks-modal-slide-up {
-      from { transform: translateY(100%); }
-      to   { transform: translateY(0); }
+      from { opacity: 0; transform: translateY(100%); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes ks-modal-slide-down {
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(100%); }
     }
     .ks-modal-backdrop {
       position: fixed; inset: 0;
@@ -55,8 +64,10 @@ function ensureStyles() {
       z-index: 1000;
       display: flex; align-items: center; justify-content: center;
       padding: 16px;
-      animation: ks-modal-fade-in 160ms ease-out;
+      transition: opacity 200ms ease;
+      animation: ks-modal-fade-in 200ms ease-out;
     }
+    .ks-modal-backdrop.is-closing { animation: ks-modal-fade-out 200ms ease-in forwards; }
     .ks-modal-card {
       background: var(--surface);
       color: var(--fg);
@@ -68,8 +79,10 @@ function ensureStyles() {
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      animation: ks-modal-pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      transition: opacity 200ms ease, transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      animation: ks-modal-pop-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
+    .ks-modal-backdrop.is-closing .ks-modal-card { animation: ks-modal-pop-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }
     .ks-modal-head {
       display: flex; align-items: center; justify-content: space-between;
       gap: 12px;
@@ -113,6 +126,9 @@ function ensureStyles() {
         max-height: 92vh;
         animation: ks-modal-slide-up 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
       }
+      .ks-modal-backdrop.is-closing .ks-modal-card {
+        animation: ks-modal-slide-down 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+      }
     }
   `
   const tag = document.createElement('style')
@@ -133,6 +149,24 @@ export default function Modal({
 }) {
   const cardRef = useRef(null)
   const prevFocusRef = useRef(null)
+  // ===== БЛОК: closing-state для exit-анимации (200ms) =====
+  // mounted синхронен с open, но при open=false держим узел в DOM ещё ~220ms,
+  // чтобы проиграть fade-out + pop-out.
+  const [mounted, setMounted] = useState(open)
+  const [closing, setClosing] = useState(false)
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      setClosing(false)
+    } else if (mounted) {
+      setClosing(true)
+      const t = setTimeout(() => { setMounted(false); setClosing(false) }, 220)
+      return () => clearTimeout(t)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Стабильный коллбэк закрытия (используется в обработчиках ниже)
+  const requestClose = useCallback(() => { onClose && onClose() }, [onClose])
 
   // ===== БЛОК: гарантируем CSS =====
   useEffect(() => {
@@ -196,17 +230,17 @@ export default function Modal({
     }
   }, [open, onClose])
 
-  if (!open) return null
+  if (!mounted) return null
 
   const maxWidth = SIZE[size] || SIZE.md
 
   // ===== БЛОК: рендер =====
   return (
     <div
-      className="ks-modal-backdrop"
+      className={`ks-modal-backdrop ${closing ? 'is-closing' : ''}`}
       onMouseDown={(e) => {
         // Закрываем только если клик начался на самом backdrop
-        if (e.target === e.currentTarget) onClose && onClose()
+        if (e.target === e.currentTarget) requestClose()
       }}
       role="presentation"
     >

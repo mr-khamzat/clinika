@@ -28,6 +28,8 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  QuickActions,
+  buildPatientCardActions,
   useToast,
 } from '../design'
 
@@ -90,6 +92,8 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
+  // ─── QR-print контекст (W4) ───
+  const [qrPrint, setQrPrint] = useState(null) // { qr_code, short_code, service_name, patient_phone }
 
   // ─── Внешние врачи (доп. таб «Ещё → Врачи») ───
   const [externalDoctors, setExternalDoctors] = useState([])
@@ -446,12 +450,13 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           </button>
         </div>
 
-        {/* Hero KPI mini-row (компактно, для топа) */}
-        <div className="max-w-3xl mx-auto mt-5 grid grid-cols-3 gap-3">
+        {/* Hero KPI mini-row (W4: 4 метрики — Принятых / В очереди / Записанных сегодня / Бонусов) */}
+        <div className="max-w-3xl mx-auto mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Сегодня',    value: stats?.today_count ?? '—',     icon: 'event_note' },
-            { label: 'Завершено',  value: stats?.confirmed_today ?? '—', icon: 'check_circle' },
-            { label: 'Бонусы',     value: stats ? fmtMoney(stats.balance) : '—', icon: 'payments' },
+            { label: 'Принятых',          value: stats?.confirmed_today ?? '—',          icon: 'task_alt' },
+            { label: 'В очереди',         value: stats?.pending_today ?? stats?.created_today ?? '—', icon: 'pending' },
+            { label: 'Записано сегодня',  value: stats?.today_count ?? '—',              icon: 'event_note' },
+            { label: 'Бонусы',            value: stats ? fmtMoney(stats.balance) : '—',  icon: 'payments' },
           ].map(c => (
             <div
               key={c.label}
@@ -632,7 +637,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                 </Card.Header>
                 <div className="space-y-2">
                   {referrals.slice(0, 3).map(r => (
-                    <div key={r.id} className="ks-row">
+                    <div key={r.id} className="ks-row" style={{ alignItems: 'flex-start' }}>
                       <div className="grid place-items-center rounded-xl flex-shrink-0"
                            style={{ width: 38, height: 38, background: 'var(--accent-soft)', color: 'var(--accent)' }}>
                         <Icon name="receipt_long" size={18} fill={1} />
@@ -643,6 +648,21 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                         </div>
                         <div className="text-[11.5px] truncate" style={{ color: 'var(--fg-3)' }}>
                           {r.service_name}
+                        </div>
+                        {/* ─── Quick Actions (W4): компактные иконки на карточке-превью ─── */}
+                        <div className="mt-1.5">
+                          <QuickActions
+                            compact
+                            actions={buildPatientCardActions({
+                              phone: r.patient_phone,
+                              onPrintQr: r.qr_code ? () => setQrPrint({
+                                qr_code: r.qr_code,
+                                short_code: r.short_code,
+                                service_name: r.service_name,
+                                patient_phone: r.patient_phone,
+                              }) : undefined,
+                            })}
+                          />
                         </div>
                       </div>
                       {statusChip(r.status)}
@@ -889,6 +909,21 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                           {r.short_code}
                         </div>
                       )}
+                    </div>
+                    {/* ─── Quick Actions (W4): иконки прямо на карточке направления ─── */}
+                    <div className="mt-2">
+                      <QuickActions
+                        compact
+                        actions={buildPatientCardActions({
+                          phone: r.patient_phone,
+                          onPrintQr: r.qr_code ? () => setQrPrint({
+                            qr_code: r.qr_code,
+                            short_code: r.short_code,
+                            service_name: r.service_name,
+                            patient_phone: r.patient_phone,
+                          }) : undefined,
+                        })}
+                      />
                     </div>
                   </div>
                 </div>
@@ -1489,6 +1524,65 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             </Button>
           </form>
         ) : null}
+      </Modal>
+
+      {/* ───── QR Print Modal (W4) ───── */}
+      <Modal
+        open={!!qrPrint}
+        onClose={() => setQrPrint(null)}
+        title="QR направления"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setQrPrint(null)}>Закрыть</Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!qrPrint) return
+                const w = window.open('', '_blank', 'width=420,height=600')
+                if (!w) { toast('Разрешите всплывающие окна для печати', 'warn'); return }
+                const code = (qrPrint.short_code || '').replace(/[<>&"']/g, '')
+                const svc  = (qrPrint.service_name || 'Направление').replace(/[<>&"']/g, '')
+                w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR направления</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;text-align:center;padding:24px;color:#0f172a}
+h1{font-size:18px;margin:0 0 8px}p{margin:4px 0;color:#475569;font-size:13px}
+img{width:280px;height:280px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;margin:16px auto;display:block}
+.code{font-family:ui-monospace,monospace;font-size:24px;letter-spacing:0.18em;margin:8px 0;color:#0e7490;font-weight:700}
+@media print{body{padding:0}}
+</style></head><body>
+<h1>${svc}</h1>
+<img src="data:image/png;base64,${qrPrint.qr_code}" alt="QR"/>
+${code ? `<div class="code">${code}</div>` : ''}
+<p>Покажите код в регистратуре</p>
+<script>setTimeout(()=>{window.print();},200);window.onafterprint=()=>window.close();</script>
+</body></html>`)
+                w.document.close()
+              }}
+            >
+              <Icon name="print" size={16} />
+              Печать
+            </Button>
+          </>
+        }
+      >
+        {qrPrint && (
+          <div className="text-center">
+            <div className="text-sm font-semibold mb-2" style={{ color: 'var(--fg)' }}>{qrPrint.service_name || '—'}</div>
+            <img
+              alt="QR"
+              src={`data:image/png;base64,${qrPrint.qr_code}`}
+              style={{ width: 220, height: 220, margin: '0 auto', background: '#fff', padding: 8, borderRadius: 12, border: '1px solid var(--border)' }}
+            />
+            {qrPrint.short_code && (
+              <div className="mt-3 font-mono tabular-nums" style={{ fontSize: 22, letterSpacing: '0.16em', color: 'var(--accent)' }}>
+                {qrPrint.short_code}
+              </div>
+            )}
+            {qrPrint.patient_phone && (
+              <div className="mt-2 text-xs" style={{ color: 'var(--fg-3)' }}>{qrPrint.patient_phone}</div>
+            )}
+          </div>
+        )}
       </Modal>
     </Page>
   )

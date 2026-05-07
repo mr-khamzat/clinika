@@ -246,6 +246,34 @@ export default function ManagerDashboard() {
           </div>
         )}
 
+        {/* ─── Quick Stats (W4) — мини-KPI блок сверху: приёмы / подтв. напр. / бонусы / активные пациенты ─── */}
+        <KpiRow cols={4} className="mb-3">
+          <KpiCard
+            label="Приёмов сегодня"
+            value={loadingSummary ? '…' : (todayStats?.appointments_today ?? todayStats?.total_today ?? 0)}
+            delta=""
+            trend="flat"
+          />
+          <KpiCard
+            label="Подтверждённых направлений"
+            value={loadingSummary ? '…' : (summary?.confirmed_referrals ?? 0)}
+            delta=""
+            trend="up"
+          />
+          <KpiCard
+            label="Бонусов начислено"
+            value={loadingSummary ? '…' : `${(summary?.paid_bonuses ?? 0) + (summary?.pending_bonuses ?? 0)} Б`}
+            delta=""
+            trend="up"
+          />
+          <KpiCard
+            label="Активных пациентов"
+            value={loadingSummary ? '…' : (summary?.active_patients ?? summary?.total_patients ?? '—')}
+            delta=""
+            trend="flat"
+          />
+        </KpiRow>
+
         {/* ─── KPI Row ─── */}
         <KpiRow cols={4} className="mb-4">
           <KpiCard

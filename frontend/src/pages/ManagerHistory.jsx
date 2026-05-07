@@ -8,7 +8,7 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { getManagerReferrals } from '../api'
-import { Card, Chip, Button, EmptyState, ClinicScopeSelector } from '../design'
+import { Card, Chip, Button, EmptyState, ClinicScopeSelector, QuickActions, buildPatientCardActions, Modal } from '../design'
 import useClinicScope from '../lib/useClinicScope'
 import ManagerShell from './_ManagerShell'
 
@@ -75,6 +75,7 @@ export default function ManagerHistory() {
   const [page, setPage]           = useState(1)
   const [hasMore, setHasMore]     = useState(false)
   const [expanded, setExpanded]   = useState(null)
+  const [qrPrint, setQrPrint]     = useState(null) // { qr_code, short_code, service_name }
   const LIMIT = 50
 
   // Per-clinic scope — пробрасываем clinic_id в фильтр истории
@@ -233,6 +234,22 @@ export default function ManagerHistory() {
                   </div>
                 </button>
 
+                {/* ─── Quick Actions (W4): иконки прямо на карточке ─── */}
+                <div className="px-4 pb-3" onClick={(e) => e.stopPropagation()}>
+                  <QuickActions
+                    actions={buildPatientCardActions({
+                      phone: r.patient_phone,
+                      onPrintQr: r.qr_code ? () => setQrPrint({
+                        qr_code: r.qr_code,
+                        short_code: r.short_code,
+                        service_name: r.service_name,
+                        patient_phone: r.patient_phone,
+                      }) : undefined,
+                      // reschedule/cancel неприменимы к завершённым/удалённым направлениям
+                    })}
+                  />
+                </div>
+
                 {isOpen && (
                   <div className="px-4 pb-4 pt-3 space-y-2" style={{ borderTop: '1px solid var(--line)' }}>
                     <Row label="Сотрудник" value={r.creator_name} />
@@ -280,6 +297,71 @@ export default function ManagerHistory() {
           )}
         </div>
       )}
+
+      {/* ───── QR Print Modal (W4) ───── */}
+      <PrintQrModal qrCtx={qrPrint} onClose={() => setQrPrint(null)} />
     </ManagerShell>
+  )
+}
+
+// ─── Модалка печати QR направления (W4) ───
+function PrintQrModal({ qrCtx, onClose }) {
+  const handlePrint = () => {
+    if (!qrCtx) return
+    const w = window.open('', '_blank', 'width=420,height=600')
+    if (!w) { alert('Разрешите всплывающие окна для печати'); return }
+    const code = (qrCtx.short_code || '').replace(/[<>&"']/g, '')
+    const svc  = (qrCtx.service_name || 'Направление').replace(/[<>&"']/g, '')
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>QR направления</title>
+<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;text-align:center;padding:24px;color:#0f172a}
+h1{font-size:18px;margin:0 0 8px}p{margin:4px 0;color:#475569;font-size:13px}
+img{width:280px;height:280px;border:1px solid #e2e8f0;border-radius:12px;padding:12px;background:#fff;margin:16px auto;display:block}
+.code{font-family:ui-monospace,monospace;font-size:24px;letter-spacing:0.18em;margin:8px 0;color:#0e7490;font-weight:700}
+@media print{body{padding:0}}
+</style></head><body>
+<h1>${svc}</h1>
+<img src="data:image/png;base64,${qrCtx.qr_code}" alt="QR"/>
+${code ? `<div class="code">${code}</div>` : ''}
+<p>Покажите код в регистратуре</p>
+<script>setTimeout(()=>{window.print();},200);window.onafterprint=()=>window.close();</script>
+</body></html>`)
+    w.document.close()
+  }
+
+  return (
+    <Modal
+      open={!!qrCtx}
+      onClose={onClose}
+      title="QR направления"
+      size="sm"
+      actions={
+        <>
+          <Button variant="secondary" onClick={onClose}>Закрыть</Button>
+          <Button variant="primary" onClick={handlePrint}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>print</span>
+            Печать
+          </Button>
+        </>
+      }
+    >
+      {qrCtx && (
+        <div className="text-center">
+          <div className="text-sm font-semibold mb-2" style={{ color: 'var(--fg)' }}>{qrCtx.service_name || '—'}</div>
+          <img
+            alt="QR"
+            src={`data:image/png;base64,${qrCtx.qr_code}`}
+            style={{ width: 220, height: 220, margin: '0 auto', background: '#fff', padding: 8, borderRadius: 12, border: '1px solid var(--border)' }}
+          />
+          {qrCtx.short_code && (
+            <div className="mt-3 font-mono tabular-nums" style={{ fontSize: 22, letterSpacing: '0.16em', color: 'var(--accent)' }}>
+              {qrCtx.short_code}
+            </div>
+          )}
+          {qrCtx.patient_phone && (
+            <div className="mt-2 text-xs" style={{ color: 'var(--fg-3)' }}>{qrCtx.patient_phone}</div>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }

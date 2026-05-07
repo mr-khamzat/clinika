@@ -238,9 +238,21 @@ function OverviewSection({ analytics, me, tenants }) {
   const activeTenants = (tenants || []).filter(t => t.is_active).length
   const totalMRR = (tenants || []).reduce((s, t) => s + Number(t.mrr || 0), 0)
 
+  // Спецификация (W4): Тенантов / Сотрудников / Направлений за месяц / MRR
+  const totalEmployees = (tenants || []).reduce((s, t) => s + Number(t.employees_count || t.staff_count || 0), 0)
+  const refsThisMonth = analytics?.referrals_month ?? analytics?.total_referrals ?? '—'
+
   return (
     <div className="flex flex-col gap-5">
-      {/* ─── KPI Row ─── */}
+      {/* ─── Quick Stats (W4) — Тенанты / Сотрудники / Направления за месяц / MRR ─── */}
+      <KpiRow cols={4}>
+        <KpiCard label="Тенантов"             value={tenantCount || (me?.tenant_count ?? '—')} delta={`${activeTenants} активных`} trend="flat" />
+        <KpiCard label="Сотрудников"          value={totalEmployees || '—'}                    delta="в сети"                       trend="flat" />
+        <KpiCard label="Направлений за месяц" value={refsThisMonth}                            delta=""                              trend="up" />
+        <KpiCard label="MRR"                  value={totalMRR ? fmtRub(totalMRR) : '—'}        delta="ежемес. доход"                trend="up" />
+      </KpiRow>
+
+      {/* ─── KPI Row (детальные) ─── */}
       <KpiRow cols={4}>
         <KpiCard
           label="Клиники сети"

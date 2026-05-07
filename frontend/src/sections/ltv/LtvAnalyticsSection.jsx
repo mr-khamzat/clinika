@@ -662,6 +662,7 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
                 }}
               />
               <div
+                className="ks-dd-enter"
                 style={{
                   position: 'absolute', right: 0, top: 'calc(100% + 6px)',
                   zIndex: 50, minWidth: 240,
@@ -671,6 +672,8 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
                   boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
                   padding: 4,
                   display: 'flex', flexDirection: 'column', gap: 2,
+                  transformOrigin: 'top right',
+                  transition: 'opacity 200ms ease, transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                 }}
               >
                 <ContactsMenuItem onClick={() => exportContacts('all', 'csv')}>CSV — все</ContactsMenuItem>

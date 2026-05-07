@@ -19,6 +19,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api'
 
+// ===== БЛОК (W4): глобальные keyframes для dropdown slide+fade 200ms =====
+const KS_DROPDOWN_STYLE_ID = 'ks-dropdown-anim'
+function ensureDropdownAnim() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(KS_DROPDOWN_STYLE_ID)) return
+  const css = `
+    @keyframes ks-dd-in  { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes ks-dd-out { from { opacity: 1; transform: translateY(0); }    to { opacity: 0; transform: translateY(-6px); } }
+    .ks-dd-enter { animation: ks-dd-in  200ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+    .ks-dd-leave { animation: ks-dd-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+  `
+  const tag = document.createElement('style')
+  tag.id = KS_DROPDOWN_STYLE_ID
+  tag.textContent = css
+  document.head.appendChild(tag)
+}
+
 // «5 мин назад» / «2 ч назад» / «3 дня назад»
 function relTime(iso) {
   if (!iso) return ''
@@ -59,10 +76,25 @@ function colorFor(type) {
 
 export default function NotificationsBell({ size = 36, variant = 'square' }) {
   const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)   // exit-анимация dropdown'а
+  const [closing, setClosing] = useState(false)
   const [items, setItems] = useState([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
   const ref = useRef(null)
+
+  // Гарантируем CSS-анимацию dropdown'а (200ms slide+fade)
+  useEffect(() => { ensureDropdownAnim() }, [])
+
+  // Mount/unmount sync с open для проигрывания exit-анимации
+  useEffect(() => {
+    if (open) { setMounted(true); setClosing(false); return }
+    if (mounted) {
+      setClosing(true)
+      const t = setTimeout(() => { setMounted(false); setClosing(false) }, 200)
+      return () => clearTimeout(t)
+    }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Загрузка уведомлений
   const load = useCallback(async () => {
@@ -162,8 +194,9 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
         )}
       </button>
 
-      {open && (
+      {mounted && (
         <div
+          className={closing ? 'ks-dd-leave' : 'ks-dd-enter'}
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0,
             width: 360, maxWidth: '92vw', zIndex: 100,
@@ -173,6 +206,7 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
             borderRadius: 12,
             boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
             overflow: 'hidden',
+            transformOrigin: 'top right',
           }}
           role="menu"
         >

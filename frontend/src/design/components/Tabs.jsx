@@ -31,7 +31,7 @@ export default function Tabs({ items = [], value, onChange, className = '' }) {
             role="tab"
             aria-selected={active}
             onClick={() => onChange?.(item.id)}
-            className="inline-flex items-center gap-1.5 font-medium transition-colors"
+            className="inline-flex items-center gap-1.5 font-medium"
             style={{
               padding: '6px 12px',
               borderRadius: '7px',
@@ -40,6 +40,11 @@ export default function Tabs({ items = [], value, onChange, className = '' }) {
               color: active ? 'var(--fg)' : 'var(--fg-2)',
               border: active ? '1px solid var(--border)' : '1px solid transparent',
               boxShadow: active ? 'var(--shadow-sm)' : 'none',
+              // ===== БЛОК (W4): smooth indicator transitions 200ms =====
+              transition:
+                'background 200ms ease, color 200ms ease, ' +
+                'border-color 200ms ease, box-shadow 200ms ease, ' +
+                'transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1)',
             }}
           >
             {item.label}
