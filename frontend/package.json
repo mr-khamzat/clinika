@@ -10,6 +10,7 @@
   "dependencies": {
     "@fontsource/inter": "^5.0.0",
     "@fontsource/manrope": "^5.0.0",
+    "@sentry/react": "^10.51.0",
     "axios": "^1.7.2",
     "dompurify": "^3.4.2",
     "html5-qrcode": "^2.3.8",

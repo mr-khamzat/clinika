@@ -1,3 +1,22 @@
+import os
+# ─── Инициализация Sentry — отключена если DSN не задан ───
+# Подключается до остальных импортов, чтобы перехватывать ранние ошибки.
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+_SENTRY_DSN = os.environ.get("SENTRY_DSN", "").strip()
+if _SENTRY_DSN:
+    # DSN задан — поднимаем интеграцию с FastAPI и SQLAlchemy.
+    sentry_sdk.init(
+        dsn=_SENTRY_DSN,
+        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+        traces_sample_rate=0.1,
+        profiles_sample_rate=0.0,
+        environment=os.environ.get("ENVIRONMENT", "production"),
+        release=os.environ.get("APP_VERSION"),
+    )
+
 from fastapi import FastAPI, Request
 from app.core.logging import setup_logging, get_logger
 from app.core.prometheus import router as prometheus_router, metrics_middleware

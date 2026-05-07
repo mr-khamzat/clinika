@@ -25,3 +25,4 @@ prometheus-client>=0.20.0
 tenacity>=8.2.0
 geoip2==4.8.0
 maxminddb==2.6.0
+sentry-sdk[fastapi]==2.18.0

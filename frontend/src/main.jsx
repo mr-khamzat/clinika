@@ -6,6 +6,18 @@ import './index.css'
 // Загружаются глобально один раз; CSS-переменные используются в /src/design/ и tailwind.
 import './design/tokens.css'
 
+// ─── Инициализация Sentry — отключена если DSN не задан ───
+// VITE_SENTRY_DSN читается из .env во время сборки Vite.
+import * as Sentry from '@sentry/react'
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    integrations: [Sentry.browserTracingIntegration()],
+    tracesSampleRate: 0.1,
+    environment: import.meta.env.MODE,
+  })
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
