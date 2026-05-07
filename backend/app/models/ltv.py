@@ -6,7 +6,8 @@ PatientLtvSnapshot — агрегированный снимок ценност�
 МИС (Renovatio) либо вручную через POST /analytics/ltv/recompute.
 
 Расчёт LTV (упрощённый):
-  ltv_estimate = avg_check × visits_per_year × 3   (горизонт 3 года)
+  ltv_estimate = avg_check × visits_per_year × 3   (горизонт 3 года, по sum_value визита)
+  net_ltv      = avg_paid × visits_per_year × 3   (горизонт 3 года, по фактическим оплатам из getPayments)
 
 Группировка по телефону (нормализованному) — pesticidedouble в МИС
 у одного пациента может быть несколько id, но телефон стабильный ключ.
@@ -76,6 +77,12 @@ class PatientLtvSnapshot(Base):
         Numeric(6, 2), nullable=False, default=Decimal("0")
     )
     ltv_estimate: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, default=Decimal("0")
+    )
+
+    # NetLTV — по фактическим оплатам из getPayments
+    # (если Renovatio открыл доступ к методу). Если данных нет — равен 0.
+    net_ltv: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0")
     )
 

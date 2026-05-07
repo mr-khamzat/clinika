@@ -31,6 +31,13 @@ const fmtRub = (v) => {
   if (!Number.isFinite(n)) return '—'
   return `${Math.round(n).toLocaleString('ru')} ₽`
 }
+// Для NetLTV: если 0 → значит данные getPayments недоступны (Renovatio пока
+// не открыл права), показываем «—» вместо нолика.
+const fmtRubOrDash = (v) => {
+  const n = Number(v || 0)
+  if (!Number.isFinite(n) || n <= 0) return '—'
+  return `${Math.round(n).toLocaleString('ru')} ₽`
+}
 const fmtNum = (v) => {
   const n = Number(v || 0)
   if (!Number.isFinite(n)) return '—'
@@ -87,6 +94,14 @@ function SummaryView({ data }) {
           trend="up"
         />
         <KpiCard
+          label="Средний NetLTV"
+          value={fmtRubOrDash(data.avg_net_ltv)}
+          delta={Number(data.avg_net_ltv || 0) > 0
+            ? 'по фактическим оплатам'
+            : 'getPayments не открыт'}
+          trend={Number(data.avg_net_ltv || 0) > 0 ? 'up' : 'flat'}
+        />
+        <KpiCard
           label="Всего пациентов"
           value={fmtNum(data.total_patients)}
           delta="с визитами в МИС"
@@ -98,11 +113,19 @@ function SummaryView({ data }) {
           delta={`в зоне риска: ${fmtNum((data.at_risk_patients || 0) + (data.medium_risk_patients || 0))}`}
           trend={Number(data.churn_rate || 0) > 30 ? 'down' : 'flat'}
         />
+      </KpiRow>
+      <KpiRow cols={2} className="mb-4">
         <KpiCard
           label="At-risk"
           value={fmtNum(data.at_risk_patients)}
           delta={`medium: ${fmtNum(data.medium_risk_patients)}`}
           trend="down"
+        />
+        <KpiCard
+          label="Средний чек"
+          value={fmtRub(data.avg_check)}
+          delta="по визитам с sum_value"
+          trend="flat"
         />
       </KpiRow>
 
@@ -111,13 +134,16 @@ function SummaryView({ data }) {
           <Card.Title>Дополнительно</Card.Title>
         </Card.Header>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, padding: 4 }}>
-          <Metric label="Средний чек" value={fmtRub(data.avg_check)} />
           <Metric label="Общая выручка (по пациентам)" value={fmtRub(data.total_spent)} />
           <Metric
             label="Последний пересчёт"
             value={data.last_computed_at ? new Date(data.last_computed_at).toLocaleString('ru') : '—'}
           />
-          <Metric label="Горизонт LTV" value="3 года" />
+          <Metric label="Горизонт LTV / NetLTV" value="3 года" />
+          <Metric
+            label="NetLTV: источник"
+            value={Number(data.avg_net_ltv || 0) > 0 ? 'getPayments (Renovatio)' : 'нет данных (403)'}
+          />
         </div>
       </Card>
     </>
@@ -161,6 +187,7 @@ function PatientsTable({ rows }) {
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Средний чек</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>Total</th>
               <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }}>LTV</th>
+              <th style={{ textAlign: 'right', padding: '12px 10px', fontWeight: 600 }} title="NetLTV — по фактическим оплатам из getPayments. «—» если Renovatio ещё не открыл доступ.">NetLTV</th>
               <th style={{ textAlign: 'left', padding: '12px 10px', fontWeight: 600 }}>Churn</th>
             </tr>
           </thead>
@@ -178,6 +205,9 @@ function PatientsTable({ rows }) {
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtRub(r.total_spent)}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: 'var(--accent)' }}>
                     {fmtRub(r.ltv_estimate)}
+                  </td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 700, color: Number(r.net_ltv || 0) > 0 ? 'var(--accent)' : 'var(--fg-4)' }}>
+                    {fmtRubOrDash(r.net_ltv)}
                   </td>
                   <td style={{ padding: '10px' }}>
                     <Chip variant={risk.tone} dot>{risk.text}</Chip>

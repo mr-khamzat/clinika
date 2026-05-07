@@ -1,6 +1,7 @@
 # Аудит публичного API МИС Renovatio (для LTV-модуля)
 
-> Проведён 2026-05-07. Тестовая инсталляция: `https://mis.stoclinic.ru:3010/api/public`
+> Проведён 2026-05-07 (повторно — после анонса Renovatio об открытии 5 новых методов).
+> Тестовая инсталляция: `https://mis.stoclinic.ru:3010/api/public`
 > API-ключ хранится в `.env` тенанта (`MIS_API_KEY`) и в БД (`tenants.mis_api_key`) — в коде/документации значения не приводятся.
 
 ## Транспорт
@@ -24,6 +25,13 @@
 | `getUsers` | `mis_sync_service.get_mis_users()` | синхронизация врачей (фильтр `role_names contains "doctor"`) |
 | `getAppointments` | `mis_client.get_appointments(...)`, `mis_sync_service.poll_and_confirm_referrals` | авто-подтверждение направлений, история визитов пациента |
 | `getPatient` | `mis_client.find_patient_by_phone(phone)` | поиск пациента по телефону |
+| `getPayments` ⚠️ 403 | `mis_client.get_payments(clinic_id, date_from, date_to)` | NetLTV (фактические оплаты). На 2026-05-07 ключ всё ещё возвращает 403 — Renovatio открыл метод, но не для нашего api_key. После открытия — ядро NetLTV-расчёта в `RenovatioAdapter.fetch_patient_visits`. |
+| `getInvoices` ⚠️ 403 | `mis_client.get_invoices(clinic_id, date_from, date_to)` | счета и скидки (для будущей сверки с visit.sum_value) |
+| `getPrograms` ⚠️ 403 | `mis_client.get_programs(clinic_id)` | каталог абонементов (название, срок, цена) |
+| `getPatientPrograms` ⚠️ 403 | `mis_client.get_patient_programs(clinic_id)` | купленные пациентом абонементы (отложенная выручка) |
+| `getCalls` ⚠️ 403 | `mis_client.get_calls(clinic_id, date_from, date_to)` | журнал звонков для маркетинговой атрибуции |
+
+> Все 5 новых обёрток уже добавлены в `backend/app/services/mis_client.py`. При 403 они возвращают пустой список и логируют warning, поэтому `RenovatioAdapter` **деградирует в Gross-only режим без падений**.
 
 ### Пример ответа `getClinics` (показ — 1 элемент массива из `data`)
 
@@ -89,12 +97,12 @@
   "patient_phone": "+7 (922) 452-31-18",
   "date_created": "27.03.2025 12:53",
   "date_updated": "03.04.2025 10:57",
-  "status": "upcoming",      // upcoming | completed | canceled | …
+  "status": "upcoming",
   "status_id": 3,
-  "is_first": false,         // первичка vs повторка
+  "is_first": false,
   "is_first_clinic": false,
   "is_first_doctor": false,
-  "sum_value": 2220,         // сумма приёма (выручка)
+  "sum_value": 2220,
   "services": [
     {
       "id": 4725, "code": "L04.04.003",
@@ -110,13 +118,11 @@
     }
   ],
   "patient_data": { /* … */ },
-  "patient_channel_id": null, "patient_channel": null,  // канал привлечения
+  "patient_channel_id": null, "patient_channel": null,
   "channel_id": null, "channel": null,
   "source": null, "type": null
 }
 ```
-
-> **Важно**: `services[].invoice_number`, `discount`, `value` и `appointment.sum_value` — это и есть «оплаты» на уровне визита. То есть **факт чека** мы можем восстановить из `getAppointments` без отдельного `getPayments`. **Но** настоящие фискальные чеки/возвраты/способы оплаты — нет (см. раздел 3).
 
 ### Пример `getPatient`
 
@@ -131,10 +137,10 @@
   "mobile": "+7 (928) 085-88-77",
   "email": null,
   "address": { "city": null, "street": null, "house": null, "flat": null, "fullAddress": null },
-  "category_ids": null,        // категории/сегменты пациента
+  "category_ids": null,
   "parent_id": null,
   "groups": null,
-  "adv_channel_id": null,      // канал привлечения
+  "adv_channel_id": null,
   "has_account": null,
   "mobile_is_confirmed": null,
   "documents": null,
@@ -146,6 +152,26 @@
 }
 ```
 
+### Новые методы — статус и ожидаемая структура (на 2026-05-07)
+
+Renovatio обещал открыть 5 методов на нашем `MIS_API_KEY`, но curl-проверка от 2026-05-07 показала, что **все 5 продолжают возвращать `{"error":1,"data":{"code":403,"desc":"No access to method"}}`**.
+
+Что сделано на нашей стороне (готовы к моменту открытия доступа):
+- В `mis_client.py` добавлены 5 обёрток с graceful degradation (`get_payments`, `get_invoices`, `get_programs`, `get_patient_programs`, `get_calls`) — при 403 возвращают `[]` и логируют info, чтобы не валить пайплайн.
+- В `ltv_service.py:RenovatioAdapter` параллельно дёргается `get_payments` через `_fetch_payments_index`; если данных нет — `total_paid = 0`, `net_ltv = 0`.
+- В таблице `patient_ltv_snapshots` добавлено поле `net_ltv` (миграция `ltv2net1ltv2`).
+- В UI (`LtvAnalyticsSection.jsx`) добавлены KpiCard «Средний NetLTV» и колонка «NetLTV» в таблице топ-пациентов; при `net_ltv = 0` показывается «—».
+
+| Метод | Параметры | Ожидаемая структура (по аналогии с другими методами Renovatio) |
+|---|---|---|
+| `getPayments` | `clinic_id`, `date_from`, `date_to` (`dd.mm.yyyy`) | `[{payment_id, patient_id, patient_phone, amount, method, created_at, invoice_id}]` — **главный источник для NetLTV** |
+| `getInvoices` | `clinic_id`, `date_from`, `date_to` | `[{invoice_id, patient_id, total, services[], discount, paid_amount, status}]` — счета и скидки |
+| `getPrograms` | `clinic_id` | `[{program_id, title, duration_days, price, services[]}]` — каталог абонементов |
+| `getPatientPrograms` | `clinic_id` (возможно `patient_id`) | `[{program_id, patient_id, started_at, expires_at, sessions_left}]` — отложенная выручка |
+| `getCalls` | `clinic_id`, `date_from`, `date_to` | `[{call_id, phone, direction, duration, patient_id, channel, recorded_at}]` — маркетинговая атрибуция |
+
+> **Важно**: точные имена полей в `getPayments` будут известны после первого успешного вызова. Адаптер в `ltv_service.py:RenovatioAdapter` уже устойчив к нескольким вариантам (`amount`/`sum`/`value`/`sum_value`/`total` и `patient_phone`/`phone`/`mobile` + `patient_id`/`client_id`).
+
 ---
 
 ## 2. Что доступно, но НЕ используем
@@ -154,7 +180,7 @@
 |---|---|---|---|
 | `getProfessions` | `api_key` | Справочник специальностей (15 шт): `id`, `name`, `doctor_name`, `egisz_code` | да — группировка выручки по специальностям |
 | `getDocuments` | `api_key`, `date_from`, `date_to` (ru-формат `dd.mm.yyyy`) | Список документов: договоры ПМУ, акты, согласия. Поля: `document_id`, `title`, `number`, `patient_id`, `appointment_id`, `program_id`, `is_completed`, `is_confirmed`, `date_created`, `time_created`, `type`, `type_title`, `treatment_result`, `treatment_outcome`, `treatment_target`, `diagnosis[]` | косвенно — связка `document → appointment_id`, `program_id`, `treatment_outcome` |
-| `cancelAppointment` | (write-метод, возвращает `{error:0,data:false}` без параметров — нужен `appointment_id`) | Отмена записи в МИС | для синхронизации направлений из нашей системы |
+| `cancelAppointment` | (write-метод, нужен `appointment_id`) | Отмена записи в МИС | для синхронизации направлений из нашей системы |
 | `confirmAppointment` | (write-метод, нужен `appointment_id`) | Подтверждение записи | для авто-подтверждения вместо текущего polling-а |
 
 ### Пример `getProfessions`
@@ -189,116 +215,78 @@
 }
 ```
 
-### Метод `getUsers` (используется только для врачей — но возвращает всех сотрудников)
-
-Ключевые поля: `id`, `name`, `gender`, `birth_date`, `role_names[]` (`doctor`, `admin`, …), `role_titles`, `profession[]`, `all_profession_titles`, `clinic[]`, `default_clinic`, `default_room`, `is_child_doctor`, `is_adult_doctor`, `is_telemedicine`, `is_outside`, `qualification`, `doctor_info`, `education`, `services[]`, `is_deleted`. Всего 47 пользователей.
-
-> Подключение `services[]` к врачу мы **не импортируем** — а это явная связка «врач ↔ услуга», нужная для LTV-разреза (выручка по комбинации врач+услуга).
-
 ---
 
-## 3. Чего НЕ ХВАТАЕТ для LTV-модуля — список запросов разработчику Renovatio
+## 3. Чего НЕ ХВАТАЕТ для LTV-модуля
 
-LTV (Lifetime Value) пациента = накопленная выручка за всё время отношений. Минимум, что нужно для аналитики:
+После анонса Renovatio об открытии 5 ключевых методов (`getPayments`, `getInvoices`, `getPrograms`, `getPatientPrograms`, `getCalls`) — список «не хватает» резко сократился. Остались только две принципиальные дыры:
 
-1. сумма платежей пациента по периодам, способу оплаты, типу услуг;
-2. возвраты (refunds) — иначе LTV завышен;
-3. категория/сегмент пациента (VIP, постоянный, отток);
-4. канал привлечения (откуда пришёл — реклама/направление/самозапись);
-5. предсказание оттока (когда последний визит, динамика частоты);
-6. абонементы/программы (предоплачено vs списано — отложенная выручка).
+### 3.1. Webhook'и / push-уведомления
 
-### 3.1. Методы, которые ВОЗВРАЩАЮТ 403 «No access to method» — нужны новые права
+**Не существуют в Renovatio API.** Подтверждено разработчиком — добавлять не планируют. Остаёмся на polling-е (`mis_sync_service.poll_and_confirm_referrals` опрашивает `getAppointments` каждые N минут).
 
-Эти методы существуют в API, но наш ключ их не видит. **Запросить у Renovatio расширение прав** для api_key тенанта Клиники:
+Последствия:
+- лаг 2 часа на авто-подтверждение направлений;
+- ежеминутный polling грузит МИС и наш сервер;
+- невозможно отловить отмену/перенос/оплату «в реальном времени».
 
-| Метод | Зачем для LTV |
-|---|---|
-| `getInvoices` | Полный список счетов: пациент, услуги, скидки, итог. Базовая таблица для расчёта выручки. |
-| `getPayments` | Фактические платежи (приход денег): дата, сумма, тип оплаты (наличные/карта/онлайн), привязка к invoice. **Главный источник для LTV.** |
-| `getServiceCategories` | Дерево категорий услуг (хотя категории есть в `getServices`, отдельный справочник нужен для иерархии и переименований без полной перезагрузки прайс-листа) |
-| `getPrograms` | Каталог абонементов/пакетов услуг |
-| `getPatientPrograms` | Купленные пациентом программы (срок действия, остаток сеансов) — отложенная выручка |
-| `getCalls` | Журнал звонков (CRM-аналитика, конверсия лида в пациента) |
-| `createPatient` | Создание пациента из нашей системы перед записью (сейчас МИС автоматически плодит «`_Пациент_67517`» при первом обращении) |
-| `changeAppointmentStatus` | Управление статусом записи (no-show, completed) → влияет на LTV-метрики посещаемости |
+**Митигация**:
+- delta-sync по `date_updated_from` уже реализован — выкачиваем не весь массив, а только изменения с прошлого запуска;
+- частоту polling-а можно снизить с минут на часы для вторичных задач (LTV-пересчёт уже идёт раз в сутки в 04:00 UTC);
+- для real-time оплат — **придётся ждать**, либо дополнить `getPayments` собственным polling-ом раз в N минут.
 
-### 3.2. Методов НЕТ в API (`404 Method not found`) — запросить добавление
+### 3.2. Фискальные чеки (54-ФЗ)
 
-Эти методы вообще отсутствуют в API Renovatio. Нужно либо просить разработчика добавить, либо подтвердить, что данных нет:
+`getReceipts` / `getRefunds` **не существуют в Renovatio API**. Это ожидаемо — Renovatio это МИС, а не онлайн-касса. Для чеков по 54-ФЗ нужна **отдельная интеграция онлайн-кассы** (АТОЛ Онлайн, Бизнес.Ру, ЭВОТОР, Ferma). Это отдельный проект — не пытаемся вытаскивать чеки из МИС.
+
+Последствия для NetLTV:
+- сейчас NetLTV считаем по `getPayments.amount` — это «приход денег по данным МИС», а не «фискальная сумма по ОФД»;
+- возвраты пациентов в этой схеме НЕ учитываются → NetLTV завышен на величину возвратов (но т.к. возвраты в стоматологии — единицы процентов от оборота, погрешность приемлема для оперативной аналитики).
+
+**План**: при появлении интеграции с онлайн-кассой — добавить таблицу `fiscal_receipts` и пересчитывать NetLTV как `sum(receipts.amount) − sum(refunds.amount)`. Это будущий этап (не текущий спринт).
+
+### 3.3. Прочие методы (низкий приоритет)
+
+Эти методы вообще отсутствуют в Renovatio — добавлять не планируется. Не блокируют LTV, упомянуты для полноты:
 
 | Желаемый метод | Что должен возвращать | Зачем для LTV |
 |---|---|---|
-| `getReceipts` / `getReceiptList` | Фискальные чеки: ФД-номер, дата, сумма, способ оплаты, ссылка на ОФД, признак возврата | Сверка с 54-ФЗ; revenue recognition |
-| `getRefunds` | Возвраты денег пациенту: дата, сумма, причина, ссылка на исходный чек | Для корректного NetLTV (Gross − Refunds) |
-| `getPaymentTypes` | Справочник способов оплаты (наличные/карта/онлайн/страховая) | Срез LTV по способу оплаты |
-| `getMedicalCard` / `getMedicalRecords` | Электронная карта пациента: диагнозы, протоколы приёмов | Сегментация по нозологии (диабет → особый LTV-кластер) |
-| `getInsurances` | Страховые компании, ДМС-полисы пациентов | Разделение касс (физлицо vs ДМС) |
-| `getDiscounts` / `getDiscountReasons` | Скидки и их причины | Промо-эффективность, маржа |
-| `getReviews` | Отзывы пациентов | Корреляция с LTV (лояльность) |
-| `getReferrals` (in/out) | Внутренние направления между врачами | Cross-sell внутри клиники |
-| `getDoctorSchedule` / `getFreeSlots` | Расписание и свободные интервалы | Онлайн-запись из нашей системы (косвенно — больше визитов → выше LTV) |
-
-### 3.3. Webhook'и / push-уведомления — НЕТ совсем
-
-Сейчас наша интеграция работает только через **polling** (`mis_sync_service.poll_and_confirm_referrals` опрашивает `getAppointments` каждые N минут). Это:
-- даёт лаг 2 часа на авто-подтверждение направлений;
-- грузит МИС (ежеминутный polling) и наш сервер;
-- невозможно отловить отмену/перенос/оплату «в реальном времени».
-
-**Запросить у Renovatio**:
-
-1. **Webhook на изменение статуса записи** (`appointment.status_changed`): `appointment_id`, `old_status`, `new_status`, `changed_at`, `patient_id`. Триггеры: confirmed, completed, canceled, no_show.
-2. **Webhook на новую оплату** (`payment.created`): `payment_id`, `appointment_id`, `patient_id`, `amount`, `method`, `created_at` — ядро для real-time LTV.
-3. **Webhook на возврат** (`refund.created`).
-4. **Webhook на нового пациента** (`patient.created`) — чтобы сразу отправить welcome-bonus / привязать к маркетинговому каналу.
-5. **Подписка через REST**: `setWebhook` / `addWebhook` с `url`, `secret` (HMAC) и фильтром по `event_type[]`.
-
-В качестве запасного варианта — пусть Renovatio добавит метод `getEvents` с курсором (`since_event_id` или `since_timestamp`), чтобы синхронизировать **только дельту** вместо полного скана `getAppointments`.
-
-### 3.4. ТОП-5 запросов разработчику Renovatio (приоритетный)
-
-1. **Открыть доступ к `getPayments` и `getInvoices`** для нашего api_key — без этого LTV считается криво (только по `appointment.sum_value`, без учёта частичных оплат, способа оплаты и возвратов).
-2. **Открыть доступ к `getPrograms` + `getPatientPrograms`** — иначе абонементы (а у Клиники есть пакеты) не учитываются в LTV / частоте посещений.
-3. **Добавить webhook-и `appointment.status_changed`, `payment.created`, `refund.created`** (или endpoint `getEvents` с курсором). Это убьёт polling и даст мгновенную реакцию.
-4. **Добавить методы `getReceipts` (фискальные чеки) + `getRefunds`** — для корректного NetLTV и сверки с ОФД.
-5. **Открыть доступ к `getCalls`** — для маркетинговой атрибуции (LTV по каналу привлечения, сейчас `patient_channel_id` в `getAppointments` пустой).
+| `getPaymentTypes` | Справочник способов оплаты | Срез LTV по способу (тип придёт в `getPayments.method`) |
+| `getMedicalCard` | Электронная карта пациента | Сегментация по нозологии |
+| `getInsurances` | ДМС-полисы | Разделение касс (физлицо vs ДМС) |
+| `getDiscounts` | Причины скидок | Промо-эффективность (частично есть в `getInvoices.services[].discount`) |
+| `getReviews` | Отзывы пациентов | Корреляция с LTV |
+| `getReferrals` (in/out) | Внутренние направления | Cross-sell |
+| `getDoctorSchedule` | Расписание | Онлайн-запись |
 
 ---
 
-## 4. Backend — что обернуть в `mis_client.py` (план, БЕЗ КОДА)
+## 4. Backend — что уже обёрнуто в `mis_client.py`
 
-При появлении прав / методов добавить в `backend/app/services/mis_client.py`:
+Все 10 актуальных методов имеют обёртки:
 
-| Функция | Renovatio-метод | Назначение |
+| Функция | Renovatio-метод | Статус |
 |---|---|---|
-| `get_professions(api_url, api_key)` | `getProfessions` | справочник специальностей (для UI выбора и для group-by в отчётах) |
-| `get_documents(date_from, date_to, api_url, api_key)` | `getDocuments` | связь visit → договор / акт / согласие (для PDF-выгрузки) |
-| `cancel_appointment(appointment_id, api_url, api_key)` | `cancelAppointment` | при отмене направления в нашей системе — отменять и в МИС |
-| `confirm_appointment(appointment_id, api_url, api_key)` | `confirmAppointment` | заменить polling на прямое подтверждение |
-| `get_payments(clinic_id, date_from, date_to, ...)` | `getPayments` ⚠️ 403 | **ядро LTV** — после открытия прав |
-| `get_invoices(clinic_id, date_from, date_to, ...)` | `getInvoices` ⚠️ 403 | счета и скидки |
-| `get_programs(clinic_id, ...)` | `getPrograms` ⚠️ 403 | каталог абонементов |
-| `get_patient_programs(patient_id, ...)` | `getPatientPrograms` ⚠️ 403 | подписки пациента |
-| `get_calls(clinic_id, date_from, date_to, ...)` | `getCalls` ⚠️ 403 | CRM-журнал, маркетинговая атрибуция |
-| `register_webhook(url, events, secret)` | (отсутствует) | после реализации на стороне Renovatio |
+| `get_clinics(...)` | `getClinics` | ✅ работает |
+| `get_services(clinic_id, ...)` | `getServices` | ✅ работает |
+| `get_appointments(clinic_id, date_from, date_to, ...)` | `getAppointments` | ✅ работает |
+| `find_patient_by_phone(phone, ...)` | `getPatient` | ✅ работает |
+| `test_connection(...)` | `getClinics` (под капотом) | ✅ работает |
+| `get_payments(clinic_id, date_from, date_to, ...)` | `getPayments` | ⚠️ 403 — ждём открытия прав |
+| `get_invoices(clinic_id, date_from, date_to, ...)` | `getInvoices` | ⚠️ 403 — ждём открытия прав |
+| `get_programs(clinic_id, ...)` | `getPrograms` | ⚠️ 403 — ждём открытия прав |
+| `get_patient_programs(clinic_id, ...)` | `getPatientPrograms` | ⚠️ 403 — ждём открытия прав |
+| `get_calls(clinic_id, date_from, date_to, ...)` | `getCalls` | ⚠️ 403 — ждём открытия прав |
 
-В `mis_sync_service.py` добавить:
-- `sync_payments(...)` → новая таблица `mis_payments` (id, patient_mis_id, appointment_mis_id, amount, method, created_at);
-- `sync_patient_programs(...)` → таблица `mis_patient_programs`;
-- materialized view `patient_ltv` (sum payments − refunds, last_visit_at, visits_count, avg_check, churn_score);
-- nightly cron + delta-sync по `date_updated`.
+В `ltv_service.py:RenovatioAdapter`:
+- `fetch_patient_visits` параллельно дёргает `get_appointments` и `get_payments` (через `_fetch_payments_index`);
+- собирает индекс `paid_by_phone` и `paid_by_pid` (на случай разных схем атрибуции);
+- равномерно распределяет суммарную оплату пациента на его completed-визиты (точная привязка по `payment.appointment_id` будет добавлена после знакомства с реальной структурой ответа);
+- если `getPayments` 403 → `total_paid = 0` → `net_ltv = 0` → UI показывает «—».
 
-### Уже есть в `getAppointments` (можно использовать без новых прав)
-
-- `is_first`, `is_first_clinic`, `is_first_doctor` → конверсия в повторный визит
-- `services[].discount`, `services[].value`, `appointment.sum_value` → выручка по визиту
-- `services[].program_id`, `services[].program_group_id` → факт списания с абонемента (ID есть, но без `getPrograms` мы не знаем имя/тип программы)
-- `services[].profession`, `services[].profession_title` → разрез по специальности
-- `patient_channel_id`, `adv_channel_id` (в `getPatient`) → канал привлечения (если МИС заполняет)
-- `status` + `status_id` → конверсия `upcoming → completed`
-
-То есть **черновик LTV-модуля можно собрать уже сейчас**, ограничиваясь `getAppointments` + `getServices` + `getUsers` + `getPatient`. Это будет «GrossLTV без возвратов и абонементов» — пригодно для MVP.
+В `compute_ltv_for_clinic`:
+- `ltv_estimate = avg_check × visits_per_year × 3` (Gross, по `sum_value`);
+- `net_ltv      = avg_paid  × visits_per_year × 3` (Net, по фактическим оплатам, если есть).
 
 ---
 
@@ -306,16 +294,18 @@ LTV (Lifetime Value) пациента = накопленная выручка з
 
 - **SSL**: `mis.stoclinic.ru:3010` — самоподписанный сертификат. В `httpx` сейчас используется `verify=False` либо `MIS_CA_CERT_PATH`. На прод лучше pin'нуть CA.
 - **Кодировка ошибок**: `desc` в ошибках на русском (`"Необходимо заполнить поле «дата создания документа (от)»"`) — нужно логировать UTF-8.
-- **Формат дат**: `dd.mm.yyyy` (русский, не ISO). Параметры: `date_updated_from`/`date_updated_to` для `getAppointments`, `date_from`/`date_to` для `getDocuments`.
+- **Формат дат**: `dd.mm.yyyy` (русский, не ISO). Параметры: `date_updated_from`/`date_updated_to` для `getAppointments`, `date_from`/`date_to` для `getDocuments`/`getPayments`/`getInvoices`/`getCalls`.
 - **getPatient** возвращает один объект, не массив (наша обёртка `find_patient_by_phone` правильно нормализует).
 - **Объёмы**: 1560 услуг на филиал, 502 записи за 2 недели на филиал → выгрузка в БД достаточно лёгкая, но при добавлении `getPayments` (поминутные платежи) понадобится delta-sync.
 - **Пагинации не обнаружено** — все методы возвращают полный массив. При росте объёма попросить Renovatio добавить `limit` / `offset` или курсор.
+- **NetLTV без 54-ФЗ**: пока нет интеграции онлайн-кассы — `net_ltv` это «оплата по данным МИС» без учёта возвратов. Точность ~95%.
 
 ---
 
 ## Источники
 
-- `backend/app/services/mis_client.py` (текущие 5 обёрток)
+- `backend/app/services/mis_client.py` (10 обёрток)
+- `backend/app/services/ltv_service.py` (RenovatioAdapter с NetLTV)
 - `backend/app/services/mis_sync_service.py` (sync clinics/doctors/services + polling)
 - Эмпирическое тестирование `curl` против `https://mis.stoclinic.ru:3010/api/public` (тестовая БД, 7 мая 2026)
 - Официальная документация Renovatio API на момент аудита недоступна — все эндпоинты выявлены методом «прозвона».

@@ -62,6 +62,8 @@ async def list_top_patients(
             "total_spent": float(r.total_spent or 0),
             "avg_check": float(r.avg_check or 0),
             "ltv_estimate": float(r.ltv_estimate or 0),
+            # NetLTV по фактическим оплатам (getPayments). 0 — данные пока недоступны.
+            "net_ltv": float(r.net_ltv or 0),
             "visits_per_year": float(r.visits_per_year or 0),
             "first_visit_at": r.first_visit_at.isoformat() if r.first_visit_at else None,
             "last_visit_at": r.last_visit_at.isoformat() if r.last_visit_at else None,
@@ -91,11 +93,12 @@ async def get_summary(
     tenant: Tenant | None = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Общие метрики: avg LTV, total patients, churn rate, at-risk."""
+    """Общие метрики: avg LTV, avg NetLTV, total patients, churn rate, at-risk."""
     if tenant is None:
         return {
             "total_patients": 0,
             "avg_ltv": 0,
+            "avg_net_ltv": 0,
             "total_spent": 0,
             "avg_check": 0,
             "churn_rate": 0,
@@ -109,12 +112,20 @@ async def get_summary(
         func.coalesce(func.sum(PatientLtvSnapshot.total_spent), 0),
         func.coalesce(func.avg(PatientLtvSnapshot.avg_check), 0),
         func.max(PatientLtvSnapshot.computed_at),
+        # Средний NetLTV считаем только по тем пациентам, у кого net_ltv > 0
+        # (т.к. при отсутствии getPayments значение = 0 и оно бы занижало среднее).
+        func.coalesce(
+            func.avg(
+                func.nullif(PatientLtvSnapshot.net_ltv, 0)
+            ),
+            0,
+        ),
     ).where(PatientLtvSnapshot.tenant_id == tenant.id)
     if clinic_id is not None:
         base = base.where(PatientLtvSnapshot.clinic_id == clinic_id)
 
     row = (await db.execute(base)).one()
-    total_patients, avg_ltv, total_spent, avg_check, last_computed = row
+    total_patients, avg_ltv, total_spent, avg_check, last_computed, avg_net_ltv = row
 
     at_risk_q = select(func.count(PatientLtvSnapshot.id)).where(
         PatientLtvSnapshot.tenant_id == tenant.id,
@@ -138,6 +149,7 @@ async def get_summary(
     return {
         "total_patients": total,
         "avg_ltv": float(avg_ltv or 0),
+        "avg_net_ltv": float(avg_net_ltv or 0),
         "total_spent": float(total_spent or 0),
         "avg_check": float(avg_check or 0),
         "churn_rate": churn_rate,
