@@ -72,6 +72,7 @@ from app.routers.patient_documents import router as patient_documents_router
 from app.routers.prescriptions import router as prescriptions_router
 from app.routers.vitals import router as vitals_router
 from app.routers.loyalty import router as loyalty_router
+from app.routers.permissions import router as permissions_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -935,6 +936,7 @@ app.include_router(patient_documents_router)
 app.include_router(prescriptions_router)
 app.include_router(vitals_router)
 app.include_router(loyalty_router)
+app.include_router(permissions_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

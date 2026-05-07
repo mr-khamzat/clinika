@@ -52,6 +52,8 @@ const BrandingSection           = lazy(() => import('../sections/BrandingSection
 const CMSPagesSection           = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection               = lazy(() => import('../sections/ActsSection'))
 const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInvoicesSection'))
+// Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
+const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMatrixSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function authH(token) { return { Authorization: `Bearer ${token}` } }
@@ -100,6 +102,7 @@ const NAV_GROUPS = [
     title: 'Платформа',
     items: [
       { id: 'modules',   label: 'Модули',      icon: 'extension'             },
+      { id: 'roles',     label: 'Роли и права',icon: 'admin_panel_settings'  },
       { id: 'webhooks',  label: 'Webhooks',    icon: 'webhook'               },
       { id: 'knowledge', label: 'База AI',     icon: 'library_books'         },
       { id: 'settings',  label: 'Настройки',   icon: 'settings'              },
@@ -126,6 +129,7 @@ const PAGE_TITLES = {
   cms:        { title: 'CMS-страницы',     subtitle: 'Публичные страницы лендинга и портала' },
   contacts:   { title: 'Заявки',           subtitle: 'Сообщения с формы обратной связи' },
   modules:    { title: 'Каталог модулей',  subtitle: 'Платные модули и их подключение' },
+  roles:      { title: 'Роли и права',     subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   webhooks:   { title: 'Webhooks',         subtitle: 'Интеграции и исходящие события' },
   knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
   settings:   { title: 'Настройки',        subtitle: 'Брендинг, домен, MIS-интеграция' },
@@ -1572,6 +1576,14 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <ModulesCatalogSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'roles') {
+      // Этап 8 ROADMAP — RBAC как данные: матрица прав с overrides
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <PermissionsMatrixSection token={adminToken} />
         </Suspense>
       )
     }
