@@ -30,14 +30,24 @@ DEDUP_MINUTES = 10
 
 
 async def _send_telegram(text: str) -> bool:
-    """Шлём через ADMIN_BOT_TOKEN если задан, иначе через TELEGRAM_BOT_TOKEN."""
+    """Шлём через ADMIN_BOT_TOKEN если задан, иначе через TELEGRAM_BOT_TOKEN.
+
+    api.telegram.org заблокирован у нашего провайдера → ходим через
+    HTTP-прокси на 144.31.89.167:8080 (tinyproxy с BasicAuth).
+    Креды можно переопределить через TELEGRAM_PROXY_URL env.
+    """
+    import os
     token = (settings.admin_bot_token or settings.telegram_bot_token).strip()
     if not token:
         log.warning("Нет токена бота — алерт не отправлен")
         return False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
+    proxy_url = os.environ.get(
+        "TELEGRAM_PROXY_URL",
+        "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
+    )
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15, proxy=proxy_url) as client:
             r = await client.post(url, json={
                 "chat_id": ADMIN_CHAT_ID,
                 "text": text,
