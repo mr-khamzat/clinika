@@ -255,35 +255,45 @@ class RenovatioAdapter:
             log.warning("ltv: tenant=%s не удалось получить MIS-настройки: %s", tenant.slug, e)
             api_url, api_key = "", ""
 
-        # 3. Опрашиваем за период [now - days, now]
+        # 3. Опрашиваем за период [now - days, now] разбитым на чанки.
+        # Renovatio падает с 500 при диапазоне больше ~3 месяцев на одном
+        # запросе (проверено: 30 дней — OK, 730 дней — 500). Делим на
+        # 90-дневные окна, последовательно чтобы не убить их API.
         now = datetime.utcnow()
-        date_from = (now - timedelta(days=days)).strftime("%d.%m.%Y")
-        date_to = now.strftime("%d.%m.%Y")
+        CHUNK_DAYS = 90
+        date_to_full = now.strftime("%d.%m.%Y")
+        date_from_full = (now - timedelta(days=days)).strftime("%d.%m.%Y")
 
-        # 4. Параллельно получаем appointments и payments
-        appt_tasks = [
-            get_appointments(int(mc), date_from, date_to,
-                             api_url=api_url, api_key=api_key)
-            for mc in target_mis_ids
-        ]
-        payments_task = self._fetch_payments_index(
-            target_mis_ids, date_from, date_to, api_url, api_key
+        # 4. Полные платежи за весь период (один запрос — payments легче)
+        paid_by_phone, paid_by_pid = await self._fetch_payments_index(
+            target_mis_ids, date_from_full, date_to_full, api_url, api_key
         )
 
-        appt_results, (paid_by_phone, paid_by_pid) = await asyncio.gather(
-            asyncio.gather(*appt_tasks, return_exceptions=True),
-            payments_task,
-        )
-
+        # 5. Visits — chunked по 90 дней. Для каждой mis-клиники проходим окно.
         all_appts: list[dict] = []
-        for mis_clinic_id, items in zip(target_mis_ids, appt_results):
-            if isinstance(items, Exception):
-                log.warning("ltv: tenant=%s mis_clinic=%s ошибка: %s",
-                            tenant.slug, mis_clinic_id, items)
-                continue
-            for it in items or []:
-                it["_mis_clinic_id"] = int(mis_clinic_id)
-            all_appts.extend(items or [])
+        for mc in target_mis_ids:
+            mis_clinic_id = int(mc)
+            cursor = now
+            target_start = now - timedelta(days=days)
+            while cursor > target_start:
+                chunk_to = cursor
+                chunk_from = max(cursor - timedelta(days=CHUNK_DAYS), target_start)
+                df = chunk_from.strftime("%d.%m.%Y")
+                dt = chunk_to.strftime("%d.%m.%Y")
+                try:
+                    items = await get_appointments(
+                        mis_clinic_id, df, dt,
+                        api_url=api_url, api_key=api_key,
+                    )
+                    for it in items or []:
+                        it["_mis_clinic_id"] = mis_clinic_id
+                    all_appts.extend(items or [])
+                except Exception as e:
+                    log.warning(
+                        "ltv: tenant=%s mis_clinic=%s окно %s..%s ошибка: %s",
+                        tenant.slug, mis_clinic_id, df, dt, e,
+                    )
+                cursor = chunk_from
 
         # 5. Преобразуем в VisitRecord (только «состоявшиеся»: completed/выполнено/status_id=4)
         # Считаем сколько визитов у каждого пациента — чтобы равномерно распределить
