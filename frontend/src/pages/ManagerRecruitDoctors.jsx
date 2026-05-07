@@ -147,17 +147,47 @@ function ResetModal({ doctor, token, onClose, onDone }) {
   )
 }
 
-// ─── Форма добавления врача (на base дизайн-системы Modal) ───
+// ─── Перечень доступных ролей при создании сотрудника (#22) ───
+// Менеджер франшизы создаёт пользователей всех ролей, кроме super_admin.
+const STAFF_ROLES = [
+  { value: 'visiting_doctor', label: 'Приезжий врач',     icon: 'flight_takeoff', hint: 'Внешний приглашённый специалист с оплатой за приём' },
+  { value: 'partner_doctor',  label: 'Партнёр (внешний врач)', icon: 'handshake',     hint: 'Внешний врач-партнёр (направляет пациентов)' },
+  { value: 'doctor',          label: 'Штатный врач',      icon: 'stethoscope',    hint: 'Врач клиники, ведёт приёмы в кабинете врача' },
+  { value: 'recruiter',       label: 'Рекрутер',          icon: 'person_search',  hint: 'Привлекает врачей-партнёров и получает % бонуса' },
+  { value: 'manager',         label: 'Руководитель',      icon: 'admin_panel_settings', hint: 'Менеджер франшизы (управляет тенантом)' },
+  { value: 'reg',             label: 'Регистратор',       icon: 'badge',          hint: 'Регистратор клиники (приём пациентов)' },
+  { value: 'nurse',           label: 'Медсестра',         icon: 'medical_services', hint: 'Медсестра, ассистирует врачу' },
+]
+
+// Какие поля показывать для каждой роли
+const ROLE_NEEDS = {
+  visiting_doctor: { specialization: true, address: true, clinics: true, terms: true,  primaryClinic: false, bonusPercent: false },
+  partner_doctor:  { specialization: true, address: true, clinics: true, terms: false, primaryClinic: false, bonusPercent: false },
+  doctor:          { specialization: true, address: false, clinics: true, terms: false, primaryClinic: false, bonusPercent: false },
+  recruiter:       { specialization: false, address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: true },
+  manager:         { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  reg:             { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  nurse:           { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+}
+
+// ─── Форма добавления сотрудника (роли: reg/nurse/doctor/recruiter/manager/partner_doctor/visiting_doctor) ───
 function AddModal({ open, token, clinics, onClose, onDone }) {
+  // Универсальная форма создания сотрудника любой роли (#22)
   const [form, setForm] = useState({
+    role: 'visiting_doctor',
     full_name: '', phone_number: '', email: '', specialization: '', address: '',
-    username: '', password: '', clinic_ids: [],
+    username: '', password: '', clinic_ids: [], clinic_id: '',
     price_per_visit: '', doctor_percent: '70',
+    bonus_percent: '10',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const toggle = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x => x !== id) : [...form.clinic_ids, id])
+
+  // Какие поля показывать для выбранной роли
+  const needs = ROLE_NEEDS[form.role] || ROLE_NEEDS.visiting_doctor
+  const roleMeta = STAFF_ROLES.find(r => r.value === form.role)
 
   const submit = async () => {
     if (!form.full_name.trim()) { setError('Введите ФИО'); return }
@@ -165,14 +195,30 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
     if (!form.password.trim())  { setError('Введите пароль'); return }
     setLoading(true); setError('')
     try {
-      const r = await apiFetch(token, '/manager/register-external-doctor', {
+      // Универсальный endpoint /manager/users/create-staff обрабатывает все роли
+      const payload = {
+        role: form.role,
+        full_name: form.full_name,
+        username: form.username,
+        password: form.password,
+        phone_number: form.phone_number || null,
+        email: form.email || null,
+      }
+      // Доп. поля по типу роли
+      if (needs.specialization) payload.specialization = form.specialization || null
+      if (needs.address)        payload.address        = form.address        || null
+      if (needs.clinics)        payload.clinic_ids     = form.clinic_ids
+      if (needs.primaryClinic && form.clinic_id) payload.clinic_id = form.clinic_id
+      if (needs.terms) {
+        payload.price_per_visit = form.price_per_visit ? parseFloat(form.price_per_visit) : null
+        payload.doctor_percent  = form.doctor_percent  ? parseFloat(form.doctor_percent)  : 70
+      }
+      if (needs.bonusPercent && form.bonus_percent) {
+        payload.bonus_percent = parseFloat(form.bonus_percent)
+      }
+      const r = await apiFetch(token, '/manager/users/create-staff', {
         method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          doctor_type: 'visiting',
-          price_per_visit: form.price_per_visit ? parseFloat(form.price_per_visit) : null,
-          doctor_percent:  form.doctor_percent  ? parseFloat(form.doctor_percent)  : 70,
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || 'Ошибка')
@@ -186,12 +232,12 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
       open={open}
       onClose={onClose}
       size="md"
-      title="Добавить приезжего врача"
+      title="Добавить сотрудника"
       actions={
         <>
           <Button variant="secondary" size="md" onClick={onClose}>Отмена</Button>
           <Button variant="primary" size="md" onClick={submit} disabled={loading}>
-            {loading ? '…' : 'Зарегистрировать'}
+            {loading ? '…' : 'Создать'}
           </Button>
         </>
       }
@@ -204,35 +250,111 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
           {error}
         </div>
       )}
-      <Field label="ФИО *"            value={form.full_name}      onChange={e => set('full_name', e.target.value)}      placeholder="Иванов Иван Иванович" />
-      <Field label="Телефон"           value={form.phone_number}   onChange={e => set('phone_number', e.target.value)}   placeholder="+7 900 000 00 00" />
-      <Field label="Email"             value={form.email}          onChange={e => set('email', e.target.value)}          placeholder="doctor@mail.ru" />
-      <Field label="Специализация"     value={form.specialization} onChange={e => set('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
-      <Field label="Адрес/Организация" value={form.address}        onChange={e => set('address', e.target.value)}        placeholder="Место работы" />
-      <Field label="Логин *"           value={form.username}       onChange={e => set('username', e.target.value)}       placeholder="doc_login" />
-      <Field label="Пароль *"          value={form.password}       onChange={e => set('password', e.target.value)}       placeholder="Минимум 4 символа" />
 
-      {/* ─── Условия работы ─── */}
-      <div
-        className="p-3 mb-3"
-        style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
-      >
-        <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          Условия работы
+      {/* ─── Селектор роли (#22) ─── */}
+      <div className="mb-4">
+        <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+          Роль сотрудника *
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          {STAFF_ROLES.map(r => {
+            const on = form.role === r.value
+            return (
+              <button
+                key={r.value}
+                type="button"
+                onClick={() => set('role', r.value)}
+                className="text-left transition-colors"
+                style={{
+                  padding: '10px 12px', borderRadius: 10,
+                  background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                  border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}`,
+                  color: on ? 'var(--accent)' : 'var(--fg)',
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{r.icon}</span>
+                  <span className="text-sm font-semibold">{r.label}</span>
+                </div>
+              </button>
+            )
+          })}
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Цена за приём ₽" type="number" value={form.price_per_visit} onChange={e => set('price_per_visit', e.target.value)} placeholder="3000" />
-          <Field label="Доля врача %"    type="number" value={form.doctor_percent}  onChange={e => set('doctor_percent', e.target.value)}  placeholder="70" />
-        </div>
-        {form.price_per_visit && form.doctor_percent && (
-          <div className="text-sm font-semibold mt-1" style={{ color: 'var(--good)' }}>
-            Врач получит: {Math.round(parseFloat(form.price_per_visit) * parseFloat(form.doctor_percent) / 100).toLocaleString('ru-RU')} ₽ за приём
-          </div>
+        {roleMeta?.hint && (
+          <div className="text-xs mt-2" style={{ color: 'var(--fg-3)' }}>{roleMeta.hint}</div>
         )}
       </div>
 
-      {/* ─── Клиники доступа ─── */}
-      {clinics.length > 0 && (
+      <Field label="ФИО *"   value={form.full_name}    onChange={e => set('full_name', e.target.value)}    placeholder="Иванов Иван Иванович" />
+      <Field label="Телефон" value={form.phone_number} onChange={e => set('phone_number', e.target.value)} placeholder="+7 900 000 00 00" />
+      <Field label="Email"   value={form.email}        onChange={e => set('email', e.target.value)}        placeholder="user@mail.ru" />
+
+      {needs.specialization && (
+        <Field label="Специализация" value={form.specialization} onChange={e => set('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
+      )}
+      {needs.address && (
+        <Field label="Адрес/Организация" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Место работы" />
+      )}
+
+      <Field label="Логин *"  value={form.username} onChange={e => set('username', e.target.value)} placeholder="login" />
+      <Field label="Пароль *" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Минимум 4 символа" />
+
+      {/* ─── Бонус % для рекрутера ─── */}
+      {needs.bonusPercent && (
+        <div
+          className="p-3 mb-3"
+          style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
+        >
+          <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Бонус рекрутера
+          </div>
+          <Field label="% от приёмов привлечённых врачей" type="number" value={form.bonus_percent} onChange={e => set('bonus_percent', e.target.value)} placeholder="10" />
+        </div>
+      )}
+
+      {/* ─── Условия работы (только visiting_doctor) ─── */}
+      {needs.terms && (
+        <div
+          className="p-3 mb-3"
+          style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
+        >
+          <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            Условия работы
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Цена за приём ₽" type="number" value={form.price_per_visit} onChange={e => set('price_per_visit', e.target.value)} placeholder="3000" />
+            <Field label="Доля врача %"    type="number" value={form.doctor_percent}  onChange={e => set('doctor_percent', e.target.value)}  placeholder="70" />
+          </div>
+          {form.price_per_visit && form.doctor_percent && (
+            <div className="text-sm font-semibold mt-1" style={{ color: 'var(--good)' }}>
+              Врач получит: {Math.round(parseFloat(form.price_per_visit) * parseFloat(form.doctor_percent) / 100).toLocaleString('ru-RU')} ₽ за приём
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── Основная клиника (для reg/nurse/manager) ─── */}
+      {needs.primaryClinic && clinics.length > 0 && (
+        <div className="mb-3">
+          <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Клиника
+          </label>
+          <select
+            value={form.clinic_id}
+            onChange={e => set('clinic_id', e.target.value)}
+            className="w-full text-sm outline-none"
+            style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px', color: 'var(--fg)' }}
+          >
+            <option value="">Без клиники</option>
+            {clinics.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* ─── Клиники доступа (для всех типов врачей) ─── */}
+      {needs.clinics && clinics.length > 0 && (
         <div className="mb-2">
           <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Клиники доступа

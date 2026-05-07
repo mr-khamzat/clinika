@@ -213,3 +213,264 @@ async def list_managers(
         q = q.where(User.tenant_id == current_user.tenant_id)
     result = await db.execute(q)
     return [{"id": str(u.id), "full_name": u.full_name, "username": u.username} for u in result.scalars().all()]
+
+
+# ════════════════════════════════════════════════════════════════════════
+# БЛОК: Универсальное создание сотрудника любой роли (#22)
+# Менеджер создаёт пользователей всех ролей: reg/nurse/recruiter/manager/
+# doctor (штатный)/partner_doctor/visiting_doctor.
+# Для doctor/partner/visiting — дополнительно создаются записи Doctor +
+# DoctorClinicAccess (привязка к клиникам).
+# Для visiting — также VisitingDoctorSettings (цена приёма + % врача).
+# ════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel, Field
+from decimal import Decimal
+
+
+class CreateStaffRequest(BaseModel):
+    """Запрос на создание сотрудника любой роли менеджером."""
+    role: str  # reg | nurse | doctor | recruiter | manager | partner_doctor | visiting_doctor
+    full_name: str
+    username: str
+    password: str
+    phone_number: Optional[str] = None
+    email: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    clinic_id: Optional[uuid.UUID] = None              # для reg/nurse/manager — основная клиника
+    clinic_ids: list[str] = Field(default_factory=list)  # для doctor/partner/visiting — клиники доступа
+    specialization: Optional[str] = None               # для всех типов врачей
+    address: Optional[str] = None                      # для partner/visiting — место работы
+    category: Optional[str] = None                     # должность (для категоризации)
+    bonus_percent: Optional[float] = None              # для recruiter — % бонуса
+    price_per_visit: Optional[float] = None            # для visiting — цена приёма
+    doctor_percent: Optional[float] = 70.0             # для visiting — доля врача
+
+
+# Иерархия: какие роли может создавать каждая роль (запрет создавать выше себя)
+_ROLE_HIERARCHY = {
+    UserRole.SUPER_ADMIN:     {"reg", "nurse", "doctor", "recruiter", "manager", "franchise_owner", "partner_doctor", "visiting_doctor"},
+    UserRole.FRANCHISE_OWNER: {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor"},
+    UserRole.MANAGER:         {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor"},
+}
+
+# Карта строки role → enum UserRole
+_ROLE_MAP = {
+    "reg":              UserRole.REG,
+    "nurse":            UserRole.NURSE,
+    "doctor":           UserRole.DOCTOR,
+    "recruiter":        UserRole.RECRUITER,
+    "manager":          UserRole.MANAGER,
+    "franchise_owner":  UserRole.FRANCHISE_OWNER,
+    "partner_doctor":   UserRole.PARTNER_DOCTOR,
+    "visiting_doctor":  UserRole.VISITING_DOCTOR,
+}
+
+
+@router.post("/users/create-staff", status_code=status.HTTP_201_CREATED)
+async def create_staff_universal(
+    body: CreateStaffRequest,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+    _sub: None = Depends(require_active_subscription),
+):
+    """Универсальное создание сотрудника любой роли (#22).
+
+    Возвращает данные созданного пользователя + credentials и QR-код для входа.
+    """
+    from app.core.security import hash_password
+    from app.services.qr_service import generate_url_qr_base64
+    from app.models.tenant import Tenant
+    from app.models.doctor_clinic_access import DoctorClinicAccess
+    from app.models.doctor import Doctor
+
+    # ── Валидация роли + проверка прав ──
+    role_str = (body.role or "").strip().lower()
+    if role_str not in _ROLE_MAP:
+        raise HTTPException(status_code=400, detail=f"Неизвестная роль: {body.role}")
+    allowed = _ROLE_HIERARCHY.get(current_user.role, set())
+    if role_str not in allowed:
+        raise HTTPException(status_code=403, detail=f"Нет прав создавать роль '{role_str}'")
+
+    target_role = _ROLE_MAP[role_str]
+
+    # ── Базовая валидация полей ──
+    if not body.full_name.strip():
+        raise HTTPException(status_code=400, detail="Введите ФИО")
+    if not body.username.strip():
+        raise HTTPException(status_code=400, detail="Введите логин")
+    if not body.password or len(body.password) < 4:
+        raise HTTPException(status_code=400, detail="Пароль слишком короткий (минимум 4 символа)")
+
+    # ── Уникальность логина ──
+    existing = await db.execute(select(User).where(User.username == body.username))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Логин уже занят")
+
+    # ── Уникальность email (если указан) ──
+    if body.email:
+        existing_email = await db.execute(select(User).where(User.email == body.email))
+        if existing_email.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Email уже используется")
+
+    # ── Лимит пользователей по тарифу ──
+    await check_plan_limit("users", current_user.tenant_id, db)
+
+    # ── Проверка clinic_id (основная клиника для reg/nurse/manager) ──
+    primary_clinic_id: Optional[uuid.UUID] = None
+    if body.clinic_id is not None:
+        clinic_check = await db.execute(select(Clinic).where(Clinic.id == body.clinic_id))
+        clinic_obj = clinic_check.scalar_one_or_none()
+        if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
+            raise HTTPException(status_code=404, detail="Клиника не найдена")
+        primary_clinic_id = body.clinic_id
+
+    # ── Создаём User ──
+    new_user = User(
+        id=uuid.uuid4(),
+        full_name=body.full_name.strip(),
+        username=body.username.strip(),
+        password_hash=hash_password(body.password),
+        phone_number=body.phone_number,
+        email=body.email,
+        date_of_birth=body.date_of_birth,
+        category=body.category,
+        role=target_role,
+        clinic_id=primary_clinic_id,
+        tenant_id=current_user.tenant_id,
+        is_active=True,
+    )
+
+    # Доп. поля для врачей
+    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR):
+        if hasattr(new_user, "specialization"):
+            new_user.specialization = body.specialization
+        if hasattr(new_user, "address"):
+            new_user.address = body.address
+        if hasattr(new_user, "doctor_type"):
+            if target_role == UserRole.DOCTOR:
+                new_user.doctor_type = "internal"
+            elif target_role == UserRole.PARTNER_DOCTOR:
+                new_user.doctor_type = "external"
+            else:
+                new_user.doctor_type = "visiting"
+        # Менеджер привлечения для partner/visiting
+        if target_role in (UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR):
+            new_user.manager_id = current_user.id
+
+    # Бонус % для рекрутера
+    if target_role == UserRole.RECRUITER and body.bonus_percent is not None:
+        new_user.bonus_percent = body.bonus_percent
+
+    db.add(new_user)
+    await db.flush()
+
+    # ── Привязка к клиникам (DoctorClinicAccess) для всех типов врачей ──
+    first_clinic_id: Optional[uuid.UUID] = primary_clinic_id
+    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR):
+        for cid_str in body.clinic_ids:
+            try:
+                cid = uuid.UUID(cid_str)
+            except (ValueError, TypeError):
+                continue
+            # Проверка что клиника принадлежит тенанту
+            cl = await db.get(Clinic, cid)
+            if not cl or (current_user.tenant_id is not None and cl.tenant_id != current_user.tenant_id):
+                continue
+            if first_clinic_id is None:
+                first_clinic_id = cid
+            db.add(DoctorClinicAccess(
+                id=uuid.uuid4(),
+                doctor_id=new_user.id,
+                clinic_id=cid,
+                granted_by=current_user.id,
+            ))
+
+        # Если не указали клиник — берём первую активную тенанта
+        if first_clinic_id is None:
+            cl = (await db.execute(
+                select(Clinic).where(
+                    Clinic.tenant_id == current_user.tenant_id,
+                    Clinic.is_active == True,
+                ).limit(1)
+            )).scalar_one_or_none()
+            if cl:
+                first_clinic_id = cl.id
+                db.add(DoctorClinicAccess(
+                    id=uuid.uuid4(),
+                    doctor_id=new_user.id,
+                    clinic_id=cl.id,
+                    granted_by=current_user.id,
+                ))
+
+        # Запись Doctor (нужна для DoctorLayout/расписания)
+        if first_clinic_id:
+            db.add(Doctor(
+                full_name=new_user.full_name,
+                tenant_id=current_user.tenant_id,
+                clinic_id=first_clinic_id,
+                specialty=body.specialization,
+                is_active=True,
+                user_id=new_user.id,
+            ))
+
+    # ── VisitingDoctorSettings для visiting_doctor ──
+    if target_role == UserRole.VISITING_DOCTOR and body.price_per_visit and first_clinic_id:
+        try:
+            from app.models.external_doctor import VisitingDoctorSettings
+            db.add(VisitingDoctorSettings(
+                id=uuid.uuid4(),
+                tenant_id=current_user.tenant_id,
+                doctor_id=new_user.id,
+                clinic_id=first_clinic_id,
+                price_per_visit=Decimal(str(body.price_per_visit)),
+                doctor_percent=Decimal(str(body.doctor_percent or 70.0)),
+                is_active=True,
+                created_by_id=current_user.id,
+            ))
+        except Exception:
+            # Если модели VisitingDoctorSettings нет — пропускаем тихо
+            pass
+
+    # ── Audit log ──
+    await audit_service.write_safe(
+        db, AuditAction.USER_CREATED,
+        actor_id=current_user.id, actor_name=current_user.full_name,
+        entity_type="user", entity_id=new_user.id,
+        after={
+            "username": new_user.username,
+            "full_name": new_user.full_name,
+            "role": role_str,
+        },
+        tenant_id=current_user.tenant_id,
+    )
+
+    await db.commit()
+    await db.refresh(new_user)
+
+    # ── Генерация QR-ссылки на вход ──
+    tenant = await db.get(Tenant, current_user.tenant_id) if current_user.tenant_id else None
+    slug = tenant.slug if tenant else ""
+    login_url = f"https://клиниксеть.рф/{slug}/admin" if slug else "https://клиниксеть.рф/admin"
+    try:
+        qr_base64 = generate_url_qr_base64(login_url)
+    except Exception:
+        qr_base64 = ""
+
+    return {
+        "success": True,
+        "user": {
+            "id": str(new_user.id),
+            "full_name": new_user.full_name,
+            "username": new_user.username,
+            "role": role_str,
+            "is_active": new_user.is_active,
+        },
+        "credentials": {
+            "username": body.username,
+            "password": body.password,
+            "login_url": login_url,
+        },
+        "qr_code": qr_base64,
+        "message": f"Сотрудник {new_user.full_name} ({role_str}) создан",
+    }
