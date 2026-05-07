@@ -7573,7 +7573,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'monitoring':     return <MonitoringSection token={adminToken} />
       case 'contacts':       return <Suspense fallback={<SectionLoader />}><ContactsSection token={adminToken} /></Suspense>
       case 'reviews':        return <Suspense fallback={<SectionLoader />}><ReviewsSection token={adminToken} /></Suspense>
-      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} /></Suspense>
+      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} mode="admin" /></Suspense>
       case 'plugins':        return <PluginsSection token={adminToken} />
       case 'mis_sync':       return <MisSyncSection token={adminToken} />
       case 'doctors':        return <Suspense fallback={<SectionLoader />}><DoctorsSection token={adminToken} /></Suspense>

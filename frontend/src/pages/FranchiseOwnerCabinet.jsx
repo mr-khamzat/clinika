@@ -1564,7 +1564,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     if (route === 'modules') {
       return (
         <Suspense fallback={<SectionLoader />}>
-          <ModulesCatalogSection token={adminToken} />
+          <ModulesCatalogSection token={adminToken} mode="owner" />
         </Suspense>
       )
     }

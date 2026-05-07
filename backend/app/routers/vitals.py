@@ -212,6 +212,10 @@ async def vitals_add(
         raise HTTPException(400, str(e))
     await db.commit()
     return _serialize(rec)
+# TODO Этап 7 ROADMAP: закрыть платным модулем vitals_apple_health.
+# Текущий require_module() работает по current_user.tenant_id, тут используется
+# patient-session — нужен patient-aware декоратор, читающий tenant_id из сессии,
+# и сначала добавить ключ vitals_apple_health в каталог commercial_modules.
 
 
 @router.post("/sync/apple-health")

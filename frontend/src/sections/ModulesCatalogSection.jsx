@@ -1,16 +1,71 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
 
+/**
+ * ============================================================================
+ * БЛОК: ModulesCatalogSection — каталог платных модулей платформы
+ * ============================================================================
+ * Совмещённая секция:
+ *   • super_admin → редактируемый каталог (цены / активность модулей).
+ *   • franchise_owner → read-only каталог + статусы по своим тенантам
+ *     (активен / триал / выключен).
+ *
+ * Endpoints:
+ *   GET /admin/modules                                  — каталог (super_admin)
+ *   PUT /admin/modules/{key}/price                      — цена (super_admin)
+ *   PATCH /admin/modules/{key}                          — toggle (super_admin)
+ *   GET /franchise-owner/tenants                        — список тенантов (owner)
+ *   GET /franchise-owner/tenants/{id}                   — модули тенанта (owner)
+ *
+ * NOTE: enable/disable per-tenant делает только super_admin через
+ *   POST /admin/tenants/{id}/modules/{key}/enable. Для franchise_owner
+ *   эквивалентного эндпоинта нет — кнопка показывает TODO-уведомление
+ *   («запросите подключение у платформы»).
+ * ============================================================================
+ */
+
 const CATEGORY_LABELS = {
-  telephony:   { label: 'Телефония', color: '#0284c7', bg: 'rgba(2,132,199,.1)',   icon: 'call' },
-  ai:          { label: 'AI',        color: '#7c3aed', bg: 'rgba(124,58,237,.1)', icon: 'auto_awesome' },
-  advertising: { label: 'Реклама',   color: '#d97706', bg: 'rgba(217,119,6,.1)',  icon: 'campaign' },
+  telephony:   { label: 'Телефония',   color: '#0284c7', bg: 'rgba(2,132,199,.1)',  icon: 'call' },
+  ai:          { label: 'AI',          color: '#7c3aed', bg: 'rgba(124,58,237,.1)', icon: 'auto_awesome' },
+  advertising: { label: 'Реклама',     color: '#d97706', bg: 'rgba(217,119,6,.1)',  icon: 'campaign' },
+  integrations:{ label: 'Интеграции',  color: '#0891b2', bg: 'rgba(8,145,178,.1)',  icon: 'integration_instructions' },
+  branding:    { label: 'Бренд',       color: '#db2777', bg: 'rgba(219,39,119,.1)', icon: 'palette' },
+}
+
+const STATUS_BADGE = {
+  active:    { label: 'Активен',    bg: 'rgba(16,185,129,.12)', fg: '#059669' },
+  trial:     { label: 'Триал',      bg: 'rgba(2,132,199,.12)',  fg: '#0369a1' },
+  grace:     { label: 'Льготный',   bg: 'rgba(245,158,11,.12)', fg: '#b45309' },
+  expired:   { label: 'Истёк',      bg: 'rgba(107,114,128,.12)',fg: '#374151' },
+  cancelled: { label: 'Отменён',    bg: 'rgba(220,38,38,.12)',  fg: '#b91c1c' },
 }
 
 function authH(token) { return { Authorization: `Bearer ${token}` } }
 
-export default function ModulesCatalogSection({ token }) {
+// ── Хелпер: понимаем роль из URL (если переданы пропсы — приоритет) ──
+function detectMode(propMode) {
+  if (propMode) return propMode
+  // На /franchise-owner/* кабинете показываем owner-режим, иначе super_admin
+  if (typeof window !== 'undefined') {
+    const p = (window.location?.pathname || '').toLowerCase()
+    if (p.includes('franchise')) return 'owner'
+  }
+  return 'admin'
+}
+
+export default function ModulesCatalogSection({ token, mode: propMode }) {
+  const mode = detectMode(propMode)
+  return mode === 'owner'
+    ? <OwnerCatalog token={token} />
+    : <AdminCatalog token={token} />
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin (super_admin) — оригинальная редактируемая секция
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AdminCatalog({ token }) {
   const [modules, setModules]   = useState([])
   const [loading, setLoading]   = useState(true)
   const [editKey, setEditKey]   = useState(null)
@@ -19,16 +74,16 @@ export default function ModulesCatalogSection({ token }) {
   const [msg, setMsg]           = useState('')
   const [filterCat, setFilterCat] = useState('all')
 
-  useEffect(() => { load() }, [])
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
       const r = await axios.get(`${API_BASE}/admin/modules`, { headers: authH(token) })
       setModules(r.data)
     } catch {}
     setLoading(false)
-  }
+  }, [token])
+
+  useEffect(() => { load() }, [load])
 
   function openEdit(m) {
     setEditKey(m.key)
@@ -77,7 +132,7 @@ export default function ModulesCatalogSection({ token }) {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Каталог модулей</h1>
           <p className="text-sm text-gray-500 mt-1">Управление платными модулями платформы</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {categories.map(c => (
             <button key={c} onClick={() => setFilterCat(c)}
               className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${
@@ -190,6 +245,197 @@ export default function ModulesCatalogSection({ token }) {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Owner (franchise_owner) — read-only каталог + статусы по своим тенантам
+// ─────────────────────────────────────────────────────────────────────────────
+
+function OwnerCatalog({ token }) {
+  const [tenants, setTenants]       = useState([])
+  const [tenantId, setTenantId]     = useState('')
+  const [tenantData, setTenantData] = useState(null) // { modules: [{module_key, status, ...}] }
+  const [catalog, setCatalog]       = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [filterCat, setFilterCat]   = useState('all')
+  const [msg, setMsg]               = useState('')
+
+  // Загрузка списка моих тенантов и публичного каталога модулей
+  useEffect(() => {
+    let aborted = false
+    async function init() {
+      setLoading(true)
+      try {
+        const [tRes, mRes] = await Promise.all([
+          axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(token) }),
+          // /modules/features даёт публичный список модулей с метаданными;
+          // фоллбэк через /admin/modules недоступен для owner-роли (403).
+          axios.get(`${API_BASE}/modules/features`, { headers: authH(token) }).catch(() => ({ data: [] })),
+        ])
+        if (aborted) return
+        setTenants(tRes.data || [])
+        if (tRes.data?.length) setTenantId(tRes.data[0].id)
+        setCatalog(mRes.data || [])
+      } catch (e) {
+        if (!aborted) setMsg('Не удалось загрузить данные')
+      } finally {
+        if (!aborted) setLoading(false)
+      }
+    }
+    init()
+    return () => { aborted = true }
+  }, [token])
+
+  // Загрузка модулей выбранного тенанта
+  useEffect(() => {
+    if (!tenantId) return
+    let aborted = false
+    axios.get(`${API_BASE}/franchise-owner/tenants/${tenantId}`, { headers: authH(token) })
+      .then(r => { if (!aborted) setTenantData(r.data) })
+      .catch(() => { if (!aborted) setTenantData(null) })
+    return () => { aborted = true }
+  }, [tenantId, token])
+
+  function requestEnable(modKey) {
+    // TODO: бэк-эндпоинт «запрос на подключение модуля» для franchise_owner
+    // отсутствует. Пока показываем уведомление с инструкцией.
+    setMsg(`Чтобы подключить модуль "${modKey}", обратитесь в поддержку платформы (admin@клиниксеть.рф) или к super_admin.`)
+    setTimeout(() => setMsg(''), 6000)
+  }
+
+  // Маппа: module_key → subscription
+  const subsMap = {}
+  for (const m of (tenantData?.modules || [])) subsMap[m.module_key] = m
+
+  // Категории: используем catalog если есть, иначе подписки
+  const sourceList = catalog.length
+    ? catalog.map(c => ({
+        key: c.name,                    // /modules/features даёт {name, label, ...}
+        name: c.label || c.name,
+        description: '',
+        category: c.category || 'other',
+        price_monthly: 0,
+        price_annual: 0,
+      }))
+    : Object.values(subsMap).map(s => ({
+        key: s.module_key,
+        name: s.module_key,
+        category: 'other',
+        price_monthly: 0,
+      }))
+
+  const categories = ['all', ...new Set(sourceList.map(m => m.category))]
+  const filtered = filterCat === 'all' ? sourceList : sourceList.filter(m => m.category === filterCat)
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Модули франшизы</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Подписки тенанта: статус, тариф, продление. Подключение/отключение —
+            через службу поддержки платформы.
+          </p>
+        </div>
+        {tenants.length > 1 && (
+          <select value={tenantId} onChange={e => setTenantId(e.target.value)}
+            className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white">
+            {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      {msg && (
+        <div className="mb-4 px-4 py-3 rounded-xl text-sm bg-blue-50 text-blue-800 border border-blue-200">
+          {msg}
+        </div>
+      )}
+
+      <div className="flex gap-2 mb-5 flex-wrap">
+        {categories.map(c => (
+          <button key={c} onClick={() => setFilterCat(c)}
+            className={`px-3 py-1.5 rounded-xl text-sm font-medium transition ${
+              filterCat === c
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+            }`}>
+            {c === 'all' ? 'Все' : CATEGORY_LABELS[c]?.label || c}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid gap-4">
+        {filtered.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center text-gray-500 border border-gray-100 dark:border-gray-700">
+            Каталог модулей пуст. Обратитесь к платформе.
+          </div>
+        )}
+        {filtered.map(m => {
+          const cat = CATEGORY_LABELS[m.category] || { label: m.category, color: '#6b7280', bg: 'rgba(107,114,128,.1)', icon: 'widgets' }
+          const sub = subsMap[m.key]
+          const status = sub?.status || 'disabled'
+          const badge = STATUS_BADGE[status] || { label: 'Не подключён', bg: 'rgba(107,114,128,.12)', fg: '#374151' }
+          const expires = sub?.expires_at || sub?.trial_ends_at || sub?.grace_until
+          return (
+            <div key={m.key} className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: cat.bg }}>
+                  <span className="material-symbols-outlined text-xl"
+                    style={{ color: cat.color, fontVariationSettings: "'FILL' 1" }}>{cat.icon}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-bold text-gray-900 dark:text-white">{m.name}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
+                    <span className="font-mono text-xs text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded-lg">{m.key}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium ml-auto"
+                      style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>
+                  </div>
+                  {m.description && (
+                    <p className="text-sm text-gray-500 mt-1 leading-snug">{m.description}</p>
+                  )}
+                  {expires && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      {sub?.status === 'trial' ? 'Триал до' : sub?.status === 'grace' ? 'Льготный период до' : 'Действует до'}
+                      &nbsp;{new Date(expires).toLocaleDateString('ru')}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  {Number(m.price_monthly) > 0 && (
+                    <div className="text-right">
+                      <div className="text-base font-bold text-gray-800 dark:text-white">
+                        {Number(m.price_monthly).toLocaleString('ru')} ₽/мес
+                      </div>
+                      {Number(m.price_annual) > 0 && (
+                        <div className="text-xs text-gray-400">{Number(m.price_annual).toLocaleString('ru')} ₽/год</div>
+                      )}
+                    </div>
+                  )}
+                  {!sub && (
+                    <button onClick={() => requestEnable(m.key)}
+                      className="px-3 py-1.5 rounded-xl text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition">
+                      Запросить
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
