@@ -20,7 +20,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
-import { API_BASE } from '../../config'
+import { API_BASE, SLUG } from '../../config'
 import {
   Card, KpiCard, KpiRow, Tabs, Button, Chip, EmptyState, useToast,
 } from '../../design'
@@ -277,8 +277,17 @@ export default function LtvAnalyticsSection({ adminToken, clinicId }) {
   const [cohorts, setCohorts] = useState([])
   const [recomputing, setRecomputing] = useState(false)
 
-  // Берём токен из переданного либо из localStorage (manager-кабинет)
-  const token = adminToken || (typeof window !== 'undefined' ? (localStorage.getItem('clinika_token') || localStorage.getItem('token') || '') : '')
+  // Берём токен из переданного либо из localStorage. Менеджер логинится через
+  // /arc/admin → ключ clinika_admin_token_arc; пациент / партнёр —
+  // clinika_token_arc. Старые fallback'и оставлены для обратной совместимости.
+  const token = adminToken || (typeof window !== 'undefined'
+    ? (localStorage.getItem('clinika_admin_token_' + SLUG)
+       || localStorage.getItem('clinika_token_' + SLUG)
+       || localStorage.getItem('clinika_admin_token_')
+       || localStorage.getItem('clinika_token')
+       || localStorage.getItem('token')
+       || '')
+    : '')
   const headers = useMemo(() => authH(token), [token])
 
   const reload = async () => {
