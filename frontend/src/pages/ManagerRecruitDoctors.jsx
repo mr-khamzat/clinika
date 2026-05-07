@@ -1,15 +1,19 @@
 /**
  * ========================================
- * БЛОК: ManagerRecruitDoctors (premium редизайн)
+ * БЛОК: ManagerRecruitDoctors (premium редизайн + design-system Modal)
  * ========================================
  * Управление приезжими врачами: добавление, выдача QR/credentials,
  * переключение активности, смена данных. Бизнес-логика не изменена.
+ *
+ * История миграций:
+ *   - 191a31b — premium-редизайн (Card/Chip/Button/Avatar/EmptyState)
+ *   - Этап 5 ROADMAP — заменён собственный ModalShell на <Modal> из дизайн-системы
  * ========================================
  */
 import { useState, useEffect } from 'react'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
-import { Card, Chip, Button, Avatar, EmptyState } from '../design'
+import { Card, Chip, Button, Avatar, EmptyState, Modal } from '../design'
 import ManagerShell from './_ManagerShell'
 
 function apiFetch(token, path, opts = {}) {
@@ -38,50 +42,22 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
   )
 }
 
-// ─── Модалка-обёртка ───
-function ModalShell({ children, onClose, maxWidth = 460 }) {
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
-        background: 'oklch(0 0 0 / 0.55)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16, overflowY: 'auto',
-      }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'var(--surface)',
-          borderRadius: 'var(--radius-lg)',
-          border: '1px solid var(--border)',
-          padding: 20,
-          maxWidth, width: '100%', maxHeight: '90vh', overflowY: 'auto',
-          boxShadow: 'var(--shadow-lg)',
-        }}
-      >
-        {children}
-      </div>
-    </div>
-  )
-}
-
-// ─── QR-попап ───
+// ─── QR-попап (на base дизайн-системы Modal) ───
 function QRPopup({ data, onClose }) {
   const [copied, setCopied] = useState('')
   const copy = (v, k) => { navigator.clipboard.writeText(v); setCopied(k); setTimeout(() => setCopied(''), 2000) }
   return (
-    <ModalShell onClose={onClose} maxWidth={400}>
-      <div className="flex items-center gap-2 mb-3">
-        <span
-          className="inline-grid place-items-center"
-          style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--good-soft)', color: 'var(--good)' }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-        </span>
-        <div className="font-semibold" style={{ fontSize: 15, color: 'var(--fg)' }}>{data.message}</div>
-      </div>
+    <Modal
+      open={!!data}
+      onClose={onClose}
+      size="sm"
+      title={data?.message || 'Готово'}
+      actions={
+        <Button variant="primary" size="md" onClick={onClose}>
+          Закрыть
+        </Button>
+      }
+    >
       <div className="text-center mb-4">
         <img
           src={`data:image/png;base64,${data.qr_code}`} alt="QR"
@@ -90,7 +66,7 @@ function QRPopup({ data, onClose }) {
         <div className="text-xs mt-2" style={{ color: 'var(--fg-3)' }}>QR для входа в кабинет</div>
       </div>
       <div
-        className="p-3 mb-3"
+        className="p-3"
         style={{ background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)' }}
       >
         {[
@@ -117,14 +93,11 @@ function QRPopup({ data, onClose }) {
           </div>
         ) : null)}
       </div>
-      <Button variant="primary" size="md" className="w-full" onClick={onClose}>
-        Закрыть
-      </Button>
-    </ModalShell>
+    </Modal>
   )
 }
 
-// ─── Смена данных ───
+// ─── Смена данных входа (на base дизайн-системы Modal) ───
 function ResetModal({ doctor, token, onClose, onDone }) {
   const [form, setForm] = useState({ username: doctor.username || '', password: '' })
   const [loading, setLoading] = useState(false)
@@ -145,8 +118,20 @@ function ResetModal({ doctor, token, onClose, onDone }) {
   }
 
   return (
-    <ModalShell onClose={onClose} maxWidth={400}>
-      <div className="font-semibold mb-1" style={{ fontSize: 16, color: 'var(--fg)' }}>Сменить данные входа</div>
+    <Modal
+      open={!!doctor}
+      onClose={onClose}
+      size="sm"
+      title="Сменить данные входа"
+      actions={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" size="md" onClick={submit} disabled={loading}>
+            {loading ? '…' : 'Сохранить'}
+          </Button>
+        </>
+      }
+    >
       <div className="text-xs mb-4" style={{ color: 'var(--fg-3)' }}>{doctor.full_name}</div>
       {error && (
         <div
@@ -158,20 +143,12 @@ function ResetModal({ doctor, token, onClose, onDone }) {
       )}
       <Field label="Новый логин" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder={doctor.username || ''} />
       <Field label="Новый пароль" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Оставьте пустым, чтобы не менять" />
-      <div className="flex gap-2 mt-4">
-        <Button variant="primary" size="md" className="flex-1" onClick={submit} disabled={loading}>
-          {loading ? '…' : 'Сохранить'}
-        </Button>
-        <Button variant="secondary" size="md" className="flex-1" onClick={onClose}>
-          Отмена
-        </Button>
-      </div>
-    </ModalShell>
+    </Modal>
   )
 }
 
-// ─── Форма добавления врача ───
-function AddModal({ token, clinics, onClose, onDone }) {
+// ─── Форма добавления врача (на base дизайн-системы Modal) ───
+function AddModal({ open, token, clinics, onClose, onDone }) {
   const [form, setForm] = useState({
     full_name: '', phone_number: '', email: '', specialization: '', address: '',
     username: '', password: '', clinic_ids: [],
@@ -205,8 +182,20 @@ function AddModal({ token, clinics, onClose, onDone }) {
   }
 
   return (
-    <ModalShell onClose={onClose} maxWidth={480}>
-      <div className="font-semibold mb-4" style={{ fontSize: 17, color: 'var(--fg)' }}>Добавить приезжего врача</div>
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title="Добавить приезжего врача"
+      actions={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose}>Отмена</Button>
+          <Button variant="primary" size="md" onClick={submit} disabled={loading}>
+            {loading ? '…' : 'Зарегистрировать'}
+          </Button>
+        </>
+      }
+    >
       {error && (
         <div
           className="rounded-lg p-2.5 mb-3 text-sm"
@@ -244,7 +233,7 @@ function AddModal({ token, clinics, onClose, onDone }) {
 
       {/* ─── Клиники доступа ─── */}
       {clinics.length > 0 && (
-        <div className="mb-4">
+        <div className="mb-2">
           <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Клиники доступа
           </label>
@@ -269,16 +258,7 @@ function AddModal({ token, clinics, onClose, onDone }) {
           </div>
         </div>
       )}
-
-      <div className="flex gap-2 mt-2">
-        <Button variant="primary" size="md" className="flex-1" onClick={submit} disabled={loading}>
-          {loading ? '…' : 'Зарегистрировать'}
-        </Button>
-        <Button variant="secondary" size="md" className="flex-1" onClick={onClose}>
-          Отмена
-        </Button>
-      </div>
-    </ModalShell>
+    </Modal>
   )
 }
 
@@ -334,7 +314,7 @@ export default function ManagerRecruitDoctors() {
     >
       {resetDoc && <ResetModal doctor={resetDoc} token={token} onClose={() => setResetDoc(null)} onDone={d => { setQrResult(d); setResetDoc(null); load() }} />}
       {qrResult && <QRPopup    data={qrResult}   onClose={() => setQrResult(null)} />}
-      {showAdd  && <AddModal   token={token} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />}
+      <AddModal   open={showAdd} token={token} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />
 
       {/* ─── Mobile add button ─── */}
       <div className="mb-4 sm:hidden">
