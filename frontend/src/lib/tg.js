@@ -13,6 +13,43 @@
 
 /** Максимальное время ожидания SDK (мс). После — режим веб-апп. */
 const SDK_WAIT_MS = 2000
+/** URL Telegram Web App SDK */
+const SDK_URL = 'https://telegram.org/js/telegram-web-app.js'
+
+/**
+ * Динамически подключает Telegram Web App SDK к странице.
+ * Безопасно вызывать многократно: повторные вызовы возвращают первый Promise.
+ * Если сеть недоступна или Telegram заблокирован — Promise резолвится как false
+ * (приложение продолжит работать как обычный веб-апп).
+ *
+ * Используется только в PatientCabinet (/p/) и при детекте Telegram MiniApp в App.jsx.
+ * Из глобального index.html SDK НЕ грузится — он не нужен лендингу/admin/manager.
+ */
+let _sdkPromise = null
+export const loadTelegramSDK = () => {
+  if (typeof document === 'undefined') return Promise.resolve(false)
+  if (window.Telegram?.WebApp) return Promise.resolve(true)
+  if (_sdkPromise) return _sdkPromise
+  _sdkPromise = new Promise(resolve => {
+    // Скрипт мог быть уже добавлен другим вызовом — не дублируем
+    const existing = document.querySelector(`script[src="${SDK_URL}"]`)
+    if (existing) {
+      existing.addEventListener('load', () => resolve(true), { once: true })
+      existing.addEventListener('error', () => resolve(false), { once: true })
+      return
+    }
+    const script = document.createElement('script')
+    script.src = SDK_URL
+    script.async = true
+    script.onload = () => resolve(true)
+    script.onerror = () => {
+      console.info('[TG] SDK недоступен — работаем как веб-приложение')
+      resolve(false)
+    }
+    document.head.appendChild(script)
+  })
+  return _sdkPromise
+}
 
 /**
  * Ждёт загрузки Telegram SDK с таймаутом.
@@ -20,7 +57,7 @@ const SDK_WAIT_MS = 2000
  *
  * Логика:
  * - Если URL не содержит tgWebApp в hash — не в Telegram, resolve(null) немедленно
- * - Если содержит — ждём SDK до SDK_WAIT_MS мс, потом всё равно resolve(null)
+ * - Если содержит — динамически подгружаем SDK и ждём до SDK_WAIT_MS мс
  */
 export const waitForTelegramSDK = (timeout = SDK_WAIT_MS) =>
   new Promise(resolve => {
@@ -38,7 +75,9 @@ export const waitForTelegramSDK = (timeout = SDK_WAIT_MS) =>
       return
     }
 
-    // Похоже на Telegram Mini App — ждём загрузки SDK
+    // Похоже на Telegram Mini App — догружаем SDK динамически и ждём
+    loadTelegramSDK()
+
     const timer = setTimeout(() => {
       clearInterval(interval)
       console.info('[TG] SDK timeout — работаем как веб-приложение')

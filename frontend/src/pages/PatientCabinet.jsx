@@ -5,6 +5,8 @@ import { API_BASE, BASE_PATH, SLUG } from '../config'
 import { Card, Button, Chip, Tabs, EmptyState, Modal, useToast, useConfirm } from '../design'
 // Единый хук переключения темы (общий с другими кабинетами)
 import useTheme from '../lib/useTheme'
+// Telegram Web App SDK — динамическая загрузка (только в /p/, не в глобальном index.html)
+import { loadTelegramSDK } from '../lib/tg'
 
 // Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
 const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
@@ -1923,6 +1925,10 @@ export default function PatientCabinet() {
 
   useEffect(() => {
     registerSW()
+    // Telegram SDK подгружается ТОЛЬКО для /p/ — пациенты могут заходить через
+    // Telegram-бот, и тогда нужен initData. Лендинг и кабинеты сотрудников
+    // его не загружают (см. lib/tg.js loadTelegramSDK).
+    loadTelegramSDK()
     const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); setShowInstall(true) }
     window.addEventListener('beforeinstallprompt', handler)
     const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream
