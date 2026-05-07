@@ -29,9 +29,13 @@ const managerItems = [
 export default function BottomNav() {
   const { user } = useAuthStore()
 
+  // У роли manager своя навигация в _ManagerShell. Старый bottom-nav
+  // со ссылками на /history, /bonuses (старый дизайн страниц) скрываем —
+  // менеджер ходит через ManagerShell на /manager/history, /manager/bonuses.
+  if (user?.role === 'manager') return null
+
   const items =
     user?.role === 'partner_doctor' ? partnerItems :
-    user?.role === 'manager' ? managerItems :
     baseItems
 
   return (
