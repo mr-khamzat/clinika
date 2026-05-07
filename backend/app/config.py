@@ -55,7 +55,8 @@ class Settings(BaseSettings):
     webhook_api_key: str = ""
 
     # CORS — через запятую (продакшн: только ваш домен)
-    allowed_origins: str = "http://localhost:5173,http://localhost:8901"
+    # Дефолт жёстко закрыт: prod-домены + localhost для разработки фронта
+    allowed_origins: str = "https://xn--e1afagcdp8ak4h.xn--p1ai,https://клиниксеть.рф,http://localhost:5173"
 
     # Ключ для защиты эндпоинта /tenant/create
     onboarding_secret: str = ""
