@@ -60,9 +60,11 @@ class Settings(BaseSettings):
     # Ключ для защиты эндпоинта /tenant/create
     onboarding_secret: str = ""
 
-    # Учётные данные суперадмина (создаются при первом запуске)
-    superadmin_username: str = "khamzat"
-    superadmin_password: str = "khamzat88712"
+    # ===== БЛОК: Учётные данные суперадмина (fail-fast — обязательны в .env) =====
+    # Раньше здесь стоял хардкод "khamzat88712" в дефолте — убран ради безопасности.
+    # Если SUPERADMIN_PASSWORD не задан в .env — сервис не стартует (pydantic ValueError).
+    superadmin_username: str
+    superadmin_password: str
     superadmin_full_name: str = "Системный администратор"
 
     # TURN/STUN для WebRTC (REST API time-limited credentials)
