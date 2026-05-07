@@ -148,13 +148,13 @@ function MiniApp() {
   // ─── Auth-гейт: нет user → стартовая страница с единым входом ───
   if (!user) return <Landing />
 
-  // ─── ProfileSetup только для новых сотрудников (не партнёров) без клиники ───
-  if (user && user.role !== 'partner' && !user.clinic_id && user.telegram_id && !user.username) {
+  // ─── ProfileSetup только для новых сотрудников клиники (без аккаунта) ───
+  if (user && !user.clinic_id && user.telegram_id && !user.username) {
     return <ProfileSetup />
   }
 
-  // ─── Приезжие и внешние врачи → только /admin ───
-  if (user?.role === 'visiting_doctor' || user?.role === 'external_doctor') {
+  // ─── Приезжий и партнёрский врач → только /admin (PartnerDoctorCabinet/VisitingDoctorCabinet) ───
+  if (user?.role === 'visiting_doctor' || user?.role === 'partner_doctor') {
     window.location.replace('/' + SLUG + '/admin')
     return null
   }
@@ -189,8 +189,8 @@ function MiniApp() {
 
           {/* ─── Маршруты для партнёра — удалены в Этапе 3 ROADMAP ─── */}
 
-          {/* ─── Маршруты для сотрудников клиники (admin/manager) ─── */}
-          {user?.role !== 'partner' && user?.role !== 'visiting_doctor' && user?.role !== 'external_doctor' && (
+          {/* ─── Маршруты для сотрудников клиники (reg/manager/doctor/recruiter) ─── */}
+          {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && (
             <>
               <Route path="create" element={<CreateReferral />} />
               <Route path="scan" element={<ScanScreen />} />

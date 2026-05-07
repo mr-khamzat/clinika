@@ -271,22 +271,21 @@ STARTER_PAGES = [
 | Роль | Код | Описание | Кабинет |
 |------|-----|----------|---------|
 | Суперадмин | `super_admin` | Владелец платформы, полный доступ | `/admin` |
-| Руководитель | `manager` | Управляющий тенантом | `/{slug}/manager` |
-| Супервизор | `supervisor` | Контроль без редактирования | `/{slug}/admin` |
-| Администратор | `admin` | Работа с направлениями | `/{slug}/admin` |
+| Владелец франшизы | `franchise_owner` | Управление своими тенантами | `/{slug}/admin` |
+| Руководитель | `manager` | Управляющий клиникой | `/{slug}/manager` |
+| Регистратор | `reg` | Работа с направлениями | `/{slug}/admin` |
 | Медсестра | `nurse` | Работа с направлениями | `/{slug}/admin` |
 | Врач | `doctor` | Личный кабинет врача | `/{slug}/admin` |
-| Партнёр | `partner` | Создание направлений | `/{slug}/` |
-| Рекрутер | `recruiter` | Привлечение партнёров | `/{slug}/admin` |
-| Менеджер привлечения | `acquisition_manager` | Привлечение врачей | `/{slug}/admin` |
-| Внешний врач | `external_doctor` | Направления и бонусы | `/{slug}/admin` |
-| Выездной врач | `visiting_doctor` | Приёмы и доход | `/{slug}/admin` |
+| Рекрутер | `recruiter` | Привлечение врачей-партнёров | `/{slug}/admin` |
+| Врач-партнёр | `partner_doctor` | Внешний направляющий врач | `/{slug}/admin` |
+| Приходящий врач | `visiting_doctor` | Приёмы и доход | `/{slug}/admin` |
+| Пациент | `patient` | Личный кабинет пациента | `/{slug}/p/` |
 
 ---
 
 ## Матрица доступа к API
 
-| Эндпоинт | admin | manager | supervisor | super_admin |
+| Эндпоинт | reg | manager | franchise_owner | super_admin |
 |----------|-------|---------|------------|-------------|
 | GET /referrals | ✅ | ✅ | ✅ | ✅ |
 | POST /referrals | ✅ | ✅ | ❌ | ✅ |
@@ -776,7 +775,7 @@ POST /acquisition/requests
 POST /admins/doctor-requests/{id}/approve
 ```
 
-Создаёт аккаунт с ролью `external_doctor` и возвращает временный пароль.
+Создаёт аккаунт с ролью `partner_doctor` и возвращает временный пароль.
 
 ### Настройки выездного врача
 

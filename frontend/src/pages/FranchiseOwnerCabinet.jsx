@@ -68,7 +68,7 @@ const NAV_GROUPS = [
       { id: 'overview',  label: 'Главная',     icon: 'dashboard'             },
       { id: 'tenants',   label: 'Клиники',     icon: 'business'              },
       { id: 'doctors',   label: 'Сотрудники',  icon: 'stethoscope'           },
-      { id: 'partners',  label: 'Внешние врачи', icon: 'medical_services'    },
+      { id: 'partners',  label: 'Партнёрские врачи', icon: 'medical_services'    },
       { id: 'recruiters',label: 'Рекрутеры',   icon: 'person_search'         },
       { id: 'reviews',   label: 'Отзывы',      icon: 'rate_review'           },
     ],
@@ -109,7 +109,7 @@ const PAGE_TITLES = {
   overview:   { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
   tenants:    { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
-  partners:   { title: 'Внешние врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
+  partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
   reviews:    { title: 'Отзывы',           subtitle: 'Модерация публичных отзывов' },
   analytics:  { title: 'Аналитика',        subtitle: 'Drill-down по клиникам, врачам, услугам' },
@@ -964,7 +964,7 @@ function BillingSection() {
 }
 
 // ============================================================================
-// Раздел: Внешние врачи (partner_doctor + visiting_doctor)
+// Раздел: Партнёрские врачи (partner_doctor + visiting_doctor)
 // ============================================================================
 function PartnerDoctorsSection({ adminToken }) {
   const [doctors, setDoctors] = useState(null)
