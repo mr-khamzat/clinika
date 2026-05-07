@@ -23,6 +23,8 @@ import {
   KpiRow,
   Chip,
   Button,
+  Tabs,
+  Modal,
   Avatar,
   EmptyState,
   Sparkline,
@@ -345,25 +347,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         }
         .ks-row:active { transform: scale(0.99); }
         .ks-row:hover { border-color: var(--accent-line); }
-        .ks-pill-btn {
-          min-height: 48px; padding: 0 18px; border-radius: 14px;
-          font-weight: 600; font-size: 14px;
-          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-          background: linear-gradient(135deg, var(--accent), var(--accent-2));
-          color: #fff;
-          box-shadow: 0 1px 0 oklch(1 0 0 / 0.15) inset, 0 8px 22px oklch(0.55 0.13 200 / 0.30);
-          transition: transform .08s;
-        }
-        .ks-pill-btn:active { transform: translateY(1px) scale(0.98); }
-        .ks-pill-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-        .ks-pill-btn-secondary {
-          min-height: 48px; padding: 0 18px; border-radius: 14px;
-          font-weight: 600; font-size: 14px;
-          display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-          background: var(--surface); color: var(--fg);
-          border: 1px solid var(--border);
-        }
-        .ks-pill-btn-secondary:active { transform: translateY(1px); }
+        /* Премиум pill-кнопки заменены на <Button> из design-system (Этап 5 ROADMAP) */
         .ks-bottom-nav {
           position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
           padding-bottom: env(safe-area-inset-bottom);
@@ -372,15 +356,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           -webkit-backdrop-filter: saturate(180%) blur(24px);
           border-top: 1px solid var(--border);
         }
-        .ks-sheet-back { position: fixed; inset: 0; background: oklch(0.18 0.014 220 / 0.55); z-index: 60; backdrop-filter: blur(2px); }
-        .ks-sheet {
-          position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
-          background: var(--surface); border-radius: 24px 24px 0 0;
-          padding-bottom: calc(24px + env(safe-area-inset-bottom));
-          max-height: 92vh; overflow-y: auto;
-          box-shadow: 0 -24px 60px oklch(0.18 0.014 220 / 0.18);
-        }
-        .ks-sheet-grip { width: 44px; height: 4px; border-radius: 999px; background: var(--bg-3); margin: 12px auto 6px; }
+        /* Bottom-sheets заменены на <Modal> (на мобильном Modal сам становится bottom-sheet) */
         .ks-code-input {
           font-variant-numeric: tabular-nums;
           letter-spacing: 0.4em;
@@ -733,12 +709,24 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                   )}
 
                   <div className="mt-5 grid grid-cols-2 gap-3">
-                    <button onClick={() => setCreatedRef(null)} className="ks-pill-btn-secondary">
-                      <Icon name="add" size={18} /> Ещё одно
-                    </button>
-                    <button onClick={() => setTab('referrals')} className="ks-pill-btn">
-                      <Icon name="list_alt" size={18} fill={1} /> К списку
-                    </button>
+                    <Button
+                      variant="secondary"
+                      size="lg"
+                      onClick={() => setCreatedRef(null)}
+                      leftIcon={<Icon name="add" size={18} />}
+                      style={{ minHeight: 48 }}
+                    >
+                      Ещё одно
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={() => setTab('referrals')}
+                      leftIcon={<Icon name="list_alt" size={18} fill={1} />}
+                      style={{ minHeight: 48 }}
+                    >
+                      К списку
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -811,12 +799,19 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                       style={{ resize: 'none' }}
                     />
                   </div>
-                  <button type="submit" disabled={loading} className="ks-pill-btn w-full">
-                    {loading
-                      ? <><div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> Создаём…</>
-                      : <><Icon name="add_circle" size={20} fill={1} /> Создать направление</>
-                    }
-                  </button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="lg"
+                    disabled={loading}
+                    leftIcon={loading
+                      ? <div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                      : <Icon name="add_circle" size={20} fill={1} />}
+                    className="w-full"
+                    style={{ minHeight: 48 }}
+                  >
+                    {loading ? 'Создаём…' : 'Создать направление'}
+                  </Button>
                 </form>
               </Card>
             )}
@@ -826,32 +821,18 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ───── НАПРАВЛЕНИЯ ───── */}
         {tab === 'referrals' && (
           <div className="space-y-3">
-            {/* Фильтр-чипы */}
-            <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-              {[
-                { k: 'all',       l: 'Все' },
-                { k: 'created',   l: 'Активные' },
-                { k: 'confirmed', l: 'Завершённые' },
-                { k: 'expired',   l: 'Просроченные' },
-              ].map(f => {
-                const active = referralFilter === f.k
-                return (
-                  <button
-                    key={f.k}
-                    onClick={() => setReferralFilter(f.k)}
-                    className="rounded-full text-[12.5px] font-semibold whitespace-nowrap transition-colors"
-                    style={{
-                      padding: '8px 14px',
-                      background: active ? 'var(--accent)' : 'var(--surface)',
-                      color: active ? '#fff' : 'var(--fg-2)',
-                      border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                      boxShadow: active ? '0 4px 12px oklch(0.55 0.13 200 / 0.22)' : 'none',
-                    }}
-                  >
-                    {f.l}
-                  </button>
-                )
-              })}
+            {/* Фильтр через design-system <Tabs> */}
+            <div className="overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
+              <Tabs
+                value={referralFilter}
+                onChange={setReferralFilter}
+                items={[
+                  { id: 'all',       label: 'Все' },
+                  { id: 'created',   label: 'Активные' },
+                  { id: 'confirmed', label: 'Завершённые' },
+                  { id: 'expired',   label: 'Просроченные' },
+                ]}
+              />
             </div>
 
             {loading ? (
@@ -952,17 +933,18 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                             </div>
                           </div>
                           {isReg && (
-                            <button
+                            <Button
+                              variant="primary"
+                              size="md"
                               onClick={() => {
                                 setBookVisitDoc(doc)
                                 setBookVisitForm({ patient_name:'', patient_phone:'', appointment_date:'', start_time:'09:00', end_time:'09:30', price:'' })
                                 setBookVisitResult(null); setBookVisitMsg('')
                               }}
-                              className="ks-pill-btn"
-                              style={{ minHeight: 40, padding: '0 14px', fontSize: 13 }}
+                              style={{ minHeight: 44 }}
                             >
                               Записать
-                            </button>
+                            </Button>
                           )}
                         </div>
                       ))}
@@ -1212,318 +1194,301 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         </div>
       </nav>
 
-      {/* ───── BOTTOM SHEET: Ещё ───── */}
-      {moreOpen && (
-        <>
-          <div className="ks-sheet-back" onClick={() => setMoreOpen(false)} />
-          <div className="ks-sheet">
-            <div className="ks-sheet-grip" />
-            <div className="px-5 pb-2 pt-2 text-[13px] font-semibold" style={{ color: 'var(--fg)' }}>Дополнительно</div>
-            <div className="grid grid-cols-3 gap-3 px-4 pt-3">
-              {moreItems.map(item => {
-                const active = tab === item.key
-                return (
-                  <button
-                    key={item.key}
-                    onClick={() => { setTab(item.key); setMoreOpen(false) }}
-                    className="flex flex-col items-center gap-2 py-4 rounded-2xl"
-                    style={{
-                      background: active ? 'var(--accent-soft)' : 'var(--bg-1)',
-                      border: `1px solid ${active ? 'var(--accent-line)' : 'var(--border)'}`,
-                    }}
-                  >
-                    <div className="grid place-items-center rounded-xl"
-                         style={{
-                           width: 44, height: 44,
-                           background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
-                         }}>
-                      <Icon name={item.icon} size={22} fill={1} style={{ color: '#fff' }} />
-                    </div>
-                    <span className="text-[12px] font-semibold text-center" style={{ color: 'var(--fg)' }}>
-                      {item.label}
-                    </span>
-                  </button>
-                )
-              })}
+      {/* ───── MODAL: Ещё (через design-system <Modal>) ───── */}
+      <Modal
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        title="Дополнительно"
+        size="sm"
+      >
+        <div className="grid grid-cols-3 gap-3">
+          {moreItems.map(item => {
+            const active = tab === item.key
+            return (
+              <button
+                key={item.key}
+                onClick={() => { setTab(item.key); setMoreOpen(false) }}
+                className="flex flex-col items-center gap-2 py-4 rounded-2xl"
+                style={{
+                  minHeight: 96,
+                  background: active ? 'var(--accent-soft)' : 'var(--bg-1)',
+                  border: `1px solid ${active ? 'var(--accent-line)' : 'var(--border)'}`,
+                }}
+              >
+                <div className="grid place-items-center rounded-xl"
+                     style={{
+                       width: 44, height: 44,
+                       background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+                     }}>
+                  <Icon name={item.icon} size={22} fill={1} style={{ color: '#fff' }} />
+                </div>
+                <span className="text-[12px] font-semibold text-center" style={{ color: 'var(--fg)' }}>
+                  {item.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </Modal>
+
+      {/* ───── MODAL: Принять пациента (design-system <Modal>) ───── */}
+      <Modal
+        open={acceptOpen}
+        onClose={() => { setAcceptOpen(false); setAcceptResult(null) }}
+        title="Принять пациента"
+        size="sm"
+      >
+        {acceptResult?.ok ? (
+          <div className="text-center">
+            <div
+              className="grid place-items-center rounded-2xl mx-auto mb-3"
+              style={{ width: 64, height: 64, background: 'var(--good-soft)', color: 'var(--good)' }}
+            >
+              <Icon name="check_circle" size={36} fill={1} />
+            </div>
+            <div className="text-[16px] font-bold" style={{ color: 'var(--fg)' }}>Пациент принят</div>
+            <div className="text-[13px] mt-1" style={{ color: 'var(--fg-3)' }}>
+              {acceptResult.referral?.patient_name || acceptResult.referral?.patient_phone}
+            </div>
+            <div className="text-[12px] mt-0.5" style={{ color: 'var(--fg-4)' }}>
+              {acceptResult.referral?.service_name}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <Button
+                variant="secondary"
+                size="lg"
+                onClick={() => setAcceptResult(null)}
+                style={{ minHeight: 48 }}
+              >
+                Ещё пациент
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => { setAcceptOpen(false); setAcceptResult(null); setTab('referrals') }}
+                style={{ minHeight: 48 }}
+              >
+                К списку
+              </Button>
             </div>
           </div>
-        </>
-      )}
+        ) : (
+          <form onSubmit={submitAccept} className="space-y-4">
+            <p className="text-[12.5px] -mt-2" style={{ color: 'var(--fg-3)' }}>
+              Введите 5-значный код пациента или отсканируйте QR
+            </p>
+            <div>
+              <label className="ks-label">Код направления</label>
+              <input
+                autoFocus
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={acceptCode}
+                onChange={e => setAcceptCode(e.target.value.replace(/\D/g, ''))}
+                placeholder="00000"
+                className="ks-code-input"
+              />
+            </div>
 
-      {/* ───── BOTTOM SHEET: Принять пациента ───── */}
-      {acceptOpen && (
-        <>
-          <div className="ks-sheet-back" onClick={() => { setAcceptOpen(false); setAcceptResult(null) }} />
-          <div className="ks-sheet">
-            <div className="ks-sheet-grip" />
-            <div className="px-5 pb-4">
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-[18px] font-bold" style={{ color: 'var(--fg)', letterSpacing: '-0.01em' }}>
-                  Принять пациента
-                </h2>
-                <button
-                  onClick={() => { setAcceptOpen(false); setAcceptResult(null) }}
-                  aria-label="Закрыть"
-                  className="grid place-items-center rounded-xl"
-                  style={{ width: 36, height: 36, background: 'var(--bg-2)', color: 'var(--fg-2)' }}
-                >
-                  <Icon name="close" size={20} />
-                </button>
+            {acceptResult && !acceptResult.ok && (
+              <div
+                className="rounded-xl px-3 py-2.5 text-[13px] flex items-center gap-2"
+                style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}
+              >
+                <Icon name="error" size={16} fill={1} />
+                {acceptResult.msg}
               </div>
-              <p className="text-[12.5px]" style={{ color: 'var(--fg-3)' }}>
-                Введите 5-значный код пациента или отсканируйте QR
-              </p>
+            )}
 
-              {acceptResult?.ok ? (
-                <div className="mt-5 text-center">
-                  <div
-                    className="grid place-items-center rounded-2xl mx-auto mb-3"
-                    style={{ width: 64, height: 64, background: 'var(--good-soft)', color: 'var(--good)' }}
-                  >
-                    <Icon name="check_circle" size={36} fill={1} />
-                  </div>
-                  <div className="text-[16px] font-bold" style={{ color: 'var(--fg)' }}>Пациент принят</div>
-                  <div className="text-[13px] mt-1" style={{ color: 'var(--fg-3)' }}>
-                    {acceptResult.referral?.patient_name || acceptResult.referral?.patient_phone}
-                  </div>
-                  <div className="text-[12px] mt-0.5" style={{ color: 'var(--fg-4)' }}>
-                    {acceptResult.referral?.service_name}
-                  </div>
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <button onClick={() => setAcceptResult(null)} className="ks-pill-btn-secondary">
-                      Ещё пациент
-                    </button>
-                    <button
-                      onClick={() => { setAcceptOpen(false); setAcceptResult(null); setTab('referrals') }}
-                      className="ks-pill-btn"
-                    >
-                      К списку
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={submitAccept} className="mt-5 space-y-4">
-                  <div>
-                    <label className="ks-label">Код направления</label>
-                    <input
-                      autoFocus
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={6}
-                      value={acceptCode}
-                      onChange={e => setAcceptCode(e.target.value.replace(/\D/g, ''))}
-                      placeholder="00000"
-                      className="ks-code-input"
-                    />
-                  </div>
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={acceptBusy || acceptCode.length < 4}
+              leftIcon={acceptBusy
+                ? <div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                : <Icon name="check_circle" size={20} fill={1} />}
+              className="w-full"
+              style={{ minHeight: 48 }}
+            >
+              {acceptBusy ? 'Проверяем…' : 'Принять'}
+            </Button>
 
-                  {acceptResult && !acceptResult.ok && (
-                    <div
-                      className="rounded-xl px-3 py-2.5 text-[13px] flex items-center gap-2"
-                      style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}
-                    >
-                      <Icon name="error" size={16} fill={1} />
-                      {acceptResult.msg}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={acceptBusy || acceptCode.length < 4}
-                    className="ks-pill-btn w-full"
-                  >
-                    {acceptBusy
-                      ? <><div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> Проверяем…</>
-                      : <><Icon name="check_circle" size={20} fill={1} /> Принять</>
-                    }
-                  </button>
-
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => { setAcceptOpen(false); setAcceptResult(null); setTab('referrals') }}
-                      className="ks-pill-btn-secondary"
-                    >
-                      <Icon name="search" size={18} /> Поиск
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toast('Включение камеры доступно в HTTPS-режиме. Используйте код или поиск по телефону.', 'info', 6000)}
-                      className="ks-pill-btn-secondary"
-                    >
-                      <Icon name="qr_code_scanner" size={18} /> QR
-                    </button>
-                  </div>
-                </form>
-              )}
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                onClick={() => { setAcceptOpen(false); setAcceptResult(null); setTab('referrals') }}
+                leftIcon={<Icon name="search" size={18} />}
+                style={{ minHeight: 44 }}
+              >
+                Поиск
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                onClick={() => toast('Включение камеры доступно в HTTPS-режиме. Используйте код или поиск по телефону.', 'info', 6000)}
+                leftIcon={<Icon name="qr_code_scanner" size={18} />}
+                style={{ minHeight: 44 }}
+              >
+                QR
+              </Button>
             </div>
-          </div>
-        </>
-      )}
+          </form>
+        )}
+      </Modal>
 
-      {/* ───── BOTTOM SHEET: Запись к приезжему врачу ───── */}
-      {bookVisitDoc && (
-        <>
-          <div
-            className="ks-sheet-back"
-            onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
-          />
-          <div className="ks-sheet">
-            <div className="ks-sheet-grip" />
-            <div className="px-5 pb-4">
-              <div className="flex items-center justify-between mb-1">
-                <div className="min-w-0">
-                  <h2 className="text-[17px] font-bold truncate" style={{ color: 'var(--fg)', letterSpacing: '-0.01em' }}>
-                    Запись на приём
-                  </h2>
-                  <p className="text-[12.5px] truncate" style={{ color: 'var(--fg-3)' }}>
-                    {bookVisitDoc.doctor_name}
-                  </p>
+      {/* ───── MODAL: Запись к приезжему врачу (design-system <Modal>) ───── */}
+      <Modal
+        open={!!bookVisitDoc}
+        onClose={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
+        title={bookVisitDoc ? `Запись на приём — ${bookVisitDoc.doctor_name}` : 'Запись на приём'}
+        size="md"
+      >
+        {bookVisitResult ? (
+          <div className="text-center">
+            {bookVisitResult.patient_qr && (
+              <img
+                src={'data:image/png;base64,' + bookVisitResult.patient_qr}
+                alt="QR пациента"
+                className="mx-auto rounded-2xl cursor-pointer"
+                style={{ width: 180, height: 180, border: '1px solid var(--border)', padding: 10, background: '#fff' }}
+                onClick={() => bookVisitResult.patient_url && window.open(bookVisitResult.patient_url, '_blank')}
+              />
+            )}
+            {bookVisitResult.short_code && (
+              <div
+                className="mt-4 rounded-2xl p-4"
+                style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }}
+              >
+                <div className="text-[10.5px] font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
+                  Код для пациента
                 </div>
-                <button
-                  onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
-                  aria-label="Закрыть"
-                  className="grid place-items-center rounded-xl"
-                  style={{ width: 36, height: 36, background: 'var(--bg-2)', color: 'var(--fg-2)' }}
+                <div
+                  className="font-black tabular-nums mt-1"
+                  style={{ fontSize: 36, letterSpacing: '0.16em', color: 'var(--accent)' }}
                 >
-                  <Icon name="close" size={20} />
-                </button>
-              </div>
-
-              {bookVisitResult ? (
-                <div className="mt-4 text-center">
-                  {bookVisitResult.patient_qr && (
-                    <img
-                      src={'data:image/png;base64,' + bookVisitResult.patient_qr}
-                      alt="QR пациента"
-                      className="mx-auto rounded-2xl cursor-pointer"
-                      style={{ width: 180, height: 180, border: '1px solid var(--border)', padding: 10, background: '#fff' }}
-                      onClick={() => bookVisitResult.patient_url && window.open(bookVisitResult.patient_url, '_blank')}
-                    />
-                  )}
-                  {bookVisitResult.short_code && (
-                    <div
-                      className="mt-4 rounded-2xl p-4"
-                      style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-line)' }}
-                    >
-                      <div className="text-[10.5px] font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>
-                        Код для пациента
-                      </div>
-                      <div
-                        className="font-black tabular-nums mt-1"
-                        style={{ fontSize: 36, letterSpacing: '0.16em', color: 'var(--accent)' }}
-                      >
-                        {bookVisitResult.short_code}
-                      </div>
-                    </div>
-                  )}
-                  {bookVisitResult.patient_url && (
-                    <a
-                      href={bookVisitResult.patient_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block mt-3 text-[12.5px] font-semibold"
-                      style={{ color: 'var(--accent)' }}
-                    >
-                      Открыть кабинет пациента →
-                    </a>
-                  )}
-                  <button
-                    onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
-                    className="ks-pill-btn w-full mt-5"
-                  >
-                    Готово
-                  </button>
+                  {bookVisitResult.short_code}
                 </div>
-              ) : (
-                <form onSubmit={saveBookVisit} className="mt-4 space-y-3">
-                  <div>
-                    <label className="ks-label">ФИО пациента</label>
-                    <input
-                      value={bookVisitForm.patient_name}
-                      onChange={e => setBookVisitForm(p => ({ ...p, patient_name: e.target.value }))}
-                      placeholder="Иванов Иван Иванович"
-                      className="ks-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="ks-label">Телефон *</label>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      value={bookVisitForm.patient_phone}
-                      onChange={e => setBookVisitForm(p => ({ ...p, patient_phone: e.target.value }))}
-                      placeholder="+7…"
-                      required
-                      className="ks-input"
-                    />
-                  </div>
-                  <div>
-                    <label className="ks-label">Дата приёма *</label>
-                    <input
-                      type="date"
-                      value={bookVisitForm.appointment_date}
-                      onChange={e => setBookVisitForm(p => ({ ...p, appointment_date: e.target.value }))}
-                      required
-                      className="ks-input"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="ks-label">Начало</label>
-                      <input
-                        type="time"
-                        value={bookVisitForm.start_time}
-                        onChange={e => setBookVisitForm(p => ({ ...p, start_time: e.target.value }))}
-                        className="ks-input"
-                      />
-                    </div>
-                    <div>
-                      <label className="ks-label">Конец</label>
-                      <input
-                        type="time"
-                        value={bookVisitForm.end_time}
-                        onChange={e => setBookVisitForm(p => ({ ...p, end_time: e.target.value }))}
-                        className="ks-input"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="ks-label">Цена ₽</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={bookVisitForm.price}
-                      onChange={e => setBookVisitForm(p => ({ ...p, price: e.target.value }))}
-                      placeholder="0"
-                      className="ks-input"
-                    />
-                  </div>
-
-                  {bookVisitMsg && (
-                    <div
-                      className="rounded-xl px-3 py-2.5 text-[13px]"
-                      style={{
-                        background: bookVisitMsg.startsWith('Ошибка') ? 'var(--bad-soft)' : 'var(--good-soft)',
-                        color: bookVisitMsg.startsWith('Ошибка') ? 'var(--bad)' : 'var(--good)',
-                      }}
-                    >
-                      {bookVisitMsg}
-                    </div>
-                  )}
-
-                  <button type="submit" disabled={bookVisitSaving} className="ks-pill-btn w-full">
-                    {bookVisitSaving
-                      ? <><div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} /> Сохраняем…</>
-                      : <><Icon name="event_available" size={20} fill={1} /> Создать запись</>
-                    }
-                  </button>
-                </form>
-              )}
-            </div>
+              </div>
+            )}
+            {bookVisitResult.patient_url && (
+              <a
+                href={bookVisitResult.patient_url}
+                target="_blank"
+                rel="noreferrer"
+                className="block mt-3 text-[12.5px] font-semibold"
+                style={{ color: 'var(--accent)' }}
+              >
+                Открыть кабинет пациента →
+              </a>
+            )}
+            <Button
+              variant="primary"
+              size="lg"
+              onClick={() => { setBookVisitDoc(null); setBookVisitResult(null) }}
+              className="w-full mt-5"
+              style={{ minHeight: 48 }}
+            >
+              Готово
+            </Button>
           </div>
-        </>
-      )}
+        ) : bookVisitDoc ? (
+          <form onSubmit={saveBookVisit} className="space-y-3">
+            <div>
+              <label className="ks-label">ФИО пациента</label>
+              <input
+                value={bookVisitForm.patient_name}
+                onChange={e => setBookVisitForm(p => ({ ...p, patient_name: e.target.value }))}
+                placeholder="Иванов Иван Иванович"
+                className="ks-input"
+              />
+            </div>
+            <div>
+              <label className="ks-label">Телефон *</label>
+              <input
+                type="tel"
+                inputMode="tel"
+                value={bookVisitForm.patient_phone}
+                onChange={e => setBookVisitForm(p => ({ ...p, patient_phone: e.target.value }))}
+                placeholder="+7…"
+                required
+                className="ks-input"
+              />
+            </div>
+            <div>
+              <label className="ks-label">Дата приёма *</label>
+              <input
+                type="date"
+                value={bookVisitForm.appointment_date}
+                onChange={e => setBookVisitForm(p => ({ ...p, appointment_date: e.target.value }))}
+                required
+                className="ks-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="ks-label">Начало</label>
+                <input
+                  type="time"
+                  value={bookVisitForm.start_time}
+                  onChange={e => setBookVisitForm(p => ({ ...p, start_time: e.target.value }))}
+                  className="ks-input"
+                />
+              </div>
+              <div>
+                <label className="ks-label">Конец</label>
+                <input
+                  type="time"
+                  value={bookVisitForm.end_time}
+                  onChange={e => setBookVisitForm(p => ({ ...p, end_time: e.target.value }))}
+                  className="ks-input"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="ks-label">Цена ₽</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                value={bookVisitForm.price}
+                onChange={e => setBookVisitForm(p => ({ ...p, price: e.target.value }))}
+                placeholder="0"
+                className="ks-input"
+              />
+            </div>
+
+            {bookVisitMsg && (
+              <div
+                className="rounded-xl px-3 py-2.5 text-[13px]"
+                style={{
+                  background: bookVisitMsg.startsWith('Ошибка') ? 'var(--bad-soft)' : 'var(--good-soft)',
+                  color: bookVisitMsg.startsWith('Ошибка') ? 'var(--bad)' : 'var(--good)',
+                }}
+              >
+                {bookVisitMsg}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={bookVisitSaving}
+              leftIcon={bookVisitSaving
+                ? <div className="ks-spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                : <Icon name="event_available" size={20} fill={1} />}
+              className="w-full"
+              style={{ minHeight: 48 }}
+            >
+              {bookVisitSaving ? 'Сохраняем…' : 'Создать запись'}
+            </Button>
+          </form>
+        ) : null}
+      </Modal>
     </Page>
   )
 }
