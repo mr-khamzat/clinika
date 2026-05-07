@@ -19,6 +19,21 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import api from '../api'
 import { Tabs, Chip, Card, Button, EmptyState } from '../design'
 
+// ── Флаг страны через Emoji (regional indicator symbols) ────────────────────
+function flagFromCountry(code) {
+  if (!code || code.length !== 2) return ''
+  const A = 0x1F1E6
+  return String.fromCodePoint(...code.toUpperCase().split('').map(c => A + c.charCodeAt(0) - 65))
+}
+
+function formatGeoLocation(e) {
+  const parts = []
+  if (e.geo_city) parts.push(e.geo_city)
+  if (e.geo_country_name) parts.push(e.geo_country_name)
+  else if (e.geo_country) parts.push(e.geo_country)
+  return parts.join(', ')
+}
+
 // ── Хелперы: иконка + цвет по action ────────────────────────────────────────
 // Маппинг типов действий в иконку + tone (для chip).
 function actionMeta(action) {
@@ -178,7 +193,7 @@ function EventRow({ e }) {
         <div style={{ fontSize: 13, color: 'var(--fg-2)' }}>
           {describeEvent(e)}
         </div>
-        <div className="flex items-center gap-2 mt-1" style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>
+        <div className="flex flex-wrap items-center gap-2 mt-1" style={{ fontSize: 11.5, color: 'var(--fg-4)' }}>
           <span title={new Date(e.created_at).toLocaleString('ru-RU')}>
             {relativeTime(e.created_at)}
           </span>
@@ -188,10 +203,21 @@ function EventRow({ e }) {
               <span className="font-mono">{e.ip_address || e.ip}</span>
             </>
           )}
-          {e.geo_city && (
+          {e.geo_country && (
             <>
               <span>·</span>
-              <span>{e.geo_city}</span>
+              <span style={{ fontSize: 14, lineHeight: 1 }} title={e.geo_country_name || e.geo_country}>
+                {flagFromCountry(e.geo_country)}
+              </span>
+              <span>{formatGeoLocation(e) || e.geo_country}</span>
+            </>
+          )}
+          {e.user_agent && (
+            <>
+              <span>·</span>
+              <span title={e.user_agent} style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {/Chrome|YaBrowser|Firefox|Safari|Edge|curl/.exec(e.user_agent)?.[0] || 'клиент'}
+              </span>
             </>
           )}
         </div>
@@ -232,12 +258,13 @@ function FeedTab({ token }) {
   const load = useCallback(async () => {
     setLoading(true); setErr('')
     try {
-      const r = await api.get('/audit/feed', { params: { days: 30, limit: 100 } })
+      // Лимит 500 чтобы статистика была репрезентативной
+      const r = await api.get('/audit/feed', { params: { days: 30, limit: 500 } })
       setItems(Array.isArray(r.data?.items) ? r.data.items : [])
     } catch {
       // fallback: /audit/log
       try {
-        const r = await api.get('/audit/log', { params: { days: 30, limit: 100 } })
+        const r = await api.get('/audit/log', { params: { days: 30, limit: 500 } })
         setItems(Array.isArray(r.data?.items) ? r.data.items : [])
       } catch (e2) {
         setErr('Не удалось загрузить ленту аудита')
@@ -250,22 +277,174 @@ function FeedTab({ token }) {
 
   useEffect(() => { load() }, [load])
 
+  // ── Статистика для KPI и диаграммы ──────────────────────────────────────
+  const stats = useMemo(() => {
+    if (!items.length) return null
+    const now = Date.now()
+    const ms24h = 24 * 3600 * 1000
+    const ms7d  = 7  * 86400 * 1000
+    const dayBuckets = new Map() // YYYY-MM-DD → count
+    const actorBuckets = new Map()
+    const actionBuckets = new Map()
+    const countryBuckets = new Map()
+    const ips = new Set()
+    let last24h = 0
+    let last7d = 0
+
+    for (const e of items) {
+      const ts = e.created_at ? new Date(e.created_at).getTime() : 0
+      if (now - ts < ms24h) last24h++
+      if (now - ts < ms7d)  last7d++
+      const day = e.created_at?.slice(0, 10) || ''
+      if (day) dayBuckets.set(day, (dayBuckets.get(day) || 0) + 1)
+      const actor = e.actor_name || e.actor_id || 'Система'
+      actorBuckets.set(actor, (actorBuckets.get(actor) || 0) + 1)
+      if (e.action) actionBuckets.set(e.action, (actionBuckets.get(e.action) || 0) + 1)
+      if (e.geo_country) countryBuckets.set(e.geo_country, (countryBuckets.get(e.geo_country) || 0) + 1)
+      const ip = e.ip_address || e.ip
+      if (ip) ips.add(ip)
+    }
+
+    // Сортируем дни хронологически — для стабильной диаграммы
+    const sortedDays = Array.from(dayBuckets.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+    const maxDayCount = Math.max(1, ...sortedDays.map(([, c]) => c))
+
+    const topActors = Array.from(actorBuckets.entries())
+      .sort((a, b) => b[1] - a[1]).slice(0, 5)
+    const topActions = Array.from(actionBuckets.entries())
+      .sort((a, b) => b[1] - a[1]).slice(0, 1)
+    const topCountries = Array.from(countryBuckets.entries())
+      .sort((a, b) => b[1] - a[1]).slice(0, 5)
+
+    return {
+      total: items.length,
+      last24h, last7d,
+      uniqueActors: actorBuckets.size,
+      uniqueIps: ips.size,
+      sortedDays, maxDayCount,
+      topActors, topActions, topCountries,
+    }
+  }, [items])
+
   return (
-    <Card style={{ overflow: 'hidden', padding: 0 }}>
-      <div
-        className="flex items-center justify-between px-4 py-3"
-        style={{ borderBottom: '1px solid var(--border)' }}
-      >
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)' }}>
-          Последние 100 событий (за 30 дней)
+    <div className="space-y-4">
+      {/* ── KPI-полоска: 5 метрик ───────────────────────────────────── */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { icon: 'history',      label: 'События',      value: stats.total,         hint: '30 дней' },
+            { icon: 'today',        label: 'За 24 часа',   value: stats.last24h,       hint: 'последние сутки' },
+            { icon: 'date_range',   label: 'За неделю',    value: stats.last7d,        hint: '7 дней' },
+            { icon: 'group',        label: 'Акторов',      value: stats.uniqueActors,  hint: 'уникальных' },
+            { icon: 'public',       label: 'IP адресов',   value: stats.uniqueIps,     hint: 'уникальных' },
+          ].map((k) => (
+            <Card key={k.label} style={{ padding: 14 }}>
+              <div className="flex items-center gap-2 mb-1" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{k.icon}</span>
+                {k.label}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--fg)', lineHeight: 1 }}>
+                {Number(k.value).toLocaleString('ru-RU')}
+              </div>
+              <div style={{ fontSize: 10.5, color: 'var(--fg-4)', marginTop: 2 }}>{k.hint}</div>
+            </Card>
+          ))}
         </div>
-        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, marginRight: 4 }}>
-            refresh
-          </span>
-          Обновить
-        </Button>
-      </div>
+      )}
+
+      {/* ── Диаграмма по дням + Топ-акторы + Топ-страны ──────────────── */}
+      {stats && stats.sortedDays.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {/* Диаграмма */}
+          <Card style={{ padding: 14, gridColumn: 'span 2 / span 2' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)', marginBottom: 10 }}>
+              Активность по дням
+            </div>
+            <div className="flex items-end gap-1" style={{ height: 80 }}>
+              {stats.sortedDays.map(([day, count]) => (
+                <div
+                  key={day}
+                  className="flex-1 flex flex-col items-center justify-end"
+                  title={`${day}: ${count} событий`}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height: `${Math.max(4, (count / stats.maxDayCount) * 70)}px`,
+                      background: 'linear-gradient(180deg, oklch(0.65 0.15 220) 0%, oklch(0.55 0.18 250) 100%)',
+                      borderRadius: '3px 3px 0 0',
+                      transition: 'opacity 200ms',
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between" style={{ fontSize: 9.5, color: 'var(--fg-4)', marginTop: 4 }}>
+              <span>{stats.sortedDays[0]?.[0]}</span>
+              <span>{stats.sortedDays[stats.sortedDays.length - 1]?.[0]}</span>
+            </div>
+          </Card>
+
+          {/* Топ акторы */}
+          <Card style={{ padding: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--fg)', marginBottom: 10 }}>
+              Топ акторов
+            </div>
+            <div className="space-y-2">
+              {stats.topActors.map(([name, c]) => {
+                const pct = stats.topActors[0] ? (c / stats.topActors[0][1]) * 100 : 0
+                return (
+                  <div key={name}>
+                    <div className="flex justify-between" style={{ fontSize: 11.5, color: 'var(--fg-2)', marginBottom: 2 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{name}</span>
+                      <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{c}</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--bg-2)', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: 'oklch(0.60 0.16 220)' }} />
+                    </div>
+                  </div>
+                )
+              })}
+              {stats.topCountries.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 6 }}>География</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {stats.topCountries.map(([code, c]) => (
+                      <div
+                        key={code}
+                        title={`${code}: ${c} событий`}
+                        className="flex items-center gap-1 px-2 py-1"
+                        style={{ fontSize: 11, borderRadius: 6, background: 'var(--bg-2)' }}
+                      >
+                        <span style={{ fontSize: 14 }}>{flagFromCountry(code)}</span>
+                        <span style={{ color: 'var(--fg-2)' }}>{code}</span>
+                        <span style={{ color: 'var(--fg-4)' }}>· {c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Лента событий ───────────────────────────────────────────── */}
+      <Card style={{ overflow: 'hidden', padding: 0 }}>
+        <div
+          className="flex items-center justify-between px-4 py-3"
+          style={{ borderBottom: '1px solid var(--border)' }}
+        >
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)' }}>
+            Последние события (всего {items.length})
+          </div>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, marginRight: 4 }}>
+              refresh
+            </span>
+            Обновить
+          </Button>
+        </div>
 
       {loading && (
         <div className="py-12 text-center" style={{ color: 'var(--fg-3)', fontSize: 13 }}>
@@ -286,12 +465,13 @@ function FeedTab({ token }) {
       )}
       {!loading && !err && items.length > 0 && (
         <div>
-          {items.map((e) => (
+          {items.slice(0, 100).map((e) => (
             <EventRow key={`${e.source || 'audit'}-${e.id}`} e={e} />
           ))}
         </div>
       )}
-    </Card>
+      </Card>
+    </div>
   )
 }
 
