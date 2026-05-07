@@ -88,6 +88,58 @@ async def get_user_clinic_ids(
     return []
 
 
+async def resolve_clinic_filter_ids(
+    db: AsyncSession,
+    user: User,
+    clinic_id: Optional[uuid.UUID],
+) -> Optional[list[uuid.UUID]]:
+    """
+    Универсальный helper: возвращает список clinic_id для применения SQL-фильтра
+    WHERE clinic_id IN (...) во всех аналитических endpoints.
+
+    Логика:
+      • clinic_id передан → проверяем доступ через get_user_clinic_ids().
+        Если клиника недоступна — 403. Возвращаем [clinic_id].
+      • clinic_id не передан:
+          super_admin / franchise_owner       → None (видят всё в скоупе);
+          manager без user.clinic_id          → все клиники тенанта (список);
+          manager с clinic_id и прочие роли   → [user.clinic_id].
+
+    Возврат:
+      • None  — фильтр не накладывать (все клиники в скоупе видны);
+      • []    — нет доступа ни к одной клинике (вернуть пустой результат);
+      • [...] — список clinic_id, применить WHERE clinic_id IN (...).
+    """
+    # Передан явный clinic_id → проверяем права доступа
+    if clinic_id is not None:
+        accessible = await get_user_clinic_ids(db, user)
+        # super_admin без выбранного тенанта — пробуем расширить через user.tenant_id
+        if user.role == UserRole.SUPER_ADMIN and not accessible:
+            if user.tenant_id is None:
+                raise HTTPException(status_code=403, detail="Тенант не выбран")
+            accessible = await get_user_clinic_ids(db, user, tenant_id_param=user.tenant_id)
+        if clinic_id not in accessible:
+            raise HTTPException(status_code=403, detail="Нет доступа к этой клинике")
+        return [clinic_id]
+
+    # clinic_id не передан
+    if user.role in (UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER):
+        # Видят всё → не накладываем clinic-фильтр (None означает «без фильтра»)
+        return None
+
+    # manager без clinic_id (главный manager сети) → все клиники тенанта
+    if user.role == UserRole.MANAGER and user.clinic_id is None:
+        ids = await get_user_clinic_ids(db, user)
+        return ids if ids else []
+
+    # manager с clinic_id или другие роли с clinic_id → только своя клиника
+    if user.clinic_id is not None:
+        return [user.clinic_id]
+
+    # Без clinic_id и без манагерских прав
+    return []
+
+
 @router.get("/clinics-accessible")
 async def list_accessible_clinics(
     tenant_id: Optional[uuid.UUID] = Query(None, description="Override для super_admin"),

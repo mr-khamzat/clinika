@@ -26,7 +26,8 @@ import {
 } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
-import { Page, PageHeader, Card, KpiCard, KpiRow, Chip, Button, Avatar, Sparkline } from '../design'
+import { Page, PageHeader, Card, KpiCard, KpiRow, Chip, Button, Avatar, Sparkline, ClinicScopeSelector } from '../design'
+import useClinicScope from '../lib/useClinicScope'
 
 // ─── Приветствие/дата ───
 function greeting() {
@@ -94,6 +95,10 @@ export default function ManagerDashboard() {
   const nav = useNavigate()
   const { user } = useAuthStore()
 
+  // ─── Per-clinic scope (lika с clinic_id видит только свою клинику; ───
+  // manager сети без clinic_id может выбрать любую клинику через селектор).
+  const scope = useClinicScope()
+
   // ─── State (как было) ───
   const [summary, setSummary]               = useState(null)
   const [admins, setAdmins]                 = useState([])
@@ -113,8 +118,10 @@ export default function ManagerDashboard() {
     const p = {}
     if (dateFrom) p.date_from = dateFrom
     if (dateTo)   p.date_to   = dateTo
+    // Per-clinic scope: пробрасываем выбранную клинику в backend
+    if (scope.selectedId) p.clinic_id = scope.selectedId
     return p
-  }, [dateFrom, dateTo])
+  }, [dateFrom, dateTo, scope.selectedId])
 
   const fetchAll = useCallback(async () => {
     setError('')
@@ -124,12 +131,18 @@ export default function ManagerDashboard() {
     setLoadingAdmins(true)
     getManagerAdmins(params).then(r => setAdmins(Array.isArray(r.data) ? r.data : [])).catch(() => setAdmins([])).finally(() => setLoadingAdmins(false))
     setLoadingClinics(true)
-    getManagerClinics().then(r => setClinics(Array.isArray(r.data) ? r.data : [])).catch(() => setClinics([])).finally(() => setLoadingClinics(false))
+    // Передаём clinic_id в /reports/clinics для per-clinic скоупа
+    api.get('/manager/reports/clinics', { params: scope.selectedId ? { clinic_id: scope.selectedId } : {} })
+      .then(r => setClinics(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setClinics([]))
+      .finally(() => setLoadingClinics(false))
     getCancelRequests().then(r => setCancelRequests(Array.isArray(r.data) ? r.data : [])).catch(() => setCancelRequests([]))
-    api.get('/manager/reports/today').then(r => setTodayStats(r.data)).catch(() => {})
-  }, [buildParams])
+    api.get('/manager/reports/today', { params: scope.selectedId ? { clinic_id: scope.selectedId } : {} })
+      .then(r => setTodayStats(r.data)).catch(() => {})
+  }, [buildParams, scope.selectedId])
 
-  useEffect(() => { fetchAll() }, [])
+  // Перезагрузка при смене scope
+  useEffect(() => { fetchAll() }, [scope.selectedId])
 
   const handleApplyFilter = (e) => { e.preventDefault(); fetchAll() }
 
@@ -211,6 +224,18 @@ export default function ManagerDashboard() {
             </div>
           }
         />
+
+        {/* Селектор клиники: одна → static label; несколько → select c «Все клиники» */}
+        {scope.clinics.length > 0 && (
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
+            <ClinicScopeSelector
+              clinics={scope.clinics}
+              selectedId={scope.selectedId}
+              onChange={scope.setSelectedId}
+              allowAll={scope.isMultiClinic}
+            />
+          </div>
+        )}
 
         {error && (
           <div

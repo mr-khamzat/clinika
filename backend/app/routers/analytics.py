@@ -28,6 +28,7 @@ from app.models.bonus import Bonus, BonusStatus
 from app.models.service import Service
 from app.models.ledger import LedgerEntry
 from app.services.ledger_service import OpType
+from app.routers.manager.clinics_access import resolve_clinic_filter_ids
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -64,6 +65,7 @@ def _dt(d: date) -> datetime:
 
 @router.get("/overview", dependencies=[_feat, _mgr])
 async def analytics_overview(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -73,15 +75,34 @@ async def analytics_overview(
     """
     Сводные метрики за период: кол-во направлений, конверсия, сумма бонусов,
     сравнение с предыдущим аналогичным периодом.
+
+    Per-clinic скоуп: если у пользователя есть user.clinic_id (manager клиники),
+    автоматически фильтруем только по его клинике; super_admin/franchise_owner
+    видят всё; явный clinic_id проходит проверку прав через resolve_clinic_filter_ids.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
     # Tenant isolation
     _tenant_id = current_user.tenant_id
+    # Per-clinic фильтр (None — все, [] — нет доступа, [...] — список clinic_id)
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     span = (d_to - d_from).days + 1
     prev_to   = d_from - timedelta(days=1)
     prev_from = prev_to - timedelta(days=span - 1)
 
     async def _period_stats(pf: date, pt: date) -> dict:
+        # Если у пользователя нет доступа ни к одной клинике — пустой результат
+        if filter_ids == []:
+            return {
+                "total": 0, "confirmed": 0, "cancelled": 0,
+                "conversion_pct": 0.0, "bonuses_paid": 0.0, "bonuses_pending": 0.0,
+            }
+        clinic_cond = []
+        if filter_ids is not None:
+            from sqlalchemy import or_
+            clinic_cond.append(or_(
+                Referral.from_clinic_id.in_(filter_ids),
+                Referral.to_clinic_id.in_(filter_ids),
+            ))
         r = await db.execute(
             select(
                 func.count(Referral.id).label("total"),
@@ -100,6 +121,7 @@ async def analytics_overview(
                 Referral.created_at >= _dt(pf),
                 Referral.tenant_id == _tenant_id if _tenant_id else Referral.tenant_id.isnot(None) | True,
                 Referral.created_at < _dt(pt) + timedelta(days=1),
+                *clinic_cond,
             )
         )
         row = r.one()
@@ -140,6 +162,7 @@ async def analytics_overview(
 
 @router.get("/funnel", dependencies=[_feat, _mgr])
 async def analytics_funnel(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -149,18 +172,48 @@ async def analytics_funnel(
     """
     Воронка направлений:
       Создано → Подтверждено → Бонус начислен → Бонус выплачен
+
+    Per-clinic скоуп: автоматический фильтр по user.clinic_id для manager-а
+    клиники; super_admin/franchise_owner видят всё; явный clinic_id проходит
+    проверку прав.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
     # Tenant isolation
     _tenant_id = current_user.tenant_id
+    # Per-clinic фильтр
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
+
+    # Если у пользователя нет доступа ни к одной клинике — пустая воронка
+    if filter_ids == []:
+        return {
+            "period": {"from": d_from.isoformat(), "to": d_to.isoformat()},
+            "steps": [
+                {"step": 1, "label": "Создано",        "count": 0, "rate_from_prev": 100.0},
+                {"step": 2, "label": "Подтверждено",   "count": 0, "rate_from_prev": 0.0},
+                {"step": 3, "label": "Бонус начислен", "count": 0, "rate_from_prev": 0.0},
+                {"step": 4, "label": "Бонус выплачен", "count": 0, "rate_from_prev": 0.0},
+            ],
+            "overall_conversion": 0.0, "bonus_coverage": 0.0, "payout_rate": 0.0,
+        }
+
+    # Per-clinic условие для WHERE (общее для всех 4 шагов)
+    clinic_cond = []
+    if filter_ids is not None:
+        from sqlalchemy import or_ as _or
+        clinic_cond.append(_or(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
 
     # Шаг 1 — созданные направления
     total_q = await db.execute(
         select(func.count(Referral.id))
         .where(Referral.created_at >= dt_from,
-            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            Referral.created_at < dt_to,
+            *clinic_cond)
     )
     total = total_q.scalar() or 0
 
@@ -172,6 +225,7 @@ async def analytics_funnel(
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
             *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            *clinic_cond,
         )
     )
     confirmed = confirmed_q.scalar() or 0
@@ -184,6 +238,7 @@ async def analytics_funnel(
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
             *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            *clinic_cond,
         )
     )
     with_bonus = bonus_accrued_q.scalar() or 0
@@ -197,6 +252,7 @@ async def analytics_funnel(
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
             *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            *clinic_cond,
         )
     )
     bonus_paid = bonus_paid_q.scalar() or 0
@@ -222,6 +278,7 @@ async def analytics_funnel(
 
 @router.get("/dynamics", dependencies=[_feat, _mgr])
 async def analytics_dynamics(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=7, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -233,12 +290,30 @@ async def analytics_dynamics(
     Динамика направлений по времени.
     granularity: day | week | month
     Возвращает: [{date, total, confirmed, conversion_pct, bonuses}]
+
+    Per-clinic скоуп: lika (manager Лорсановой) видит только свою клинику.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
-    # Tenant isolation
+    # Tenant isolation + per-clinic фильтр
     _tenant_id = current_user.tenant_id
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
+
+    if filter_ids == []:
+        return {
+            "period":      {"from": d_from.isoformat(), "to": d_to.isoformat()},
+            "granularity": granularity,
+            "series":      [],
+        }
+
+    clinic_cond = []
+    if filter_ids is not None:
+        from sqlalchemy import or_ as _or
+        clinic_cond.append(_or(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
 
     if granularity == "day":
         trunc = func.date_trunc("day", Referral.created_at)
@@ -258,7 +333,9 @@ async def analytics_dynamics(
         )
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
         .where(Referral.created_at >= dt_from,
-            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            Referral.created_at < dt_to,
+            *clinic_cond)
         .group_by("period")
         .order_by("period")
     )
@@ -284,6 +361,7 @@ async def analytics_dynamics(
 
 @router.get("/top-services", dependencies=[_feat, _mgr])
 async def analytics_top_services(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -293,12 +371,26 @@ async def analytics_top_services(
 ):
     """
     Топ услуг: кол-во направлений, конверсия, бонусный объём, средний бонус.
+
+    Per-clinic скоуп через resolve_clinic_filter_ids.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
-    # Tenant isolation
+    # Tenant isolation + per-clinic фильтр
     _tenant_id = current_user.tenant_id
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
+
+    if filter_ids == []:
+        return {"period": {"from": d_from.isoformat(), "to": d_to.isoformat()}, "items": []}
+
+    clinic_cond = []
+    if filter_ids is not None:
+        from sqlalchemy import or_ as _or
+        clinic_cond.append(_or(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
 
     q = await db.execute(
         select(
@@ -316,7 +408,9 @@ async def analytics_top_services(
         .join(Referral, Referral.service_id == Service.id)
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
         .where(Referral.created_at >= dt_from,
-            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            Referral.created_at < dt_to,
+            *clinic_cond)
         .group_by(Service.id, Service.name)
         .order_by(func.count(Referral.id).desc())
         .limit(limit)
@@ -343,6 +437,7 @@ async def analytics_top_services(
 
 @router.get("/top-staff", dependencies=[_feat, _mgr])
 async def analytics_top_staff(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -352,12 +447,23 @@ async def analytics_top_staff(
 ):
     """
     Рейтинг сотрудников: кол-во направлений, конверсия, заработанные бонусы.
+
+    Per-clinic скоуп: фильтр по сотрудникам из клиник scope (User.clinic_id).
     """
     d_from, d_to = _date_range(days, from_date, to_date)
-    # Tenant isolation
+    # Tenant isolation + per-clinic фильтр
     _tenant_id = current_user.tenant_id
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
+
+    if filter_ids == []:
+        return {"period": {"from": d_from.isoformat(), "to": d_to.isoformat()}, "items": []}
+
+    # Здесь фильтруем по клинике сотрудника, а не по from/to_clinic_id направления
+    clinic_cond = []
+    if filter_ids is not None:
+        clinic_cond.append(User.clinic_id.in_(filter_ids))
 
     q = await db.execute(
         select(
@@ -381,6 +487,7 @@ async def analytics_top_staff(
             Referral.created_at >= dt_from,
             Referral.created_at < dt_to,
             *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            *clinic_cond,
         )
         .group_by(User.id, User.full_name, Clinic.name)
         .order_by(func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).desc())
@@ -407,6 +514,7 @@ async def analytics_top_staff(
 
 @router.get("/clinics", dependencies=[_feat, _mgr])
 async def analytics_clinics(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     days: int = Query(30, ge=1, le=365),
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
@@ -415,12 +523,23 @@ async def analytics_clinics(
 ):
     """
     Сравнение клиник: направления, конверсия, объём бонусов.
+
+    Per-clinic скоуп: manager клиники видит только свою клинику в таблице
+    сравнения. super_admin/franchise_owner видят все клиники.
     """
     d_from, d_to = _date_range(days, from_date, to_date)
-    # Tenant isolation
+    # Tenant isolation + per-clinic фильтр
     _tenant_id = current_user.tenant_id
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     dt_from = _dt(d_from)
     dt_to   = _dt(d_to) + timedelta(days=1)
+
+    if filter_ids == []:
+        return {"period": {"from": d_from.isoformat(), "to": d_to.isoformat()}, "items": []}
+
+    clinic_cond = []
+    if filter_ids is not None:
+        clinic_cond.append(Clinic.id.in_(filter_ids))
 
     q = await db.execute(
         select(
@@ -438,7 +557,9 @@ async def analytics_clinics(
         .join(Referral, Referral.from_clinic_id == Clinic.id)
         .outerjoin(Bonus, Bonus.referral_id == Referral.id)
         .where(Referral.created_at >= dt_from,
-            *([Referral.tenant_id == _tenant_id] if _tenant_id else []), Referral.created_at < dt_to)
+            *([Referral.tenant_id == _tenant_id] if _tenant_id else []),
+            Referral.created_at < dt_to,
+            *clinic_cond)
         .group_by(Clinic.id, Clinic.name)
         .order_by(func.count(Referral.id).desc())
     )

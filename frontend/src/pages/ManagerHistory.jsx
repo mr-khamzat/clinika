@@ -8,7 +8,8 @@
  */
 import { useEffect, useState, useCallback } from 'react'
 import { getManagerReferrals } from '../api'
-import { Card, Chip, Button, EmptyState } from '../design'
+import { Card, Chip, Button, EmptyState, ClinicScopeSelector } from '../design'
+import useClinicScope from '../lib/useClinicScope'
 import ManagerShell from './_ManagerShell'
 
 const STATUS_TABS = [
@@ -76,6 +77,9 @@ export default function ManagerHistory() {
   const [expanded, setExpanded]   = useState(null)
   const LIMIT = 50
 
+  // Per-clinic scope — пробрасываем clinic_id в фильтр истории
+  const scope = useClinicScope()
+
   const load = useCallback(async (reset = true) => {
     setLoading(true)
     const p = reset ? 1 : page + 1
@@ -84,6 +88,7 @@ export default function ManagerHistory() {
       if (dateFrom) params.date_from = dateFrom
       if (dateTo) params.date_to = dateTo
       if (status !== 'all') params.status = status
+      if (scope.selectedId) params.clinic_id = scope.selectedId
       const res = await getManagerReferrals(params)
       const data = Array.isArray(res.data) ? res.data : []
       if (reset) {
@@ -97,9 +102,9 @@ export default function ManagerHistory() {
     } finally {
       setLoading(false)
     }
-  }, [status, dateFrom, dateTo, page])
+  }, [status, dateFrom, dateTo, page, scope.selectedId])
 
-  useEffect(() => { load(true) }, [status, dateFrom, dateTo])
+  useEffect(() => { load(true) }, [status, dateFrom, dateTo, scope.selectedId])
 
   const setPreset = (preset) => {
     if (preset === 'today') { setDateFrom(today()); setDateTo(today()) }
@@ -115,6 +120,18 @@ export default function ManagerHistory() {
       subtitle={!loading && (referrals.length === 0 ? 'Нет записей' : `Найдено: ${referrals.length}${hasMore ? '+' : ''}`)}
       icon="history"
     >
+      {/* Селектор клиники для per-clinic скоупа */}
+      {scope.clinics.length > 0 && (
+        <div className="mb-3">
+          <ClinicScopeSelector
+            clinics={scope.clinics}
+            selectedId={scope.selectedId}
+            onChange={scope.setSelectedId}
+            allowAll={scope.isMultiClinic}
+          />
+        </div>
+      )}
+
       {/* ─── Пресеты периода ─── */}
       <Card className="mb-3">
         <div className="flex flex-wrap gap-2">

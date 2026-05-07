@@ -8,7 +8,8 @@
  */
 import { useEffect, useState, useMemo } from 'react'
 import { getManagerBonuses, markAllPaid } from '../api'
-import { Card, Chip, Button, Avatar, EmptyState, Tabs } from '../design'
+import { Card, Chip, Button, Avatar, EmptyState, Tabs, ClinicScopeSelector } from '../design'
+import useClinicScope from '../lib/useClinicScope'
 import ManagerShell from './_ManagerShell'
 
 function fmt(iso) {
@@ -24,15 +25,20 @@ export default function ManagerBonuses() {
   const [paying, setPaying]     = useState(null)
   const [error, setError]       = useState('')
 
+  // Per-clinic scope для фильтра выплат по клинике сотрудника
+  const scope = useClinicScope()
+
   const load = async () => {
     setLoading(true); setError('')
     try {
-      const r = await getManagerBonuses({ only_pending: filter === 'pending' })
+      const params = { only_pending: filter === 'pending' }
+      if (scope.selectedId) params.clinic_id = scope.selectedId
+      const r = await getManagerBonuses(params)
       setAdmins(Array.isArray(r.data) ? r.data : [])
     } catch { setError('Ошибка загрузки данных') } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [filter])
+  useEffect(() => { load() }, [filter, scope.selectedId])
 
   const handlePayAll = async (adminId) => {
     setPaying(adminId); setError('')
@@ -61,6 +67,18 @@ export default function ManagerBonuses() {
       icon="payments"
       badge={admins.length > 0 ? <Chip variant="warn">{admins.length}</Chip> : null}
     >
+      {/* Селектор клиники для per-clinic скоупа */}
+      {scope.clinics.length > 0 && (
+        <div className="mb-3">
+          <ClinicScopeSelector
+            clinics={scope.clinics}
+            selectedId={scope.selectedId}
+            onChange={scope.setSelectedId}
+            allowAll={scope.isMultiClinic}
+          />
+        </div>
+      )}
+
       {/* ─── Hero: К выплате всего ─── */}
       {pendingTotal > 0 && (
         <div

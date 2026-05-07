@@ -24,6 +24,7 @@ from app.models.service import Service
 from app.schemas.manager import (
     SummaryReport, AdminStats, ClinicFlowEntry,
 )
+from app.routers.manager.clinics_access import resolve_clinic_filter_ids
 
 router = APIRouter(tags=["manager:reports"])
 
@@ -34,6 +35,7 @@ router = APIRouter(tags=["manager:reports"])
 
 @router.get("/reports/summary", response_model=SummaryReport)
 async def get_summary(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     current_user: User = Depends(require_manager),
@@ -43,12 +45,20 @@ async def get_summary(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
-    # Управляющий клиники видит только свою клинику
-    if current_user.clinic_id is not None:
+    # Per-clinic scope: lika (manager Лорсановой) видит только свою клинику;
+    # super_admin/franchise_owner — все клиники в скоупе.
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return SummaryReport(
+            total_referrals=0, confirmed_referrals=0, expired_referrals=0,
+            pending_referrals=0, pending_bonuses=0.0, paid_bonuses=0.0,
+            date_from=date_from, date_to=date_to,
+        )
+    if filter_ids is not None:
         from sqlalchemy import or_
         filters.append(or_(
-            Referral.from_clinic_id == current_user.clinic_id,
-            Referral.to_clinic_id == current_user.clinic_id,
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
         ))
     if date_from:
         filters.append(Referral.created_at >= date_from)
@@ -88,7 +98,7 @@ async def get_summary(
 
 @router.get("/reports/admins", response_model=list[AdminStats])
 async def get_admin_stats(
-    clinic_id: Optional[uuid.UUID] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     current_user: User = Depends(require_manager),
@@ -98,8 +108,12 @@ async def get_admin_stats(
 
     if current_user.tenant_id is not None:
         ref_filters.append(Referral.tenant_id == current_user.tenant_id)
-    if clinic_id:
-        ref_filters.append(User.clinic_id == clinic_id)
+    # Per-clinic scope: lika видит сотрудников только своей клиники.
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return []
+    if filter_ids is not None:
+        ref_filters.append(User.clinic_id.in_(filter_ids))
     if date_from:
         ref_filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -185,6 +199,7 @@ async def get_admin_stats(
 
 @router.get("/reports/clinics", response_model=list[ClinicFlowEntry])
 async def get_clinic_flow(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     current_user: User = Depends(require_manager),
@@ -194,6 +209,16 @@ async def get_clinic_flow(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    # Per-clinic scope (фильтр потоков, в которых участвует одна из клиник скоупа)
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return []
+    if filter_ids is not None:
+        from sqlalchemy import or_
+        filters.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -243,7 +268,7 @@ async def get_clinic_flow(
 
 @router.get("/reports/export")
 async def export_referrals(
-    clinic_id: Optional[uuid.UUID] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     admin_id: Optional[uuid.UUID] = Query(None),
     ref_status: Optional[ReferralStatus] = Query(None, alias="status"),
     date_from: Optional[datetime] = Query(None),
@@ -260,8 +285,24 @@ async def export_referrals(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
-    if clinic_id:
-        filters.append(or_(Referral.from_clinic_id == clinic_id, Referral.to_clinic_id == clinic_id))
+    # Per-clinic scope с проверкой прав
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        # Пустой CSV
+        output = io.StringIO()
+        output.write('﻿')
+        writer = csv.writer(output)
+        writer.writerow(["id","patient_phone","status","from_clinic","to_clinic","admin","created_at","confirmed_at","expires_at","notes","bonus_amount","bonus_status"])
+        filename = f"referrals_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.csv"
+        return Response(
+            content=output.getvalue().encode("utf-8"), media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    if filter_ids is not None:
+        filters.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
     if admin_id:
         filters.append(Referral.created_by_admin_id == admin_id)
     if ref_status:
@@ -313,6 +354,7 @@ async def export_referrals(
 
 @router.get("/reports/bonuses", response_model=list[dict])
 async def list_bonuses_by_admin(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     only_pending: bool = Query(False),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
@@ -323,6 +365,12 @@ async def list_bonuses_by_admin(
 
     if current_user.tenant_id is not None:
         ref_filters.append(Referral.tenant_id == current_user.tenant_id)
+    # Per-clinic scope: lika видит бонусы сотрудников только своей клиники.
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return []
+    if filter_ids is not None:
+        ref_filters.append(User.clinic_id.in_(filter_ids))
     if date_from:
         ref_filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -382,6 +430,7 @@ async def list_bonuses_by_admin(
 
 @router.get("/reports/referrals", response_model=list[dict])
 async def list_all_referrals(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     ref_status: Optional[str] = Query(None, alias="status"),
@@ -391,6 +440,7 @@ async def list_all_referrals(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy.orm import aliased
+    from sqlalchemy import or_
     FromC = aliased(Clinic, name="from_c")
     ToC = aliased(Clinic, name="to_c")
     Creator = aliased(User, name="creator")
@@ -400,6 +450,15 @@ async def list_all_referrals(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    # Per-clinic scope: lika видит направления только своей клиники.
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return []
+    if filter_ids is not None:
+        filters.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:
@@ -461,13 +520,30 @@ async def list_all_referrals(
 
 @router.get("/reports/daily", response_model=list[dict])
 async def get_daily_report(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import date
-    from sqlalchemy import cast, Date
+    from sqlalchemy import cast, Date, or_
     today = date.today()
     start = today - timedelta(days=29)
+
+    # Tenant + per-clinic scope
+    extra_filters = []
+    if current_user.tenant_id is not None:
+        extra_filters.append(Referral.tenant_id == current_user.tenant_id)
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return [
+            {"date": (start + timedelta(days=i)).isoformat(), "total": 0, "confirmed": 0}
+            for i in range(30)
+        ]
+    if filter_ids is not None:
+        extra_filters.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
 
     q = await db.execute(
         select(
@@ -475,7 +551,7 @@ async def get_daily_report(
             func.count(Referral.id).label("total"),
             func.count(Referral.id).filter(Referral.status == ReferralStatus.CONFIRMED).label("confirmed"),
         )
-        .where(Referral.created_at >= start)
+        .where(Referral.created_at >= start, *extra_filters)
         .group_by(cast(Referral.created_at, Date))
         .order_by(cast(Referral.created_at, Date))
     )
@@ -630,23 +706,40 @@ async def get_analytics(
 
 @router.get("/reports/today", response_model=dict, dependencies=[Depends(require_feature("analytics"))])
 async def get_today_stats(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import date
+    from sqlalchemy import or_
     today_start = datetime.combine(date.today(), datetime.min.time())
     tomorrow_start = today_start + timedelta(days=1)
+
+    # Per-clinic scope
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return {"total_today": 0, "confirmed_today": 0, "pending_cancel": 0, "pending_bonuses": 0.0}
     clinic_filter = []
-    if current_user.clinic_id is not None:
-        clinic_filter.append(Referral.to_clinic_id == current_user.clinic_id)
+    if filter_ids is not None:
+        clinic_filter.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
+    if current_user.tenant_id is not None:
+        clinic_filter.append(Referral.tenant_id == current_user.tenant_id)
 
     total_q = await db.execute(select(func.count(Referral.id)).where(Referral.created_at >= today_start, Referral.created_at < tomorrow_start, *clinic_filter))
     confirmed_q = await db.execute(select(func.count(Referral.id)).where(Referral.status == ReferralStatus.CONFIRMED, Referral.confirmed_at >= today_start, Referral.confirmed_at < tomorrow_start, *clinic_filter))
     cancel_q = await db.execute(select(func.count(Referral.id)).where(Referral.status == ReferralStatus.CANCEL_REQUESTED, *clinic_filter))
 
     bonus_ref_filter = []
-    if current_user.clinic_id is not None:
-        bonus_ref_filter.append(Bonus.referral_id.in_(select(Referral.id).where(Referral.to_clinic_id == current_user.clinic_id)))
+    if filter_ids is not None:
+        bonus_ref_filter.append(Bonus.referral_id.in_(
+            select(Referral.id).where(or_(
+                Referral.from_clinic_id.in_(filter_ids),
+                Referral.to_clinic_id.in_(filter_ids),
+            ))
+        ))
     bonuses_q = await db.execute(select(func.coalesce(func.sum(Bonus.amount), 0)).where(Bonus.status == BonusStatus.PENDING, *bonus_ref_filter))
 
     return {
@@ -663,21 +756,38 @@ async def get_today_stats(
 
 @router.get("/reports/chart", response_model=list[dict], dependencies=[Depends(require_feature("analytics"))])
 async def get_chart_data(
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     from datetime import date
+    from sqlalchemy import or_
     today = date.today()
+
+    # Per-clinic scope (резолвим один раз за запрос)
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return [
+            {"date": (today - timedelta(days=i)).strftime("%d.%m"), "total": 0, "confirmed": 0}
+            for i in range(6, -1, -1)
+        ]
+
+    base_clinic_filter = []
+    if filter_ids is not None:
+        base_clinic_filter.append(or_(
+            Referral.from_clinic_id.in_(filter_ids),
+            Referral.to_clinic_id.in_(filter_ids),
+        ))
+    if current_user.tenant_id is not None:
+        base_clinic_filter.append(Referral.tenant_id == current_user.tenant_id)
+
     result = []
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
         day_start = datetime.combine(day, datetime.min.time())
         day_end = day_start + timedelta(days=1)
-        clinic_filter = []
-        if current_user.clinic_id is not None:
-            clinic_filter.append(Referral.to_clinic_id == current_user.clinic_id)
-        total_q = await db.execute(select(func.count(Referral.id)).where(Referral.created_at >= day_start, Referral.created_at < day_end, *clinic_filter))
-        confirmed_q = await db.execute(select(func.count(Referral.id)).where(Referral.status == ReferralStatus.CONFIRMED, Referral.confirmed_at >= day_start, Referral.confirmed_at < day_end, *clinic_filter))
+        total_q = await db.execute(select(func.count(Referral.id)).where(Referral.created_at >= day_start, Referral.created_at < day_end, *base_clinic_filter))
+        confirmed_q = await db.execute(select(func.count(Referral.id)).where(Referral.status == ReferralStatus.CONFIRMED, Referral.confirmed_at >= day_start, Referral.confirmed_at < day_end, *base_clinic_filter))
         result.append({"date": day.strftime("%d.%m"), "total": total_q.scalar() or 0, "confirmed": confirmed_q.scalar() or 0})
     return result
 

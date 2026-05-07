@@ -18,6 +18,7 @@ from app.models.user import User, UserRole
 from app.models.clinic import Clinic
 from app.models.referral import Referral, ReferralStatus
 from app.models.kpi_target import KpiTarget
+from app.routers.manager.clinics_access import resolve_clinic_filter_ids
 
 router = APIRouter(tags=["manager:kpi"])
 
@@ -25,6 +26,7 @@ router = APIRouter(tags=["manager:kpi"])
 @router.get("/kpi/", response_model=list[dict], dependencies=[Depends(require_feature("kpi"))])
 async def list_kpi(
     month: Optional[str] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
@@ -44,6 +46,12 @@ async def list_kpi(
     # Tenant isolation: видим только своих сотрудников
     if current_user.tenant_id is not None:
         admins_filters.append(User.tenant_id == current_user.tenant_id)
+    # Per-clinic scope: lika видит KPI только сотрудников своей клиники.
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        return []
+    if filter_ids is not None:
+        admins_filters.append(User.clinic_id.in_(filter_ids))
     admins_q = await db.execute(
         select(User, Clinic.name.label("clinic_name"))
         .outerjoin(Clinic, Clinic.id == User.clinic_id)
@@ -65,6 +73,13 @@ async def list_kpi(
     actual_filters = [Referral.created_at >= month_start, Referral.created_at <= month_end]
     if current_user.tenant_id is not None:
         actual_filters.append(Referral.tenant_id == current_user.tenant_id)
+    # Ограничиваем выборку фактических направлений только сотрудниками
+    # из scope-клиник (если admins был отфильтрован по clinic_id).
+    if filter_ids is not None:
+        admin_ids_in_scope = [r.User.id for r in admins]
+        if not admin_ids_in_scope:
+            return []
+        actual_filters.append(Referral.created_by_admin_id.in_(admin_ids_in_scope))
     actual_q = await db.execute(
         select(
             Referral.created_by_admin_id,

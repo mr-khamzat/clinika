@@ -35,6 +35,7 @@ from app.models.franchise import Franchise
 from app.models.presence import CallLog
 from app.models.tenant import Tenant
 from app.models.user import User, UserRole
+from app.routers.manager.clinics_access import resolve_clinic_filter_ids
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
@@ -185,19 +186,25 @@ async def _build_filters(
     elif target_user_id:
         cond.append(or_(CallLog.caller_id == target_user_id, CallLog.callee_id == target_user_id))
 
-    # Фильтр по клинике (через clinic_id участников)
-    if clinic_id and is_mgr:
-        if not await _can_see_clinic(db, user, clinic_id):
+    # Per-clinic scope для manager+ (lika с clinic_id видит только свою клинику).
+    # super_admin / franchise_owner без явного clinic_id — без фильтра.
+    if is_mgr:
+        # resolve_clinic_filter_ids валидирует доступ к clinic_id и
+        # автоматически подставляет user.clinic_id если он задан.
+        filter_ids = await resolve_clinic_filter_ids(db, user, clinic_id)
+        if filter_ids == []:
+            # Нет доступа ни к одной клинике
             return None
-        # Подзапрос: пользователи указанной клиники
-        clinic_users_q = select(User.id).where(User.clinic_id == clinic_id)
-        clinic_user_ids = [r[0] for r in (await db.execute(clinic_users_q)).all()]
-        if not clinic_user_ids:
-            return None
-        cond.append(or_(
-            CallLog.caller_id.in_(clinic_user_ids),
-            CallLog.callee_id.in_(clinic_user_ids),
-        ))
+        if filter_ids is not None:
+            # Подзапрос: пользователи указанных клиник
+            clinic_users_q = select(User.id).where(User.clinic_id.in_(filter_ids))
+            clinic_user_ids = [r[0] for r in (await db.execute(clinic_users_q)).all()]
+            if not clinic_user_ids:
+                return None
+            cond.append(or_(
+                CallLog.caller_id.in_(clinic_user_ids),
+                CallLog.callee_id.in_(clinic_user_ids),
+            ))
 
     return cond
 
