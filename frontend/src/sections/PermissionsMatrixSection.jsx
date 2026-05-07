@@ -4,14 +4,17 @@
  * ============================================================================
  * Этап 8 ROADMAP — RBAC как данные.
  *
- * Использование (только для franchise_owner / super_admin):
- *   <PermissionsMatrixSection token={adminToken} />
+ * Использование:
+ *   <PermissionsMatrixSection token={adminToken} />              — для franchise_owner
+ *   <PermissionsMatrixSection token={adminToken} mode="admin" /> — для super_admin
+ *     (показывает селектор тенанта, редактирует overrides выбранного тенанта)
  *
  * Что делает:
- *   • GET /permissions/matrix       — таблица effective прав по ролям
- *   • GET /permissions/actions      — список всех action'ов (заголовки колонок)
- *   • PUT /permissions/override     — сохранить переопределения для роли
- *   • DELETE /permissions/override/:role — сбросить override роли к дефолту
+ *   • GET /permissions/matrix?tenant_id=…       — таблица effective прав по ролям
+ *   • GET /permissions/actions                  — список всех action'ов (заголовки колонок)
+ *   • PUT /permissions/override                 — сохранить переопределения для роли
+ *       (super_admin шлёт target_tenant_id в body)
+ *   • DELETE /permissions/override/{role}?tenant_id=… — сбросить override роли к дефолту
  *
  * Логика:
  *   1. Зеркалим ответ /matrix в локальный editable state (drafts).
@@ -71,7 +74,8 @@ const RESOURCE_LABELS = {
   consent:    'Согласия',
 }
 
-export default function PermissionsMatrixSection({ token }) {
+export default function PermissionsMatrixSection({ token, mode }) {
+  const isAdminMode = mode === 'admin'
   const { toast } = useToast()
   const [actions, setActions] = useState([])
   const [rows, setRows] = useState([])         // [{role, default[], overrides{}, effective[]}]
@@ -79,12 +83,43 @@ export default function PermissionsMatrixSection({ token }) {
   const [defaults, setDefaults] = useState({}) // {role: Set<action>} — дефолт от бэкенда
   const [loading, setLoading] = useState(true)
   const [savingRole, setSavingRole] = useState(null)
+  // ── Селектор тенанта для super_admin ──
+  const [tenants, setTenants] = useState([])         // [{id, name, slug}]
+  const [tenantId, setTenantId] = useState('')      // выбранный uuid (только в admin-режиме)
+
+  // ── Загрузка списка тенантов (только в admin-режиме) ──
+  useEffect(() => {
+    if (!isAdminMode) return
+    let aborted = false
+    axios.get(`${API_BASE}/admin/tenants`, { headers: authH(token) })
+      .then(r => {
+        if (aborted) return
+        const list = Array.isArray(r.data) ? r.data : []
+        setTenants(list)
+        if (list.length && !tenantId) setTenantId(list[0].id)
+      })
+      .catch(() => {
+        if (!aborted) toast('Не удалось загрузить список тенантов', 'error')
+      })
+    return () => { aborted = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdminMode, token])
 
   // ── Загрузка матрицы ──
+  // В admin-режиме обязательно нужен tenantId (иначе матрица будет «дефолт»).
   const load = useCallback(async () => {
+    if (isAdminMode && !tenantId) {
+      // Тенант ещё не выбран — не дёргаем API
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/permissions/matrix`, { headers: authH(token) })
+      const params = isAdminMode && tenantId ? { tenant_id: tenantId } : {}
+      const r = await axios.get(`${API_BASE}/permissions/matrix`, {
+        headers: authH(token),
+        params,
+      })
       const data = r.data
       setActions(data.actions || [])
       setRows(data.roles || [])
@@ -108,7 +143,7 @@ export default function PermissionsMatrixSection({ token }) {
     } finally {
       setLoading(false)
     }
-  }, [token, toast])
+  }, [token, toast, isAdminMode, tenantId])
 
   useEffect(() => { load() }, [load])
 
@@ -137,12 +172,18 @@ export default function PermissionsMatrixSection({ token }) {
 
   // ── Сохранение overrides одной роли ──
   const saveRole = async (role) => {
+    if (isAdminMode && !tenantId) {
+      toast('Выберите тенанта', 'error')
+      return
+    }
     setSavingRole(role)
     try {
       const permissions = buildOverridePayload(role)
+      const body = { role, permissions }
+      if (isAdminMode && tenantId) body.target_tenant_id = tenantId
       await axios.put(
         `${API_BASE}/permissions/override`,
-        { role, permissions },
+        body,
         { headers: authH(token) }
       )
       toast(`Права роли «${ROLE_LABELS[role] || role}» сохранены`, 'success')
@@ -156,9 +197,17 @@ export default function PermissionsMatrixSection({ token }) {
 
   // ── Сброс роли к дефолту ──
   const resetRole = async (role) => {
+    if (isAdminMode && !tenantId) {
+      toast('Выберите тенанта', 'error')
+      return
+    }
     setSavingRole(role)
     try {
-      await axios.delete(`${API_BASE}/permissions/override/${role}`, { headers: authH(token) })
+      const params = isAdminMode && tenantId ? { tenant_id: tenantId } : {}
+      await axios.delete(`${API_BASE}/permissions/override/${role}`, {
+        headers: authH(token),
+        params,
+      })
       toast(`Права роли «${ROLE_LABELS[role] || role}» сброшены к дефолту`, 'success')
       await load()
     } catch (e) {
@@ -171,23 +220,71 @@ export default function PermissionsMatrixSection({ token }) {
   // ── Группировка action'ов для отрисовки ──
   const grouped = useMemo(() => groupActions(actions), [actions])
 
+  // ── Селектор тенанта (только в admin-режиме) ──
+  const tenantSelector = isAdminMode ? (
+    <Card style={{ padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <label style={{ fontSize: 13, fontWeight: 600 }}>Тенант:</label>
+        <select
+          value={tenantId}
+          onChange={e => setTenantId(e.target.value)}
+          style={{
+            padding: '8px 12px',
+            border: '1px solid var(--border, #e5e7eb)',
+            borderRadius: 8,
+            background: 'var(--surface, #fff)',
+            fontSize: 13,
+            minWidth: 240,
+          }}
+        >
+          {tenants.length === 0 && <option value="">— нет тенантов —</option>}
+          {tenants.map(t => (
+            <option key={t.id} value={t.id}>
+              {t.name} {t.slug ? `(${t.slug})` : ''}
+            </option>
+          ))}
+        </select>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+          super_admin редактирует overrides выбранного тенанта.
+        </span>
+      </div>
+    </Card>
+  ) : null
+
   if (loading) {
     return (
-      <Card style={{ padding: 24 }}>
-        <div style={{ color: 'var(--text-muted)' }}>Загрузка матрицы прав…</div>
-      </Card>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {tenantSelector}
+        <Card style={{ padding: 24 }}>
+          <div style={{ color: 'var(--text-muted)' }}>Загрузка матрицы прав…</div>
+        </Card>
+      </div>
+    )
+  }
+
+  // В admin-режиме без выбранного тенанта — пустое состояние
+  if (isAdminMode && !tenantId) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {tenantSelector}
+        <Card style={{ padding: 24 }}>
+          <div style={{ color: 'var(--text-muted)' }}>Выберите тенанта для редактирования матрицы прав.</div>
+        </Card>
+      </div>
     )
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {tenantSelector}
       <Card style={{ padding: 16 }}>
         <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5 }}>
           Матрица прав определяет, что разрешено каждой роли. По умолчанию права
           захардкожены в коде (ROLE_PERMISSIONS), но вы можете переопределить их
-          для своего тенанта. Ячейки с переопределением подсвечены —
-          они отличаются от системного дефолта. Кнопка «Сбросить» возвращает роль
-          к дефолтным правам (удаляет все ваши override).
+          {isAdminMode ? ' для выбранного тенанта' : ' для своего тенанта'}.
+          Ячейки с переопределением подсвечены — они отличаются от системного
+          дефолта. Кнопка «Сбросить» возвращает роль к дефолтным правам
+          (удаляет все override).
         </div>
       </Card>
 

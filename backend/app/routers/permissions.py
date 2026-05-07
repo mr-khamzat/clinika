@@ -8,10 +8,16 @@ Endpoints:
   DELETE /permissions/override/{role}  — сбросить override роли к дефолту
 
 Все ответы возвращаются с учётом override для текущего тенанта.
+
+super_admin может работать с любым тенантом, передавая ?tenant_id=<uuid>
+в query (для GET) или в payload.target_tenant_id (для PUT) — это нужно для
+вкладки «Роли и права» в /admin, где super_admin редактирует чужие тенанты.
 """
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -44,6 +50,11 @@ class OverridePayload(BaseModel):
         default_factory=dict,
         description="{action: bool} — True/False переопределяет, отсутствие = дефолт",
     )
+    # Только для super_admin — целевой тенант (если не указан, берётся свой)
+    target_tenant_id: Optional[str] = Field(
+        default=None,
+        description="(super_admin) UUID тенанта, чьи overrides редактируем",
+    )
 
 
 class RoleMatrix(BaseModel):
@@ -56,6 +67,25 @@ class RoleMatrix(BaseModel):
 class MatrixResponse(BaseModel):
     actions: list[str]
     roles: list[RoleMatrix]
+    tenant_id: Optional[str] = None
+
+
+# ── Хелпер: разрешить super_admin использовать tenant_id query ───────────────
+def _resolve_tenant_id(user: User, tenant_id_query: Optional[str]) -> Optional[str]:
+    """Возвращает строковый UUID тенанта, с которым работает запрос.
+
+    super_admin может явно указать tenant_id — иначе используется свой.
+    Прочие роли всегда работают только со своим тенантом (query игнорируется).
+    """
+    is_sa = (user.role == UserRole.SUPER_ADMIN)
+    if is_sa and tenant_id_query:
+        # Валидация UUID
+        try:
+            uuid.UUID(tenant_id_query)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Некорректный tenant_id")
+        return tenant_id_query
+    return str(user.tenant_id) if user.tenant_id else None
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
@@ -67,24 +97,27 @@ async def list_actions(_user: User = Depends(get_current_user)):
 
 @router.get("/matrix", response_model=MatrixResponse)
 async def get_matrix(
+    tenant_id: Optional[str] = Query(default=None, description="(super_admin) явный тенант"),
     user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Возвращает effective матрицу прав для тенанта текущего пользователя.
+    Возвращает effective матрицу прав.
 
     Доступно: manager+ (включая franchise_owner и super_admin).
-    Если у пользователя нет tenant_id — отдаём чистый дефолт.
+    super_admin может передать ?tenant_id=<uuid> чтобы посмотреть/редактировать
+    матрицу любого тенанта. Если у пользователя нет tenant_id и query пуст —
+    отдаём чистый дефолт.
     """
     actions = get_all_actions()
-    tenant_id = str(user.tenant_id) if user.tenant_id else None
+    resolved_tid = _resolve_tenant_id(user, tenant_id)
 
     rows: list[RoleMatrix] = []
     for role_name in EDITABLE_ROLES:
         default_perms = get_default_permissions(role_name)
         overrides: dict[str, bool] = {}
-        if tenant_id:
-            overrides = await get_effective_override(db, tenant_id, role_name)
+        if resolved_tid:
+            overrides = await get_effective_override(db, resolved_tid, role_name)
 
         # Считаем effective: дефолт + override
         effective = set(default_perms)
@@ -103,7 +136,7 @@ async def get_matrix(
             )
         )
 
-    return MatrixResponse(actions=actions, roles=rows)
+    return MatrixResponse(actions=actions, roles=rows, tenant_id=resolved_tid)
 
 
 @router.put("/override")
@@ -113,10 +146,11 @@ async def put_override(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Переопределяет матрицу прав одной роли для тенанта владельца.
+    Переопределяет матрицу прав одной роли для тенанта.
 
-    Доступно только franchise_owner / super_admin.
-    Тело: {role, permissions: {action: bool}} — карта переопределений.
+    Доступно: franchise_owner / super_admin.
+    Тело: {role, permissions: {action: bool}, target_tenant_id?}.
+    super_admin может указать target_tenant_id для редактирования чужих тенантов.
     Пустая карта = «нет переопределений» (фактически как DELETE, но строка остаётся).
     """
     # Валидация роли
@@ -135,17 +169,18 @@ async def put_override(
             detail=f"Неизвестные action'ы: {unknown}",
         )
 
-    if not user.tenant_id:
+    resolved_tid = _resolve_tenant_id(user, payload.target_tenant_id)
+    if not resolved_tid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Текущий пользователь не привязан к тенанту",
+            detail="Не указан тенант (target_tenant_id для super_admin или tenant_id у пользователя)",
         )
-    tenant_id = user.tenant_id
+    tenant_uuid = uuid.UUID(resolved_tid)
 
     # upsert по (tenant_id, role)
     res = await db.execute(
         select(TenantPermissionOverride).where(
-            TenantPermissionOverride.tenant_id == tenant_id,
+            TenantPermissionOverride.tenant_id == tenant_uuid,
             TenantPermissionOverride.role == payload.role,
         )
     )
@@ -153,7 +188,7 @@ async def put_override(
     if row is None:
         row = TenantPermissionOverride(
             id=uuid.uuid4(),
-            tenant_id=tenant_id,
+            tenant_id=tenant_uuid,
             role=payload.role,
             permissions=payload.permissions,
             updated_at=datetime.utcnow(),
@@ -167,37 +202,40 @@ async def put_override(
 
     await db.commit()
     # Сбрасываем кэш — следующий запрос подтянет свежее
-    await invalidate_rbac_cache(str(tenant_id), payload.role)
-    return {"ok": True, "role": payload.role, "permissions": payload.permissions}
+    await invalidate_rbac_cache(resolved_tid, payload.role)
+    return {"ok": True, "role": payload.role, "tenant_id": resolved_tid, "permissions": payload.permissions}
 
 
 @router.delete("/override/{role}")
 async def delete_override(
     role: str,
+    tenant_id: Optional[str] = Query(default=None, description="(super_admin) явный тенант"),
     user: User = Depends(require_franchise_owner),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Сбрасывает override роли — теперь применяется только захардкоженный дефолт.
+    super_admin может указать ?tenant_id=<uuid> для чужих тенантов.
     """
     if role not in EDITABLE_ROLES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Нельзя редактировать роль {role}",
         )
-    if not user.tenant_id:
+    resolved_tid = _resolve_tenant_id(user, tenant_id)
+    if not resolved_tid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Текущий пользователь не привязан к тенанту",
+            detail="Не указан тенант",
         )
-    tenant_id = user.tenant_id
+    tenant_uuid = uuid.UUID(resolved_tid)
 
     await db.execute(
         delete(TenantPermissionOverride).where(
-            TenantPermissionOverride.tenant_id == tenant_id,
+            TenantPermissionOverride.tenant_id == tenant_uuid,
             TenantPermissionOverride.role == role,
         )
     )
     await db.commit()
-    await invalidate_rbac_cache(str(tenant_id), role)
-    return {"ok": True, "role": role}
+    await invalidate_rbac_cache(resolved_tid, role)
+    return {"ok": True, "role": role, "tenant_id": resolved_tid}

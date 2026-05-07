@@ -74,6 +74,16 @@ function AdminCatalog({ token }) {
   const [msg, setMsg]           = useState('')
   const [filterCat, setFilterCat] = useState('all')
 
+  // ── Селектор тенанта + статус подписок (super_admin) ──
+  // tenants: [{id, name, slug, ...}]
+  // tenantId: выбранный uuid
+  // tenantSubs: { module_key: subscription } — текущие подписки выбранного тенанта
+  const [tenants, setTenants]   = useState([])
+  const [tenantId, setTenantId] = useState('')
+  const [tenantSubs, setTenantSubs] = useState({})
+  const [busyKey, setBusyKey]   = useState(null) // ключ модуля при операции trial/disable
+
+  // Загрузка каталога модулей платформы
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -84,6 +94,42 @@ function AdminCatalog({ token }) {
   }, [token])
 
   useEffect(() => { load() }, [load])
+
+  // Загрузка списка тенантов один раз
+  useEffect(() => {
+    let aborted = false
+    axios.get(`${API_BASE}/admin/tenants`, { headers: authH(token) })
+      .then(r => {
+        if (aborted) return
+        const list = Array.isArray(r.data) ? r.data : []
+        setTenants(list)
+        if (list.length && !tenantId) setTenantId(list[0].id)
+      })
+      .catch(() => {})
+    return () => { aborted = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  // Загрузка подписок выбранного тенанта (по /admin/tenants/{id}/modules)
+  const loadTenantSubs = useCallback(async () => {
+    if (!tenantId) { setTenantSubs({}); return }
+    try {
+      const r = await axios.get(
+        `${API_BASE}/admin/tenants/${tenantId}/modules`,
+        { headers: authH(token) }
+      )
+      // ответ: [{module: {...}, subscription: {...}|null}]
+      const map = {}
+      for (const row of (r.data || [])) {
+        if (row.subscription) map[row.module.key] = row.subscription
+      }
+      setTenantSubs(map)
+    } catch {
+      setTenantSubs({})
+    }
+  }, [token, tenantId])
+
+  useEffect(() => { loadTenantSubs() }, [loadTenantSubs])
 
   function openEdit(m) {
     setEditKey(m.key)
@@ -122,15 +168,83 @@ function AdminCatalog({ token }) {
     }
   }
 
+  // ── Активация trial-подписки модуля для выбранного тенанта ──
+  // POST /admin/tenants/{tid}/modules/{key}/enable  body: {trial_days, billing_cycle}
+  async function activateTrial(modKey, days = 30) {
+    if (!tenantId) {
+      setMsg('Ошибка: выберите тенанта')
+      setTimeout(() => setMsg(''), 4000)
+      return
+    }
+    setBusyKey(modKey)
+    try {
+      await axios.post(
+        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/enable`,
+        { trial_days: days, billing_cycle: 'monthly' },
+        { headers: authH(token) }
+      )
+      setMsg(`Trial (${days} дн.) активирован для модуля ${modKey} ✓`)
+      await loadTenantSubs()
+    } catch (e) {
+      setMsg('Ошибка: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setBusyKey(null)
+      setTimeout(() => setMsg(''), 4000)
+    }
+  }
+
+  // ── Полное активирование (без trial — сразу платная подписка) ──
+  async function activateFull(modKey) {
+    if (!tenantId) {
+      setMsg('Ошибка: выберите тенанта'); setTimeout(() => setMsg(''), 4000); return
+    }
+    setBusyKey(modKey)
+    try {
+      await axios.post(
+        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/enable`,
+        { trial_days: 0, billing_cycle: 'monthly' },
+        { headers: authH(token) }
+      )
+      setMsg(`Модуль ${modKey} активирован ✓`)
+      await loadTenantSubs()
+    } catch (e) {
+      setMsg('Ошибка: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setBusyKey(null)
+      setTimeout(() => setMsg(''), 4000)
+    }
+  }
+
+  // ── Отключение модуля у тенанта (cancel) ──
+  async function disableForTenant(modKey) {
+    if (!tenantId) return
+    setBusyKey(modKey)
+    try {
+      await axios.post(
+        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/disable`,
+        {},
+        { headers: authH(token) }
+      )
+      setMsg(`Модуль ${modKey} отключён ✓`)
+      await loadTenantSubs()
+    } catch (e) {
+      setMsg('Ошибка: ' + (e.response?.data?.detail || e.message))
+    } finally {
+      setBusyKey(null)
+      setTimeout(() => setMsg(''), 4000)
+    }
+  }
+
   const categories = ['all', ...Object.keys(CATEGORY_LABELS)]
   const filtered = filterCat === 'all' ? modules : modules.filter(m => m.category === filterCat)
+  const selectedTenant = tenants.find(t => t.id === tenantId)
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Каталог модулей</h1>
-          <p className="text-sm text-gray-500 mt-1">Управление платными модулями платформы</p>
+          <p className="text-sm text-gray-500 mt-1">Управление платными модулями платформы и подписками тенантов</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           {categories.map(c => (
@@ -146,6 +260,24 @@ function AdminCatalog({ token }) {
         </div>
       </div>
 
+      {/* ─── Селектор тенанта (для управления подписками) ─── */}
+      <div className="mb-6 bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+        <span className="material-symbols-outlined text-blue-600">business</span>
+        <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Тенант для управления подписками:</span>
+        <select value={tenantId} onChange={e => setTenantId(e.target.value)}
+          className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 text-sm bg-white dark:bg-gray-800 dark:text-white min-w-[240px]">
+          {tenants.length === 0 && <option value="">— нет тенантов —</option>}
+          {tenants.map(t => (
+            <option key={t.id} value={t.id}>{t.name}{t.slug ? ` (${t.slug})` : ''}</option>
+          ))}
+        </select>
+        {selectedTenant && (
+          <span className="text-xs text-gray-500">
+            план: <b>{selectedTenant.plan || '—'}</b> | клиник: {selectedTenant.clinics_count} | юзеров: {selectedTenant.users_count}
+          </span>
+        )}
+      </div>
+
       {msg && (
         <div className={`mb-4 px-4 py-3 rounded-xl text-sm ${msg.startsWith('Ошибка') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
           {msg}
@@ -156,11 +288,21 @@ function AdminCatalog({ token }) {
         <div className="flex justify-center py-16">
           <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-8 text-center text-gray-500 border border-gray-100 dark:border-gray-700">
+          В каталоге нет модулей. Запустите seed (commercial_modules).
+        </div>
       ) : (
         <div className="grid gap-4">
           {filtered.map(m => {
             const cat = CATEGORY_LABELS[m.category] || { label: m.category, color: '#6b7280', bg: 'rgba(107,114,128,.1)', icon: 'widgets' }
             const isEditing = editKey === m.key
+            // Подписка выбранного тенанта на этот модуль (если есть)
+            const sub    = tenantSubs[m.key]
+            const status = sub?.status || 'disabled'
+            const badge  = STATUS_BADGE[status] || { label: 'Не подключён', bg: 'rgba(107,114,128,.12)', fg: '#374151' }
+            const expires = sub?.expires_at || sub?.trial_ends_at || sub?.grace_until
+            const busy   = busyKey === m.key
             return (
               <div key={m.key} className={`bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border transition ${m.is_active ? 'border-gray-100 dark:border-gray-700' : 'border-gray-200 dark:border-gray-600 opacity-60'}`}>
                 <div className="flex items-start gap-4">
@@ -174,6 +316,10 @@ function AdminCatalog({ token }) {
                       <span className="px-2 py-0.5 rounded-full text-xs font-medium"
                         style={{ background: cat.bg, color: cat.color }}>{cat.label}</span>
                       <span className="font-mono text-xs text-gray-400 bg-gray-50 dark:bg-gray-900 px-2 py-0.5 rounded-lg">{m.key}</span>
+                      {tenantId && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium ml-auto"
+                          style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>
+                      )}
                     </div>
                     {m.description && (
                       <p className="text-sm text-gray-500 mt-1 leading-snug">{m.description}</p>
@@ -185,6 +331,12 @@ function AdminCatalog({ token }) {
                           <span key={p} className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-md font-medium">{p}</span>
                         ))}
                       </div>
+                    )}
+                    {expires && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        {sub?.status === 'trial' ? 'Триал до' : sub?.status === 'grace' ? 'Льготный период до' : 'Действует до'}
+                        &nbsp;{new Date(expires).toLocaleDateString('ru')}
+                      </p>
                     )}
                   </div>
 
@@ -200,10 +352,12 @@ function AdminCatalog({ token }) {
                           )}
                         </div>
                         <button onClick={() => openEdit(m)}
+                          title="Редактировать цену"
                           className="p-2 rounded-xl bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 dark:bg-gray-700 dark:hover:bg-blue-900/30 transition">
                           <span className="material-symbols-outlined text-lg">edit</span>
                         </button>
                         <button onClick={() => toggleActive(m)}
+                          title={m.is_active ? 'Деактивировать в каталоге' : 'Активировать в каталоге'}
                           className={`p-2 rounded-xl transition ${m.is_active ? 'bg-green-50 text-green-600 hover:bg-red-50 hover:text-red-500' : 'bg-gray-50 text-gray-400 hover:bg-green-50 hover:text-green-600'} dark:bg-gray-700`}>
                           <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>
                             {m.is_active ? 'toggle_on' : 'toggle_off'}
@@ -240,6 +394,49 @@ function AdminCatalog({ token }) {
                     )}
                   </div>
                 </div>
+
+                {/* ─── Управление подпиской выбранного тенанта ─── */}
+                {tenantId && !isEditing && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-gray-500 mr-2">Подписка тенанта:</span>
+                    {(!sub || status === 'cancelled' || status === 'expired') && (
+                      <>
+                        <button onClick={() => activateTrial(m.key, 14)} disabled={busy}
+                          className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">science</span>
+                          Trial 14 дн.
+                        </button>
+                        <button onClick={() => activateTrial(m.key, 30)} disabled={busy}
+                          className="px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">science</span>
+                          Trial 30 дн.
+                        </button>
+                        <button onClick={() => activateFull(m.key)} disabled={busy}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">check_circle</span>
+                          Активировать
+                        </button>
+                      </>
+                    )}
+                    {sub && (status === 'trial' || status === 'active' || status === 'grace') && (
+                      <>
+                        {status === 'trial' && (
+                          <button onClick={() => activateFull(m.key)} disabled={busy}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1">
+                            <span className="material-symbols-outlined text-sm">upgrade</span>
+                            Перевести на платную
+                          </button>
+                        )}
+                        <button onClick={() => disableForTenant(m.key)} disabled={busy}
+                          className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold disabled:opacity-50 inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">block</span>
+                          Отключить
+                        </button>
+                      </>
+                    )}
+                    {busy && <span className="text-xs text-gray-400">…</span>}
+                  </div>
+                )}
               </div>
             )
           })}
