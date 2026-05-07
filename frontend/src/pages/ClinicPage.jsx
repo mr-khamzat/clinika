@@ -324,7 +324,7 @@ function DoctorCard({ doc, tenantId, primary, slug, onReviewAdded }) {
           </button>
         )}
         <button onClick={() => setRevOpen(true)}
-          style={{ flex:doc.has_schedule?0:1, padding:'12px 14px', background:'none', border:'none', borderLeft:doc.has_schedule?'1px solid rgba(255,255,255,.2)':'none', color:doc.has_schedule?'rgba(255,255,255,.9)':primary, fontSize:13, cursor:'pointer', background:doc.has_schedule?'transparent':'#F8FAFF' }}>
+          style={{ flex:doc.has_schedule?0:1, padding:'12px 14px', border:'none', borderLeft:doc.has_schedule?'1px solid rgba(255,255,255,.2)':'none', color:doc.has_schedule?'rgba(255,255,255,.9)':primary, fontSize:13, cursor:'pointer', background:doc.has_schedule?'transparent':'#F8FAFF' }}>
           ✍️ Отзыв
         </button>
         {doc.review_count > 0 && (
