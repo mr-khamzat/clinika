@@ -25,6 +25,7 @@
 @import '@fontsource/manrope/cyrillic-800.css';
 /* Material Symbols — иконки (font-display: swap задаётся через vite PostCSS) */
 @import 'material-symbols/outlined.css';
+@import 'material-symbols/rounded.css';
 
 @tailwind base;
 @tailwind components;

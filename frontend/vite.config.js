@@ -32,8 +32,8 @@ export default defineConfig({
       output: {
         // Даём фиксированное имя woff2 Material Symbols чтобы preload в index.html работал
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'material-symbols-outlined.woff2') {
-            return 'assets/material-symbols-outlined.woff2'
+          if (assetInfo.name === 'material-symbols-outlined.woff2' || assetInfo.name === 'material-symbols-rounded.woff2') {
+            return 'assets/' + assetInfo.name
           }
           return 'assets/[name]-[hash][extname]'
         }
