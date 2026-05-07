@@ -29,6 +29,9 @@ class Service(Base):
     prep_instructions: Mapped[str | None] = mapped_column(Text, nullable=True)
     lab: Mapped[str | None] = mapped_column(String(200), nullable=True)
     duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # SLA: срок (в днях) до автоматической просрочки направления на эту услугу.
+    # Используется при расчёте дедлайна: Referral.created_at + sla_days
+    sla_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14, server_default="14")
 
     referrals: Mapped[list["Referral"]] = relationship("Referral", back_populates="service")
     clinic: Mapped["Clinic | None"] = relationship("Clinic", back_populates="services")

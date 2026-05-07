@@ -42,6 +42,9 @@ class ReferralResponse(BaseModel):
     to_clinic_name: str | None = None
     service_name: str | None = None
     bonus_amount: float | None = None
+    # SLA: рассчитывается как created_at + service.sla_days
+    sla_days: int | None = None
+    sla_deadline: datetime | None = None
 
     class Config:
         from_attributes = True

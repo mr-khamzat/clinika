@@ -271,12 +271,16 @@ async def complete_visit(
     appointment.status = AppointmentStatus.COMPLETED
     appointment.updated_at = datetime.utcnow()
 
-    # Найти visiting_doctor settings
+    # Найти doctor_record и определить тип доктора (internal/visiting/external)
     from app.models.doctor import Doctor
     doctor_record = await db.get(Doctor, appointment.doctor_id)
     if not doctor_record or not doctor_record.user_id:
         await db.commit()
-        return {"status": "completed", "ledger": False}
+        return {"status": "completed", "ledger": False, "doctor_type": None}
+
+    # Тип доктора берём из User.doctor_type. По умолчанию — internal
+    doctor_user = await db.get(User, doctor_record.user_id)
+    doctor_type = (doctor_user.doctor_type if doctor_user and doctor_user.doctor_type else "internal")
 
     settings = await db.scalar(
         select(VisitingDoctorSettings).where(
@@ -287,7 +291,31 @@ async def complete_visit(
         )
     )
 
+    # Для штатного доктора (internal) — settings обычно нет, считаем только VISIT_REVENUE клинике
     price = appointment.price or (settings.price_per_visit if settings else None)
+    if price and not settings and doctor_type == "internal":
+        # Внутренний доктор: записываем только VISIT_REVENUE
+        price = Decimal(str(price))
+        db.add(LedgerEntry(
+            id=uuid.uuid4(),
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            amount=price,
+            operation_type="VISIT_REVENUE",
+            reference_id=appointment.id,
+            reference_type="appointment",
+            clinic_id=appointment.clinic_id,
+            description=f"Приём (штатный) {doctor_record.full_name} | {appointment.appointment_date}",
+        ))
+        await db.commit()
+        return {
+            "status": "completed",
+            "ledger": True,
+            "doctor_type": "internal",
+            "price": float(price),
+            "doctor_share": None,
+            "doctor_percent": None,
+        }
     if price and settings:
         price = Decimal(str(price))
         pct = Decimal(str(settings.doctor_percent)) / 100
@@ -340,6 +368,7 @@ async def complete_visit(
     return {
         "status": "completed",
         "ledger": bool(price and settings),
+        "doctor_type": doctor_type,
         "price": float(price) if price else None,
         "doctor_share": doctor_share_val,
         "doctor_percent": float(settings.doctor_percent) if settings else None,

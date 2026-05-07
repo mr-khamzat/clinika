@@ -293,6 +293,201 @@ async def geoip_update_job():
         log.error("geoip_update: %s", e)
 
 
+async def referral_reminder_patient_job():
+    """APScheduler: напоминание пациенту за 3 дня до дедлайна SLA направления.
+
+    Раз в час сканирует Referral в статусе CREATED. Для каждого:
+      - вычисляем sla_deadline = created_at + service.sla_days
+      - если now ∈ [sla_deadline-3д, sla_deadline-3д+1ч] — шлём напоминание
+    Канал доставки:
+      - SMS-плагин (если SMS_PROVIDER не stub) — на patient_phone
+      - Telegram (если у пользователя с phone_number=patient_phone есть telegram_id)
+      - Иначе пишем в /var/log/clinika/referral_reminder.log
+    Чтобы не дублировать — помечаем notes маркером "[sla-reminded-patient]".
+    """
+    import logging, os
+    from datetime import datetime, timedelta
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.referral import Referral, ReferralStatus
+    from app.models.service import Service
+    from app.models.user import User
+    from app.plugins.registry import plugin_registry
+
+    log = logging.getLogger("referral_reminder_patient")
+    LOG_FILE = "/var/log/clinika/referral_reminder.log"
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    except Exception:
+        pass
+
+    def _audit(msg: str):
+        log.info(msg)
+        try:
+            with open(LOG_FILE, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.utcnow().isoformat()} | {msg}\n")
+        except Exception:
+            pass
+
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            # Берём только CREATED — кому ещё нужен напоминание о дедлайне
+            result = await db.execute(
+                select(Referral).where(Referral.status == ReferralStatus.CREATED)
+            )
+            referrals = result.scalars().all()
+            sent = 0
+            for r in referrals:
+                # Маркер уже отправленного напоминания — чтобы не дублировать
+                if r.notes and "[sla-reminded-patient]" in r.notes:
+                    continue
+                svc = await db.get(Service, r.service_id)
+                sla_days = int(getattr(svc, "sla_days", 14) or 14)
+                deadline = r.created_at + timedelta(days=sla_days)
+                # Отправляем когда now входит в окно [deadline-3д, deadline-3д+1ч]
+                window_start = deadline - timedelta(days=3)
+                window_end = window_start + timedelta(hours=1)
+                if not (window_start <= now < window_end):
+                    continue
+
+                msg = (
+                    f"Напоминание: запись на услугу '{svc.name if svc else ''}' "
+                    f"истекает {deadline.strftime('%d.%m.%Y')}. "
+                    f"Пожалуйста, обратитесь в клинику для подтверждения."
+                )
+                delivered = False
+
+                # SMS-плагин
+                try:
+                    sms_plugin = plugin_registry.get("sms")
+                    if sms_plugin and await sms_plugin.is_enabled():
+                        ok = await sms_plugin.send(r.patient_phone, msg)
+                        if ok:
+                            delivered = True
+                            _audit(f"SMS sent referral={r.id} phone={r.patient_phone}")
+                except Exception as e:
+                    log.warning(f"SMS send failed for referral={r.id}: {e}")
+
+                # Telegram (если в users есть аккаунт с тем же phone_number и заполненным telegram_id)
+                try:
+                    user_with_tg = (await db.execute(
+                        select(User).where(
+                            User.phone_number == r.patient_phone,
+                            User.telegram_id != None,
+                        ).limit(1)
+                    )).scalar_one_or_none()
+                    if user_with_tg and user_with_tg.telegram_id:
+                        notify_plugin = plugin_registry.get("notify")
+                        if notify_plugin and await notify_plugin.is_enabled():
+                            ok = await notify_plugin.send_message(user_with_tg.telegram_id, msg)
+                            if ok:
+                                delivered = True
+                                _audit(f"Telegram sent referral={r.id} tg={user_with_tg.telegram_id}")
+                except Exception as e:
+                    log.warning(f"Telegram send failed for referral={r.id}: {e}")
+
+                if not delivered:
+                    _audit(
+                        f"NO CHANNEL referral={r.id} phone={r.patient_phone} "
+                        f"deadline={deadline.isoformat()} (плагины не настроены)"
+                    )
+
+                # Помечаем направление чтобы не отправить повторно
+                marker = "[sla-reminded-patient]"
+                r.notes = (r.notes + " " + marker) if r.notes else marker
+                sent += 1
+
+            if sent:
+                await db.commit()
+                log.info(f"referral_reminder_patient: отправлено {sent}")
+    except Exception as e:
+        log.error(f"referral_reminder_patient: {e}")
+
+
+async def referral_reminder_author_job():
+    """APScheduler: напоминание автору направления за 1 день до дедлайна SLA.
+
+    Раз в час сканирует Referral в статусе CREATED. Для каждого:
+      - вычисляем sla_deadline = created_at + service.sla_days
+      - если now ∈ [sla_deadline-1д, sla_deadline-1д+1ч] — шлём автору
+    Канал доставки:
+      - Telegram (NotifyPlugin) на admin_telegram_id из настроек тенанта или User.telegram_id
+      - Запись в activity_log (для отображения в дашборде автора)
+    Маркер: notes += "[sla-reminded-author]" — чтобы не дублировать.
+    """
+    import logging
+    from datetime import datetime, timedelta
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.referral import Referral, ReferralStatus
+    from app.models.service import Service
+    from app.models.user import User
+    from app.models.activity_log import ActivityLog
+    from app.plugins.registry import plugin_registry
+
+    log = logging.getLogger("referral_reminder_author")
+    try:
+        async with AsyncSessionLocal() as db:
+            now = datetime.utcnow()
+            result = await db.execute(
+                select(Referral).where(Referral.status == ReferralStatus.CREATED)
+            )
+            referrals = result.scalars().all()
+            sent = 0
+            for r in referrals:
+                if r.notes and "[sla-reminded-author]" in r.notes:
+                    continue
+                svc = await db.get(Service, r.service_id)
+                sla_days = int(getattr(svc, "sla_days", 14) or 14)
+                deadline = r.created_at + timedelta(days=sla_days)
+                window_start = deadline - timedelta(days=1)
+                window_end = window_start + timedelta(hours=1)
+                if not (window_start <= now < window_end):
+                    continue
+
+                author = await db.get(User, r.created_by_admin_id)
+                author_name = author.full_name if author else "—"
+                msg = (
+                    f"⏰ Дедлайн направления через 24 часа.\n"
+                    f"Пациент: {r.patient_name or '—'} ({r.patient_phone})\n"
+                    f"Услуга: {svc.name if svc else '—'}\n"
+                    f"Дедлайн: {deadline.strftime('%d.%m.%Y %H:%M')}"
+                )
+
+                # Telegram автору (если у него есть telegram_id)
+                try:
+                    if author and author.telegram_id:
+                        notify_plugin = plugin_registry.get("notify")
+                        if notify_plugin and await notify_plugin.is_enabled():
+                            await notify_plugin.send_message(author.telegram_id, msg)
+                except Exception as e:
+                    log.warning(f"author tg fail referral={r.id}: {e}")
+
+                # Внутрикабинетная нотификация — запись в activity_log
+                try:
+                    db.add(ActivityLog(
+                        tenant_id=r.tenant_id,
+                        user_id=r.created_by_admin_id,
+                        user_name=author_name,
+                        action="SLA-напоминание: дедлайн направления через 24ч",
+                        entity_type="referral",
+                        entity_id=r.id,
+                    ))
+                except Exception as e:
+                    log.warning(f"activity_log fail referral={r.id}: {e}")
+
+                marker = "[sla-reminded-author]"
+                r.notes = (r.notes + " " + marker) if r.notes else marker
+                sent += 1
+
+            if sent:
+                await db.commit()
+                log.info(f"referral_reminder_author: отправлено {sent}")
+    except Exception as e:
+        log.error(f"referral_reminder_author: {e}")
+
+
 async def geoip_initial_download_if_missing():
     """При первом старте после деплоя — скачать mmdb если файла ещё нет."""
     import logging, os
@@ -346,6 +541,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
     scheduler.add_job(daily_invoices_job, 'cron', hour=0, minute=0, id='daily_invoices', replace_existing=True)
     scheduler.add_job(appointment_reminders_job, 'interval', minutes=30, id='appointment_reminders', replace_existing=True)
+    # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
+    scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
+    scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
     # Гео-IP: еженедельное обновление dbip-city-lite (понедельник 03:00 UTC)
     scheduler.add_job(geoip_update_job, 'cron', day_of_week='mon', hour=3, minute=0, id='geoip_update', replace_existing=True)
     scheduler.start()

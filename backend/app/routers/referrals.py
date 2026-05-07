@@ -317,6 +317,11 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
     )
     bonus = bonus_result.scalars().first()
 
+    # SLA: дедлайн направления = created_at + service.sla_days
+    from datetime import timedelta as _td
+    sla_days_val = int(getattr(service, "sla_days", 14) or 14) if service else 14
+    sla_deadline_val = referral.created_at + _td(days=sla_days_val) if referral.created_at else None
+
     return ReferralResponse(
         id=referral.id,
         from_clinic_id=referral.from_clinic_id,
@@ -339,5 +344,7 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
         from_clinic_name=from_clinic.name if from_clinic else None,
         to_clinic_name=to_clinic.name if to_clinic else None,
         service_name=service.name if service else None,
-        bonus_amount=float(bonus.amount) if bonus else None
+        bonus_amount=float(bonus.amount) if bonus else None,
+        sla_days=sla_days_val,
+        sla_deadline=sla_deadline_val,
     )
