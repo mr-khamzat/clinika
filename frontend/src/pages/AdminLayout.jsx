@@ -1604,65 +1604,124 @@ function ReportsSection({ token }) {
             </div>
             <button type="submit" className="bg-blue-600 text-white rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-blue-700 transition">Применить</button>
           </form>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
             {loadingAdmins ? <div className="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
             : admins.length === 0 ? <div className="p-6 text-center text-gray-400 text-sm">Нет данных</div>
             : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Сотрудник</th>
-                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
-                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
-                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
-                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Бонусы</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                {/* Desktop table */}
+                <div className="admin-table-desktop admin-table-wrap">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                        <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Сотрудник</th>
+                        <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
+                        <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
+                        <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
+                        <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Бонусы</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {admins.map((row, i) => (
+                        <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                          <td className="px-4 py-3 text-gray-800 dark:text-white font-medium">{row.full_name || row.admin_name || '—'}</td>
+                          <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
+                          <td className="px-4 py-3 text-right">{row.referral_count ?? row.total_referrals ?? 0}</td>
+                          <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed_count ?? row.confirmed_referrals ?? 0}</td>
+                          <td className="px-4 py-3 text-right text-blue-600 font-medium">
+                            {row.pending_bonuses != null ? `${row.pending_bonuses} Б` : (row.bonus_total != null ? `${row.bonus_total} Б` : '—')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile cards (≤640px) */}
+                <div className="admin-cards-mobile" style={{ padding: 12 }}>
                   {admins.map((row, i) => (
-                    <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
-                      <td className="px-4 py-3 text-gray-800 dark:text-white font-medium">{row.full_name || row.admin_name || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
-                      <td className="px-4 py-3 text-right">{row.referral_count ?? row.total_referrals ?? 0}</td>
-                      <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed_count ?? row.confirmed_referrals ?? 0}</td>
-                      <td className="px-4 py-3 text-right text-blue-600 font-medium">
-                        {row.pending_bonuses != null ? `${row.pending_bonuses} Б` : (row.bonus_total != null ? `${row.bonus_total} Б` : '—')}
-                      </td>
-                    </tr>
+                    <div key={row.admin_id ?? i} className="admin-row-card">
+                      <div className="admin-row-title">{row.full_name || row.admin_name || '—'}</div>
+                      <div className="admin-row-field">
+                        <span className="admin-row-field-label">Клиника</span>
+                        <span className="admin-row-field-value">{row.clinic_name || row.clinic || '—'}</span>
+                      </div>
+                      <div className="admin-row-field">
+                        <span className="admin-row-field-label">Направлений</span>
+                        <span className="admin-row-field-value">{row.referral_count ?? row.total_referrals ?? 0}</span>
+                      </div>
+                      <div className="admin-row-field">
+                        <span className="admin-row-field-label">Подтверждено</span>
+                        <span className="admin-row-field-value text-green-600 font-medium">{row.confirmed_count ?? row.confirmed_referrals ?? 0}</span>
+                      </div>
+                      <div className="admin-row-field">
+                        <span className="admin-row-field-label">Бонусы</span>
+                        <span className="admin-row-field-value text-blue-600 font-medium">
+                          {row.pending_bonuses != null ? `${row.pending_bonuses} Б` : (row.bonus_total != null ? `${row.bonus_total} Б` : '—')}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              </>
             )}
           </div>
         </div>
       )}
 
       {tab === 'clinics' && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
           {loadingClinics ? <div className="p-6 text-center text-gray-400 text-sm">Загрузка...</div>
           : clinics.length === 0 ? <div className="p-6 text-center text-gray-400 text-sm">Нет данных о потоке</div>
           : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Откуда</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Куда</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
-                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop table */}
+              <div className="admin-table-desktop admin-table-wrap">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Откуда</th>
+                      <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Куда</th>
+                      <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Направлений</th>
+                      <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Подтверждено</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clinics.map((row, i) => (
+                      <tr key={`${row.from_clinic_id}-${row.to_clinic_id}-${i}`}
+                        className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                        <td className="px-4 py-3 text-gray-800 dark:text-white">{row.from_clinic_name || row.from_clinic || '—'}</td>
+                        <td className="px-4 py-3 text-gray-800 dark:text-white">{row.to_clinic_name || row.to_clinic || '—'}</td>
+                        <td className="px-4 py-3 text-right">{row.total ?? row.referral_count ?? 0}</td>
+                        <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed ?? row.confirmed_count ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Mobile cards (≤640px) */}
+              <div className="admin-cards-mobile" style={{ padding: 12 }}>
                 {clinics.map((row, i) => (
-                  <tr key={`${row.from_clinic_id}-${row.to_clinic_id}-${i}`}
-                    className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
-                    <td className="px-4 py-3 text-gray-800 dark:text-white">{row.from_clinic_name || row.from_clinic || '—'}</td>
-                    <td className="px-4 py-3 text-gray-800 dark:text-white">{row.to_clinic_name || row.to_clinic || '—'}</td>
-                    <td className="px-4 py-3 text-right">{row.total ?? row.referral_count ?? 0}</td>
-                    <td className="px-4 py-3 text-right text-green-600 font-medium">{row.confirmed ?? row.confirmed_count ?? 0}</td>
-                  </tr>
+                  <div key={`${row.from_clinic_id}-${row.to_clinic_id}-m-${i}`} className="admin-row-card">
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Откуда</span>
+                      <span className="admin-row-field-value">{row.from_clinic_name || row.from_clinic || '—'}</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Куда</span>
+                      <span className="admin-row-field-value">{row.to_clinic_name || row.to_clinic || '—'}</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Направлений</span>
+                      <span className="admin-row-field-value">{row.total ?? row.referral_count ?? 0}</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Подтверждено</span>
+                      <span className="admin-row-field-value text-green-600 font-medium">{row.confirmed ?? row.confirmed_count ?? 0}</span>
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -1740,61 +1799,113 @@ function BonusesSection({ token }) {
       {loading ? (
         <Spinner />
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">ФИО сотрудника</th>
-                <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
-                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Начислено</th>
-                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Выплачено</th>
-                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">К выплате</th>
-                <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Действие</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
-                    Нет данных
-                  </td>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
+          {/* Desktop table */}
+          <div className="admin-table-desktop admin-table-wrap">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">ФИО сотрудника</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Клиника</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Начислено</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Выплачено</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">К выплате</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 px-4 py-3">Действие</th>
                 </tr>
-              ) : (
-                rows.map((row, i) => {
-                  const accrued = row.bonus_total ?? 0
-                  const paid = row.bonus_paid ?? 0
-                  const pending = row.bonus_pending ?? (accrued - paid)
-                  return (
-                    <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
-                      <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{row.full_name || row.admin_name || '—'}</td>
-                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
-                      <td className="px-4 py-3 text-right text-gray-800 dark:text-white">{accrued} Б</td>
-                      <td className="px-4 py-3 text-right text-green-600 font-medium">{paid} Б</td>
-                      <td className="px-4 py-3 text-right font-semibold text-amber-600">{pending} Б</td>
-                      <td className="px-4 py-3 text-right">
-                        {pending > 0 && (
-                          <button
-                            onClick={async () => {
-                              if (!(await confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`, { okText: 'Выплатить' }))) return
-                              try {
-                                await apiFetch('post', `/manager/bonuses/mark-paid-all/${row.admin_id}`, token)
-                                fetchData()
-                              } catch {
-                                toast('Ошибка при выплате', 'error')
-                              }
-                            }}
-                            className="text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 font-medium transition"
-                          >
-                            Выплатить
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-gray-400 dark:text-gray-500 text-sm">
+                      Нет данных
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((row, i) => {
+                    const accrued = row.bonus_total ?? 0
+                    const paid = row.bonus_paid ?? 0
+                    const pending = row.bonus_pending ?? (accrued - paid)
+                    return (
+                      <tr key={row.admin_id ?? i} className={i % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-900/50'}>
+                        <td className="px-4 py-3 font-medium text-gray-800 dark:text-white">{row.full_name || row.admin_name || '—'}</td>
+                        <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{row.clinic_name || row.clinic || '—'}</td>
+                        <td className="px-4 py-3 text-right text-gray-800 dark:text-white">{accrued} Б</td>
+                        <td className="px-4 py-3 text-right text-green-600 font-medium">{paid} Б</td>
+                        <td className="px-4 py-3 text-right font-semibold text-amber-600">{pending} Б</td>
+                        <td className="px-4 py-3 text-right">
+                          {pending > 0 && (
+                            <button
+                              onClick={async () => {
+                                if (!(await confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`, { okText: 'Выплатить' }))) return
+                                try {
+                                  await apiFetch('post', `/manager/bonuses/mark-paid-all/${row.admin_id}`, token)
+                                  fetchData()
+                                } catch {
+                                  toast('Ошибка при выплате', 'error')
+                                }
+                              }}
+                              className="text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 font-medium transition"
+                            >
+                              Выплатить
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          {/* Mobile cards (≤640px) */}
+          <div className="admin-cards-mobile" style={{ padding: 12 }}>
+            {rows.length === 0 ? (
+              <div className="text-center py-8 text-gray-400 text-sm">Нет данных</div>
+            ) : (
+              rows.map((row, i) => {
+                const accrued = row.bonus_total ?? 0
+                const paid = row.bonus_paid ?? 0
+                const pending = row.bonus_pending ?? (accrued - paid)
+                return (
+                  <div key={row.admin_id ?? i} className="admin-row-card">
+                    <div className="admin-row-title">{row.full_name || row.admin_name || '—'}</div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Клиника</span>
+                      <span className="admin-row-field-value">{row.clinic_name || row.clinic || '—'}</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Начислено</span>
+                      <span className="admin-row-field-value">{accrued} Б</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Выплачено</span>
+                      <span className="admin-row-field-value text-green-600 font-medium">{paid} Б</span>
+                    </div>
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">К выплате</span>
+                      <span className="admin-row-field-value font-semibold text-amber-600">{pending} Б</span>
+                    </div>
+                    {pending > 0 && (
+                      <button
+                        onClick={async () => {
+                          if (!(await confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`, { okText: 'Выплатить' }))) return
+                          try {
+                            await apiFetch('post', `/manager/bonuses/mark-paid-all/${row.admin_id}`, token)
+                            fetchData()
+                          } catch {
+                            toast('Ошибка при выплате', 'error')
+                          }
+                        }}
+                        className="admin-tap-44 w-full mt-2 px-3 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-medium transition"
+                      >
+                        Выплатить {pending} Б
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -4917,7 +5028,8 @@ function AuditSection({ token }) {
 
       {loading ? <Spinner /> : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop table — на мобильном (≤640) скрыто, рендерятся карточки ниже */}
+          <div className="admin-table-desktop admin-table-wrap">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
@@ -5016,12 +5128,57 @@ function AuditSection({ token }) {
               </tbody>
             </table>
           </div>
+          {/* Mobile cards (≤640px) — компактное представление аудит-лога */}
+          <div className="admin-cards-mobile" style={{ padding: 12 }}>
+            {log.length === 0 && (
+              <div className="text-center py-8 text-gray-400 text-sm">Нет записей</div>
+            )}
+            {log.map(e => {
+              const ip = e.ip_address || e.ip
+              const flag = flagFromCountry(e.geo_country)
+              const loc = formatGeoLocation(e)
+              return (
+                <div key={`${e.source || 'audit'}-${e.id}-m`} className="admin-row-card">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
+                      {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
+                      {e.source === 'audit' ? 'аудит' : 'активность'}
+                    </span>
+                  </div>
+                  <div className="admin-row-title">
+                    <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium mr-2">
+                      {e.action}
+                    </span>
+                    <span className="text-xs text-gray-600 dark:text-gray-300">{e.entity_type}{e.entity_id ? ` #${e.entity_id}` : ''}</span>
+                  </div>
+                  <div className="admin-row-field">
+                    <span className="admin-row-field-label">Актор</span>
+                    <span className="admin-row-field-value">{e.actor_name || `ID ${e.actor_id}`}</span>
+                  </div>
+                  <div className="admin-row-field">
+                    <span className="admin-row-field-label">IP</span>
+                    <span className="admin-row-field-value font-mono">
+                      {flag && <span className="mr-1">{flag}</span>}{ip || '—'}
+                    </span>
+                  </div>
+                  {loc && (
+                    <div className="admin-row-field">
+                      <span className="admin-row-field-label">Локация</span>
+                      <span className="admin-row-field-value">{loc}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
           <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-700">
             <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
-              className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">← Назад</button>
+              className="admin-tap-44 text-sm text-[#0097A7] disabled:text-gray-300 font-medium px-3 py-2">← Назад</button>
             <span className="text-xs text-gray-400">Страница {page + 1}</span>
             <button disabled={log.length < LIMIT} onClick={() => setPage(p => p + 1)}
-              className="text-sm text-[#0097A7] disabled:text-gray-300 font-medium">Вперёд →</button>
+              className="admin-tap-44 text-sm text-[#0097A7] disabled:text-gray-300 font-medium px-3 py-2">Вперёд →</button>
           </div>
         </div>
       )}
@@ -5207,10 +5364,11 @@ function BillingSection({ token }) {
         </div>
       )}
 
-      {/* Invoices */}
+      {/* Invoices — desktop table + mobile cards (W3) */}
       {activeTab === 'invoices' && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Desktop table */}
+          <div className="admin-table-desktop admin-table-wrap">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
@@ -5247,6 +5405,40 @@ function BillingSection({ token }) {
                 ))}
               </tbody>
             </table>
+          </div>
+          {/* Mobile cards (≤640px) */}
+          <div className="admin-cards-mobile" style={{ padding: 12 }}>
+            {invoices.length === 0 && (
+              <div className="text-center py-8 text-gray-400 text-sm">Нет счетов</div>
+            )}
+            {invoices.map(inv => (
+              <div key={inv.id} className="admin-row-card">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="font-mono text-xs text-gray-700 dark:text-gray-300 truncate">{inv.invoice_number}</div>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 ${INV_COLORS[inv.status] || 'bg-gray-100 text-gray-600'}`}>{inv.status}</span>
+                </div>
+                <div className="admin-row-field">
+                  <span className="admin-row-field-label">Период</span>
+                  <span className="admin-row-field-value">
+                    {new Date(inv.period_start).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })} — {new Date(inv.period_end).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
+                  </span>
+                </div>
+                <div className="admin-row-field">
+                  <span className="admin-row-field-label">Сумма</span>
+                  <span className="admin-row-field-value font-bold">{(inv.amount).toLocaleString('ru-RU')} ₽</span>
+                </div>
+                <div className="admin-row-field">
+                  <span className="admin-row-field-label">Срок</span>
+                  <span className="admin-row-field-value">{inv.due_date ? new Date(inv.due_date).toLocaleDateString('ru-RU') : '—'}</span>
+                </div>
+                {(inv.status === 'sent' || inv.status === 'overdue') && (
+                  <button onClick={() => { setPayModal(inv); setPayAmount(inv.amount) }}
+                    className="admin-tap-44 w-full mt-2 px-3 py-2.5 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition">
+                    Оплатить
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -7030,13 +7222,14 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const [helpOpen, setHelpOpen]   = useState(false)
   const [branding, setBranding]   = useState(null)
 
-  // ── Sidebar: expanded (≥1024px) → collapsed (768-1023px) → mobile (<768px) ─
-  // Состояние пересчитывается при ресайзе. На мобильном сайдбар открывается
-  // как drawer; при выборе пункта drawer закрывается.
+  // ── Sidebar: expanded (≥1024px) → collapsed (641-1023px) → mobile (≤640px) ─
+  // Mobile-first (W3): на ≤640 sidebar открывается drawer'ом, иконки 44×44
+  // tap-target. Состояние пересчитывается при ресайзе. При выборе пункта
+  // drawer закрывается.
   const [sidebarMode, setSidebarMode] = useState(() => {
     if (typeof window === 'undefined') return 'expanded'
     const w = window.innerWidth
-    if (w < 768) return 'mobile'
+    if (w <= 640) return 'mobile'
     if (w < 1024) return 'collapsed'
     return 'expanded'
   })
@@ -7044,7 +7237,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   useEffect(() => {
     const onResize = () => {
       const w = window.innerWidth
-      if (w < 768) setSidebarMode('mobile')
+      if (w <= 640) setSidebarMode('mobile')
       else if (w < 1024) setSidebarMode('collapsed')
       else setSidebarMode('expanded')
     }
@@ -7470,19 +7663,19 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               zIndex: 20,
             }}
           >
-            {/* Mobile: бургер */}
+            {/* Mobile: бургер (W3: tap-target ≥44px) */}
             {isMobile && (
               <button
                 onClick={() => setDrawerOpen(true)}
-                className="grid place-items-center flex-shrink-0"
+                className="admin-tap-44 grid place-items-center flex-shrink-0"
                 style={{
-                  width: 40, height: 40, borderRadius: 10,
+                  width: 44, height: 44, borderRadius: 10,
                   border: '1px solid var(--border)',
                   background: 'var(--bg-1)', color: 'var(--fg-2)', cursor: 'pointer',
                 }}
                 aria-label="Меню"
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>menu</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>menu</span>
               </button>
             )}
 
@@ -7543,7 +7736,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             {/* Уведомления (бейдж обращений) */}
             <button
               onClick={() => contactsBadge > 0 && handleNav('contacts')}
-              className="grid place-items-center flex-shrink-0 relative"
+              className="admin-tap-44 grid place-items-center flex-shrink-0 relative"
               style={{
                 width: 40, height: 40, borderRadius: 10,
                 background: 'var(--bg-1)', border: '1px solid var(--border)',
@@ -7570,7 +7763,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             {/* Тёмная тема */}
             <button
               onClick={toggleDark}
-              className="grid place-items-center flex-shrink-0"
+              className="admin-tap-44 grid place-items-center flex-shrink-0"
               style={{
                 width: 40, height: 40, borderRadius: 10,
                 background: 'var(--bg-1)', border: '1px solid var(--border)',

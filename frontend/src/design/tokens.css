@@ -132,3 +132,87 @@
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Mobile-first responsive helpers для AdminLayout (W3)
+   ─ Mobile (≤640):  Sidebar → drawer; таблицы → карточки; tap-target ≥44px
+   ─ Tablet (641-1023): Sidebar остаётся (icon-rail 68px); таблицы overflow-x
+   ─ Desktop (≥1024): обычный режим
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* По умолчанию (desktop-first) — карточки скрыты, таблица видна */
+.ks-app .admin-cards-mobile {
+  display: none;
+}
+.ks-app .admin-table-desktop {
+  display: block;
+}
+
+/* Анимация slide-in для мобильного drawer'а сайдбара */
+@keyframes admin-slide-in {
+  from { transform: translateX(-100%); opacity: 0.6; }
+  to   { transform: translateX(0);     opacity: 1; }
+}
+
+/* Карточка строки таблицы для мобильного представления */
+.ks-app .admin-row-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow-sm);
+}
+.ks-app .admin-row-card .admin-row-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  padding: 3px 0;
+}
+.ks-app .admin-row-card .admin-row-field-label {
+  color: var(--fg-3);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.ks-app .admin-row-card .admin-row-field-value {
+  color: var(--fg);
+  text-align: right;
+  word-break: break-word;
+}
+.ks-app .admin-row-card .admin-row-title {
+  font-weight: 600;
+  color: var(--fg);
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+/* Mobile (≤640) */
+@media (max-width: 640px) {
+  /* Tap-target ≥44px для иконок-кнопок */
+  .ks-app .admin-tap-44 {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  /* Любая обёртка с этим классом получает horizontal scroll */
+  .ks-app .admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Если есть пара (table + cards) — показываем cards, прячем table */
+  .ks-app .admin-table-desktop {
+    display: none !important;
+  }
+  .ks-app .admin-cards-mobile {
+    display: block !important;
+  }
+}
+
+/* Tablet (641-1023) — таблицы получают horizontal scroll */
+@media (min-width: 641px) and (max-width: 1023px) {
+  .ks-app .admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
