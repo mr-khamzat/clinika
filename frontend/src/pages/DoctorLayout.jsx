@@ -45,6 +45,7 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  useToast,
 } from '../design'
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
 
@@ -152,15 +153,24 @@ function Hint({ icon, title, subtitle }) {
 function TodayPage({ token, doctorId, doctorInfo }) {
   const [apts, setApts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [reloadTick, setReloadTick] = useState(0)
+  const { toast } = useToast()
 
   useEffect(() => {
     if (!doctorId) { setLoading(false); return }
     const today = new Date().toISOString().slice(0, 10)
+    setLoading(true)
     apiFetch('get', `/appointments?doctor_id=${doctorId}&date=${today}&limit=50`, token)
       .then(r => setApts(Array.isArray(r.data) ? r.data : r.data?.appointments || []))
       .catch(() => setApts([]))
       .finally(() => setLoading(false))
-  }, [token, doctorId])
+  }, [token, doctorId, reloadTick])
+
+  // ===== БЛОК: обновление расписания без перезагрузки страницы =====
+  const handleRefresh = () => {
+    setReloadTick(t => t + 1)
+    toast('Расписание обновлено', 'success', 2500)
+  }
 
   const STATUS = {
     pending:   { l: 'ожидает',     v: 'default' },
@@ -194,7 +204,7 @@ function TodayPage({ token, doctorId, doctorInfo }) {
               : `${done} из ${total} ${pluralize(total, ['приём завершён', 'приёма завершено', 'приёмов завершено'])}${next ? ` · ближайший — ${next.patient_name || '—'}` : ''}`
         }
         actions={
-          <Button variant="secondary" size="sm" leftIcon={<MIcon name="refresh" size={15} />} onClick={() => window.location.reload()}>
+          <Button variant="secondary" size="sm" leftIcon={<MIcon name="refresh" size={15} />} onClick={handleRefresh}>
             обновить
           </Button>
         }
@@ -437,6 +447,7 @@ function AppointmentsPage({ token, doctorId }) {
 function ReferralsPage({ token }) {
   const [refs, setRefs] = useState([])
   const [loading, setLoading] = useState(true)
+  const { toast } = useToast()
 
   useEffect(() => {
     apiFetch('get', '/manager/referrals/?limit=50', token)
@@ -461,7 +472,13 @@ function ReferralsPage({ token }) {
         title="Направления"
         subtitle={`${refs.length} ${pluralize(refs.length, ['направление', 'направления', 'направлений'])} в журнале`}
         actions={
-          <Button variant="secondary" size="sm" leftIcon={<MIcon name="add" size={15} />}>
+          // TODO: открывать <Modal> с формой создания направления (Этап 5+)
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<MIcon name="add" size={15} />}
+            onClick={() => toast('Создание направлений — в разработке', 'info', 3000)}
+          >
             новое направление
           </Button>
         }
@@ -752,14 +769,16 @@ function ChatPage() {
 
 // ─────────────────────────────────────────────────────────────────────
 // NavItem — один пункт боковой навигации
+// minHeight 44px — соблюдаем mobile tap target (WCAG 2.5.5)
 // ─────────────────────────────────────────────────────────────────────
 function NavItem({ item, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2.5 transition-colors"
+      className="flex items-center gap-2.5 transition-colors w-full"
       style={{
-        padding: '8px 10px',
+        padding: '10px 10px',
+        minHeight: 44,
         borderRadius: 8,
         fontSize: 13,
         textAlign: 'left',
@@ -905,7 +924,8 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               onClick={onLogout}
               className="w-full flex items-center gap-2.5 transition-colors hover:opacity-80"
               style={{
-                padding: '8px 10px',
+                padding: '10px 10px',
+                minHeight: 44,
                 borderRadius: 8,
                 fontSize: 12.5,
                 color: 'var(--fg-3)',
@@ -934,13 +954,14 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
           >
             <button
               onClick={() => setSidebarOpen(true)}
-              className="grid place-items-center"
+              aria-label="Открыть меню"
+              className="grid place-items-center flex-shrink-0"
               style={{
-                width: 36, height: 36, borderRadius: 9,
+                width: 44, height: 44, borderRadius: 10,
                 background: 'var(--bg-1)', border: '1px solid var(--border)', color: 'var(--fg-2)',
               }}
             >
-              <MIcon name="menu" size={18} />
+              <MIcon name="menu" size={20} />
             </button>
             <div className="flex-1 min-w-0">
               <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--accent)', textTransform: 'uppercase' }}>
@@ -1024,10 +1045,11 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="grid place-items-center"
-                style={{ width: 32, height: 32, borderRadius: 8, color: 'var(--fg-3)' }}
+                aria-label="Закрыть меню"
+                className="grid place-items-center flex-shrink-0"
+                style={{ width: 44, height: 44, borderRadius: 10, color: 'var(--fg-3)' }}
               >
-                <MIcon name="close" size={18} />
+                <MIcon name="close" size={20} />
               </button>
             </div>
 
@@ -1070,7 +1092,9 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
                 onClick={onLogout}
                 className="w-full flex items-center gap-2.5"
                 style={{
-                  padding: '10px 12px', borderRadius: 9,
+                  padding: '12px 12px',
+                  minHeight: 48,
+                  borderRadius: 9,
                   fontSize: 13, color: 'var(--fg-2)', background: 'var(--bg-2)',
                 }}
               >
