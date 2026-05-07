@@ -30,3 +30,4 @@ export { default as ClinicScopeSelector } from './components/ClinicScopeSelector
 export { default as Skeleton, TableSkeleton } from './components/Skeleton'
 // QuickActions — ряд иконок-действий для карточек (W4 UX-улучшения)
 export { default as QuickActions, buildPatientCardActions } from './components/QuickActions'
+export { default as Breadcrumbs } from "./components/Breadcrumbs"
