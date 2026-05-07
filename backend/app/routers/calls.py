@@ -265,39 +265,8 @@ async def list_call_log(
     return {"items": items, "total": int(total or 0), "limit": limit, "offset": offset}
 
 
-# ───────────────────────────────────────────────────────────────────────────
-# GET /calls/log/{id} — детали звонка
-# ───────────────────────────────────────────────────────────────────────────
-
-@router.get("/log/{call_id}")
-async def get_call(
-    call_id: uuid.UUID,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    row = (await db.execute(select(CallLog).where(CallLog.id == call_id))).scalar_one_or_none()
-    if not row:
-        raise HTTPException(status_code=404, detail="Звонок не найден")
-
-    # Доступ
-    tenant_ids = await _accessible_tenant_ids(db, user)
-    if tenant_ids is not None and row.tenant_id not in (tenant_ids or []):
-        # Если не manager+ — пускаем, только если это свой звонок
-        if not _is_manager_plus(user):
-            if row.caller_id != user.id and row.callee_id != user.id:
-                raise HTTPException(status_code=403, detail="Нет доступа")
-        else:
-            raise HTTPException(status_code=403, detail="Нет доступа")
-    # Обычный сотрудник: только свои
-    if not _is_manager_plus(user):
-        if row.caller_id != user.id and row.callee_id != user.id:
-            raise HTTPException(status_code=403, detail="Нет доступа")
-
-    users = (await db.execute(
-        select(User).where(User.id.in_([row.caller_id, row.callee_id]))
-    )).scalars().all()
-    users_by_id = {u.id: u for u in users}
-    return _row_to_dict(row, users_by_id)
+# Note: статический маршрут /log/export.csv определён ниже до /log/{call_id},
+# чтобы FastAPI не пытался парсить «export.csv» как UUID.
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -442,7 +411,8 @@ _TYPE_RU = {"audio": "Аудио", "video": "Видео"}
 
 
 @router.get("/log/export.csv")
-async def export_call_log_csv(
+async def export_call_log_csv(  # noqa: N802 — статический путь до /log/{id}
+
     date_from: Optional[datetime] = Query(None, alias="from"),
     date_to: Optional[datetime]   = Query(None, alias="to"),
     clinic_id: Optional[uuid.UUID] = Query(None),
@@ -496,3 +466,40 @@ async def export_call_log_csv(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# GET /calls/log/{id} — детали звонка
+# Зарегистрирован ПОСЛЕ /log/export.csv, чтобы FastAPI выбирал статический
+# путь до dynamic-параметра UUID.
+# ───────────────────────────────────────────────────────────────────────────
+
+@router.get("/log/{call_id}")
+async def get_call(
+    call_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row = (await db.execute(select(CallLog).where(CallLog.id == call_id))).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Звонок не найден")
+
+    # Доступ
+    tenant_ids = await _accessible_tenant_ids(db, user)
+    if tenant_ids is not None and row.tenant_id not in (tenant_ids or []):
+        # Если не manager+ — пускаем, только если это свой звонок
+        if not _is_manager_plus(user):
+            if row.caller_id != user.id and row.callee_id != user.id:
+                raise HTTPException(status_code=403, detail="Нет доступа")
+        else:
+            raise HTTPException(status_code=403, detail="Нет доступа")
+    # Обычный сотрудник: только свои
+    if not _is_manager_plus(user):
+        if row.caller_id != user.id and row.callee_id != user.id:
+            raise HTTPException(status_code=403, detail="Нет доступа")
+
+    users = (await db.execute(
+        select(User).where(User.id.in_([row.caller_id, row.callee_id]))
+    )).scalars().all()
+    users_by_id = {u.id: u for u in users}
+    return _row_to_dict(row, users_by_id)
