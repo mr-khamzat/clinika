@@ -6,7 +6,74 @@ import SupportChat from './SupportChat'
 import CallWidget from './CallWidget'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
-import { useConfirm } from '../design'
+import { useConfirm, useToast } from '../design'
+
+// ─── Push helpers (Этап 10 ROADMAP) ────────────────────────────────────────
+// Регистрируем service worker и подписываем устройство сотрудника на VAPID
+// push. На сервере /push/subscribe-user привязывает endpoint к текущему юзеру.
+async function registerStaffSW() {
+  if (!('serviceWorker' in navigator)) return null
+  try {
+    const reg = await navigator.serviceWorker.register('/' + SLUG + '/sw.js', { scope: '/' + SLUG + '/' })
+    return reg
+  } catch (e) {
+    console.warn('[push] SW регистрация не удалась', e)
+    return null
+  }
+}
+
+async function subscribeStaffPush() {
+  // Возвращает: 'ok' | 'denied' | 'unsupported' | 'no_vapid' | 'error'
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return 'unsupported'
+  if (Notification.permission === 'denied') return 'denied'
+  const perm = await Notification.requestPermission()
+  if (perm !== 'granted') return 'denied'
+
+  const reg = await navigator.serviceWorker.ready
+  // 1. Запрашиваем публичный VAPID ключ с бэкенда
+  let publicKey = ''
+  try {
+    const r = await fetch(API_BASE + '/push/vapid-key')
+    const j = await r.json()
+    publicKey = j.public_key || ''
+  } catch {
+    return 'no_vapid'
+  }
+  if (!publicKey) return 'no_vapid'
+
+  // 2. Конвертируем base64-urlsafe ключ в Uint8Array
+  const b64 = publicKey.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4)
+  const raw = atob(padded)
+  const key = new Uint8Array([...raw].map(c => c.charCodeAt(0)))
+
+  // 3. Подписываемся через PushManager
+  let sub
+  try {
+    sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key })
+  } catch (e) {
+    console.warn('[push] subscribe failed', e)
+    return 'error'
+  }
+  const s = sub.toJSON()
+
+  // 4. Отправляем подписку на бэкенд (требует Authorization).
+  // Ключ токена в localStorage именован как 'clinika_token_<slug>' (см. store/auth.js).
+  const token = localStorage.getItem('clinika_token_' + SLUG)
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = 'Bearer ' + token
+    const r = await fetch(API_BASE + '/push/subscribe-user', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ endpoint: s.endpoint, p256dh: s.keys.p256dh, auth: s.keys.auth }),
+    })
+    if (!r.ok) return 'error'
+    return 'ok'
+  } catch {
+    return 'error'
+  }
+}
 
 export const ThemeContext = createContext({ isDark: false, toggleTheme: () => {} })
 export const HelpContext = createContext({ openHelp: () => {} })
@@ -30,9 +97,48 @@ export default function Layout() {
     try { return localStorage.getItem('theme') === 'dark' } catch { return false }
   })
   const [helpOpen, setHelpOpen] = useState(false)
+  // Состояние push-подписки сотрудника (granted / denied / null=нужно спросить)
+  const [pushState, setPushState] = useState(() => {
+    try {
+      if (typeof Notification === 'undefined') return 'unsupported'
+      return Notification.permission // 'default' | 'granted' | 'denied'
+    } catch { return 'unsupported' }
+  })
+  const [pushBusy, setPushBusy] = useState(false)
   const { user, logout } = useAuthStore()
   // Замена window.confirm на Modal-диалог из design-system
   const { confirm, ConfirmHost } = useConfirm()
+  // Toast — используется вместо alert (правило проекта)
+  const { toast } = useToast()
+
+  // ─── Регистрируем SW заранее, чтобы потом быстро подписаться ─────────────
+  useEffect(() => {
+    registerStaffSW()
+  }, [])
+
+  // Кнопка «Включить уведомления» — обработчик
+  const handleEnablePush = async () => {
+    if (pushBusy) return
+    setPushBusy(true)
+    try {
+      const result = await subscribeStaffPush()
+      if (result === 'ok') {
+        setPushState('granted')
+        toast('Уведомления включены', 'success')
+      } else if (result === 'denied') {
+        setPushState('denied')
+        toast('Разрешение на уведомления отклонено', 'error')
+      } else if (result === 'no_vapid') {
+        toast('Push не настроен на сервере', 'warn')
+      } else if (result === 'unsupported') {
+        toast('Браузер не поддерживает push', 'warn')
+      } else {
+        toast('Не удалось подписаться', 'error')
+      }
+    } finally {
+      setPushBusy(false)
+    }
+  }
 
   useEffect(() => {
     if (isDark) {
@@ -84,8 +190,21 @@ export default function Layout() {
               </div>
             </div>
 
-            {/* Правая часть — тема, справка, выйти */}
+            {/* Правая часть — push, тема, справка, выйти */}
             <div className="flex items-center gap-1">
+              {/* Включить уведомления — показывается только если permission != granted */}
+              {pushState !== 'granted' && pushState !== 'unsupported' && (
+                <button
+                  onClick={handleEnablePush}
+                  disabled={pushBusy}
+                  className="w-9 h-9 flex items-center justify-center text-[#727783] hover:text-[#0097A7] hover:bg-[#eceef0] dark:hover:bg-gray-800 rounded-full transition disabled:opacity-50"
+                  title={pushState === 'denied' ? 'Уведомления заблокированы в браузере' : 'Включить уведомления'}
+                >
+                  <span className="material-symbols-outlined text-xl">
+                    {pushState === 'denied' ? 'notifications_off' : 'notifications_active'}
+                  </span>
+                </button>
+              )}
               <button
                 onClick={toggleTheme}
                 className="w-9 h-9 flex items-center justify-center text-[#727783] hover:text-[#191c1e] dark:hover:text-white hover:bg-[#eceef0] dark:hover:bg-gray-800 rounded-full transition"

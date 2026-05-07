@@ -1,5 +1,11 @@
 """
 Web Push (VAPID) service.
+
+Источник ключей VAPID (приоритет):
+  1. settings.vapid_public_key + settings.vapid_private_key (из .env)
+  2. Таблица vapid_keys в БД (автогенерация при первом запуске)
+Если ни ключи в .env, ни pywebpush недоступны — push отключается тихо
+(send_push возвращает False, без 500).
 """
 import json
 import logging
@@ -8,9 +14,16 @@ import base64
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 _vapid_cache: dict | None = None
-VAPID_CLAIMS = {"sub": "mailto:admin@clinika.app"}
+
+
+def _vapid_claims() -> dict:
+    """sub-клейм берём из настроек (vapid_subject), либо дефолтный mailto."""
+    sub = (settings.vapid_subject or "").strip() or "mailto:admin@clinika.app"
+    return {"sub": sub}
 
 
 def _generate_vapid_keys() -> tuple[str, str]:
@@ -29,13 +42,23 @@ def _generate_vapid_keys() -> tuple[str, str]:
 
 
 async def _get_or_create_vapid(db: AsyncSession) -> dict:
+    """Возвращает действующую пару VAPID ключей (env приоритетнее БД)."""
     global _vapid_cache
     if _vapid_cache:
         return _vapid_cache
+    # 1. Из .env (если оба заданы)
+    env_pub = (settings.vapid_public_key or "").strip()
+    env_priv = (settings.vapid_private_key or "").strip()
+    if env_pub and env_priv:
+        _vapid_cache = {"public_key": env_pub, "private_key": env_priv}
+        logger.info("VAPID: ключи загружены из .env")
+        return _vapid_cache
+    # 2. Из БД
     row = (await db.execute(text("SELECT public_key, private_key FROM vapid_keys LIMIT 1"))).fetchone()
     if row:
         _vapid_cache = {"public_key": row[0], "private_key": row[1]}
         return _vapid_cache
+    # 3. Автогенерация
     pub, priv = _generate_vapid_keys()
     await db.execute(
         text("INSERT INTO vapid_keys (public_key, private_key) VALUES (:pub, :priv)"),
@@ -43,6 +66,7 @@ async def _get_or_create_vapid(db: AsyncSession) -> dict:
     )
     await db.commit()
     _vapid_cache = {"public_key": pub, "private_key": priv}
+    logger.info("VAPID: ключи автоматически сгенерированы и сохранены в БД")
     return _vapid_cache
 
 
@@ -71,7 +95,7 @@ async def send_push(subscription: dict, title: str, body: str, data: dict | None
             subscription_info=sub_info,
             data=payload,
             vapid_private_key=keys["private_key"],
-            vapid_claims=VAPID_CLAIMS,
+            vapid_claims=_vapid_claims(),
         ))
         return True
     except Exception as e:

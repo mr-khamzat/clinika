@@ -121,7 +121,7 @@ async def onboard_tenant(
 
     await db.commit()
 
-    return {
+    result = {
         "tenant_id": str(tenant.id),
         "tenant_name": name,
         "slug": slug,
@@ -132,3 +132,31 @@ async def onboard_tenant(
         "url": f"https://клиниксеть.рф/{slug}",
         "admin_panel": f"https://клиниксеть.рф/{slug}/admin",
     }
+
+    # ─── Email-уведомление франчайзи (Этап 10 ROADMAP) ──────────────────────
+    # Отправляем доступы только если admin_username похож на email
+    # (содержит @). SMTP не настроен → тихо ничего не делает.
+    try:
+        if "@" in admin_username:
+            from app.services.email_service import schedule_email
+            subject = f"Добро пожаловать в КлиникаСеть — {name}"
+            body_html = f"""
+            <p>Здравствуйте, {admin_name}!</p>
+            <p>Для вашей сети «<b>{name}</b>» создан аккаунт в платформе КлиникаСеть.</p>
+            <ul>
+              <li><b>Логин:</b> {admin_username}</li>
+              <li><b>Пароль:</b> {raw_password}</li>
+              <li><b>Тариф:</b> {plan} (trial до {trial_until.isoformat()})</li>
+              <li><b>URL:</b> <a href=\"{result['url']}\">{result['url']}</a></li>
+              <li><b>Админ-панель:</b> <a href=\"{result['admin_panel']}\">{result['admin_panel']}</a></li>
+            </ul>
+            <p>Срок trial — 14 дней. По окончании потребуется выбор тарифа.</p>
+            <p>—<br/>Команда КлиникаСеть</p>
+            """
+            schedule_email(admin_username, subject, body_html=body_html)
+    except Exception:
+        # Любая проблема email не должна валить онбординг
+        import logging as _logging
+        _logging.getLogger(__name__).exception("[ONBOARDING] email уведомление не отправлено")
+
+    return result

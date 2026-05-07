@@ -368,4 +368,26 @@ async def register_by_invite(data: InviteRegisterRequest, request: Request, db: 
     await db.commit()
     await db.refresh(user)
 
+    # ─── Email-уведомление о регистрации (Этап 10 ROADMAP) ──────────────────
+    # Отправляем приветственное письмо если у пользователя задан email
+    # (telegram-онбординг может позже привязать email — сюда не попадаем).
+    try:
+        if user.email:
+            from app.services.email_service import schedule_email
+            schedule_email(
+                user.email,
+                "Добро пожаловать в КлиникаСеть",
+                body_html=(
+                    f"<p>Здравствуйте, {user.full_name}!</p>"
+                    f"<p>Ваш аккаунт в КлиникаСеть успешно создан.</p>"
+                    f"<ul>"
+                    f"<li>Логин: <b>{user.username}</b></li>"
+                    f"<li>Роль: {user.role.value if hasattr(user.role,'value') else user.role}</li>"
+                    f"</ul>"
+                    f"<p>Если вы не регистрировались — сообщите администратору клиники.</p>"
+                ),
+            )
+    except Exception:
+        logger.exception("[REGISTER] email уведомление не отправлено")
+
     return await _issue_tokens(user, request, db)

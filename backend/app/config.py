@@ -73,6 +73,28 @@ class Settings(BaseSettings):
     turn_secret: str = ""
     turn_ttl: int = 3600
 
+    # ===== БЛОК: VAPID ключи Web Push (Этап 10 ROADMAP) =====
+    # Если оба пустые — ключи будут автоматически сгенерированы и сохранены в БД
+    # (см. app/services/push_service.py). Для контролируемого окружения
+    # рекомендуется задать их вручную через .env (одна пара на все деплои).
+    # vapid_public_key  — base64-urlsafe (без padding), uncompressed P-256 (~88 chars)
+    # vapid_private_key — base64-urlsafe (без padding), DER PKCS#8
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:admin@клиниксеть.рф"
+
+    # ===== БЛОК: SMTP для email-уведомлений (Этап 10 ROADMAP) =====
+    # Если smtp_host пустой — email_service.send_email тихо логирует и ничего не делает.
+    # Поддерживается STARTTLS (порт 587) или SSL (порт 465 + smtp_use_tls=True+smtp_starttls=False).
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "noreply@клиниксеть.рф"
+    smtp_from_name: str = "КлиникаСеть"
+    smtp_use_tls: bool = True       # включить TLS (STARTTLS либо implicit SSL)
+    smtp_starttls: bool = True      # True = STARTTLS (587), False = implicit SSL (465)
+
     class Config:
         env_file = ".env"
 
