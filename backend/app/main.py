@@ -74,6 +74,7 @@ from app.routers.prescriptions import router as prescriptions_router
 from app.routers.vitals import router as vitals_router
 from app.routers.loyalty import router as loyalty_router
 from app.routers.permissions import router as permissions_router
+from app.routers.ltv import router as ltv_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -105,6 +106,51 @@ async def run_auto_confirm_job():
 async def _run_auto_confirm():
     from app.services.auto_confirm import run_auto_confirm
     return await run_auto_confirm()
+
+async def run_ltv_job():
+    """
+    APScheduler: ежедневно в 04:00 UTC пересчитывает LTV-снапшоты для всех
+    тенантов с активной подпиской ltv_pro. Идёт по каждой клинике тенанта
+    (compute_ltv_for_clinic с clinic_id=None — обработает все).
+    """
+    import logging
+    from sqlalchemy import select
+    from app.database import AsyncSessionLocal
+    from app.models.commercial import ModuleStatus, TenantModuleSubscription
+    from app.models.tenant import Tenant
+    from app.services.ltv_service import compute_ltv_for_clinic
+
+    logger = logging.getLogger("ltv_recompute")
+    try:
+        async with AsyncSessionLocal() as db:
+            subs = (await db.execute(
+                select(TenantModuleSubscription).where(
+                    TenantModuleSubscription.module_key == "ltv_pro",
+                    TenantModuleSubscription.status.in_([
+                        ModuleStatus.ACTIVE, ModuleStatus.TRIAL, ModuleStatus.GRACE,
+                    ]),
+                )
+            )).scalars().all()
+
+            total_updated = 0
+            for sub in subs:
+                t = (await db.execute(
+                    select(Tenant).where(Tenant.id == sub.tenant_id, Tenant.is_active == True)
+                )).scalar_one_or_none()
+                if not t:
+                    continue
+                try:
+                    res = await compute_ltv_for_clinic(db, t, clinic_id=None)
+                    total_updated += int(res.get("updated", 0))
+                    logger.info("ltv: tenant=%s обновлено снапшотов=%s", t.slug, res.get("updated", 0))
+                except Exception as e:
+                    logger.warning("ltv: tenant=%s ошибка пересчёта: %s", t.slug, e)
+
+            if total_updated:
+                logger.info("ltv: всего обновлено снапшотов=%s", total_updated)
+    except Exception as e:
+        logger.error("run_ltv_job: %s", e)
+
 
 async def expire_referrals_job():
     """APScheduler: просрочка направлений (каждый час)."""
@@ -548,6 +594,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
     # Гео-IP: еженедельное обновление dbip-city-lite (понедельник 03:00 UTC)
     scheduler.add_job(geoip_update_job, 'cron', day_of_week='mon', hour=3, minute=0, id='geoip_update', replace_existing=True)
+    # LTV-аналитика: ежедневный пересчёт снапшотов в 04:00 UTC
+    scheduler.add_job(run_ltv_job, 'cron', hour=4, minute=0, id='ltv_recompute', replace_existing=True)
     scheduler.start()
     # При первом запуске (если mmdb ещё нет) — скачать в фоне, чтобы не блокировать старт
     asyncio.create_task(geoip_initial_download_if_missing())
@@ -940,6 +988,7 @@ app.include_router(prescriptions_router)
 app.include_router(vitals_router)
 app.include_router(loyalty_router)
 app.include_router(permissions_router)
+app.include_router(ltv_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

@@ -6,10 +6,13 @@
  * Бизнес-логика и API не изменены.
  * ========================================
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { getAnalytics } from '../api'
-import { Card, Chip, KpiCard, KpiRow, EmptyState } from '../design'
+import { Card, Chip, KpiCard, KpiRow, EmptyState, Tabs } from '../design'
 import ManagerShell from './_ManagerShell'
+
+// Ленивая загрузка LTV-секции (платный модуль ltv_pro)
+const LtvAnalyticsSection = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
 
 function fmt(n) { return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—' }
 
@@ -77,14 +80,17 @@ export default function ManagerAnalytics() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
+  // Активная вкладка верхнего уровня: 'overview' | 'ltv'
+  const [tab, setTab]         = useState('overview')
 
   useEffect(() => {
+    if (tab !== 'overview') return
     setLoading(true)
     getAnalytics()
       .then(r => setData(r.data))
       .catch(() => setError('Ошибка загрузки аналитики'))
       .finally(() => setLoading(false))
-  }, [])
+  }, [tab])
 
   const conv      = data?.conversion_rate ?? 0
   const thisMonth = data?.this_month ?? {}
@@ -99,7 +105,31 @@ export default function ManagerAnalytics() {
       subtitle="Конверсия, динамика, сравнение клиник"
       icon="bar_chart"
     >
-      {error && (
+      {/* ─── Переключатель верхнего уровня: Аналитика | LTV ─── */}
+      <div className="mb-4">
+        <Tabs
+          items={[
+            { id: 'overview', label: 'Аналитика' },
+            { id: 'ltv', label: 'LTV' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
+      {tab === 'ltv' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <LtvAnalyticsSection />
+        </Suspense>
+      )}
+
+      {tab === 'overview' && error && (
         <div
           className="mb-4 rounded-xl p-3"
           style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
@@ -108,7 +138,7 @@ export default function ManagerAnalytics() {
         </div>
       )}
 
-      {loading ? (
+      {tab === 'overview' && (loading ? (
         <Card>
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
@@ -329,7 +359,7 @@ export default function ManagerAnalytics() {
             )}
           </Card>
         </>
-      )}
+      ))}
     </ManagerShell>
   )
 }

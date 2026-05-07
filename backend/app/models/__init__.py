@@ -88,3 +88,6 @@ from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction, LoyaltyTier, 
 
 # RBAC как данные (Этап 8 ROADMAP) — overrides матрицы прав на уровне тенанта
 from app.models.permission_override import TenantPermissionOverride
+
+# LTV-аналитика (модуль ltv_pro) — снапшоты пациентов
+from app.models.ltv import PatientLtvSnapshot

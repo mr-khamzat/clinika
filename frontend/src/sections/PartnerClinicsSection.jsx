@@ -288,6 +288,59 @@ export default function PartnerClinicsSection({ adminToken }) {
   // payouts: { [clinic_id]: {confirmed_referrals, total_amount, ...} }
   const [payouts, setPayouts] = useState({})
   const [editing, setEditing] = useState(null)
+  // Состояние подписки модуля ltv_pro по тенантам: { [tenant_id]: bool }
+  const [ltvByTenant, setLtvByTenant] = useState({})
+  const [enablingLtv, setEnablingLtv] = useState({}) // { [tenant_id]: true }
+
+  // Подгружаем подписки на ltv_pro для всех видимых тенантов (только super_admin
+  // имеет доступ к /admin/tenants/{id}/modules; для franchise-owner — пропускаем).
+  const loadLtvForTenants = async (tenantIds) => {
+    if (!tenantIds.length) return
+    try {
+      const results = await Promise.all(tenantIds.map(async (tid) => {
+        try {
+          const r = await axios.get(
+            `${API_BASE}/admin/tenants/${tid}/modules`,
+            { headers: authH(adminToken) },
+          )
+          const items = Array.isArray(r.data) ? r.data : []
+          const sub = items.find(x => x.module?.key === 'ltv_pro')?.subscription
+          const active = !!sub && ['active', 'trial', 'grace'].includes(sub.status)
+          return [tid, active]
+        } catch {
+          return [tid, false]
+        }
+      }))
+      const map = {}
+      for (const [tid, val] of results) map[tid] = val
+      setLtvByTenant(prev => ({ ...prev, ...map }))
+    } catch { /* ignore */ }
+  }
+
+  // Включить ltv_pro на 14 дней пробного периода
+  const enableLtvForTenant = async (tenantId, tenantName) => {
+    const ok = await confirm({
+      title: 'Подключить LTV-аналитику?',
+      message: `Тенант: ${tenantName}. Будет создана подписка ltv_pro с пробным периодом 14 дней.`,
+      confirmText: 'Подключить',
+    })
+    if (!ok) return
+    setEnablingLtv(s => ({ ...s, [tenantId]: true }))
+    try {
+      await axios.post(
+        `${API_BASE}/admin/tenants/${tenantId}/modules/ltv_pro/enable`,
+        { billing_cycle: 'monthly', trial_days: 14 },
+        { headers: authH(adminToken) },
+      )
+      toast?.success?.('LTV-аналитика подключена (trial 14 дней)')
+      setLtvByTenant(prev => ({ ...prev, [tenantId]: true }))
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e.message
+      toast?.error?.('Ошибка подключения: ' + msg)
+    } finally {
+      setEnablingLtv(s => ({ ...s, [tenantId]: false }))
+    }
+  }
 
   const reload = async () => {
     setLoading(true)
@@ -334,6 +387,11 @@ export default function PartnerClinicsSection({ adminToken }) {
         }
       }
     })()
+    // Параллельно подгружаем статусы ltv_pro по уникальным тенантам
+    const uniqueTenants = Array.from(new Set(
+      partners.map(p => p.tenant_id).filter(Boolean)
+    ))
+    loadLtvForTenants(uniqueTenants)
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partners])
@@ -463,6 +521,20 @@ export default function PartnerClinicsSection({ adminToken }) {
                           leftIcon={<Icon name="edit" size={14} />}
                           onClick={() => setEditing(p)}
                         >Контракт</Button>
+                        {/* ── Кнопка LTV-аналитики ── */}
+                        {p.tenant_id && (ltvByTenant[p.tenant_id]
+                          ? <Button
+                              variant="ghost" size="sm"
+                              leftIcon={<Icon name="check_circle" size={14} />}
+                              disabled
+                            >LTV подключено</Button>
+                          : <Button
+                              variant="ghost" size="sm"
+                              leftIcon={<Icon name="insights" size={14} />}
+                              onClick={() => enableLtvForTenant(p.tenant_id, p.tenant_name || p.name)}
+                              disabled={!!enablingLtv[p.tenant_id]}
+                            >{enablingLtv[p.tenant_id] ? 'Подключение…' : 'LTV-аналитика'}</Button>
+                        )}
                         {!isTerm && (isPaused
                           ? <Button
                               variant="ghost" size="sm"
