@@ -1,4 +1,7 @@
 """
+DEPRECATED: используйте `python -m scripts.seed_all --wiki`.
+Скрипт оставлен для совместимости с docker-командами в существующих ENV/scripts.
+
 Сид Wiki-страниц из markdown-файлов в таблицу wiki_pages.
 
 Читает все .md файлы из директории wiki_content/ и метаданные

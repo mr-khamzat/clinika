@@ -1,4 +1,7 @@
 """
+DEPRECATED: используйте `python -m scripts.seed_all --payments`.
+Скрипт оставлен для совместимости с docker-командами в существующих ENV/scripts.
+
 Seed модулей online_payments_pro и fiscal_54fz_pro в каталог commercial_modules
 (идемпотентно — ON CONFLICT DO NOTHING).
 

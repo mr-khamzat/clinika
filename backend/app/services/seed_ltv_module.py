@@ -1,4 +1,7 @@
 """
+DEPRECATED: используйте `python -m scripts.seed_all --ltv`.
+Скрипт оставлен для совместимости с docker-командами в существующих ENV/scripts.
+
 Seed модуля ltv_pro в каталог commercial_modules (идемпотентно).
 
 Запуск:

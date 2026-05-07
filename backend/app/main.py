@@ -32,7 +32,7 @@ from app.routers import auth, referrals, bonuses, clinics, admins, integrations
 from app.routers.manager import router as manager_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.tenant import router as tenant_router
-from app.routers.plugins import router as plugins_router
+# plugins_router удалён — старая plugin_*-система выпилена (заменена commercial_modules)
 from app.routers.modules import router as modules_router
 from app.routers.geo import router as geo_router
 from app.routers.scheduling import router as scheduling_router
@@ -957,7 +957,7 @@ app.include_router(ai_knowledge_router)
 app.include_router(portal_router)
 app.include_router(monitoring_router)
 app.include_router(tenant_router)
-app.include_router(plugins_router)
+# plugins_router удалён — старая plugin_*-система выпилена (заменена commercial_modules)
 app.include_router(modules_router)
 app.include_router(geo_router)
 app.include_router(scheduling_router)

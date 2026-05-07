@@ -300,7 +300,7 @@ from app.models.billing import TenantPluginSubscription, PluginSubStatus
 from app.models.billing_plan import TenantPlan, TenantPricingRules
 from app.models.billing_ledger import BillingLedger, EntryType, Direction
 from app.models.advertising import Ad, AdEvent, AdStatus, AdType, PricingModel, AdEventType
-from app.models.plugin import PluginFeature
+# from app.models.plugin import PluginFeature — удалена legacy plugin_*-система
 
 
 # ── TenantPlan ────────────────────────────────────────────────────────────────
@@ -511,94 +511,10 @@ async def get_active_plugin_subscription(
     return result.scalar_one_or_none()
 
 
-async def enable_plugin(
-    db: AsyncSession,
-    tenant_id: uuid.UUID,
-    feature_key: str,
-    billing_cycle: str = "monthly",
-    trial_days: int = 7,
-) -> TenantPluginSubscription:
-    """
-    Включить платный плагин для тенанта.
-
-    Логика:
-    1. Идемпотентность: если уже active/trial → возвращаем существующую
-    2. Проверяем что фича платная и существует в каталоге
-    3. trial_days>0 → создаём trial (нет списания), иначе сразу charge+split
-
-    Валидация:
-    - Нельзя включить бесплатную фичу (для неё TenantPluginFeature)
-    - UniqueConstraint гарантирует одну запись per (tenant, feature_key)
-    """
-    from fastapi import HTTPException
-
-    # Идемпотентность
-    existing = await get_active_plugin_subscription(db, tenant_id, feature_key)
-    if existing:
-        return existing
-
-    # Проверяем каталог
-    feat_result = await db.execute(
-        select(PluginFeature).where(PluginFeature.key == feature_key)
-    )
-    feature = feat_result.scalar_one_or_none()
-    if feature is None:
-        raise HTTPException(status_code=404, detail=f"Фича плагина не найдена: {feature_key}")
-    if not feature.is_paid:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Фича {feature_key} бесплатна — включается через настройки модулей"
-        )
-
-    price = feature.price_monthly
-    now = datetime.utcnow()
-    trial_ends = now + timedelta(days=trial_days) if trial_days > 0 else None
-    expires    = now + timedelta(days=30) if trial_days == 0 else None
-
-    plugin_sub = TenantPluginSubscription(
-        tenant_id=tenant_id,
-        feature_key=feature_key,
-        status=PluginSubStatus.TRIAL if trial_days > 0 else PluginSubStatus.ACTIVE,
-        billing_cycle=billing_cycle,
-        price=price,
-        trial_ends_at=trial_ends,
-        expires_at=expires,
-        last_charged_at=None if trial_days > 0 else now,
-    )
-    db.add(plugin_sub)
-    await db.flush()
-
-    if trial_days > 0:
-        # Trial — нулевая запись для аудита (сумма=0, тип=trial)
-        await record_billing_ledger(
-            db,
-            tenant_id=tenant_id,
-            entry_type=EntryType.SUBSCRIPTION_TRIAL,
-            direction=Direction.CREDIT,
-            amount=Decimal("0"),
-            reference_id=plugin_sub.id,
-            reference_type="plugin_subscription",
-            description=f"Trial {feature_key} ({trial_days} дней)",
-            meta={"feature_key": feature_key, "trial_days": trial_days},
-        )
-    else:
-        # Сразу платим и делаем split
-        charge = await record_billing_ledger(
-            db,
-            tenant_id=tenant_id,
-            entry_type=EntryType.PLUGIN_CHARGE,
-            direction=Direction.DEBIT,
-            amount=price,
-            reference_id=plugin_sub.id,
-            reference_type="plugin_subscription",
-            description=f"Активация плагина {feature_key}",
-        )
-        await _apply_revenue_split(
-            db, tenant_id=tenant_id, gross_amount=price,
-            source_entry=charge, split_type="plugin"
-        )
-
-    return plugin_sub
+# enable_plugin() удалена вместе с legacy plugin_*-системой.
+# Включение платных модулей теперь идёт через commercial_service / роутер /commercial.
+# Cron-задача renew_plugins_job (main.py) использует только TenantPluginSubscription
+# и charge_plugin_subscription ниже — без обращения к таблице plugin_features.
 
 
 async def charge_plugin_subscription(

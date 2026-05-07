@@ -39,13 +39,13 @@ import ManagerSettings from './pages/ManagerSettings'
 import ManagerInvoices from './pages/ManagerInvoices'
 import ManagerAppointments from './pages/ManagerAppointments'
 import ClinicSchedules from './pages/ClinicSchedules'
-import AdminPanel from './pages/AdminPanel'
+// AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
 import { PLATFORM_MODE } from './config'
 import PatientCabinet from './pages/PatientCabinet'
 import OnlineBooking from './pages/OnlineBooking'
 import ClinicPage from './pages/ClinicPage'
-import DesignPreview from './pages/DesignPreview'
+// DesignPreview (v1) удалён — используем только DesignPreview2 (актуальный)
 import DesignPreview2 from './pages/DesignPreview2'
 // ─── Новый этап: дизайн-токены + базовые компоненты (Этап 4 ROADMAP) ───
 // Lazy: бандл с компонентами и tokens.css не грузится для обычных пользователей.
@@ -185,7 +185,7 @@ function MiniApp() {
           <Route path="qr/:id" element={<QRScreen />} />
 
           {/* ─── Превью дизайн-токенов (публичный пилот, без auth) ─── */}
-          <Route path="design-preview" element={<DesignPreview />} />
+          {/* design-preview (v1) удалён, оставлен только актуальный design-preview-2 */}
           <Route path="design-preview-2" element={<DesignPreview2 />} />
 
           {/* ─── Витрина дизайн-системы (Этап 4): только super_admin ─── */}
@@ -224,7 +224,7 @@ function MiniApp() {
               <Route path="manager/recruit-doctors" element={<ManagerRecruitDoctors />} />
               <Route path="manager/invoices" element={<ManagerInvoices />} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
-              <Route path="admin-panel" element={<AdminPanel />} />
+              {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}
 
@@ -302,11 +302,8 @@ function AppRouter() {
     return <ClinicPage />
   }
 
-  // Превью премиум-палитры (пилот, без auth) — /{slug}/design-preview
-  if (SLUG && (path === '/' + SLUG + '/design-preview' || path.startsWith('/' + SLUG + '/design-preview/'))) {
-    return <DesignPreview />
-  }
-  // Второй бандл дизайна — /{slug}/design-preview-2 (HTML-прототипы из Claude Design)
+  // Бандл актуального дизайна — /{slug}/design-preview-2 (HTML-прототипы из Claude Design)
+  // (старый /design-preview удалён вместе с DesignPreview.jsx)
   if (SLUG && (path === '/' + SLUG + '/design-preview-2' || path.startsWith('/' + SLUG + '/design-preview-2/'))) {
     return <DesignPreview2 />
   }
