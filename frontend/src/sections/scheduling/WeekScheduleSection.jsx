@@ -14,21 +14,27 @@
  *   POST /appointments                                    — создать запись
  *   PATCH /appointments/{id}                              — перенести (date/time)
  *   PATCH /appointments/{id}/status                       — confirm/cancel/complete/no_show
+ *
+ * Миграция (#29): шапка / KPI / модалы → дизайн-система (Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal).
+ * TODO: сама сетка-таблица недели (WeekGrid) и список одного дня (DayList) оставлены в нативной разметке —
+ *       они слишком кастомные (drag-and-drop, position-aware grid, гибридная адаптивность).
+ *       Их можно мигрировать поэтапно отдельным PR.
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../../config'
+import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal } from '../../design'
 
 const authH = t => ({ Authorization: `Bearer ${t}` })
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const STATUS_INFO = {
-  pending:   { l: 'Ожидает',     bg: 'rgba(245,158,11,0.10)', c: '#b45309', dot: '#f59e0b' },
-  confirmed: { l: 'Подтверждён', bg: 'rgba(0,151,167,0.12)',  c: '#0e7490', dot: '#0097a7' },
-  completed: { l: 'Завершён',    bg: 'rgba(100,116,139,0.10)', c: '#475569', dot: '#94a3b8' },
-  cancelled: { l: 'Отменён',     bg: 'rgba(244,63,94,0.08)',   c: '#9f1239', dot: '#f43f5e' },
-  no_show:   { l: 'Не пришёл',   bg: 'rgba(245,158,11,0.08)',  c: '#92400e', dot: '#f59e0b' },
+  pending:   { l: 'Ожидает',     bg: 'rgba(245,158,11,0.10)', c: '#b45309', dot: '#f59e0b', chip: 'warn'    },
+  confirmed: { l: 'Подтверждён', bg: 'rgba(0,151,167,0.12)',  c: '#0e7490', dot: '#0097a7', chip: 'accent'  },
+  completed: { l: 'Завершён',    bg: 'rgba(100,116,139,0.10)', c: '#475569', dot: '#94a3b8', chip: 'default' },
+  cancelled: { l: 'Отменён',     bg: 'rgba(244,63,94,0.08)',   c: '#9f1239', dot: '#f43f5e', chip: 'bad'     },
+  no_show:   { l: 'Не пришёл',   bg: 'rgba(245,158,11,0.08)',  c: '#92400e', dot: '#f59e0b', chip: 'warn'    },
 }
 
 function ymd(d) {
@@ -200,7 +206,7 @@ export default function WeekScheduleSection({
 
   return (
     <div className="px-4 pb-24 max-w-[1280px] mx-auto">
-      {/* Header */}
+      {/* ===== БЛОК: Шапка (выбор врача, неделя, view-toggle, +Запись) ===== */}
       <Header
         mode={mode}
         doctors={doctors}
@@ -216,14 +222,20 @@ export default function WeekScheduleSection({
       />
 
       {error && (
-        <div className="mb-3 px-3 py-2 rounded-xl text-sm bg-rose-50 text-rose-700 border border-rose-200">{error}</div>
+        <div className="mb-3 px-3 py-2 rounded-xl text-sm"
+          style={{ background: 'var(--bad-soft)', color: 'var(--bad)', border: '1px solid var(--bad-soft)' }}>
+          {error}
+        </div>
       )}
 
-      {/* Грид недели (десктоп) или день (мобильный) */}
+      {/* ===== БЛОК: Сетка недели или список дня =====
+          TODO(#29): WeekGrid и DayList используют нестандартную верстку (CSS-grid с display:contents,
+          drag-and-drop, гибридные мобильные чипы). Оставлены как есть — при переходе на дизайн-систему
+          цвета статусов и контейнеры карточки могут быть постепенно унифицированы. */}
       {loading && !data ? (
-        <div className="text-center text-gray-400 py-16">Загрузка расписания…</div>
+        <div className="text-center py-16" style={{ color: 'var(--fg-3)' }}>Загрузка расписания…</div>
       ) : !data ? (
-        <div className="text-center text-gray-400 py-16">Нет данных</div>
+        <div className="text-center py-16" style={{ color: 'var(--fg-3)' }}>Нет данных</div>
       ) : mobileView === 'week' ? (
         <WeekGrid
           data={data}
@@ -247,10 +259,29 @@ export default function WeekScheduleSection({
         />
       )}
 
-      {/* KPI */}
-      <KpiRow kpi={kpi} duration={data?.slot_duration} />
+      {/* ===== БЛОК: KPI недели ===== */}
+      <KpiRow cols={3} className="mt-4">
+        <KpiCard
+          label="Слотов в неделе"
+          value={kpi.total}
+          delta={data?.slot_duration ? `по ${data.slot_duration} мин` : ''}
+          trend="flat"
+        />
+        <KpiCard
+          label="Занято"
+          value={kpi.taken}
+          delta={`${kpi.load || 0}% загрузка`}
+          trend={kpi.load >= 70 ? 'up' : 'flat'}
+        />
+        <KpiCard
+          label="Свободно"
+          value={kpi.free}
+          delta="видны пациентам"
+          trend="flat"
+        />
+      </KpiRow>
 
-      {/* Модалы */}
+      {/* ===== БЛОК: Модалы ===== */}
       {bookModal && (
         <BookModal
           ctx={bookModal}
@@ -280,26 +311,39 @@ function Header({ mode, doctors, doctorId, setDoctorId, weekStart, setWeekStart,
   const fmt = (d) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
   const title = `${fmt(ws)} – ${fmt(we)} ${we.getFullYear()}`
 
+  // ===== БЛОК: View-toggle (Неделя / День) =====
+  const viewItems = [
+    { id: 'week', label: 'Неделя' },
+    { id: 'day',  label: 'День' },
+  ]
+
   return (
     <div className="mb-5">
       <div className="flex items-start gap-3 flex-wrap mb-3">
         <div className="flex-1 min-w-[200px]">
-          <h2 className="text-xl md:text-2xl font-black text-gray-900">Расписание</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{title}</p>
+          <h2 className="text-xl md:text-2xl font-black" style={{ color: 'var(--fg)' }}>Расписание</h2>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--fg-3)' }}>{title}</p>
         </div>
         {canEdit && (
-          <button onClick={onAdd}
-            className="px-4 py-2 rounded-xl bg-gradient-to-br from-cyan-600 to-teal-700 text-white text-sm font-bold shadow-lg hover:shadow-xl transition flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[18px]">add</span>
+          <Button variant="primary" onClick={onAdd}
+            leftIcon={<span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>}>
             Запись
-          </button>
+          </Button>
         )}
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
         {mode === 'full' && (
           <select value={doctorId} onChange={e => setDoctorId(e.target.value)}
-            className="p-2.5 rounded-xl border border-gray-200 bg-white text-sm font-medium min-w-[200px]">
+            className="text-sm font-medium min-w-[200px]"
+            style={{
+              padding: '10px 12px',
+              borderRadius: '10px',
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+              minHeight: 44,
+            }}>
             {doctors.map(d => (
               <option key={d.id} value={d.id}>
                 {d.full_name || d.name}{d.specialty ? ` · ${d.specialty}` : ''}
@@ -308,35 +352,25 @@ function Header({ mode, doctors, doctorId, setDoctorId, weekStart, setWeekStart,
           </select>
         )}
         {mode === 'self' && selfDoctorName && (
-          <div className="px-3 py-2 rounded-xl bg-cyan-50 text-cyan-800 text-sm font-semibold border border-cyan-100">
-            {selfDoctorName}
-          </div>
+          <Chip variant="accent">{selfDoctorName}</Chip>
         )}
 
-        <div className="flex bg-gray-100 rounded-xl p-1">
-          <button onClick={() => setMobileView('week')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${mobileView === 'week' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-            Неделя
-          </button>
-          <button onClick={() => setMobileView('day')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${mobileView === 'day' ? 'bg-white shadow text-gray-900' : 'text-gray-500'}`}>
-            День
-          </button>
-        </div>
+        <Tabs items={viewItems} value={mobileView} onChange={setMobileView} />
 
         <div className="flex items-center gap-1 ml-auto">
-          <button onClick={() => setWeekStart(addDays(weekStart, -7))}
-            className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition">
-            <span className="material-symbols-outlined text-base text-gray-700">chevron_left</span>
-          </button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))}
-            className="px-3 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-bold text-gray-700">
+          <Button variant="secondary" size="sm" onClick={() => setWeekStart(addDays(weekStart, -7))}
+            aria-label="Предыдущая неделя"
+            className="!w-11 !h-11 !p-0">
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_left</span>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setWeekStart(startOfWeek(new Date()))}>
             Сегодня
-          </button>
-          <button onClick={() => setWeekStart(addDays(weekStart, 7))}
-            className="w-9 h-9 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition">
-            <span className="material-symbols-outlined text-base text-gray-700">chevron_right</span>
-          </button>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setWeekStart(addDays(weekStart, 7))}
+            aria-label="Следующая неделя"
+            className="!w-11 !h-11 !p-0">
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_right</span>
+          </Button>
         </div>
       </div>
     </div>
@@ -344,6 +378,8 @@ function Header({ mode, doctors, doctorId, setDoctorId, weekStart, setWeekStart,
 }
 
 // ── Сетка недели ─────────────────────────────────────────────────────────────
+// TODO(#29): кастомная CSS-grid сетка с display:contents и drag-and-drop.
+// Оставлена в нативной разметке — миграция требует отдельной проработки.
 function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, setMoveDrag, onDropMove }) {
   const days = data.days || []
   const todayKey = ymd(new Date())
@@ -356,25 +392,27 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
   })
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 shadow-sm">
+    <Card padded={false} className="overflow-hidden">
       <div
         className="grid"
         style={{
           gridTemplateColumns: `64px repeat(${days.length}, minmax(0, 1fr))`,
           gap: 1,
-          background: '#f1f5f9',
+          background: 'var(--bg-2)',
         }}>
         {/* header row */}
-        <div className="bg-white" />
-        {days.map((d, i) => {
+        <div style={{ background: 'var(--surface)' }} />
+        {days.map((d) => {
           const isToday = d.date === todayKey
           return (
-            <div key={d.date} className="bg-white px-2 py-3 text-center">
-              <div className={`text-[11px] uppercase tracking-wider font-semibold ${isToday ? 'text-cyan-600' : 'text-gray-400'}`}>{d.day_name}</div>
-              <div className={`text-lg font-bold mt-0.5 ${isToday ? 'text-cyan-700' : 'text-gray-900'}`}>
+            <div key={d.date} className="px-2 py-3 text-center" style={{ background: 'var(--surface)' }}>
+              <div className="text-[11px] uppercase tracking-wider font-semibold"
+                style={{ color: isToday ? 'var(--accent)' : 'var(--fg-3)' }}>{d.day_name}</div>
+              <div className="text-lg font-bold mt-0.5"
+                style={{ color: isToday ? 'var(--accent)' : 'var(--fg)' }}>
                 {parseInt(d.date.slice(8, 10), 10)}
               </div>
-              {!d.is_working && <div className="text-[10px] text-gray-400 mt-0.5">выходной</div>}
+              {!d.is_working && <div className="text-[10px] mt-0.5" style={{ color: 'var(--fg-3)' }}>выходной</div>}
             </div>
           )
         })}
@@ -382,18 +420,19 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
         {/* hour rows */}
         {hours.map(h => (
           <div key={`row-${h}`} style={{ display: 'contents' }}>
-            <div className="bg-white text-right px-2 py-2 text-[11px] text-gray-400 font-mono tabular-nums">{h}</div>
+            <div className="text-right px-2 py-2 text-[11px] font-mono tabular-nums"
+              style={{ background: 'var(--surface)', color: 'var(--fg-3)' }}>{h}</div>
             {days.map((d, di) => {
               const slot = dayMaps[di].get(h)
               if (!d.is_working) {
                 return (
                   <div key={`c-${d.date}-${h}`} className="min-h-[58px]"
                     style={{
-                      background: 'repeating-linear-gradient(45deg, #f8fafc, #f8fafc 6px, #eef2f6 6px, #eef2f6 12px)',
+                      background: 'repeating-linear-gradient(45deg, var(--bg-2), var(--bg-2) 6px, var(--bg-3) 6px, var(--bg-3) 12px)',
                     }} />
                 )
               }
-              if (!slot) return <div key={`c-${d.date}-${h}`} className="bg-gray-50 min-h-[58px]" />
+              if (!slot) return <div key={`c-${d.date}-${h}`} className="min-h-[58px]" style={{ background: 'var(--bg-2)' }} />
               const a = slot.appointment
               const st = a ? STATUS_INFO[a.status] || STATUS_INFO.pending : null
 
@@ -423,19 +462,23 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
                   onDragOver={canEdit && moveDrag ? (e) => e.preventDefault() : undefined}
                   onDrop={canEdit && moveDrag ? () => onDropMove(d.date, h) : undefined}
                   onClick={() => onPickEmpty(d.date, h)}
-                  className={`bg-white min-h-[58px] flex items-center justify-center transition ${canEdit ? 'cursor-pointer hover:bg-cyan-50' : 'cursor-default'}`}>
-                  {canEdit && <span className="text-[11px] text-gray-300 font-medium">+ слот</span>}
+                  className={`min-h-[58px] flex items-center justify-center transition ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                  style={{ background: 'var(--surface)' }}
+                  onMouseEnter={canEdit ? (e) => e.currentTarget.style.background = 'var(--accent-soft)' : undefined}
+                  onMouseLeave={canEdit ? (e) => e.currentTarget.style.background = 'var(--surface)' : undefined}>
+                  {canEdit && <span className="text-[11px] font-medium" style={{ color: 'var(--fg-3)' }}>+ слот</span>}
                 </div>
               )
             })}
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }
 
 // ── Список одного дня (мобильный) ────────────────────────────────────────────
+// TODO(#29): чипы дней + список слотов — оставлено в нативной разметке (мобильные тач-чипы).
 function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEmpty, onPickAppt }) {
   const days = data.days || []
   const day = days[activeDayIdx] || days[0]
@@ -443,7 +486,7 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
 
   return (
     <div>
-      {/* day chips */}
+      {/* day chips (мобильная навигация по дням) */}
       <div className="flex gap-1.5 mb-3 overflow-x-auto -mx-1 px-1 pb-1">
         {days.map((d, i) => {
           const active = i === activeDayIdx
@@ -452,13 +495,15 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
             <button key={d.date} onClick={() => setActiveDayIdx(i)}
               className="flex-shrink-0 w-14 rounded-xl py-2 transition flex flex-col items-center"
               style={active ? {
-                background: 'linear-gradient(135deg,#0097A7,#0e7490)',
-                color: 'white',
-                boxShadow: '0 4px 14px rgba(14,116,144,0.3)',
+                background: 'var(--accent)',
+                color: 'var(--accent-fg)',
+                boxShadow: 'var(--shadow-sm)',
+                minHeight: 56,
               } : {
-                background: 'white',
-                color: isToday ? '#0e7490' : '#475569',
-                border: '1px solid #e5e7eb',
+                background: 'var(--surface)',
+                color: isToday ? 'var(--accent)' : 'var(--fg-2)',
+                border: '1px solid var(--border)',
+                minHeight: 56,
               }}>
               <div className="text-[10px] uppercase font-bold opacity-80">{d.day_name}</div>
               <div className="text-lg font-black">{parseInt(d.date.slice(8, 10), 10)}</div>
@@ -468,23 +513,28 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
       </div>
 
       {/* slots list */}
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+      <Card padded={false} className="overflow-hidden">
         {!day.is_working ? (
-          <div className="text-center py-12 text-sm text-gray-400">Нерабочий день</div>
+          <div className="text-center py-12 text-sm" style={{ color: 'var(--fg-3)' }}>Нерабочий день</div>
         ) : day.slots.length === 0 ? (
-          <div className="text-center py-12 text-sm text-gray-400">Расписание не настроено</div>
+          <div className="text-center py-12 text-sm" style={{ color: 'var(--fg-3)' }}>Расписание не настроено</div>
         ) : (
-          day.slots.map((s, i) => {
+          day.slots.map((s) => {
             const a = s.appointment
             const st = a ? STATUS_INFO[a.status] || STATUS_INFO.pending : null
             return (
               <div key={s.start_time}
                 onClick={() => a ? onPickAppt(a, day.date, s.start_time) : onPickEmpty(day.date, s.start_time)}
-                className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 transition ${(canEdit || a) ? 'active:bg-gray-50 cursor-pointer' : ''}`}
-                style={a ? { background: st.bg } : undefined}>
+                className={`flex items-center gap-3 px-4 py-3 transition ${(canEdit || a) ? 'active:bg-gray-50 cursor-pointer' : ''}`}
+                style={{
+                  background: a ? st.bg : undefined,
+                  borderBottom: '1px solid var(--border)',
+                  minHeight: 56,
+                }}>
                 <div className="w-12 flex-shrink-0 text-center">
-                  <div className={`text-sm font-bold tabular-nums ${a ? '' : 'text-gray-400'}`} style={a ? { color: st.c } : undefined}>{s.start_time}</div>
-                  <div className="text-[10px] text-gray-400">{s.end_time}</div>
+                  <div className="text-sm font-bold tabular-nums"
+                    style={a ? { color: st.c } : { color: 'var(--fg-3)' }}>{s.start_time}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--fg-3)' }}>{s.end_time}</div>
                 </div>
                 <div className="flex-1 min-w-0">
                   {a ? (
@@ -493,41 +543,20 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
                       <div className="text-xs opacity-70 mt-0.5" style={{ color: st.c }}>{a.patient_phone}</div>
                     </>
                   ) : (
-                    <div className="text-sm text-gray-400">Свободно</div>
+                    <div className="text-sm" style={{ color: 'var(--fg-3)' }}>Свободно</div>
                   )}
                 </div>
                 {a && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase flex-shrink-0"
-                    style={{ background: 'rgba(255,255,255,0.5)', color: st.c }}>{st.l}</span>
+                  <Chip variant={st.chip}>{st.l}</Chip>
                 )}
                 {!a && canEdit && (
-                  <span className="material-symbols-outlined text-[20px] text-gray-300">add_circle</span>
+                  <span className="material-symbols-outlined text-[20px]" style={{ color: 'var(--fg-3)' }}>add_circle</span>
                 )}
               </div>
             )
           })
         )}
-      </div>
-    </div>
-  )
-}
-
-// ── KPI ──────────────────────────────────────────────────────────────────────
-function KpiRow({ kpi, duration }) {
-  const items = [
-    { l: 'Слотов в неделе', v: kpi.total, sub: duration ? `по ${duration} мин` : '' },
-    { l: 'Занято',          v: kpi.taken, sub: `${kpi.load || 0}% загрузка` },
-    { l: 'Свободно',        v: kpi.free,  sub: 'видны пациентам' },
-  ]
-  return (
-    <div className="grid grid-cols-3 gap-2 mt-4">
-      {items.map(x => (
-        <div key={x.l} className="bg-white rounded-xl p-3 border border-gray-100">
-          <div className="text-[11px] text-gray-500 font-semibold">{x.l}</div>
-          <div className="text-2xl font-black tabular-nums">{x.v}</div>
-          {x.sub && <div className="text-[10px] text-gray-400 mt-0.5">{x.sub}</div>}
-        </div>
-      ))}
+      </Card>
     </div>
   )
 }
@@ -550,39 +579,47 @@ function BookModal({ ctx, doctorName, onClose, onCreate }) {
     }
   }
 
+  // Стиль input — единый
+  const inputStyle = {
+    padding: '12px 14px',
+    borderRadius: '12px',
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--fg)',
+    fontSize: 14,
+    width: '100%',
+    minHeight: 44,
+    outline: 'none',
+  }
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-      <div className="bg-white w-full md:max-w-md md:rounded-2xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-lg font-bold">Запись на приём</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 text-xl leading-none">×</button>
-        </div>
-        <div className="text-xs text-gray-500 mb-4">{ctx.date} · {ctx.start_time} · {doctorName}</div>
+    <Modal open onClose={onClose} title="Запись на приём">
+      <div className="text-xs mb-4" style={{ color: 'var(--fg-3)' }}>{ctx.date} · {ctx.start_time} · {doctorName}</div>
 
-        <div className="space-y-3">
-          <input type="tel" placeholder="Телефон пациента +7…" value={form.patient_phone}
-            onChange={e => setForm({ ...form, patient_phone: e.target.value })}
-            className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:border-cyan-500 outline-none" />
-          <input placeholder="ФИО пациента" value={form.patient_name}
-            onChange={e => setForm({ ...form, patient_name: e.target.value })}
-            className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:border-cyan-500 outline-none" />
-          <textarea placeholder="Примечания (необязательно)" value={form.notes}
-            onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
-            className="w-full p-3 rounded-xl border border-gray-200 text-sm focus:border-cyan-500 outline-none resize-none" />
-        </div>
-
-        {err && <div className="mt-3 text-xs text-rose-700 bg-rose-50 px-3 py-2 rounded-xl">{err}</div>}
-
-        <div className="flex gap-2 mt-4">
-          <button onClick={onClose}
-            className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-700 font-semibold text-sm">Отмена</button>
-          <button onClick={submit} disabled={saving || !form.patient_phone}
-            className="flex-1 py-3 rounded-xl bg-gradient-to-br from-cyan-600 to-teal-700 text-white font-bold text-sm shadow disabled:opacity-50">
-            {saving ? 'Создание…' : 'Записать'}
-          </button>
-        </div>
+      <div className="space-y-3">
+        <input type="tel" placeholder="Телефон пациента +7…" value={form.patient_phone}
+          onChange={e => setForm({ ...form, patient_phone: e.target.value })}
+          style={inputStyle} />
+        <input placeholder="ФИО пациента" value={form.patient_name}
+          onChange={e => setForm({ ...form, patient_name: e.target.value })}
+          style={inputStyle} />
+        <textarea placeholder="Примечания (необязательно)" value={form.notes}
+          onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
+          style={{ ...inputStyle, resize: 'none' }} />
       </div>
-    </div>
+
+      {err && (
+        <div className="mt-3 text-xs px-3 py-2 rounded-xl"
+          style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>{err}</div>
+      )}
+
+      <div className="flex gap-2 mt-4">
+        <Button variant="secondary" onClick={onClose} className="flex-1">Отмена</Button>
+        <Button variant="primary" onClick={submit} disabled={saving || !form.patient_phone} className="flex-1">
+          {saving ? 'Создание…' : 'Записать'}
+        </Button>
+      </div>
+    </Modal>
   )
 }
 
@@ -603,86 +640,97 @@ function ApptModal({ ctx, canEdit, onClose, onStatus, onMove, weekStart }) {
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-      <div className="bg-white w-full md:max-w-md md:rounded-2xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-lg font-bold">Запись пациента</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 text-xl leading-none">×</button>
+    <Modal open onClose={onClose} title="Запись пациента">
+      {/* ===== БЛОК: Карточка статуса записи ===== */}
+      <div className="rounded-xl p-3 mb-4" style={{ background: st.bg, color: st.c }}>
+        <div className="flex items-center justify-between">
+          <Chip variant={st.chip}>{st.l}</Chip>
+          <span className="text-xs font-mono tabular-nums">{ctx.date} · {ctx.start_time}</span>
         </div>
+        <div className="text-base font-bold mt-2">{a.patient_name || '—'}</div>
+        <div className="text-xs opacity-80 mt-0.5">{a.patient_phone}</div>
+        {a.notes && <div className="text-xs mt-2 italic opacity-90">«{a.notes}»</div>}
+      </div>
 
-        <div className="rounded-xl p-3 mb-4" style={{ background: st.bg, color: st.c }}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase opacity-80">{st.l}</span>
-            <span className="text-xs font-mono tabular-nums">{ctx.date} · {ctx.start_time}</span>
-          </div>
-          <div className="text-base font-bold mt-1">{a.patient_name || '—'}</div>
-          <div className="text-xs opacity-80 mt-0.5">{a.patient_phone}</div>
-          {a.notes && <div className="text-xs mt-2 italic opacity-90">«{a.notes}»</div>}
-        </div>
-
-        {!canEdit ? (
-          <div className="text-xs text-gray-400 text-center py-2">Только просмотр</div>
-        ) : moveCtx ? (
-          <>
-            <div className="text-xs font-semibold text-gray-500 mb-2">Перенос на:</div>
-            <div className="grid grid-cols-7 gap-1 mb-3">
-              {days.map(d => (
+      {!canEdit ? (
+        <div className="text-xs text-center py-2" style={{ color: 'var(--fg-3)' }}>Только просмотр</div>
+      ) : moveCtx ? (
+        <>
+          <div className="text-xs font-semibold mb-2" style={{ color: 'var(--fg-3)' }}>Перенос на:</div>
+          {/* Сетка дней (компактные кнопки 14 дней) */}
+          <div className="grid grid-cols-7 gap-1 mb-3">
+            {days.map(d => {
+              const active = moveCtx.date === ymd(d)
+              return (
                 <button key={ymd(d)} onClick={() => setMoveCtx({ ...moveCtx, date: ymd(d) })}
-                  className={`py-2 rounded-lg text-xs font-bold transition ${moveCtx.date === ymd(d) ? 'bg-cyan-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}>
+                  className="rounded-lg text-xs font-bold transition"
+                  style={{
+                    padding: '8px 0',
+                    minHeight: 44,
+                    background: active ? 'var(--accent)' : 'var(--bg-2)',
+                    color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
+                    border: '1px solid var(--border)',
+                  }}>
                   <div className="text-[9px] opacity-70">{DAY_SHORT[(d.getDay() + 6) % 7]}</div>
                   {d.getDate()}
                 </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1 mb-3 max-h-40 overflow-y-auto">
-              {times.map(t => (
+              )
+            })}
+          </div>
+          {/* Сетка времён */}
+          <div className="flex flex-wrap gap-1 mb-3 max-h-40 overflow-y-auto">
+            {times.map(t => {
+              const active = moveCtx.time === t
+              return (
                 <button key={t} onClick={() => setMoveCtx({ ...moveCtx, time: t })}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-mono tabular-nums transition ${moveCtx.time === t ? 'bg-cyan-600 text-white' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}>
+                  className="text-xs font-mono tabular-nums transition"
+                  style={{
+                    padding: '8px 12px',
+                    minHeight: 36,
+                    borderRadius: 8,
+                    background: active ? 'var(--accent)' : 'var(--bg-2)',
+                    color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
+                    border: '1px solid var(--border)',
+                  }}>
                   {t}
                 </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setMoveCtx(null)}
-                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-sm font-semibold">Назад</button>
-              <button onClick={() => onMove(a.id, moveCtx.date, moveCtx.time)} disabled={!moveCtx.date || !moveCtx.time}
-                className="flex-1 py-2.5 rounded-xl bg-cyan-600 text-white text-sm font-bold disabled:opacity-50">Перенести</button>
-            </div>
-          </>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {a.status === 'pending' && (
-              <button onClick={() => onStatus(a.id, 'confirmed')}
-                className="py-2.5 rounded-xl bg-emerald-50 text-emerald-700 text-sm font-bold hover:bg-emerald-100">
-                ✓ Подтвердить
-              </button>
-            )}
-            {['pending', 'confirmed'].includes(a.status) && (
-              <>
-                <button onClick={() => setMoveCtx({ date: ctx.date, time: ctx.start_time })}
-                  className="py-2.5 rounded-xl bg-cyan-50 text-cyan-700 text-sm font-bold hover:bg-cyan-100">
-                  ⇆ Перенести
-                </button>
-                <button onClick={() => onStatus(a.id, 'completed')}
-                  className="py-2.5 rounded-xl bg-violet-50 text-violet-700 text-sm font-bold hover:bg-violet-100">
-                  ✓ Завершить
-                </button>
-                <button onClick={() => onStatus(a.id, 'no_show')}
-                  className="py-2.5 rounded-xl bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100">
-                  ⚠ Не пришёл
-                </button>
-                <button onClick={() => onStatus(a.id, 'cancelled')}
-                  className="py-2.5 rounded-xl bg-rose-50 text-rose-700 text-sm font-bold hover:bg-rose-100 col-span-2">
-                  × Отменить запись
-                </button>
-              </>
-            )}
-            {['cancelled', 'completed', 'no_show'].includes(a.status) && (
-              <div className="col-span-2 text-center text-xs text-gray-400 py-2">Запись закрыта</div>
-            )}
+              )
+            })}
           </div>
-        )}
-      </div>
-    </div>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setMoveCtx(null)} className="flex-1">Назад</Button>
+            <Button variant="primary" onClick={() => onMove(a.id, moveCtx.date, moveCtx.time)}
+              disabled={!moveCtx.date || !moveCtx.time} className="flex-1">Перенести</Button>
+          </div>
+        </>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {a.status === 'pending' && (
+            <Button variant="secondary" onClick={() => onStatus(a.id, 'confirmed')} className="col-span-2">
+              ✓ Подтвердить
+            </Button>
+          )}
+          {['pending', 'confirmed'].includes(a.status) && (
+            <>
+              <Button variant="secondary" onClick={() => setMoveCtx({ date: ctx.date, time: ctx.start_time })}>
+                ⇆ Перенести
+              </Button>
+              <Button variant="secondary" onClick={() => onStatus(a.id, 'completed')}>
+                ✓ Завершить
+              </Button>
+              <Button variant="secondary" onClick={() => onStatus(a.id, 'no_show')}>
+                ⚠ Не пришёл
+              </Button>
+              <Button variant="danger" onClick={() => onStatus(a.id, 'cancelled')}>
+                × Отменить
+              </Button>
+            </>
+          )}
+          {['cancelled', 'completed', 'no_show'].includes(a.status) && (
+            <div className="col-span-2 text-center text-xs py-2" style={{ color: 'var(--fg-3)' }}>Запись закрыта</div>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }
