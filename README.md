@@ -267,7 +267,14 @@ Volumes: `/opt/clinika/uploads`, `/opt/clinika/data` (GeoIP), `clinika-db-data`,
 
 ## Документация
 
-- **API:** `backend/openapi.json` (импортируется в Swagger UI / Postman)
+### API documentation
+- **Swagger UI:** <https://клиниксеть.рф/api/docs> — интерактивная документация всех endpoints
+- **OpenAPI JSON:** `backend/openapi.json` (импортируется в Postman / Insomnia)
+- **API Conventions:** [`docs/API_CONVENTIONS.md`](docs/API_CONVENTIONS.md) — правила URL, query, статусов, naming + список endpoints для рефакторинга
+- **API Reference:** [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) — описание текущих endpoints
+- **API Contract:** [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md) — контракты для интеграций
+
+### Прочие документы
 - **Биллинг:** `BILLING_ARCHITECTURE.md` — revenue split, plans, pricing rules
 - **Changelog:** `CHANGELOG.md`
 
