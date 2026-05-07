@@ -1,7 +1,45 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense, Component } from 'react'
 import api from '../api'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
+
+// ===== ErrorBoundary — показывает текст ошибки вместо белого экрана =====
+class AdminErrorBoundary extends Component {
+  state = { error: null, info: null }
+  static getDerivedStateFromError(error) { return { error } }
+  componentDidCatch(error, info) {
+    console.error('[AdminErrorBoundary]', error, info)
+    this.setState({ info })
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, fontFamily: 'monospace', fontSize: 13, color: '#fff', background: '#1a1a1a', minHeight: '100vh' }}>
+          <h2 style={{ color: '#f87171' }}>Ошибка приложения</h2>
+          <div style={{ marginTop: 12, padding: 12, background: '#2d1b1b', border: '1px solid #f87171', borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+            <b>{this.state.error.name}: </b>{this.state.error.message}
+          </div>
+          {this.state.info?.componentStack && (
+            <details style={{ marginTop: 12 }} open>
+              <summary style={{ cursor: 'pointer', color: '#fbbf24' }}>Component stack</summary>
+              <pre style={{ marginTop: 8, padding: 12, background: '#0f0f0f', overflow: 'auto', fontSize: 11 }}>{this.state.info.componentStack}</pre>
+            </details>
+          )}
+          {this.state.error.stack && (
+            <details style={{ marginTop: 12 }}>
+              <summary style={{ cursor: 'pointer', color: '#fbbf24' }}>Stack trace</summary>
+              <pre style={{ marginTop: 8, padding: 12, background: '#0f0f0f', overflow: 'auto', fontSize: 11 }}>{this.state.error.stack}</pre>
+            </details>
+          )}
+          <button onClick={() => window.location.reload()} style={{ marginTop: 16, padding: '8px 16px', background: '#06b6d4', color: '#000', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>
+            Перезагрузить
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import DoctorLayout from './DoctorLayout'
 import OperationalCabinet from './OperationalCabinet'
 import RecruiterCabinet from './RecruiterCabinet'
@@ -166,7 +204,12 @@ export default function AdminRoot() {
 
   // ── Super Admin → панель платформы
   if (role === 'super_admin') {
-    return <><AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return (
+      <AdminErrorBoundary>
+        <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
+        <CallWidget />
+      </AdminErrorBoundary>
+    )
   }
 
   // Неизвестная роль
