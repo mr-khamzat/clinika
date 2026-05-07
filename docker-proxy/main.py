@@ -13,6 +13,8 @@ log = logging.getLogger("docker-proxy")
 app = FastAPI(title="Docker Proxy", docs_url=None, redoc_url=None)
 
 ALLOWED_CONTAINERS = {"clinika-backend", "clinika-frontend", "clinika-db", "clinika-redis", "clinika-bot"}
+# Контейнеры, которые можно перезапускать через /restart (только non-stateful).
+RESTARTABLE_CONTAINERS = {"clinika-backend", "clinika-frontend", "clinika-bot"}
 
 def _client():
     return docker.DockerClient(base_url="unix:///var/run/docker.sock", timeout=10)
@@ -72,6 +74,28 @@ def container_logs(name: str, lines: int = 100):
         return {"container": name, "lines": [f"Контейнер {name} не найден"], "count": 1}
     except Exception as e:
         return {"container": name, "lines": [str(e)], "count": 1}
+
+
+@app.post("/containers/{name}/restart")
+def container_restart(name: str):
+    """Рестарт указанного контейнера. Разрешены только не-stateful сервисы."""
+    if name not in RESTARTABLE_CONTAINERS:
+        raise HTTPException(status_code=400, detail="Контейнер не разрешён для рестарта")
+    try:
+        client = _client()
+        try:
+            c = client.containers.get(name)
+            c.restart(timeout=10)
+            return {"ok": True, "container": name, "status": "restarted"}
+        except docker.errors.NotFound:
+            raise HTTPException(status_code=404, detail=f"Контейнер {name} не найден")
+        finally:
+            client.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"restart {name} error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
