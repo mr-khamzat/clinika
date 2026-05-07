@@ -1,0 +1,95 @@
+# КлиникСеть — отдельный compose-стек для мониторинга.
+# Поднимается независимо от боевых сервисов (clinika-backend / frontend / db / redis).
+# Запуск:   docker compose -f docker-compose.monitoring.yml up -d
+# Остановка: docker compose -f docker-compose.monitoring.yml down
+#
+# Что внутри:
+#   uptime-kuma           — мониторинг доступности (HTTP/HTTPS/TCP/Ping/DNS/Push)
+#   prometheus            — сбор метрик (опционально, см. ниже)
+#   postgres-exporter     — метрики PostgreSQL для Prometheus
+#   grafana               — дашборды поверх Prometheus
+#
+# По умолчанию включён только uptime-kuma. Остальное — через профиль 'metrics':
+#   docker compose -f docker-compose.monitoring.yml --profile metrics up -d
+#
+# Все порты слушают только 127.0.0.1 — наружу не торчат.
+# Доступ снаружи только через nginx (см. /etc/nginx/sites-enabled/clinikahttps.conf).
+
+services:
+  # ── Uptime-Kuma: status-page + Telegram alerts ──────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - uptime-kuma:/app/data
+    networks:
+      - monitoring-net
+
+  # ── Prometheus: time-series база метрик (опционально) ───────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: unless-stopped
+    profiles: ["metrics"]
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - monitoring-net
+
+  # ── PostgreSQL exporter: метрики БД для Prometheus (опционально) ────────────
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    restart: unless-stopped
+    profiles: ["metrics"]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://clinika:clinika_pass@clinika-db:5432/clinika?sslmode=disable"
+    networks:
+      - monitoring-net
+      - clinika-default      # для доступа к clinika-db
+    depends_on:
+      - prometheus
+
+  # ── Grafana: дашборды (опционально) ─────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    profiles: ["metrics"]
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: "https://клиниксеть.рф/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring-net
+    depends_on:
+      - prometheus
+
+volumes:
+  uptime-kuma:
+    external: true        # уже создан docker run командой при первом запуске
+  prometheus-data:
+  grafana-data:
+
+networks:
+  monitoring-net:
+    driver: bridge
+  clinika-default:
+    external: true
+    name: clinika_clinika-net

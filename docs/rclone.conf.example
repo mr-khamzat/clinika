@@ -1,0 +1,46 @@
+# rclone конфиг для offsite-бэкапов КлиникСеть.
+#
+# Этот файл — ШАБЛОН. Реальный конфиг с токенами должен лежать в:
+#   /root/.config/rclone/rclone.conf
+# и НИКОГДА НЕ КОММИТИТЬСЯ В РЕПО (.gitignore).
+#
+# Как настроить (Yandex.Disk):
+#
+# 1. Установить rclone (уже есть): apt install rclone -y
+# 2. Запустить интерактивный конфиг:
+#      rclone config
+#    Ответы:
+#      n) New remote
+#      name> yandex
+#      Storage> yandex                    (или номер из списка)
+#      client_id> (Enter — пусто, дефолтный)
+#      client_secret> (Enter — пусто)
+#      Edit advanced config? n
+#      Use auto config? Y                  (откроется браузер для OAuth)
+#    После авторизации Я.Диск выдаст токен и rclone сохранит его сюда.
+#
+# 3. Тест:
+#      rclone ls yandex:
+#      rclone mkdir yandex:clinika-backups
+#
+# 4. В /etc/clinika-backup.env раскомментировать:
+#      RCLONE_REMOTE=yandex
+#      RCLONE_PATH=clinika-backups
+#      RCLONE_RETENTION_DAYS=90
+#
+# 5. Ручной запуск бэкапа для проверки:
+#      /opt/clinika/backup.sh
+#      rclone ls yandex:clinika-backups/db/
+#
+# Альтернативные провайдеры (если Я.Диск не подходит):
+#   • S3 / DigitalOcean Spaces / Backblaze B2 / Cloudflare R2 — type=s3
+#   • Google Drive — type=drive
+#   • Mail.ru Cloud — type=mailru
+#   • SFTP на свой второй сервер — type=sftp
+
+# ─── ПРИМЕР после успешного rclone config (НЕ копировать как есть!) ───
+#
+# [yandex]
+# type = yandex
+# token = {"access_token":"<TODO: получить через rclone config>","token_type":"OAuth","refresh_token":"<TODO>","expiry":"<TODO>"}
+#
