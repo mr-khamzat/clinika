@@ -55,6 +55,7 @@ import {
   Button as DSButton,
   KpiCard as DSKpiCard,
   KpiRow as DSKpiRow,
+  Breadcrumbs as DSBreadcrumbs,
   useToast,
   useConfirm,
 } from '../design'
