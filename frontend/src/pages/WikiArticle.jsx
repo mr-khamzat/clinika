@@ -404,7 +404,7 @@ export default function WikiArticle() {
               fontWeight: 500,
             }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '18px' }}>
               menu_book
             </span>
             Содержание
@@ -420,7 +420,7 @@ export default function WikiArticle() {
               fontWeight: 500,
             }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: '18px' }}>
               arrow_back
             </span>
             В категорию
@@ -466,7 +466,7 @@ export default function WikiArticle() {
                   </div>
                   <button
                     onClick={() => setDrawerOpen(false)}
-                    className="material-symbols-outlined transition-colors"
+                    className="material-symbols-rounded transition-colors"
                     style={{ fontSize: '22px', color: 'var(--fg-3)' }}
                     aria-label="Закрыть"
                   >
@@ -513,7 +513,7 @@ export default function WikiArticle() {
                   }}
                 >
                   <span
-                    className="material-symbols-outlined"
+                    className="material-symbols-rounded"
                     style={{ fontSize: '14px' }}
                   >
                     {categoryMeta.icon}
@@ -574,7 +574,7 @@ export default function WikiArticle() {
                     }}
                   >
                     <span
-                      className="material-symbols-outlined"
+                      className="material-symbols-rounded"
                       style={{
                         fontSize: '18px',
                         fontVariationSettings:
@@ -600,7 +600,7 @@ export default function WikiArticle() {
                     }}
                   >
                     <span
-                      className="material-symbols-outlined"
+                      className="material-symbols-rounded"
                       style={{
                         fontSize: '18px',
                         fontVariationSettings:
@@ -644,7 +644,7 @@ export default function WikiArticle() {
                       >
                         <div className="flex items-start gap-3">
                           <span
-                            className="material-symbols-outlined mt-0.5"
+                            className="material-symbols-rounded mt-0.5"
                             style={{
                               fontSize: '20px',
                               color: categoryMeta?.accent || 'var(--accent)',
@@ -692,7 +692,7 @@ export default function WikiArticle() {
                   onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--fg-2)')}
                 >
                   <span
-                    className="material-symbols-outlined"
+                    className="material-symbols-rounded"
                     style={{ fontSize: '18px' }}
                   >
                     arrow_back

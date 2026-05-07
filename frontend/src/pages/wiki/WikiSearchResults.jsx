@@ -58,7 +58,7 @@ export default function WikiSearchResults({ query, results, snippets = {} }) {
         }}
       >
         <span
-          className="material-symbols-outlined"
+          className="material-symbols-rounded"
           style={{ fontSize: '48px', color: 'var(--fg-4)' }}
         >
           search_off

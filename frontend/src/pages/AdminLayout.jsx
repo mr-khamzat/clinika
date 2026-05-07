@@ -7772,7 +7772,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             </span>
 
             {/* Центр уведомлений (W3) — общий dropdown для audit/activity/contacts */}
-            {/* <NotificationsBell size={40} variant="square" /> отключён, infinite re-render */}
+            <NotificationsBell size={40} variant="square" />
 
             {/* Уведомления (бейдж обращений) — старая кнопка, ведёт в раздел /contacts */}
             <button
@@ -7869,7 +7869,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           >
             <div className="mx-auto" style={{ maxWidth: 1280 }}>
               {/* W4 — Breadcrumbs: «Группа → Раздел → [подэлемент]» */}
-              {/* <DSBreadcrumbs items={breadcrumbItems} /> временно отключено */}
+              <DSBreadcrumbs items={breadcrumbItems} />
               <DSPageHeader
                 title={pageMeta.title}
                 subtitle={pageMeta.subtitle}
@@ -8059,7 +8059,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
 
       {/* W3: глобальный поиск Cmd+K */}
-      {/* <CommandPalette /> отключён, infinite re-render */}
+      <CommandPalette />
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`

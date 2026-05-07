@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from app.database import get_db
 from app.core.tenant import get_current_tenant, require_module
+from sqlalchemy import select
+from app.models.tenant import Tenant
 from app.services.cms_service import CmsService
 from app.services.theme_service import ThemeService
 from app.core.deps import get_current_user
@@ -40,21 +42,30 @@ class PageUpdate(BaseModel):
     seo_description: Optional[str] = None
 
 
+async def _resolve_tenant_optional(slug: Optional[str], db: AsyncSession):
+    """Public-эндпоинт: тенант берётся из ?slug=, иначе None (default)."""
+    if not slug:
+        return None
+    r = await db.execute(select(Tenant).where(Tenant.slug == slug))
+    return r.scalar_one_or_none()
+
+
 @router.get("/theme")
 async def get_theme(
+    slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    tenant=Depends(get_current_tenant),
 ):
-    theme = await ThemeService.get_theme(db, str(tenant.id) if tenant else None)
-    return theme
+    tenant = await _resolve_tenant_optional(slug, db)
+    return await ThemeService.get_theme(db, str(tenant.id) if tenant else None)
 
 
 @router.get("/theme/css")
 async def get_theme_css(
+    slug: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    tenant=Depends(get_current_tenant),
 ):
     from fastapi.responses import Response
+    tenant = await _resolve_tenant_optional(slug, db)
     theme = await ThemeService.get_theme(db, str(tenant.id) if tenant else None)
     css = ThemeService.to_css_variables(theme)
     return Response(content=css, media_type="text/css")

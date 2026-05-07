@@ -306,7 +306,7 @@ export default function Wiki() {
                 }}
               >
                 <span
-                  className="material-symbols-outlined"
+                  className="material-symbols-rounded"
                   style={{
                     fontSize: '36px',
                     color: currentCategory.accent,
@@ -395,7 +395,7 @@ export default function Wiki() {
                 onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--fg)')}
                 onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--fg-2)')}
               >
-                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                <span className="material-symbols-rounded" style={{ fontSize: '18px' }}>
                   arrow_back
                 </span>
                 Все категории

@@ -47,7 +47,7 @@ export default function WikiArticleCard({
           }}
         >
           <span
-            className="material-symbols-outlined"
+            className="material-symbols-rounded"
             style={{
               fontSize: '24px',
               color: accent,
