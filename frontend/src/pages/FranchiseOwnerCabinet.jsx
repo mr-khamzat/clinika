@@ -33,6 +33,8 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  Modal,
+  Tabs,
   useToast,
   useConfirm,
 } from '../design'
@@ -522,97 +524,78 @@ function TenantsSection({ adminToken, me, tenants, reload, loading }) {
         </div>
       )}
 
-      {/* ─── Модалка создания ─── */}
-      {showForm && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setShowForm(false)}
-        >
+      {/* ─── Модалка создания (через дизайн-систему Modal) ─── */}
+      <Modal
+        open={showForm}
+        onClose={() => setShowForm(false)}
+        title="Новый тенант"
+        size="md"
+        actions={
+          <>
+            <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
+              Отмена
+            </Button>
+            <Button type="submit" form="tenant-create-form" disabled={saving}>
+              {saving ? 'Создание…' : 'Создать тенант'}
+            </Button>
+          </>
+        }
+      >
+        <form id="tenant-create-form" onSubmit={submit} className="flex flex-col gap-3">
+          <FormField label="Название тенанта *">
+            <FormInput
+              value={form.name}
+              onChange={e => { set('name', e.target.value); if (!form.slug) set('slug', slugify(e.target.value)) }}
+              required
+            />
+          </FormField>
+          <FormField label="Slug (URL) *">
+            <FormInput
+              value={form.slug}
+              onChange={e => set('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+              required pattern="^[a-z0-9-]+$"
+              mono
+            />
+          </FormField>
+          <FormField label="Тариф">
+            <FormSelect value={form.plan} onChange={e => set('plan', e.target.value)}>
+              <option value="trial">Trial</option>
+              <option value="basic">Basic</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </FormSelect>
+          </FormField>
+
           <div
-            onClick={e => e.stopPropagation()}
-            className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto"
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              boxShadow: 'var(--shadow-lg)',
-              padding: 24,
-            }}
+            className="rounded-xl p-3 flex flex-col gap-2"
+            style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold" style={{ fontSize: 18, color: 'var(--fg)' }}>Новый тенант</h2>
-              <button
-                onClick={() => setShowForm(false)}
-                className="grid place-items-center rounded-lg"
-                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}
-              >
-                <Icon name="close" size={20} />
-              </button>
-            </div>
-            <form onSubmit={submit} className="flex flex-col gap-3">
-              <FormField label="Название тенанта *">
-                <FormInput
-                  value={form.name}
-                  onChange={e => { set('name', e.target.value); if (!form.slug) set('slug', slugify(e.target.value)) }}
-                  required
-                />
-              </FormField>
-              <FormField label="Slug (URL) *">
-                <FormInput
-                  value={form.slug}
-                  onChange={e => set('slug', e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                  required pattern="^[a-z0-9-]+$"
-                  mono
-                />
-              </FormField>
-              <FormField label="Тариф">
-                <FormSelect value={form.plan} onChange={e => set('plan', e.target.value)}>
-                  <option value="trial">Trial</option>
-                  <option value="basic">Basic</option>
-                  <option value="pro">Pro</option>
-                  <option value="enterprise">Enterprise</option>
-                </FormSelect>
-              </FormField>
-
-              <div
-                className="rounded-xl p-3 flex flex-col gap-2"
-                style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}
-              >
-                <div
-                  className="font-bold uppercase"
-                  style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '0.08em' }}
-                >Администратор тенанта</div>
-                <FormInput placeholder="ФИО *" required value={form.admin_full_name}
-                  onChange={e => set('admin_full_name', e.target.value)} />
-                <FormInput placeholder="Логин *" required value={form.admin_login}
-                  onChange={e => set('admin_login', e.target.value)} mono />
-                <FormInput placeholder="Пароль (или сгенерировать)" value={form.admin_password}
-                  onChange={e => set('admin_password', e.target.value)} mono />
-              </div>
-
-              <div className="flex gap-2 mt-2">
-                <Button type="submit" disabled={saving} className="flex-1">
-                  {saving ? 'Создание…' : 'Создать тенант'}
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setShowForm(false)}>
-                  Отмена
-                </Button>
-              </div>
-            </form>
+            <div
+              className="font-bold uppercase"
+              style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '0.08em' }}
+            >Администратор тенанта</div>
+            <FormInput placeholder="ФИО *" required value={form.admin_full_name}
+              onChange={e => set('admin_full_name', e.target.value)} />
+            <FormInput placeholder="Логин *" required value={form.admin_login}
+              onChange={e => set('admin_login', e.target.value)} mono />
+            <FormInput placeholder="Пароль (или сгенерировать)" value={form.admin_password}
+              onChange={e => set('admin_password', e.target.value)} mono />
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
 
-      {/* ─── Модалка результата создания ─── */}
-      {created && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-        >
-          <div
-            className="w-full max-w-md"
-            style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', padding: 24 }}
-          >
+      {/* ─── Модалка результата создания (через дизайн-систему Modal) ─── */}
+      <Modal
+        open={!!created}
+        onClose={() => setCreated(null)}
+        title="Тенант создан"
+        size="sm"
+        actions={
+          <Button onClick={() => setCreated(null)}>Понятно</Button>
+        }
+      >
+        {created && (
+          <>
             <div className="flex items-center gap-3 mb-4">
               <div
                 className="grid place-items-center"
@@ -620,10 +603,10 @@ function TenantsSection({ adminToken, me, tenants, reload, loading }) {
               >
                 <Icon name="check_circle" size={22} fill={1} />
               </div>
-              <div className="font-semibold" style={{ fontSize: 16, color: 'var(--fg)' }}>Тенант создан</div>
+              <div className="font-semibold" style={{ fontSize: 14, color: 'var(--fg)' }}>Учётные данные администратора</div>
             </div>
             <div
-              className="rounded-xl p-3 mb-4 flex flex-col gap-1"
+              className="rounded-xl p-3 flex flex-col gap-1"
               style={{ background: 'var(--warn-soft)', border: '1px solid var(--warn-soft)', fontSize: 12 }}
             >
               <div className="font-bold" style={{ color: 'var(--warn)' }}>⚠ Сохраните данные — показываются один раз</div>
@@ -631,35 +614,19 @@ function TenantsSection({ adminToken, me, tenants, reload, loading }) {
               <div className="font-mono" style={{ color: 'var(--warn)' }}>Логин: {created.admin_username}</div>
               <div className="font-mono" style={{ color: 'var(--warn)' }}>Пароль: {created.admin_password}</div>
             </div>
-            <Button onClick={() => setCreated(null)} className="w-full">Понятно</Button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
 
-      {/* ─── Модалка деталей ─── */}
-      {details && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setDetails(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full sm:max-w-md"
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              boxShadow: 'var(--shadow-lg)',
-              padding: 24,
-            }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold" style={{ fontSize: 18, color: 'var(--fg)' }}>Тенант</h2>
-              <button onClick={() => setDetails(null)} className="grid place-items-center rounded-lg"
-                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}>
-                <Icon name="close" size={20} />
-              </button>
-            </div>
+      {/* ─── Модалка деталей (через дизайн-систему Modal) ─── */}
+      <Modal
+        open={!!details}
+        onClose={() => setDetails(null)}
+        title="Тенант"
+        size="sm"
+      >
+        {details && (
+          <>
             <div className="flex flex-col gap-2" style={{ fontSize: 13 }}>
               {[
                 ['Название', details.name],
@@ -688,9 +655,9 @@ function TenantsSection({ adminToken, me, tenants, reload, loading }) {
               <Icon name="open_in_new" size={16} />
               Перейти в /{details.slug}/admin
             </a>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -817,35 +784,17 @@ function ReviewsSection({ adminToken }) {
         </KpiRow>
       )}
 
-      {/* ─── Фильтры ─── */}
-      <div className="flex gap-2 flex-wrap">
-        {[
+      {/* ─── Фильтры (через дизайн-систему Tabs) ─── */}
+      <Tabs
+        items={[
           { id: 'pending',  label: 'Ожидают' },
           { id: 'approved', label: 'Одобрённые' },
           { id: 'rejected', label: 'Отклонённые' },
           { id: 'all',      label: 'Все' },
-        ].map(f => {
-          const active = statusFilter === f.id
-          return (
-            <button
-              key={f.id}
-              onClick={() => { setStatusFilter(f.id); setPage(0) }}
-              className="font-semibold transition-colors"
-              style={{
-                padding: '6px 14px',
-                borderRadius: 999,
-                fontSize: 12.5,
-                background: active ? 'var(--accent)' : 'var(--bg-2)',
-                color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                boxShadow: active ? '0 4px 12px oklch(0.55 0.16 240 / 0.2)' : 'none',
-              }}
-            >
-              {f.label}
-            </button>
-          )
-        })}
-      </div>
+        ]}
+        value={statusFilter}
+        onChange={(id) => { setStatusFilter(id); setPage(0) }}
+      />
 
       {/* ─── Список ─── */}
       {loading ? (
@@ -1075,54 +1024,35 @@ function PartnerDoctorsSection({ adminToken }) {
         </div>
       )}
 
-      {/* ─── Модалка направлений ─── */}
-      {referrals && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setReferrals(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full sm:max-w-lg max-h-[88vh] overflow-y-auto"
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 'var(--radius-lg) var(--radius-lg) 0 0',
-              boxShadow: 'var(--shadow-lg)',
-              padding: 24,
-            }}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold" style={{ fontSize: 17, color: 'var(--fg)' }}>Направления врача</h2>
-              <button onClick={() => setReferrals(null)} className="grid place-items-center rounded-lg"
-                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}>
-                <Icon name="close" size={20} />
-              </button>
-            </div>
-            {(referrals.items || []).length === 0 ? (
-              <EmptyState
-                icon={<Icon name="list_alt" size={26} />}
-                title="Нет направлений"
-                message="У этого врача пока нет созданных направлений."
-              />
-            ) : (
-              <div className="flex flex-col gap-2" style={{ fontSize: 12.5 }}>
-                {referrals.items.slice(0, 30).map(it => (
-                  <div key={it.id || `${it.created_at}-${Math.random()}`} className="flex items-center justify-between py-2"
-                    style={{ borderTop: '1px solid var(--line)' }}>
-                    <span style={{ color: 'var(--fg-2)' }}>
-                      {it.patient_name || it.patient_full_name || it.patient_phone || `№${String(it.id || '').slice(0,8)}`}
-                    </span>
-                    <Chip variant={it.status === 'confirmed' ? 'good' : (it.status === 'expired' ? 'bad' : 'default')}>
-                      {it.status || '—'}
-                    </Chip>
-                  </div>
-                ))}
+      {/* ─── Модалка направлений (через дизайн-систему Modal) ─── */}
+      <Modal
+        open={!!referrals}
+        onClose={() => setReferrals(null)}
+        title="Направления врача"
+        size="md"
+      >
+        {referrals && ((referrals.items || []).length === 0 ? (
+          <EmptyState
+            icon={<Icon name="list_alt" size={26} />}
+            title="Нет направлений"
+            message="У этого врача пока нет созданных направлений."
+          />
+        ) : (
+          <div className="flex flex-col gap-2" style={{ fontSize: 12.5 }}>
+            {referrals.items.slice(0, 30).map(it => (
+              <div key={it.id || `${it.created_at}-${Math.random()}`} className="flex items-center justify-between py-2"
+                style={{ borderTop: '1px solid var(--line)' }}>
+                <span style={{ color: 'var(--fg-2)' }}>
+                  {it.patient_name || it.patient_full_name || it.patient_phone || `№${String(it.id || '').slice(0,8)}`}
+                </span>
+                <Chip variant={it.status === 'confirmed' ? 'good' : (it.status === 'expired' ? 'bad' : 'default')}>
+                  {it.status || '—'}
+                </Chip>
               </div>
-            )}
+            ))}
           </div>
-        </div>
-      )}
+        ))}
+      </Modal>
     </div>
   )
 }
@@ -1235,39 +1165,29 @@ function RecruitersSection({ adminToken }) {
         </div>
       )}
 
-      {/* ─── Модалка редактирования процента ─── */}
-      {percentEdit && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => setPercentEdit(null)}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            className="w-full max-w-sm"
-            style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)', padding: 24 }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold" style={{ fontSize: 16, color: 'var(--fg)' }}>Процент с бонусов</h2>
-              <button onClick={() => setPercentEdit(null)} className="grid place-items-center rounded-lg"
-                style={{ width: 32, height: 32, color: 'var(--fg-3)', background: 'var(--bg-2)' }}>
-                <Icon name="close" size={18} />
-              </button>
-            </div>
-            <FormField label="% от бонуса привлечённого врача">
-              <FormInput
-                type="number" min="0" max="100" step="0.5"
-                value={percentEdit.value}
-                onChange={e => setPercentEdit({ ...percentEdit, value: e.target.value })}
-              />
-            </FormField>
-            <div className="flex gap-2 mt-4">
-              <Button onClick={savePercent} className="flex-1">Сохранить</Button>
-              <Button variant="secondary" onClick={() => setPercentEdit(null)}>Отмена</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ─── Модалка редактирования процента (через дизайн-систему Modal) ─── */}
+      <Modal
+        open={!!percentEdit}
+        onClose={() => setPercentEdit(null)}
+        title="Процент с бонусов"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setPercentEdit(null)}>Отмена</Button>
+            <Button onClick={savePercent}>Сохранить</Button>
+          </>
+        }
+      >
+        {percentEdit && (
+          <FormField label="% от бонуса привлечённого врача">
+            <FormInput
+              type="number" min="0" max="100" step="0.5"
+              value={percentEdit.value}
+              onChange={e => setPercentEdit({ ...percentEdit, value: e.target.value })}
+            />
+          </FormField>
+        )}
+      </Modal>
     </div>
   )
 }
@@ -1319,29 +1239,20 @@ function SettingsSection({ adminToken }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ─── Табы ─── */}
-      <div className="flex gap-2 flex-wrap">
-        {TABS.map(t => {
-          const active = tab === t.id
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className="font-semibold transition-colors flex items-center gap-1.5"
-              style={{
-                padding: '6px 14px', borderRadius: 999, fontSize: 12.5,
-                background: active ? 'var(--accent)' : 'var(--bg-2)',
-                color: active ? 'var(--accent-fg)' : 'var(--fg-2)',
-                border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-                boxShadow: active ? '0 4px 12px oklch(0.55 0.16 240 / 0.2)' : 'none',
-              }}
-            >
+      {/* ─── Табы (через дизайн-систему Tabs) ─── */}
+      <Tabs
+        items={TABS.map(t => ({
+          id: t.id,
+          label: (
+            <span className="inline-flex items-center gap-1.5">
               <Icon name={t.icon} size={14} />
               {t.label}
-            </button>
-          )
-        })}
-      </div>
+            </span>
+          ),
+        }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === 'brand' && (
         <Suspense fallback={<SectionLoader />}>

@@ -37,6 +37,10 @@ import {
   PageHeader as DSPageHeader,
   Chip as DSChip,
   Avatar as DSAvatar,
+  Card as DSCard,
+  Button as DSButton,
+  KpiCard as DSKpiCard,
+  KpiRow as DSKpiRow,
   useToast,
   useConfirm,
 } from '../design'
@@ -660,25 +664,33 @@ function HomeDashboard({ token, onNavigate }) {
         <p className="text-sm text-ms-on-surface-variant dark:text-gray-400 mt-1">КлиникСеть — панель платформовладельца</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* KPI Row через дизайн-систему: верхний ряд метрик платформы */}
+      <DSKpiRow cols={4}>
         {kpis.map(k => (
-          <div key={k.label}
+          <div
+            key={k.label}
             onClick={() => k.nav && onNavigate?.(k.nav)}
-            className={"bg-white dark:bg-gray-800 rounded-2xl p-4 transition-all duration-200" + (k.nav ? " cursor-pointer hover:scale-[1.02]" : "")}
-            style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-3" style={{ background: k.bg }}>
-              <span className="material-symbols-outlined text-lg" style={{ color: k.color, fontVariationSettings: "FILL 1" }}>{k.icon}</span>
-            </div>
-            <p className="text-2xl font-extrabold font-headline dark:text-white" style={{ color: k.color }}>
-              {loading ? "…" : k.value}
-            </p>
-            <p className="text-xs text-ms-on-surface-variant dark:text-gray-400 mt-0.5">{k.label}</p>
+            style={{ cursor: k.nav ? 'pointer' : 'default' }}
+          >
+            <DSKpiCard
+              label={k.label}
+              value={loading ? '…' : k.value}
+              icon={
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 18, color: k.color, fontVariationSettings: "'FILL' 1" }}
+                >
+                  {k.icon}
+                </span>
+              }
+            />
           </div>
         ))}
-      </div>
+      </DSKpiRow>
 
+      {/* Финансы / Подписки — обёрнуты в DSCard дизайн-системы */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+        <DSCard>
           <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">Финансы платформы (30 дней)</p>
           {loading ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}</div>
@@ -698,15 +710,14 @@ function HomeDashboard({ token, onNavigate }) {
                   {fmt(Object.values(ledger?.breakdown || {}).reduce((s, v) => s + (v.count || 0), 0))}
                 </span>
               </div>
-              <button onClick={() => onNavigate?.("billing_ledger")}
-                className="w-full mt-2 py-2 rounded-xl text-xs font-semibold text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition">
+              <DSButton variant="secondary" size="sm" className="w-full mt-2" onClick={() => onNavigate?.("billing_ledger")}>
                 Открыть Фин. реестр →
-              </button>
+              </DSButton>
             </div>
           )}
-        </div>
+        </DSCard>
 
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5" style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
+        <DSCard>
           <p className="font-headline font-bold text-ms-on-surface dark:text-white text-sm mb-4">{"Подписки (" + subTotal + " всего)"}</p>
           {loading ? (
             <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-8 bg-gray-100 dark:bg-gray-700 rounded-lg animate-pulse" />)}</div>
@@ -734,36 +745,41 @@ function HomeDashboard({ token, onNavigate }) {
                   </div>
                 </div>
               )}
-              <button onClick={() => onNavigate?.("billing")}
-                className="w-full mt-2 py-2 rounded-xl text-xs font-semibold text-teal-600 dark:text-teal-400 border border-teal-200 dark:border-teal-800 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition">
+              <DSButton variant="secondary" size="sm" className="w-full mt-2" onClick={() => onNavigate?.("billing")}>
                 Управление биллингом →
-              </button>
+              </DSButton>
             </div>
           )}
-        </div>
+        </DSCard>
       </div>
 
       <div>
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Состояние системы</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {/* Карточки состояния системы — через дизайн-систему KpiRow/KpiCard */}
+        <DSKpiRow cols={4}>
           {sysCards.map(s => (
-            <button key={s.label} onClick={() => onNavigate?.("monitoring")}
-              className="bg-white dark:bg-gray-800 rounded-2xl p-4 text-left hover:scale-[1.02] transition-all duration-200 w-full"
-              style={{ boxShadow: "0 4px 20px rgba(25,28,30,0.06)" }}>
-              <div className="flex items-center justify-between mb-2">
-                <div className={"w-8 h-8 rounded-xl flex items-center justify-center " + (s.ok ? "bg-emerald-50" : "bg-red-50")}>
-                  <span className="material-symbols-outlined text-base" style={{ color: s.ok ? "#166534" : "#ba1a1a", fontVariationSettings: "FILL 1" }}>{s.icon}</span>
-                </div>
-                <span className={"text-[10px] font-bold px-2 py-0.5 rounded-full " + (s.ok ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700")}>
-                  {s.ok ? "● OK" : "● ERR"}
-                </span>
-              </div>
-              <p className="text-base font-extrabold font-headline dark:text-white" style={{ color: s.ok ? "#166534" : "#ba1a1a" }}>{loading ? "…" : s.val}</p>
-              <p className="text-[11px] font-semibold text-gray-500 dark:text-gray-300 mt-0.5">{s.label}</p>
-              <p className="text-[10px] text-gray-400 dark:text-gray-500">{s.sub}</p>
-            </button>
+            <div
+              key={s.label}
+              onClick={() => onNavigate?.("monitoring")}
+              style={{ cursor: 'pointer' }}
+            >
+              <DSKpiCard
+                label={s.label}
+                value={loading ? '…' : s.val}
+                delta={s.sub}
+                trend={s.ok ? 'up' : 'down'}
+                icon={
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 18, color: s.ok ? 'var(--good)' : 'var(--bad)', fontVariationSettings: "'FILL' 1" }}
+                  >
+                    {s.icon}
+                  </span>
+                }
+              />
+            </div>
           ))}
-        </div>
+        </DSKpiRow>
       </div>
     </div>
   )

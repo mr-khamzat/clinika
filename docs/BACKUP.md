@@ -26,9 +26,12 @@ Cron: `0 3 * * * /opt/clinika/backup.sh`
 
 ## Offsite (защита от смерти диска)
 
-1. Установить rclone:
+> **Шпаргалка с примером конфига**: `docs/rclone.conf.example` — пошаговая инструкция
+> со всеми ответами в `rclone config` для Яндекс.Диска.
+
+1. Установить rclone (на сервере уже установлен — `which rclone`):
    ```bash
-   apt install rclone
+   apt install rclone -y
    ```
 
 2. Настроить remote (Яндекс.Диск):
