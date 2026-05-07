@@ -1,6 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import DOMPurify from 'dompurify'
 import { API_BASE, SLUG } from '../config'
+
+// ===== БЛОК: безопасная санитизация HTML =====
+// DOMPurify прогоняет любой HTML, который мы строим из markdown,
+// прежде чем он попадёт в dangerouslySetInnerHTML.
+// Whitelist: разрешаем только теги/атрибуты, которые реально использует renderMd.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'br', 'strong', 'em', 'b', 'i', 'u', 's',
+    'ul', 'ol', 'li',
+    'blockquote', 'pre', 'code',
+    'a', 'img', 'hr',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'div', 'span',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
+  // Разрешаем только http/https/mailto в href/src — никаких javascript: или data:.
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+}
+
+const sanitize = (html) => DOMPurify.sanitize(html, SANITIZE_CONFIG)
 
 // ── Markdown renderer (идентичен WikiSection) ─────────────────────────────────
 function renderMd(raw) {
@@ -254,7 +276,7 @@ export default function WikiViewer({ token, user, onClose }) {
 
               {/* Content */}
               <div className="wiki-content"
-                dangerouslySetInnerHTML={{ __html: renderMd(current.content_md) }} />
+                dangerouslySetInnerHTML={{ __html: sanitize(renderMd(current.content_md)) }} />
 
               {/* Child pages */}
               {(() => {

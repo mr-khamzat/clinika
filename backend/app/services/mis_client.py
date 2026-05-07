@@ -10,10 +10,9 @@ from app.config import settings
 log = logging.getLogger("mis_client")
 
 DEFAULT_MIS_BASE = "https://mis.stoclinic.ru:3010/api/public"
-# DEPRECATED: per-tenant список МИС clinic_id теперь хранится в Tenant.mis_clinic_ids (JSONB).
-# Оставлен для обратной совместимости с существующими вызовами get_patient_visits;
-# в auto_confirm уже не используется. Не добавлять новые ссылки на эту константу.
-MIS_CLINIC_IDS = {1, 4, 26}
+# ===== Per-tenant МИС =====
+# Список clinic_id хранится в Tenant.mis_clinic_ids (JSONB). Глобальной константы
+# больше нет — она была cross-tenant утечкой (опросом чужих клиник без проверки tenant).
 
 
 def _ssl_context(ssl_verify: bool):
@@ -126,38 +125,7 @@ async def get_clinics(api_url: str = "", api_key: str = "") -> list[dict]:
     return []
 
 
-async def get_patient_visits(patient_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
-    try:
-        result = await _post("getPatientAppointments", api_url=api_url, api_key=api_key,
-                             ssl_verify=settings.mis_ssl_verify, patient_id=patient_id, limit=50)
-        if result.get("error") == 0:
-            return result.get("data") or []
-    except Exception:
-        pass
-    try:
-        from datetime import datetime, timedelta
-        date_to = datetime.now().strftime("%d.%m.%Y")
-        date_from = (datetime.now() - timedelta(days=730)).strftime("%d.%m.%Y")
-        all_appts = []
-        for clinic_id in MIS_CLINIC_IDS:
-            try:
-                appts = await get_appointments(clinic_id, date_from, date_to, api_url=api_url, api_key=api_key)
-                for a in appts:
-                    if str(a.get("patient_id")) == str(patient_id):
-                        all_appts.append({**a, "clinic_id": clinic_id})
-            except Exception:
-                continue
-        return sorted(all_appts, key=lambda x: x.get("date", ""), reverse=True)[:30]
-    except Exception:
-        return []
-
-
-async def get_patient_analyses(patient_id: int, api_url: str = "", api_key: str = "") -> list[dict]:
-    try:
-        result = await _post("getPatientAnalyses", api_url=api_url, api_key=api_key,
-                             ssl_verify=settings.mis_ssl_verify, patient_id=patient_id, limit=50)
-        if result.get("error") == 0:
-            return result.get("data") or []
-    except Exception:
-        return []
-    return []
+# Удалены неиспользуемые get_patient_visits / get_patient_analyses —
+# у обеих был cross-tenant fallback по глобальному MIS_CLINIC_IDS.
+# Если когда-то понадобится — реализовать per-tenant: принимать clinic_ids: list[int]
+# из Tenant.mis_clinic_ids на стороне вызова (как в auto_confirm.py).

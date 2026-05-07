@@ -3,7 +3,24 @@
  * Только для super_admin. Фиолетово-тёмная тема.
  */
 import { useState, useEffect, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import { API_BASE } from '../config'
+
+// ===== БЛОК: безопасный рендер markdown =====
+// AI-провайдер возвращает произвольный текст. Раньше он шёл напрямую
+// в dangerouslySetInnerHTML — это XSS, если ответ содержит <script>.
+// Теперь: 1) экранируем источник, 2) парсим markdown,
+// 3) прогоняем результат через DOMPurify с whitelist'ом тегов и стилей.
+const escapeHtml = (s) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+   .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: ['h2', 'h3', 'b', 'br', 'p', 'em', 'i', 'strong', 'ul', 'li'],
+  ALLOWED_ATTR: ['style'],
+  // Запрещаем javascript:/data: в любых url'ах.
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+}
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
 
@@ -14,14 +31,15 @@ const apiFetch = (method, path, token, body) =>
     body: body ? JSON.stringify(body) : undefined,
   }).then(r => r.json())
 
-/** Простой рендер markdown-подобного текста */
+/** Безопасный рендер markdown-подобного текста (с DOMPurify). */
 function renderMarkdown(text) {
   if (!text) return ''
-  return text
+  const html = escapeHtml(text)
     .replace(/### (.+)/g, '<h3 style="font-size:1.05rem;font-weight:700;color:#c4b5fd;margin:12px 0 4px">$1</h3>')
     .replace(/## (.+)/g, '<h2 style="font-size:1.15rem;font-weight:700;color:#a78bfa;margin:14px 0 6px">$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, '<b style="color:#e2e8f0">$1</b>')
     .replace(/\n/g, '<br/>')
+  return DOMPurify.sanitize(html, SANITIZE_CONFIG)
 }
 
 // ── Константы ─────────────────────────────────────────────────────────────────
