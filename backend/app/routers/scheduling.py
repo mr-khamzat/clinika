@@ -329,6 +329,63 @@ async def get_slots(
     return await get_available_slots(db, doctor_id, target_date)
 
 
+# ===== БЛОК: Недельная сетка =====
+# WeekScheduleSection.jsx ходит сюда чтобы построить календарь на 7 дней.
+@router.get("/doctors/{doctor_id}/week", dependencies=_FEAT)
+async def get_doctor_week(
+    doctor_id: uuid.UUID,
+    start_date: date = Query(..., description="Понедельник недели в YYYY-MM-DD"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Расписание + слоты + записи врача на неделю (7 дней от start_date)."""
+    from datetime import timedelta as _td
+    # Tenant isolation
+    doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
+    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
+        raise HTTPException(404, "Врач не найден")
+
+    # Шаблон расписания врача
+    sched_rows = (await db.execute(
+        select(DoctorSchedule).where(DoctorSchedule.doctor_id == doctor_id)
+    )).scalars().all()
+    sched_map = {r.day_of_week: r for r in sched_rows}
+
+    DAY_NAMES = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+    days = []
+    today = date.today()
+
+    for i in range(7):
+        d = start_date + _td(days=i)
+        dow = d.weekday()
+        sch = sched_map.get(dow)
+        is_working = bool(sch and sch.is_active)
+
+        # Слоты только для рабочего дня и не из прошлого
+        slots = []
+        if is_working and d >= today:
+            try:
+                slots = await get_available_slots(db, doctor_id, d)
+            except Exception:
+                slots = []
+
+        days.append({
+            "date": d.isoformat(),
+            "day_of_week": dow,
+            "day_name": DAY_NAMES[dow],
+            "is_working": is_working,
+            "start_time": (sch.start_time.strftime("%H:%M") if sch else "09:00"),
+            "end_time":   (sch.end_time.strftime("%H:%M")   if sch else "18:00"),
+            "slots": slots,
+        })
+
+    return {
+        "doctor": {"id": str(doctor.id), "slot_duration": doctor.slot_duration},
+        "start_date": start_date.isoformat(),
+        "days": days,
+    }
+
+
 # ── Записи на приём ───────────────────────────────────────────────────────────
 
 @router.post("/appointments", status_code=201, dependencies=_FEAT)
