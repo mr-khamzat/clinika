@@ -19,7 +19,7 @@
  * ========================================
  */
 import { useEffect, useMemo, useState } from 'react'
-import axios from 'axios'
+import api from '../../api'
 import { API_BASE, SLUG } from '../../config'
 import {
   Card, KpiCard, KpiRow, Tabs, Button, Chip, EmptyState, useToast,
@@ -57,6 +57,26 @@ const RISK_LABEL = {
   high: { text: 'высокий', tone: 'bad' },
 }
 
+// ─── Горизонт LTV (1/3/5/10 лет) ───────────────────────────────────────────
+// Бэкенд принимает years=N в /summary, /patients, /export/pdf, /export/xlsx
+// и пересчитывает значения LTV/NetLTV из базовой формулы (3 года) в N лет.
+const HORIZON_OPTIONS = [
+  { id: '1',  label: '1 год' },
+  { id: '3',  label: '3 года' },
+  { id: '5',  label: '5 лет' },
+  { id: '10', label: '10 лет' },
+]
+
+// Русское склонение «лет / года / год» для произвольного числа лет.
+function yearsLabelRu(n) {
+  const num = Number(n) || 0
+  const mod10 = num % 10
+  const mod100 = num % 100
+  if (mod10 === 1 && mod100 !== 11) return `${num} год`
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return `${num} года`
+  return `${num} лет`
+}
+
 function authH(token) { return token ? { Authorization: `Bearer ${token}` } : {} }
 
 
@@ -84,7 +104,7 @@ function ConnectModulePrompt() {
 
 
 // ─── Сводка ────────────────────────────────────────────────────────────────
-function SummaryView({ data }) {
+function SummaryView({ data, years = 3 }) {
   if (!data) return null
   return (
     <>
@@ -141,7 +161,7 @@ function SummaryView({ data }) {
             label="Последний пересчёт"
             value={data.last_computed_at ? new Date(data.last_computed_at).toLocaleString('ru') : '—'}
           />
-          <Metric label="Горизонт LTV / NetLTV" value="3 года" />
+          <Metric label="Горизонт LTV / NetLTV" value={yearsLabelRu(years)} />
           <Metric
             label="NetLTV: источник"
             value={Number(data.avg_net_ltv || 0) > 0 ? 'getPayments (Renovatio)' : 'нет данных от Renovatio'}
@@ -282,6 +302,9 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
   const [recomputing, setRecomputing] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
   const [exportingXlsx, setExportingXlsx] = useState(false)
+  // Горизонт расчёта LTV (1/3/5/10 лет). По умолчанию — 3 года (старая формула).
+  // При смене перезагружаются summary/patients и передаётся в экспорт PDF/Excel.
+  const [years, setYears] = useState(3)
 
   // Внутренний scope активен только если родитель не передал clinicId
   const externallyControlled = externalClinicId !== undefined
@@ -304,12 +327,16 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
   const reload = async () => {
     setLoading(true)
     setModuleAvailable(true)
-    const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
+    // Базовые параметры включают горизонт LTV (years=N) — бэкенд пересчитывает
+    // ltv_estimate / net_ltv в response без переписывания снапшотов в БД.
+    const baseParams = { years }
+    if (effectiveClinicId) baseParams.clinic_id = effectiveClinicId
     try {
       const [s, p, c] = await Promise.all([
-        axios.get(`${API_BASE}/analytics/ltv/summary`, { headers, params }),
-        axios.get(`${API_BASE}/analytics/ltv/patients`, { headers, params: { ...params, limit: 100, min_visits: 2 } }),
-        axios.get(`${API_BASE}/analytics/ltv/cohorts`, { headers }),
+        api.get(`/analytics/ltv/summary`, { headers, params: baseParams }),
+        api.get(`/analytics/ltv/patients`, { headers, params: { ...baseParams, limit: 100, min_visits: 2 } }),
+        // Когорты не зависят от horizon — отдельная семантика (avg по когорте за всё время)
+        api.get(`/analytics/ltv/cohorts`, { headers }),
       ])
       setSummary(s.data || null)
       setPatients(Array.isArray(p.data) ? p.data : [])
@@ -327,14 +354,14 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     }
   }
 
-  // Перезагружаем данные при смене clinic (внешней или внутренней)
-  useEffect(() => { reload() /* eslint-disable-next-line */ }, [effectiveClinicId])
+  // Перезагружаем данные при смене clinic (внешней/внутренней) или горизонта LTV.
+  useEffect(() => { reload() /* eslint-disable-next-line */ }, [effectiveClinicId, years])
 
   const recompute = async () => {
     setRecomputing(true)
     try {
       const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
-      const r = await axios.post(`${API_BASE}/analytics/ltv/recompute`, null, { headers, params })
+      const r = await api.post(`/analytics/ltv/recompute`, null, { headers, params })
       const upd = r.data?.updated ?? 0
       toast?.success?.(`Пересчитано: обновлено ${upd} снапшотов`)
       await reload()
@@ -359,7 +386,9 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
     const setBusy = kind === 'pdf' ? setExportingPdf : setExportingXlsx
     setBusy(true)
     try {
-      const params = effectiveClinicId ? { clinic_id: effectiveClinicId } : {}
+      // Передаём текущий горизонт LTV — отчёт сгенерится под выбранный N лет.
+      const params = { years }
+      if (effectiveClinicId) params.clinic_id = effectiveClinicId
       const url = `${API_BASE}/analytics/ltv/export/${kind}`
       const resp = await axios.get(url, {
         headers,
@@ -436,6 +465,20 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
         <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--fg)' }}>LTV-аналитика</div>
         <Tabs items={tabs} value={tab} onChange={setTab} />
         <div className="flex-1" />
+        {/* Горизонт расчёта LTV: 1/3/5/10 лет — пересчёт LTV/NetLTV в response */}
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          title="Горизонт расчёта LTV / NetLTV"
+        >
+          <span style={{ fontSize: 12, color: 'var(--fg-3)', whiteSpace: 'nowrap' }}>
+            Горизонт:
+          </span>
+          <Tabs
+            items={HORIZON_OPTIONS}
+            value={String(years)}
+            onChange={(v) => setYears(Number(v))}
+          />
+        </div>
         {/* Селектор клиники — только если внутренний scope активен */}
         {!externallyControlled && scope.clinics.length > 0 && (
           <ClinicScopeSelector
@@ -466,7 +509,7 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
         </Button>
       </div>
 
-      {tab === 'summary'  && <SummaryView data={summary} />}
+      {tab === 'summary'  && <SummaryView data={summary} years={years} />}
       {tab === 'patients' && <PatientsTable rows={patients} />}
       {tab === 'cohorts'  && <CohortsTable rows={cohorts} />}
     </div>

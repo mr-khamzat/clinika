@@ -26,6 +26,7 @@ import csv
 import io
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Optional
 from urllib.parse import quote
 
@@ -101,6 +102,51 @@ def _days_since(dt: Optional[datetime]) -> Optional[int]:
     return max(0, int(delta.days))
 
 
+# ───────────────────────────────────────────────────────────────────────────
+# Горизонт расчёта LTV (1/3/5/10 лет)
+# ───────────────────────────────────────────────────────────────────────────
+
+# Базовый горизонт, под который считаются и сохраняются снапшоты в БД.
+# Если фронт просит другой горизонт — пересчитываем на лету коэффициентом.
+_BASE_LTV_HORIZON_YEARS = Decimal("3")
+
+
+def _clamp_years(years: Optional[int]) -> int:
+    """Ограничивает years диапазоном 1..10. None → 3."""
+    if years is None:
+        return 3
+    try:
+        n = int(years)
+    except (TypeError, ValueError):
+        return 3
+    if n < 1:
+        return 1
+    if n > 10:
+        return 10
+    return n
+
+
+def _scale_factor(years: int) -> Decimal:
+    """Коэффициент пересчёта LTV из базовых 3 лет в произвольный горизонт."""
+    return (Decimal(years) / _BASE_LTV_HORIZON_YEARS)
+
+
+def _rescale(value, years: int) -> float:
+    """Пересчёт сохранённого LTV/NetLTV под выбранный горизонт.
+
+    В БД лежат значения для 3-летнего горизонта, поэтому новый = старый × years / 3.
+    Возвращает float (готовое к JSON). На вход — Decimal/float/None.
+    """
+    if value is None:
+        return 0.0
+    try:
+        d = Decimal(str(value))
+    except Exception:
+        return 0.0
+    res = (d * _scale_factor(years)).quantize(Decimal("0.01"))
+    return float(res)
+
+
 @router.get("/patients", dependencies=[_mgr, _mod])
 async def list_top_patients(
     clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники, либо все клиники тенанта"),
@@ -111,14 +157,23 @@ async def list_top_patients(
         None, ge=1, le=3650,
         description="Фильтр спящих пациентов: дней с последнего визита ≥ inactive_days",
     ),
+    years: int = Query(
+        3, ge=1, le=10,
+        description="Горизонт расчёта LTV (1..10 лет). По умолчанию 3 — соответствует БД.",
+    ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Топ пациентов по LTV (DESC). Поддержка фильтров «повторные» / «спящие»."""
+    """Топ пациентов по LTV (DESC). Поддержка фильтров «повторные» / «спящие».
+
+    `years` пересчитывает ltv_estimate / net_ltv в response из БД-значений
+    (которые рассчитаны под 3 года) — без переписывания снапшотов.
+    """
     if tenant is None:
         return []
 
+    years = _clamp_years(years)
     effective_clinic_id = await _resolve_clinic_scope(db, user, clinic_id)
 
     # Если включён repeat_only — поднимаем порог визитов до 2 (если он ниже).
@@ -148,9 +203,10 @@ async def list_top_patients(
             "visits_count": r.visits_count,
             "total_spent": float(r.total_spent or 0),
             "avg_check": float(r.avg_check or 0),
-            "ltv_estimate": float(r.ltv_estimate or 0),
+            # ltv_estimate / net_ltv пересчитаны под выбранный horizon=years.
+            "ltv_estimate": _rescale(r.ltv_estimate, years),
             # NetLTV по фактическим оплатам (getPayments). 0 — данные пока недоступны.
-            "net_ltv": float(r.net_ltv or 0),
+            "net_ltv": _rescale(r.net_ltv, years),
             "visits_per_year": float(r.visits_per_year or 0),
             "first_visit_at": r.first_visit_at.isoformat() if r.first_visit_at else None,
             "last_visit_at": r.last_visit_at.isoformat() if r.last_visit_at else None,
@@ -158,6 +214,7 @@ async def list_top_patients(
             "cohort_quarter": r.cohort_quarter,
             "churn_risk": r.churn_risk,
             "clinic_id": str(r.clinic_id) if r.clinic_id else None,
+            "horizon_years": years,
         }
         for r in rows
     ]
@@ -178,11 +235,19 @@ async def list_cohorts(
 @router.get("/summary", dependencies=[_mgr, _mod])
 async def get_summary(
     clinic_id: Optional[uuid.UUID] = Query(None),
+    years: int = Query(
+        3, ge=1, le=10,
+        description="Горизонт расчёта LTV (1..10 лет). По умолчанию 3 — соответствует БД.",
+    ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Общие метрики: avg LTV, avg NetLTV, total patients, churn rate, at-risk."""
+    """Общие метрики: avg LTV, avg NetLTV, total patients, churn rate, at-risk.
+
+    `years` пересчитывает avg_ltv / avg_net_ltv в response из БД-значений
+    (рассчитанных под 3 года) — снапшоты не переписываются.
+    """
     if tenant is None:
         return {
             "total_patients": 0,
@@ -193,8 +258,10 @@ async def get_summary(
             "churn_rate": 0,
             "at_risk_patients": 0,
             "last_computed_at": None,
+            "horizon_years": _clamp_years(years),
         }
 
+    years = _clamp_years(years)
     effective_clinic_id = await _resolve_clinic_scope(db, user, clinic_id)
 
     base = select(
@@ -239,14 +306,16 @@ async def get_summary(
 
     return {
         "total_patients": total,
-        "avg_ltv": float(avg_ltv or 0),
-        "avg_net_ltv": float(avg_net_ltv or 0),
+        # avg_ltv / avg_net_ltv пересчитаны под выбранный горизонт (years).
+        "avg_ltv": _rescale(avg_ltv, years),
+        "avg_net_ltv": _rescale(avg_net_ltv, years),
         "total_spent": float(total_spent or 0),
         "avg_check": float(avg_check or 0),
         "churn_rate": churn_rate,
         "at_risk_patients": at_risk,
         "medium_risk_patients": medium,
         "last_computed_at": last_computed.isoformat() if last_computed else None,
+        "horizon_years": years,
     }
 
 
@@ -283,6 +352,10 @@ def _content_disposition(filename: str) -> str:
 async def export_pdf(
     clinic_id: Optional[uuid.UUID] = Query(None),
     period: str = Query("all", description="Метка периода для шапки: all/month/quarter/year"),
+    years: int = Query(
+        3, ge=1, le=10,
+        description="Горизонт расчёта LTV (1..10 лет). По умолчанию 3.",
+    ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
@@ -290,9 +363,10 @@ async def export_pdf(
     """PDF-отчёт LTV: KPI, топ-50 пациентов, когорты, диаграммы."""
     if tenant is None:
         raise HTTPException(status_code=400, detail="Тенант не определён")
+    years = _clamp_years(years)
     effective_clinic_id = await _resolve_clinic_scope(db, user, clinic_id)
     try:
-        pdf_bytes = await generate_ltv_pdf(db, tenant, effective_clinic_id, period)
+        pdf_bytes = await generate_ltv_pdf(db, tenant, effective_clinic_id, period, years=years)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка генерации PDF: {e}")
 
@@ -308,6 +382,10 @@ async def export_pdf(
 @router.get("/export/xlsx", dependencies=[_mgr, _mod])
 async def export_xlsx(
     clinic_id: Optional[uuid.UUID] = Query(None),
+    years: int = Query(
+        3, ge=1, le=10,
+        description="Горизонт расчёта LTV (1..10 лет). По умолчанию 3.",
+    ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
@@ -315,9 +393,10 @@ async def export_xlsx(
     """Excel-отчёт LTV: листы Сводка / Топ пациентов / Когорты."""
     if tenant is None:
         raise HTTPException(status_code=400, detail="Тенант не определён")
+    years = _clamp_years(years)
     effective_clinic_id = await _resolve_clinic_scope(db, user, clinic_id)
     try:
-        xlsx_bytes = await generate_ltv_excel(db, tenant, effective_clinic_id)
+        xlsx_bytes = await generate_ltv_excel(db, tenant, effective_clinic_id, years=years)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка генерации Excel: {e}")
 

@@ -25,6 +25,7 @@ import io
 import math
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Optional
 
@@ -36,6 +37,33 @@ from app.models.clinic import Clinic
 from app.models.ltv import PatientLtvSnapshot
 from app.models.tenant import Tenant
 from app.services.ltv_service import compute_cohorts
+
+
+# Базовый горизонт, под который рассчитаны и сохранены снапшоты в БД.
+# Если запросили другой — масштабируем коэффициентом years/3.
+_BASE_LTV_HORIZON_YEARS = Decimal("3")
+
+
+def _scale(value, years: int) -> float:
+    """Пересчёт сохранённого LTV/NetLTV из базовых 3 лет в `years`."""
+    if value is None:
+        return 0.0
+    try:
+        d = Decimal(str(value))
+    except Exception:
+        return 0.0
+    res = (d * Decimal(years) / _BASE_LTV_HORIZON_YEARS).quantize(Decimal("0.01"))
+    return float(res)
+
+
+def _years_label_ru(years: int) -> str:
+    """Русское склонение «лет/года/год» для числа years."""
+    n = int(years)
+    if n % 10 == 1 and n % 100 != 11:
+        return f"{n} год"
+    if n % 10 in (2, 3, 4) and n % 100 not in (12, 13, 14):
+        return f"{n} года"
+    return f"{n} лет"
 
 # ── Jinja2 окружение для PDF-шаблона ────────────────────────────────────────
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
@@ -89,6 +117,16 @@ def _fmt_pct(v) -> str:
     return f"{n:.1f}%"
 
 
+def _fmt_date_ru(dt) -> str:
+    """ДД.ММ.ГГГГ или пусто (для PDF/CSV). dt — datetime или None."""
+    if dt is None:
+        return ""
+    try:
+        return dt.strftime("%d.%m.%Y")
+    except Exception:
+        return ""
+
+
 # ───────────────────────────────────────────────────────────────────────────
 # Сбор данных (общий для PDF и Excel)
 # ───────────────────────────────────────────────────────────────────────────
@@ -97,9 +135,13 @@ async def _collect_ltv_data(
     db: AsyncSession,
     tenant: Tenant,
     clinic_id: Optional[uuid.UUID] = None,
+    years: int = 3,
 ):
     """Возвращает кортеж (summary, patients, cohorts) — те же данные, что отдают
     REST-endpoints /analytics/ltv/{summary,patients,cohorts}.
+
+    `years` — горизонт расчёта LTV (1..10). LTV/NetLTV пересчитываются из
+    базового горизонта 3 года, сохранённого в БД, коэффициентом years/3.
     """
     # ── Summary ───────────────────────────────────────────────────────────
     base = select(
@@ -143,8 +185,9 @@ async def _collect_ltv_data(
 
     summary = {
         "total_patients": total,
-        "avg_ltv": float(avg_ltv or 0),
-        "avg_net_ltv": float(avg_net_ltv or 0),
+        # avg_ltv / avg_net_ltv пересчитаны под горизонт `years`.
+        "avg_ltv": _scale(avg_ltv, years),
+        "avg_net_ltv": _scale(avg_net_ltv, years),
         "total_spent": float(total_spent or 0),
         "avg_check": float(avg_check or 0),
         "churn_rate": churn_rate,
@@ -152,6 +195,7 @@ async def _collect_ltv_data(
         "medium_risk_patients": medium,
         "low_risk_patients": low,
         "last_computed_at": last_computed.isoformat() if last_computed else None,
+        "horizon_years": years,
     }
 
     # ── Топ пациентов (top-50) ────────────────────────────────────────────
@@ -170,15 +214,27 @@ async def _collect_ltv_data(
             "visits_count": int(r.visits_count or 0),
             "total_spent": float(r.total_spent or 0),
             "avg_check": float(r.avg_check or 0),
-            "ltv_estimate": float(r.ltv_estimate or 0),
-            "net_ltv": float(r.net_ltv or 0),
+            # ltv_estimate / net_ltv пересчитаны под горизонт `years`.
+            "ltv_estimate": _scale(r.ltv_estimate, years),
+            "net_ltv": _scale(r.net_ltv, years),
             "churn_risk": r.churn_risk or "high",
+            "first_visit_at": r.first_visit_at,
+            "last_visit_at": r.last_visit_at,
         }
         for r in prows
     ]
 
     # ── Когорты ───────────────────────────────────────────────────────────
-    cohorts = await compute_cohorts(db, tenant.id, period="quarter")
+    raw_cohorts = await compute_cohorts(db, tenant.id, period="quarter")
+    # avg_ltv / avg_net_ltv в когортах тоже пересчитываем под выбранный горизонт.
+    cohorts = [
+        {
+            **c,
+            "avg_ltv": _scale(c.get("avg_ltv"), years),
+            "avg_net_ltv": _scale(c.get("avg_net_ltv"), years),
+        }
+        for c in raw_cohorts
+    ]
 
     return summary, patients, cohorts
 
@@ -288,12 +344,23 @@ async def generate_ltv_pdf(
     tenant: Tenant,
     clinic_id: Optional[uuid.UUID] = None,
     period: str = "all",
+    years: int = 3,
 ) -> bytes:
-    """Сгенерировать PDF-отчёт LTV. Возвращает байты PDF."""
+    """Сгенерировать PDF-отчёт LTV. Возвращает байты PDF.
+
+    `years` — горизонт расчёта LTV (1..10 лет). Все суммы LTV/NetLTV
+    пересчитываются под этот горизонт; шапка отчёта подписывается «N лет».
+    """
     # Ленивый импорт WeasyPrint (тяжёлая зависимость)
     from weasyprint import HTML  # noqa: WPS433
 
-    summary, patients, cohorts = await _collect_ltv_data(db, tenant, clinic_id)
+    # Клампим years на всякий случай (если позвали из не-роутера)
+    try:
+        years = max(1, min(10, int(years)))
+    except (TypeError, ValueError):
+        years = 3
+
+    summary, patients, cohorts = await _collect_ltv_data(db, tenant, clinic_id, years=years)
 
     # Лейбл клиники (если задана)
     clinic_label = "Все клиники"
@@ -331,6 +398,8 @@ async def generate_ltv_pdf(
             "total_spent_fmt": _fmt_rub_zero_ok(p["total_spent"]),
             "ltv_estimate_fmt": _fmt_rub_zero_ok(p["ltv_estimate"]),
             "net_ltv_fmt": _fmt_rub(p["net_ltv"]),  # 0 → «—»
+            "first_visit_fmt": _fmt_date_ru(p.get("first_visit_at")),
+            "last_visit_fmt": _fmt_date_ru(p.get("last_visit_at")),
         })
 
     cohorts_fmt = []
@@ -362,6 +431,9 @@ async def generate_ltv_pdf(
         "has_data": has_data,
         "bar_chart_svg": bar_svg,
         "pie_chart_svg": pie_svg,
+        # Горизонт LTV — для шапки отчёта и описаний секций
+        "horizon_years": years,
+        "horizon_label": _years_label_ru(years),
     }
 
     template = _jinja_env.get_template("ltv_report.html")
@@ -377,14 +449,25 @@ async def generate_ltv_excel(
     db: AsyncSession,
     tenant: Tenant,
     clinic_id: Optional[uuid.UUID] = None,
+    years: int = 3,
 ) -> bytes:
-    """Сгенерировать Excel-отчёт LTV. Возвращает байты XLSX."""
+    """Сгенерировать Excel-отчёт LTV. Возвращает байты XLSX.
+
+    `years` — горизонт расчёта LTV (1..10 лет). LTV/NetLTV пересчитываются
+    под этот горизонт; в шапке листа «Сводка» — отдельная строка.
+    """
     # Ленивый импорт openpyxl
     from openpyxl import Workbook  # noqa: WPS433
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side  # noqa: WPS433
 
-    summary, patients, cohorts = await _collect_ltv_data(db, tenant, clinic_id)
+    try:
+        years = max(1, min(10, int(years)))
+    except (TypeError, ValueError):
+        years = 3
+
+    summary, patients, cohorts = await _collect_ltv_data(db, tenant, clinic_id, years=years)
     has_data = (summary.get("total_patients") or 0) > 0
+    horizon_label = _years_label_ru(years)
 
     # ── Стили ─────────────────────────────────────────────────────────────
     header_fill = PatternFill("solid", fgColor="06B6D4")
@@ -406,9 +489,10 @@ async def generate_ltv_excel(
 
     rows_summary = [
         ("Метрика", "Значение"),
+        ("Горизонт LTV / NetLTV", horizon_label),
         ("Всего пациентов", summary["total_patients"], int_fmt),
-        ("Avg LTV (3 года)", round(summary["avg_ltv"], 2), rub_fmt),
-        ("Avg NetLTV (3 года)", round(summary["avg_net_ltv"], 2), rub_fmt),
+        (f"Avg LTV ({horizon_label})", round(summary["avg_ltv"], 2), rub_fmt),
+        (f"Avg NetLTV ({horizon_label})", round(summary["avg_net_ltv"], 2), rub_fmt),
         ("Total spent", round(summary["total_spent"], 2), rub_fmt),
         ("Avg check", round(summary["avg_check"], 2), rub_fmt),
         ("Churn rate", round(summary["churn_rate"], 2), pct_fmt),
@@ -453,10 +537,11 @@ async def generate_ltv_excel(
     # ── Лист «Топ пациентов» ──────────────────────────────────────────────
     ws_p = wb.create_sheet("Топ пациентов")
     headers_p = [
-        "#", "Имя", "Телефон", "Визитов", "Ср. чек",
-        "Total spent", "LTV", "NetLTV", "Churn risk",
+        "#", "Имя", "Телефон", "Визитов",
+        "Первый визит", "Последний визит",
+        "Ср. чек", "Total spent", "LTV", "NetLTV", "Churn risk",
     ]
-    widths_p = [5, 28, 18, 10, 14, 16, 16, 16, 14]
+    widths_p = [5, 28, 18, 10, 14, 16, 14, 16, 16, 16, 14]
     for col_idx, (h, w) in enumerate(zip(headers_p, widths_p), start=1):
         c = ws_p.cell(row=1, column=col_idx, value=h)
         c.fill = header_fill
@@ -474,20 +559,22 @@ async def generate_ltv_excel(
                 (2, p.get("patient_name") or "—", None),
                 (3, p.get("patient_phone") or "—", None),
                 (4, int(p.get("visits_count") or 0), int_fmt),
-                (5, round(float(p.get("avg_check") or 0), 2), rub_fmt),
-                (6, round(float(p.get("total_spent") or 0), 2), rub_fmt),
-                (7, round(float(p.get("ltv_estimate") or 0), 2), rub_fmt),
-                (8, round(float(p.get("net_ltv") or 0), 2), rub_fmt),
-                (9, p.get("churn_risk") or "—", None),
+                (5, _fmt_date_ru(p.get("first_visit_at")) or "—", None),
+                (6, _fmt_date_ru(p.get("last_visit_at")) or "—", None),
+                (7, round(float(p.get("avg_check") or 0), 2), rub_fmt),
+                (8, round(float(p.get("total_spent") or 0), 2), rub_fmt),
+                (9, round(float(p.get("ltv_estimate") or 0), 2), rub_fmt),
+                (10, round(float(p.get("net_ltv") or 0), 2), rub_fmt),
+                (11, p.get("churn_risk") or "—", None),
             ]
             for col_idx, val, fmt in cells:
                 c = ws_p.cell(row=row, column=col_idx, value=val)
                 c.border = border
                 if fmt:
                     c.number_format = fmt
-                if col_idx in (1, 4, 9):
+                if col_idx in (1, 4, 5, 6, 11):
                     c.alignment = Alignment(horizontal="center")
-                elif col_idx in (5, 6, 7, 8):
+                elif col_idx in (7, 8, 9, 10):
                     c.alignment = Alignment(horizontal="right")
     else:
         cell = ws_p.cell(

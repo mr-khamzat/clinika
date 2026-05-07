@@ -197,6 +197,7 @@
   <div class="meta">
     <b>Клиника:</b> {{ clinic_label }} &nbsp;·&nbsp;
     <b>Период:</b> {{ period_label }} &nbsp;·&nbsp;
+    <b>Горизонт LTV:</b> {{ horizon_label }} &nbsp;·&nbsp;
     <b>Создан:</b> {{ generated_at }}
   </div>
 </div>
@@ -211,7 +212,7 @@
 <h2 class="section">Сводка</h2>
 <div class="section-desc">
   Ключевые метрики LTV-аналитики по выбранной клинике/периоду.
-  Avg LTV — средний прогнозируемый доход с пациента (горизонт 3 года).
+  Avg LTV — средний прогнозируемый доход с пациента (горизонт {{ horizon_label }}).
 </div>
 <table class="kpi">
   <tr>
@@ -271,14 +272,16 @@
 <table class="data">
   <thead>
     <tr>
-      <th style="width:4%">#</th>
-      <th style="width:20%">Имя</th>
-      <th style="width:13%">Телефон</th>
-      <th class="center" style="width:7%">Визитов</th>
-      <th class="num" style="width:11%">Ср. чек</th>
-      <th class="num" style="width:11%">Total</th>
-      <th class="num" style="width:11%">LTV</th>
-      <th class="num" style="width:11%">NetLTV</th>
+      <th style="width:3%">#</th>
+      <th style="width:15%">Имя</th>
+      <th style="width:11%">Телефон</th>
+      <th class="center" style="width:6%">Визитов</th>
+      <th class="center" style="width:9%">Первый визит</th>
+      <th class="center" style="width:9%">Последний визит</th>
+      <th class="num" style="width:9%">Ср. чек</th>
+      <th class="num" style="width:9%">Total</th>
+      <th class="num" style="width:10%">LTV</th>
+      <th class="num" style="width:10%">NetLTV</th>
       <th class="center" style="width:8%">Churn</th>
     </tr>
   </thead>
@@ -289,6 +292,8 @@
       <td>{{ p.patient_name or '—' }}</td>
       <td>{{ p.patient_phone }}</td>
       <td class="center">{{ p.visits_count }}</td>
+      <td class="center">{{ p.first_visit_fmt or '—' }}</td>
+      <td class="center">{{ p.last_visit_fmt or '—' }}</td>
       <td class="num">{{ p.avg_check_fmt }}</td>
       <td class="num">{{ p.total_spent_fmt }}</td>
       <td class="num">{{ p.ltv_estimate_fmt }}</td>
