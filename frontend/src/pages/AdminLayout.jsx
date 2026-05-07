@@ -7870,7 +7870,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           >
             <div className="mx-auto" style={{ maxWidth: 1280 }}>
               {/* W4 — Breadcrumbs: «Группа → Раздел → [подэлемент]» */}
-              <DSBreadcrumbs items={breadcrumbItems} />
+              {/* <DSBreadcrumbs items={breadcrumbItems} /> временно отключено */}
               <DSPageHeader
                 title={pageMeta.title}
                 subtitle={pageMeta.subtitle}
