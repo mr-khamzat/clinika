@@ -27,11 +27,8 @@
  * ============================================================================
  */
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { Card, Button, useToast } from '../design'
-
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 // Понятные подписи ролей для UI (мапим roleId → название)
 const ROLE_LABELS = {
@@ -91,7 +88,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
   useEffect(() => {
     if (!isAdminMode) return
     let aborted = false
-    axios.get(`${API_BASE}/admin/tenants`, { headers: authH(token) })
+    api.get('/admin/tenants')
       .then(r => {
         if (aborted) return
         const list = Array.isArray(r.data) ? r.data : []
@@ -103,7 +100,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
       })
     return () => { aborted = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminMode, token])
+  }, [isAdminMode])
 
   // ── Загрузка матрицы ──
   // В admin-режиме обязательно нужен tenantId (иначе матрица будет «дефолт»).
@@ -116,10 +113,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
     setLoading(true)
     try {
       const params = isAdminMode && tenantId ? { tenant_id: tenantId } : {}
-      const r = await axios.get(`${API_BASE}/permissions/matrix`, {
-        headers: authH(token),
-        params,
-      })
+      const r = await api.get('/permissions/matrix', { params })
       const data = r.data
       setActions(data.actions || [])
       setRows(data.roles || [])
@@ -143,7 +137,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
     } finally {
       setLoading(false)
     }
-  }, [token, toast, isAdminMode, tenantId])
+  }, [toast, isAdminMode, tenantId])
 
   useEffect(() => { load() }, [load])
 
@@ -181,11 +175,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
       const permissions = buildOverridePayload(role)
       const body = { role, permissions }
       if (isAdminMode && tenantId) body.target_tenant_id = tenantId
-      await axios.put(
-        `${API_BASE}/permissions/override`,
-        body,
-        { headers: authH(token) }
-      )
+      await api.put('/permissions/override', body)
       toast(`Права роли «${ROLE_LABELS[role] || role}» сохранены`, 'success')
       await load()
     } catch (e) {
@@ -204,10 +194,7 @@ export default function PermissionsMatrixSection({ token, mode }) {
     setSavingRole(role)
     try {
       const params = isAdminMode && tenantId ? { tenant_id: tenantId } : {}
-      await axios.delete(`${API_BASE}/permissions/override/${role}`, {
-        headers: authH(token),
-        params,
-      })
+      await api.delete(`/permissions/override/${role}`, { params })
       toast(`Права роли «${ROLE_LABELS[role] || role}» сброшены к дефолту`, 'success')
       await load()
     } catch (e) {

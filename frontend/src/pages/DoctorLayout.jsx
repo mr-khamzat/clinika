@@ -31,8 +31,7 @@
  * ========================================
  */
 import { useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import {
   Page,
   PageHeader,
@@ -54,8 +53,8 @@ import useTheme from '../lib/useTheme'
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
 // ─────────────────────────────────────────────────────────────────────
-function authH(t) { return { Authorization: `Bearer ${t}` } }
-function apiFetch(m, u, t, d) { return axios({ method: m, url: `${API_BASE}${u}`, headers: authH(t), data: d }) }
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+function apiFetch(m, u, _t, d) { return api({ method: m, url: u, data: d }) }
 
 function pluralize(n, forms) {
   // forms: ['приём', 'приёма', 'приёмов']

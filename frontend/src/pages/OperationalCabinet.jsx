@@ -14,7 +14,7 @@
  * ========================================
  */
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
-import axios from 'axios'
+import apiClient from '../api'
 import { API_BASE, SLUG } from '../config'
 import {
   Page,
@@ -35,10 +35,11 @@ const BrandingSection = lazy(() => import('../sections/BrandingSection'))
 const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection     = lazy(() => import('../sections/ActsSection'))
 
-// ─── HTTP-клиент с авторизацией ───
-const api = (token) => ({
-  get:  (url, params) => axios.get(API_BASE + url, { headers: { Authorization: `Bearer ${token}` }, params }),
-  post: (url, data)   => axios.post(API_BASE + url, data, { headers: { Authorization: `Bearer ${token}` } }),
+// ─── HTTP-клиент: единый apiClient (auto-Bearer + auto-refresh).
+// Сигнатура (token) сохранена для обратной совместимости — не используется.
+const api = (_token) => ({
+  get:  (url, params) => apiClient.get(url, { params }),
+  post: (url, data)   => apiClient.post(url, data),
 })
 
 // ─── Премиум cyan/teal акцент (override accent токенов) ───

@@ -18,8 +18,7 @@
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../../config'
+import api from '../../api'
 
 const PROVIDERS = [
   {
@@ -67,8 +66,6 @@ const PROVIDERS = [
   },
 ]
 
-const authH = (token) => ({ Authorization: `Bearer ${token}` })
-
 export default function FiscalSettingsSection({ token, clinicId, showToast }) {
   const [provider, setProvider] = useState('platforma_ofd')
   const [config, setConfig] = useState(null)
@@ -90,9 +87,7 @@ export default function FiscalSettingsSection({ token, clinicId, showToast }) {
     setLoading(true)
     setErr('')
     try {
-      const r = await axios.get(`${API_BASE}/clinics/${clinicId}/ofd-config`, {
-        headers: authH(token),
-      })
+      const r = await api.get(`/clinics/${clinicId}/ofd-config`)
       setConfig(r.data?.config || null)
       setAvailable(r.data?.available_providers || [])
       if (r.data?.config) {
@@ -105,7 +100,7 @@ export default function FiscalSettingsSection({ token, clinicId, showToast }) {
     } finally {
       setLoading(false)
     }
-  }, [clinicId, token])
+  }, [clinicId])
 
   useEffect(() => {
     load()
@@ -125,9 +120,7 @@ export default function FiscalSettingsSection({ token, clinicId, showToast }) {
         config: {},
       }
       if (apiKey.trim()) body.api_key = apiKey.trim()
-      await axios.put(`${API_BASE}/clinics/${clinicId}/ofd-config`, body, {
-        headers: authH(token),
-      })
+      await api.put(`/clinics/${clinicId}/ofd-config`, body)
       _toast('success', 'Настройки ОФД сохранены')
       setApiKey('')
       await load()
@@ -143,11 +136,7 @@ export default function FiscalSettingsSection({ token, clinicId, showToast }) {
   const handlePull = async () => {
     setPulling(true)
     try {
-      const r = await axios.post(
-        `${API_BASE}/clinics/${clinicId}/ofd/pull`,
-        {},
-        { headers: authH(token) },
-      )
+      const r = await api.post(`/clinics/${clinicId}/ofd/pull`, {})
       _toast(
         'success',
         `Подтянуто чеков: ${r.data?.fetched ?? 0} (новых: ${r.data?.saved ?? 0})`,

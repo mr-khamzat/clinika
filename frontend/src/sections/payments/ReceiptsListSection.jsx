@@ -10,10 +10,7 @@
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../../config'
-
-const authH = (token) => ({ Authorization: `Bearer ${token}` })
+import api from '../../api'
 
 const OP_LABEL = {
   sale: 'Продажа',
@@ -35,16 +32,14 @@ export default function ReceiptsListSection({ token, clinicId, showToast }) {
     if (!clinicId) return
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/clinics/${clinicId}/receipts`, {
-        headers: authH(token),
-      })
+      const r = await api.get(`/clinics/${clinicId}/receipts`)
       setItems(Array.isArray(r.data) ? r.data : [])
     } catch (e) {
       _toast('error', e?.response?.data?.detail || 'Ошибка загрузки чеков')
     } finally {
       setLoading(false)
     }
-  }, [clinicId, token])
+  }, [clinicId])
 
   useEffect(() => {
     load()

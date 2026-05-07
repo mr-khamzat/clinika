@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { API_BASE } from '../config';
+import api from '../api';
 import { useConfirm } from '../design';
 
 const PAGE_TYPES = ['info', 'landing', 'service', 'contact', 'faq'];
@@ -19,7 +18,7 @@ export default function CMSPagesSection({ token }) {
   async function load() {
     setLoading(true);
     try {
-      const r = await axios.get(`${API_BASE}/cms/pages?all=true`, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await api.get('/cms/pages?all=true');
       setPages(r.data);
     } catch {}
     setLoading(false);
@@ -38,9 +37,9 @@ export default function CMSPagesSection({ token }) {
   async function save() {
     try {
       if (editing === 'new') {
-        await axios.post(`${API_BASE}/cms/pages`, form, { headers: { Authorization: `Bearer ${token}` } });
+        await api.post('/cms/pages', form);
       } else {
-        await axios.put(`${API_BASE}/cms/pages/${form.slug}`, form, { headers: { Authorization: `Bearer ${token}` } });
+        await api.put(`/cms/pages/${form.slug}`, form);
       }
       setMsg('Сохранено ✓');
       setEditing(null);
@@ -53,7 +52,7 @@ export default function CMSPagesSection({ token }) {
 
   async function deletePage(slug) {
     if (!(await confirm('Удалить страницу?', { danger: true, okText: 'Удалить' }))) return;
-    await axios.delete(`${API_BASE}/cms/pages/${slug}`, { headers: { Authorization: `Bearer ${token}` } });
+    await api.delete(`/cms/pages/${slug}`);
     await load();
   }
 

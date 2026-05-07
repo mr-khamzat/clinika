@@ -4,7 +4,7 @@
  * Позиция: fixed bottom-right, над SupportChat.
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
+import api from '../api'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 import { startRingback, stopRingback, startRingtone, stopRingtone, stopAllTones } from '../lib/callTones'
@@ -50,18 +50,16 @@ export default function CallWidget() {
   const iceConfigRef   = useRef(DEFAULT_RTC_CONFIG)
   const userGestureUnlockedRef = useRef(false)  // факт user-click для autoplay-policy
 
-  const h = { Authorization: `Bearer ${token}` }
-
   // ── Проверка модулей ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return
-    axios.get(API_BASE + '/presence/can-call', { headers: h })
+    api.get('/presence/can-call')
       .then(r => {
         setCaps(r.data)
         setMode(r.data.audio ? 'audio' : 'video')
       })
       .catch(() => {})
-    axios.get(API_BASE + '/presence/ice-config', { headers: h })
+    api.get('/presence/ice-config')
       .then(r => { if (r.data?.iceServers) iceConfigRef.current = { iceServers: r.data.iceServers } })
       .catch(() => {})
   }, [token])
@@ -74,7 +72,7 @@ export default function CallWidget() {
     wsRef.current = ws
 
     ws.onopen = () => {
-      axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
+      api.put('/presence/status', { status: 'online' }).catch(() => {})
       pingRef.current = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'heartbeat' }))
       }, 30000)
@@ -127,7 +125,7 @@ export default function CallWidget() {
         case 'call_end':
           cleanupMedia()
           setActive(null); setIncoming(null); setOutgoing(null)
-          axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
+          api.put('/presence/status', { status: 'online' }).catch(() => {})
           break
 
         case 'ice_candidate':
@@ -151,10 +149,10 @@ export default function CallWidget() {
   }, [user?.id])
 
   const loadContacts = useCallback(() => {
-    axios.get(API_BASE + '/presence/users', { headers: h })
+    api.get('/presence/users')
       .then(r => setContacts(Array.isArray(r.data) ? r.data : (r.data?.users || [])))
       .catch(() => {})
-  }, [token])
+  }, [])
 
   useEffect(() => { if (open && caps.enabled) loadContacts() }, [open])
 
@@ -324,7 +322,7 @@ export default function CallWidget() {
     setActive({ peer_id: incoming.caller_id, peer_name: incoming.caller_name,
       call_type: callType, started: Date.now() })
     setIncoming(null)
-    axios.put(API_BASE + '/presence/status', { status: 'busy' }, { headers: h }).catch(() => {})
+    api.put('/presence/status', { status: 'busy' }).catch(() => {})
   }
 
   const rejectCall = () => {
@@ -337,7 +335,7 @@ export default function CallWidget() {
     if (peerId) sendWs({ type: 'call_end', target_id: peerId })
     cleanupMedia()
     setActive(null); setOutgoing(null); setIncoming(null)
-    axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: h }).catch(() => {})
+    api.put('/presence/status', { status: 'online' }).catch(() => {})
   }
 
   const toggleMic = () => {

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 
 /**
  * ============================================================================
@@ -40,8 +39,6 @@ const STATUS_BADGE = {
   expired:   { label: 'Истёк',      bg: 'rgba(107,114,128,.12)',fg: '#374151' },
   cancelled: { label: 'Отменён',    bg: 'rgba(220,38,38,.12)',  fg: '#b91c1c' },
 }
-
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 // ── Хелпер: понимаем роль из URL (если переданы пропсы — приоритет) ──
 function detectMode(propMode) {
@@ -87,18 +84,18 @@ function AdminCatalog({ token }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/admin/modules`, { headers: authH(token) })
+      const r = await api.get('/admin/modules')
       setModules(r.data)
     } catch {}
     setLoading(false)
-  }, [token])
+  }, [])
 
   useEffect(() => { load() }, [load])
 
   // Загрузка списка тенантов один раз
   useEffect(() => {
     let aborted = false
-    axios.get(`${API_BASE}/admin/tenants`, { headers: authH(token) })
+    api.get('/admin/tenants')
       .then(r => {
         if (aborted) return
         const list = Array.isArray(r.data) ? r.data : []
@@ -108,16 +105,13 @@ function AdminCatalog({ token }) {
       .catch(() => {})
     return () => { aborted = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])
+  }, [])
 
   // Загрузка подписок выбранного тенанта (по /admin/tenants/{id}/modules)
   const loadTenantSubs = useCallback(async () => {
     if (!tenantId) { setTenantSubs({}); return }
     try {
-      const r = await axios.get(
-        `${API_BASE}/admin/tenants/${tenantId}/modules`,
-        { headers: authH(token) }
-      )
+      const r = await api.get(`/admin/tenants/${tenantId}/modules`)
       // ответ: [{module: {...}, subscription: {...}|null}]
       const map = {}
       for (const row of (r.data || [])) {
@@ -127,7 +121,7 @@ function AdminCatalog({ token }) {
     } catch {
       setTenantSubs({})
     }
-  }, [token, tenantId])
+  }, [tenantId])
 
   useEffect(() => { loadTenantSubs() }, [loadTenantSubs])
 
@@ -139,10 +133,9 @@ function AdminCatalog({ token }) {
   async function savePrice() {
     setSaving(true)
     try {
-      await axios.put(
-        `${API_BASE}/admin/modules/${editKey}/price`,
+      await api.put(
+        `/admin/modules/${editKey}/price`,
         { price_monthly: Number(editPrice.monthly), price_annual: Number(editPrice.annual) },
-        { headers: authH(token) }
       )
       setMsg('Цена обновлена ✓')
       setEditKey(null)
@@ -156,10 +149,9 @@ function AdminCatalog({ token }) {
 
   async function toggleActive(m) {
     try {
-      await axios.patch(
-        `${API_BASE}/admin/modules/${m.key}`,
+      await api.patch(
+        `/admin/modules/${m.key}`,
         { is_active: !m.is_active },
-        { headers: authH(token) }
       )
       await load()
     } catch (e) {
@@ -178,10 +170,9 @@ function AdminCatalog({ token }) {
     }
     setBusyKey(modKey)
     try {
-      await axios.post(
-        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/enable`,
+      await api.post(
+        `/admin/tenants/${tenantId}/modules/${modKey}/enable`,
         { trial_days: days, billing_cycle: 'monthly' },
-        { headers: authH(token) }
       )
       setMsg(`Trial (${days} дн.) активирован для модуля ${modKey} ✓`)
       await loadTenantSubs()
@@ -200,10 +191,9 @@ function AdminCatalog({ token }) {
     }
     setBusyKey(modKey)
     try {
-      await axios.post(
-        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/enable`,
+      await api.post(
+        `/admin/tenants/${tenantId}/modules/${modKey}/enable`,
         { trial_days: 0, billing_cycle: 'monthly' },
-        { headers: authH(token) }
       )
       setMsg(`Модуль ${modKey} активирован ✓`)
       await loadTenantSubs()
@@ -220,10 +210,9 @@ function AdminCatalog({ token }) {
     if (!tenantId) return
     setBusyKey(modKey)
     try {
-      await axios.post(
-        `${API_BASE}/admin/tenants/${tenantId}/modules/${modKey}/disable`,
+      await api.post(
+        `/admin/tenants/${tenantId}/modules/${modKey}/disable`,
         {},
-        { headers: authH(token) }
       )
       setMsg(`Модуль ${modKey} отключён ✓`)
       await loadTenantSubs()
@@ -466,10 +455,10 @@ function OwnerCatalog({ token }) {
       setLoading(true)
       try {
         const [tRes, mRes] = await Promise.all([
-          axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(token) }),
+          api.get('/franchise-owner/tenants'),
           // /modules/features даёт публичный список модулей с метаданными;
           // фоллбэк через /admin/modules недоступен для owner-роли (403).
-          axios.get(`${API_BASE}/modules/features`, { headers: authH(token) }).catch(() => ({ data: [] })),
+          api.get('/modules/features').catch(() => ({ data: [] })),
         ])
         if (aborted) return
         setTenants(tRes.data || [])
@@ -489,7 +478,7 @@ function OwnerCatalog({ token }) {
   useEffect(() => {
     if (!tenantId) return
     let aborted = false
-    axios.get(`${API_BASE}/franchise-owner/tenants/${tenantId}`, { headers: authH(token) })
+    api.get(`/franchise-owner/tenants/${tenantId}`)
       .then(r => { if (!aborted) setTenantData(r.data) })
       .catch(() => { if (!aborted) setTenantData(null) })
     return () => { aborted = true }

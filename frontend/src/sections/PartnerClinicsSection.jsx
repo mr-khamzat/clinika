@@ -22,8 +22,7 @@
  * ========================================
  */
 import { useEffect, useMemo, useState } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import {
   Card,
   Button,
@@ -36,7 +35,6 @@ import {
 } from '../design'
 
 // ── Хелперы ─────────────────────────────────────────────────────────────────
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 const fmtRub = (v) => {
   const n = Number(v || 0)
@@ -170,10 +168,9 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
         contract_expires_at: form.contract_expires_at ? new Date(form.contract_expires_at).toISOString() : null,
         revenue_source: form.revenue_source || null,
       }
-      await axios.patch(
-        `${API_BASE}/franchise-owner/partner-clinics/${partner.id}/contract`,
+      await api.patch(
+        `/franchise-owner/partner-clinics/${partner.id}/contract`,
         body,
-        { headers: authH(adminToken) },
       )
       toast?.success?.('Контракт обновлён')
       onSaved?.()
@@ -299,10 +296,7 @@ export default function PartnerClinicsSection({ adminToken }) {
     try {
       const results = await Promise.all(tenantIds.map(async (tid) => {
         try {
-          const r = await axios.get(
-            `${API_BASE}/admin/tenants/${tid}/modules`,
-            { headers: authH(adminToken) },
-          )
+          const r = await api.get(`/admin/tenants/${tid}/modules`)
           const items = Array.isArray(r.data) ? r.data : []
           const sub = items.find(x => x.module?.key === 'ltv_pro')?.subscription
           const active = !!sub && ['active', 'trial', 'grace'].includes(sub.status)
@@ -327,10 +321,9 @@ export default function PartnerClinicsSection({ adminToken }) {
     if (!ok) return
     setEnablingLtv(s => ({ ...s, [tenantId]: true }))
     try {
-      await axios.post(
-        `${API_BASE}/admin/tenants/${tenantId}/modules/ltv_pro/enable`,
+      await api.post(
+        `/admin/tenants/${tenantId}/modules/ltv_pro/enable`,
         { billing_cycle: 'monthly', trial_days: 14 },
-        { headers: authH(adminToken) },
       )
       toast?.success?.('LTV-аналитика подключена (trial 14 дней)')
       setLtvByTenant(prev => ({ ...prev, [tenantId]: true }))
@@ -345,7 +338,7 @@ export default function PartnerClinicsSection({ adminToken }) {
   const reload = async () => {
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/franchise-owner/partner-clinics`, { headers: authH(adminToken) })
+      const r = await api.get('/franchise-owner/partner-clinics')
       setPartners(Array.isArray(r.data) ? r.data : [])
     } catch (e) {
       const msg = e?.response?.data?.detail || e.message
@@ -361,10 +354,9 @@ export default function PartnerClinicsSection({ adminToken }) {
   // ── Подсчёт выплат за 30 дней (ленивая дозагрузка по строкам) ────────────
   const calcPayout = async (clinicId) => {
     try {
-      const r = await axios.post(
-        `${API_BASE}/franchise-owner/partner-clinics/${clinicId}/calculate?period_days=30`,
+      const r = await api.post(
+        `/franchise-owner/partner-clinics/${clinicId}/calculate?period_days=30`,
         null,
-        { headers: authH(adminToken) },
       )
       setPayouts(p => ({ ...p, [clinicId]: r.data }))
       return r.data
@@ -406,10 +398,9 @@ export default function PartnerClinicsSection({ adminToken }) {
     })
     if (!ok) return
     try {
-      await axios.post(
-        `${API_BASE}/franchise-owner/partner-clinics/${partner.id}/${action}`,
+      await api.post(
+        `/franchise-owner/partner-clinics/${partner.id}/${action}`,
         null,
-        { headers: authH(adminToken) },
       )
       toast?.success?.(`Готово: ${label.toLowerCase()}`)
       await reload()

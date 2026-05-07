@@ -11,10 +11,7 @@
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../../config'
-
-const authH = (token) => ({ Authorization: `Bearer ${token}` })
+import api from '../../api'
 
 const STATUS_LABEL = {
   pending: { text: 'Ожидает', color: '#f59e0b' },
@@ -41,17 +38,14 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
     try {
       const params = {}
       if (statusFilter) params.status = statusFilter
-      const r = await axios.get(`${API_BASE}/clinics/${clinicId}/payments`, {
-        headers: authH(token),
-        params,
-      })
+      const r = await api.get(`/clinics/${clinicId}/payments`, { params })
       setItems(Array.isArray(r.data) ? r.data : [])
     } catch (e) {
       _toast('error', e?.response?.data?.detail || 'Ошибка загрузки платежей')
     } finally {
       setLoading(false)
     }
-  }, [clinicId, token, statusFilter])
+  }, [clinicId, statusFilter])
 
   useEffect(() => {
     load()
@@ -61,11 +55,7 @@ export default function PaymentsListSection({ token, clinicId, showToast }) {
     if (!window.confirm('Сделать полный возврат?')) return
     setRefundingId(id)
     try {
-      await axios.post(
-        `${API_BASE}/payments/${id}/refund`,
-        {},
-        { headers: authH(token) },
-      )
+      await api.post(`/payments/${id}/refund`, {})
       _toast('success', 'Возврат инициирован')
       await load()
     } catch (e) {

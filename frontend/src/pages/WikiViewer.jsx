@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
+import api from '../api'
 import DOMPurify from 'dompurify'
-import { API_BASE, SLUG } from '../config'
+import { SLUG } from '../config'
 
 // ===== БЛОК: безопасная санитизация HTML =====
 // DOMPurify прогоняет любой HTML, который мы строим из markdown,
@@ -102,16 +102,14 @@ export default function WikiViewer({ token, user, onClose }) {
   const [sideOpen, setSideOpen] = useState(false)
   const isSuperAdmin = user?.role === 'super_admin' || user?.is_superadmin
 
-  const hdr = { headers: { Authorization: `Bearer ${token}` } }
-
   const loadPages = useCallback(async () => {
     try {
       const endpoint = isSuperAdmin ? '/wiki/pages/all' : '/wiki/pages'
-      const r = await axios.get(API_BASE + endpoint, hdr)
+      const r = await api.get(endpoint)
       setPages(r.data)
       if (r.data.length > 0 && !current) setCurrent(r.data[0])
     } catch { setPages([]) }
-  }, [token])
+  }, [isSuperAdmin])
 
   useEffect(() => { loadPages() }, [loadPages])
 

@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.15, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.14, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -88,12 +88,19 @@ function LoginModal({ onClose }) {
     e.preventDefault(); setError(''); setLoading(true)
     try {
       const res = await axios.post(API_BASE + '/auth/login', { username, password })
-      const { access_token, redirect_url, tenant_slug } = res.data
+      const { access_token, refresh_token, redirect_url, tenant_slug } = res.data
       const targetSlug = tenant_slug || SLUG || 'arc'
       const redirect = redirect_url || ('/' + targetSlug + '/')
       const isAdmin = redirect === '/admin' || redirect.endsWith('/admin')
-      if (isAdmin) localStorage.setItem('clinika_admin_token_' + (redirect === '/admin' ? '' : targetSlug), access_token)
-      else localStorage.setItem('clinika_token_' + targetSlug, access_token)
+      if (isAdmin) {
+        const storageSlug = redirect === '/admin' ? '' : targetSlug
+        localStorage.setItem('clinika_admin_token_' + storageSlug, access_token)
+        // Сохраняем refresh-токен для auto-refresh
+        if (refresh_token) localStorage.setItem('clinika_admin_refresh_token_' + storageSlug, refresh_token)
+      } else {
+        localStorage.setItem('clinika_token_' + targetSlug, access_token)
+        if (refresh_token) localStorage.setItem('clinika_refresh_token_' + targetSlug, refresh_token)
+      }
       window.location.href = redirect
     } catch { setError('Неверный логин или пароль') } finally { setLoading(false) }
   }
@@ -459,8 +466,8 @@ export default function Landing() {
             </div>
             {/* Calls download buttons (сохранены из старой версии) */}
             <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.15.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.15
+              <a href="/downloads/KliniknetCalls-Setup-1.0.14.exe" download className="ks-btn-ghost">
+                {ICONS.download} Calls Win 1.0.14
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls Mac 1.0.7
@@ -681,11 +688,11 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версия 1.0.15 — adaptive bitrate, RNNoise, update flow.
+                Версия 1.0.14 — adaptive bitrate, RNNoise, update flow.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.15.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.15
+                <a href="/downloads/KliniknetCalls-Setup-1.0.14.exe" download className="ks-btn-primary">
+                  {ICONS.download} Windows · 1.0.14
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ
@@ -702,7 +709,7 @@ export default function Landing() {
             <div className="ks-calls-mock">
               <div className="ks-preview-chrome">
                 <div className="ks-preview-dots"><span /><span /><span /></div>
-                <div className="ks-preview-url">КлиникСеть Calls · 1.0.15</div>
+                <div className="ks-preview-url">КлиникСеть Calls · 1.0.14</div>
               </div>
               <div className="ks-calls-mock-body">
                 <div className="ks-calls-tile">

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { API_BASE } from '../config';
+import api from '../api';
 
 const STATUS_LABELS = {
   draft: { label: 'Черновик', color: '#9e9e9e' },
@@ -26,7 +25,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
     setLoading(true);
     try {
       const params = filter ? `?act_status=${filter}` : '';
-      const r = await axios.get(`${API_BASE}/acts/${params}`, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await api.get(`/acts/${params}`);
       setActs(r.data);
     } catch {}
     setLoading(false);
@@ -34,7 +33,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
 
   async function generateAct() {
     try {
-      await axios.post(`${API_BASE}/acts/generate`, genForm, { headers: { Authorization: `Bearer ${token}` } });
+      await api.post('/acts/generate', genForm);
       setMsg('Акт сформирован ✓');
       await load();
     } catch (e) {
@@ -46,7 +45,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
   async function signAct() {
     if (!signerName.trim()) return;
     try {
-      await axios.post(`${API_BASE}/acts/${signModal}/sign`, { signer_name: signerName }, { headers: { Authorization: `Bearer ${token}` } });
+      await api.post(`/acts/${signModal}/sign`, { signer_name: signerName });
       setSignModal(null);
       setSignerName('');
       setMsg('Акт подписан ✓');
@@ -58,7 +57,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
   }
 
   async function payAct(act_number, amount) {
-    await axios.post(`${API_BASE}/acts/${act_number}/pay`, { amount }, { headers: { Authorization: `Bearer ${token}` } });
+    await api.post(`/acts/${act_number}/pay`, { amount });
     setMsg('Оплата зарегистрирована ✓');
     await load();
     setTimeout(() => setMsg(''), 3000);
@@ -67,8 +66,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
   // Скачивание PDF акта (бэк отдаёт application/pdf)
   async function downloadPdf(act) {
     try {
-      const r = await axios.get(`${API_BASE}/acts/${act.id || act.act_number}/pdf`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const r = await api.get(`/acts/${act.id || act.act_number}/pdf`, {
         responseType: 'blob',
       });
       const url = URL.createObjectURL(r.data);
@@ -89,9 +87,7 @@ export default function ActsSection({ token, isSuperAdmin }) {
   async function signElectronic(act) {
     if (!window.confirm('Подписать акт электронной подписью? Это действие необратимо.')) return;
     try {
-      await axios.post(`${API_BASE}/acts/${act.id || act.act_number}/sign-electronic`, {}, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await api.post(`/acts/${act.id || act.act_number}/sign-electronic`, {});
       setMsg('Акт подписан электронно ✓');
       await load();
     } catch (e) {

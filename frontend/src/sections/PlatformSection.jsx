@@ -6,14 +6,12 @@
  * Импортируется лениво из AdminLayout через React.lazy.
  */
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
-import axios from 'axios'
+import api from '../api'
 const TenantDrawer = lazy(() => import('./TenantDrawer'))
-import { API_BASE, BASE_PATH, SLUG } from '../config'
 import { useConfirm } from '../design'
 
-const API = API_BASE
-const authH = (t) => ({ Authorization: `Bearer ${t}` })
-const apiFetch = (m, url, t, d) => axios({ method: m, url: `${API}${url}`, headers: authH(t), data: d })
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+const apiFetch = (m, url, _t, d) => api({ method: m, url, data: d })
 
 // Статус подписки → цвет и текст
 const SUB_STATUS = {

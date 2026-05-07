@@ -4,12 +4,10 @@
  * проверка подключения, ссылка на dashboard провайдера.
  */
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 
-const authHeaders = (token) => ({ Authorization: `Bearer ${token}` })
-const apiFetch = (method, url, token, data) =>
-  axios({ method, url: `${API_BASE}${url}`, headers: authHeaders(token), data })
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+const apiFetch = (method, url, _token, data) => api({ method, url, data })
 
 // ── Конфиг провайдеров ──────────────────────────────────────────────────────
 

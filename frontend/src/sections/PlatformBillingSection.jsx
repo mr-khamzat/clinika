@@ -8,15 +8,14 @@
  * Стиль совместим с AdminLayout (BillingSection / BillingLedgerSection).
  */
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useToast, useConfirm } from '../design'
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
-
-const authHeaders = (token) => ({ Authorization: `Bearer ${token}` })
-const apiFetch = (method, url, token, data) =>
-  axios({ method, url: `${API_BASE}${url}`, headers: authHeaders(token), data })
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+// Параметр token оставлен для сигнатуры — не используется.
+const apiFetch = (method, url, _token, data) =>
+  api({ method, url, data })
 
 const fmtRub = (v) => {
   const n = Number(v || 0)

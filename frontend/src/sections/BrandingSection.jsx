@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { API_BASE } from '../config';
+import api from '../api';
 import { applyTheme } from '../utils/ThemeLoader';
 
 const FONT_OPTIONS = ['Inter', 'Roboto', 'Open Sans', 'Montserrat', 'Nunito', 'PT Sans'];
@@ -23,7 +22,7 @@ export default function BrandingSection({ token }) {
 
   async function fetchBranding() {
     try {
-      const r = await axios.get(`${API_BASE}/tenant/branding`, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await api.get('/tenant/branding');
       setForm(f => ({ ...f, ...r.data }));
     } catch {}
     setLoading(false);
@@ -34,11 +33,7 @@ export default function BrandingSection({ token }) {
     try {
       // PATCH сохраняет брендинг тенанта; ответ содержит свежие поля
       // (включая server-side значения, например, домен/проверки).
-      const res = await axios.patch(
-        `${API_BASE}/tenant/branding`,
-        form,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.patch('/tenant/branding', form);
       const saved = res?.data || form;
       // Локально подмешиваем актуальные поля в форму
       setForm(f => ({ ...f, ...saved }));

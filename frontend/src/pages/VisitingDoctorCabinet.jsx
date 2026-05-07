@@ -17,7 +17,7 @@
  * ========================================
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
+import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / Chip / Button / EmptyState + useToast
 import { Card, KpiCard, Chip, Button, EmptyState, useToast } from '../design'
@@ -233,7 +233,8 @@ function QueueCard({ apt }) {
 export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
   // Замена alert на Toast
   const { toast } = useToast()
-  const hdr = useCallback(() => ({ headers:{ Authorization:`Bearer ${adminToken}` } }), [adminToken])
+  // hdr() оставлен для обратной совместимости — больше не нужен (api подкладывает Bearer сам)
+  const hdr = useCallback(() => ({}), [])
 
   const [tab,      setTab]      = useState('queue')
   const [queue,    setQueue]    = useState([])
@@ -252,8 +253,8 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
     setLoading(true)
     try {
       const [qRes, hRes] = await Promise.all([
-        axios.get(API_BASE + '/visiting/my-queue', hdr()),
-        axios.get(API_BASE + '/visiting/my-visits', hdr()),
+        api.get('/visiting/my-queue'),
+        api.get('/visiting/my-visits'),
       ])
       setQueue(Array.isArray(qRes.data) ? qRes.data : [])
       const today = new Date().toISOString().slice(0,10)
@@ -263,13 +264,13 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
   }
   const loadHistory = async () => {
     try {
-      const r = await axios.get(API_BASE + '/visiting/my-visits', hdr())
+      const r = await api.get('/visiting/my-visits')
       setHistory(Array.isArray(r.data) ? r.data.filter(v => v.status === 'completed') : [])
     } catch {}
   }
   const loadIncome = async () => {
     try {
-      const r = await axios.get(API_BASE + '/visiting/my-income', hdr())
+      const r = await api.get('/visiting/my-income')
       setIncome({ total:r.data.total || 0, entries:Array.isArray(r.data.entries) ? r.data.entries : [] })
     } catch {}
   }
@@ -302,7 +303,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
   const acceptAppointment = async (apt) => {
     setAccepting(apt.id)
     try {
-      const r = await axios.post(API_BASE + '/visiting/admin/complete-visit', { appointment_id:apt.id }, hdr())
+      const r = await api.post('/visiting/admin/complete-visit', { appointment_id:apt.id })
       setAccepted(r.data); loadQueue()
     } catch(e) { toast('Ошибка: ' + (e.response?.data?.detail || e.message), 'error') }
     setAccepting(null)
@@ -325,7 +326,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
       if (aptId) body = { qr_value:'APT:' + aptId }
       else if (/^\d{4}$/.test(v)) body = { short_code:parseInt(v) }
       else body = { qr_value:v }
-      const r = await axios.post(API_BASE + '/visiting/admin/complete-visit', body, hdr())
+      const r = await api.post('/visiting/admin/complete-visit', body)
       setAccepted(r.data); loadQueue()
     } catch(e) { toast('Запись не найдена: ' + (e.response?.data?.detail || v), 'error') }
     setAccepting(null)

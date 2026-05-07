@@ -79,6 +79,10 @@ export default function InviteRegister({ code }) {
       })
       // Сохраняем токен и получаем данные пользователя
       setToken(res.data.access_token)
+      // Сохраняем refresh-токен для auto-refresh
+      if (res.data?.refresh_token) {
+        localStorage.setItem('clinika_refresh_token_' + SLUG, res.data.refresh_token)
+      }
       const meRes = await getMe()
       setUser(meRes.data)
       // Перенаправляем в приложение

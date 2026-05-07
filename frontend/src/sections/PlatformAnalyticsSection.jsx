@@ -10,14 +10,14 @@
  *   • Динамика подписок (SVG sparkline)
  */
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
 
-const authHeaders = (token) => ({ Authorization: `Bearer ${token}` })
-const apiFetch = (method, url, token, data) =>
-  axios({ method, url: `${API_BASE}${url}`, headers: authHeaders(token), data })
+// Вызов API через единый axios-инстанс (auto-Bearer + auto-refresh).
+// Параметр token оставлен для обратной совместимости сигнатуры — больше не используется.
+const apiFetch = (method, url, _token, data) =>
+  api({ method, url, data })
 
 const fmtRub = (v) => {
   const n = Number(v || 0)

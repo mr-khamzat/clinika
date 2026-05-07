@@ -25,8 +25,16 @@ export default function AdminLogin() {
       if (isAdminPanel) {
         const storageSlug = finalRedirect === '/admin' ? '' : slug
         localStorage.setItem('clinika_admin_token_' + storageSlug, data.access_token)
+        // Сохраняем refresh-токен для admin-панели
+        if (data.refresh_token) {
+          localStorage.setItem('clinika_admin_refresh_token_' + storageSlug, data.refresh_token)
+        }
       } else {
         localStorage.setItem('clinika_token_' + slug, data.access_token)
+        // Сохраняем refresh-токен для тенант-панели
+        if (data.refresh_token) {
+          localStorage.setItem('clinika_refresh_token_' + slug, data.refresh_token)
+        }
       }
       window.location.href = finalRedirect
     } catch {

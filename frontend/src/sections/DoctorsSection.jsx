@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import axios from 'axios'
+import api from '../api'
 import { API_BASE } from '../config'
 import { useToast, useConfirm } from '../design'
 
@@ -21,9 +21,6 @@ const EMPTY_FORM = {
 }
 
 // ─── Хелперы ──────────────────────────────────────────────────────────────────
-function authH(token) {
-  return { Authorization: `Bearer ${token}` }
-}
 
 // Преобразование URL фото к абсолютному (через API_BASE)
 function resolvePhotoUrl(photo_url) {
@@ -89,23 +86,23 @@ export default function DoctorsSection({ token }) {
     setLoading(true)
     setError('')
     try {
-      const r = await axios.get(`${API_BASE}/doctors`, { headers: authH(token) })
+      const r = await api.get('/doctors')
       setDoctors(Array.isArray(r.data) ? r.data : [])
     } catch (e) {
       setError(e?.response?.data?.detail || 'Не удалось загрузить список врачей')
       setDoctors([])
     }
     setLoading(false)
-  }, [token])
+  }, [])
 
   const loadClinics = useCallback(async () => {
     try {
-      const r = await axios.get(`${API_BASE}/manager/clinics/`, { headers: authH(token) })
+      const r = await api.get('/manager/clinics/')
       setClinics(Array.isArray(r.data) ? r.data : [])
     } catch {
       setClinics([])
     }
-  }, [token])
+  }, [])
 
   useEffect(() => { loadDoctors(); loadClinics() }, [loadDoctors, loadClinics])
 
@@ -113,8 +110,7 @@ export default function DoctorsSection({ token }) {
   async function deleteDoctor(doctor) {
     if (!(await confirm(`Удалить врача «${doctor.full_name}»? (он будет деактивирован)`, { danger: true, okText: 'Удалить' }))) return
     try {
-      await axios.patch(`${API_BASE}/doctors/${doctor.id}`,
-        { is_active: false }, { headers: authH(token) })
+      await api.patch(`/doctors/${doctor.id}`, { is_active: false })
       await loadDoctors()
     } catch (e) {
       toast('Ошибка: ' + (e?.response?.data?.detail || e.message), 'error')
@@ -301,7 +297,7 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
   useEffect(() => {
     if (!doctorId) return
     setScheduleLoading(true)
-    axios.get(`${API_BASE}/doctors/${doctorId}/schedule`, { headers: authH(token) })
+    api.get(`/doctors/${doctorId}/schedule`)
       .then(r => {
         if (Array.isArray(r.data) && r.data.length === 7) {
           setSchedule(r.data.map(d => ({
@@ -344,7 +340,7 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
     }
     if (!(await confirm('Удалить фото врача?', { danger: true, okText: 'Удалить' }))) return
     try {
-      await axios.delete(`${API_BASE}/doctors/${doctorId}/photo`, { headers: authH(token) })
+      await api.delete(`/doctors/${doctorId}/photo`)
       setPhotoFile(null); setPhotoPreview(null); setPhotoUrl(null)
       setMsg('Фото удалено')
       setTimeout(() => setMsg(''), 2500)
@@ -372,9 +368,9 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
       }
       let savedId = doctorId
       if (isEdit && doctorId) {
-        await axios.patch(`${API_BASE}/doctors/${doctorId}`, payload, { headers: authH(token) })
+        await api.patch(`/doctors/${doctorId}`, payload)
       } else {
-        const r = await axios.post(`${API_BASE}/doctors`, payload, { headers: authH(token) })
+        const r = await api.post('/doctors', payload)
         savedId = r.data?.id
         setDoctorId(savedId)
       }
@@ -384,10 +380,10 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
         const fd = new FormData()
         fd.append('file', photoFile)
         try {
-          const r = await axios.post(
-            `${API_BASE}/doctors/${savedId}/photo`,
+          const r = await api.post(
+            `/doctors/${savedId}/photo`,
             fd,
-            { headers: { ...authH(token), 'Content-Type': 'multipart/form-data' } },
+            { headers: { 'Content-Type': 'multipart/form-data' } },
           )
           setPhotoUrl(r.data?.photo_url || null)
           setPhotoFile(null)
@@ -427,7 +423,7 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
         end_time: d.end_time.length === 5 ? d.end_time + ':00' : d.end_time,
         is_active: d.is_active,
       }))
-      await axios.put(`${API_BASE}/doctors/${doctorId}/schedule`, payload, { headers: authH(token) })
+      await api.put(`/doctors/${doctorId}/schedule`, payload)
       setScheduleMsg('Расписание сохранено')
       setTimeout(() => setScheduleMsg(''), 2500)
     } catch (e) {

@@ -25,6 +25,10 @@ export default function Login() {
       const redirectUrl = res.data?.redirect_url   // backend подсказывает куда идти по роли
       setToken(token)
       localStorage.setItem('clinika_token_' + SLUG, token)
+      // Сохраняем refresh-токен для auto-refresh при 401
+      if (res.data?.refresh_token) {
+        localStorage.setItem('clinika_refresh_token_' + SLUG, res.data.refresh_token)
+      }
       const me = await getMe()
       setUser(me.data)
       // Редирект по роли (franchise_owner→/{slug}/admin, super_admin→/admin, manager→/{slug}/manager и т.д.)

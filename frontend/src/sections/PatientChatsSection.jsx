@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 
 // ─── Хелперы ──────────────────────────────────────────────────────────────────
 const PRIMARY = '#0097A7'
-
-function authH(token) {
-  return { Authorization: `Bearer ${token}` }
-}
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -65,7 +60,7 @@ export default function PatientChatsSection({ token }) {
   // ── API ──────────────────────────────────────────────────────────────
   const fetchChats = useCallback(async () => {
     try {
-      const r = await axios.get(`${API_BASE}/admin/patient-chats`, { headers: authH(token) })
+      const r = await api.get('/admin/patient-chats')
       setChats(Array.isArray(r.data?.chats) ? r.data.chats : [])
       setErr('')
     } catch (e) {
@@ -73,13 +68,13 @@ export default function PatientChatsSection({ token }) {
     } finally {
       setLoadingList(false)
     }
-  }, [token])
+  }, [])
 
   const fetchMessages = useCallback(async (chatId) => {
     if (!chatId) return
     setLoadingMsgs(true)
     try {
-      const r = await axios.get(`${API_BASE}/admin/patient-chats/${chatId}/messages`, { headers: authH(token) })
+      const r = await api.get(`/admin/patient-chats/${chatId}/messages`)
       setActive(r.data)
       // Обновляем chat в списке (unread сбрасывается)
       setChats(prev => prev.map(c => c.id === chatId ? { ...c, ...r.data?.chat, unread_admin: 0 } : c))
@@ -88,7 +83,7 @@ export default function PatientChatsSection({ token }) {
     } finally {
       setLoadingMsgs(false)
     }
-  }, [token])
+  }, [])
 
   useEffect(() => {
     fetchChats()
@@ -118,10 +113,9 @@ export default function PatientChatsSection({ token }) {
     if (!text || sending || !activeId) return
     setSending(true)
     try {
-      const r = await axios.post(
-        `${API_BASE}/admin/patient-chats/${activeId}/reply`,
-        { text },
-        { headers: authH(token) }
+      const r = await api.post(
+        `/admin/patient-chats/${activeId}/reply`,
+        { text }
       )
       // Сразу подмешиваем новое сообщение
       setActive(prev => prev ? {
@@ -141,10 +135,9 @@ export default function PatientChatsSection({ token }) {
   const toggleMode = async () => {
     if (!activeId) return
     try {
-      const r = await axios.post(
-        `${API_BASE}/admin/patient-chats/${activeId}/toggle-mode`,
-        {},
-        { headers: authH(token) }
+      const r = await api.post(
+        `/admin/patient-chats/${activeId}/toggle-mode`,
+        {}
       )
       setActive(prev => prev ? { ...prev, chat: r.data?.chat || prev.chat } : prev)
       setChats(prev => prev.map(c => c.id === activeId ? { ...c, ...(r.data?.chat || {}) } : c))

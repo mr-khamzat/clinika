@@ -18,8 +18,7 @@
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../../config'
+import api from '../../api'
 
 // ─── Список поддерживаемых шлюзов ──────────────────────────────────────────
 const GATEWAYS = [
@@ -95,8 +94,6 @@ const GATEWAYS = [
   },
 ]
 
-const authH = (token) => ({ Authorization: `Bearer ${token}` })
-
 // ─── Главный компонент ─────────────────────────────────────────────────────
 
 export default function PaymentSettingsSection({ token, clinicId, showToast }) {
@@ -120,9 +117,7 @@ export default function PaymentSettingsSection({ token, clinicId, showToast }) {
     setLoading(true)
     setErr('')
     try {
-      const r = await axios.get(`${API_BASE}/clinics/${clinicId}/payment-config`, {
-        headers: authH(token),
-      })
+      const r = await api.get(`/clinics/${clinicId}/payment-config`)
       setConfigs(r.data?.configs || [])
       setAvailable(r.data?.available_gateways || [])
     } catch (e) {
@@ -130,7 +125,7 @@ export default function PaymentSettingsSection({ token, clinicId, showToast }) {
     } finally {
       setLoading(false)
     }
-  }, [clinicId, token])
+  }, [clinicId])
 
   useEffect(() => {
     load()
@@ -167,9 +162,7 @@ export default function PaymentSettingsSection({ token, clinicId, showToast }) {
         config: {},
       }
       if (secretKey.trim()) body.secret_key = secretKey.trim()
-      await axios.put(`${API_BASE}/clinics/${clinicId}/payment-config`, body, {
-        headers: authH(token),
-      })
+      await api.put(`/clinics/${clinicId}/payment-config`, body)
       _toast('success', 'Настройки шлюза сохранены')
       setSecretKey('')
       await load()

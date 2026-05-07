@@ -8,11 +8,8 @@
  * Иерархия: per-clinic (точное) → role-only (глобально) → дефолт.
  */
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useConfirm } from '../design'
-
-const authH = t => ({ Authorization: `Bearer ${t}` })
 
 const ROLE_INFO = {
   franchise_owner: { short: 'Владелец',    full: 'Владелец франшизы' },
@@ -48,7 +45,7 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
       return
     }
     setLoading(true)
-    axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(adminToken) })
+    api.get('/franchise-owner/tenants')
       .then(r => {
         setTenants(r.data || [])
         if (r.data?.length && !selectedId) setSelectedId(r.data[0].id)
@@ -60,14 +57,14 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
   const reload = useCallback(() => {
     if (!selectedId) return
     const detailUrl = fixedTenantId
-      ? `${API_BASE}/tenant/modules-status`
-      : `${API_BASE}/franchise-owner/tenants/${selectedId}`
+      ? '/tenant/modules-status'
+      : `/franchise-owner/tenants/${selectedId}`
     Promise.all([
-      axios.get(`${API_BASE}/call-rules/${selectedId}`, { headers: authH(adminToken) })
+      api.get(`/call-rules/${selectedId}`)
         .then(r => r.data).catch(() => ({ rules: [], active_roles: [] })),
-      axios.get(detailUrl, { headers: authH(adminToken) })
+      api.get(detailUrl)
         .then(r => r.data).catch(() => null),
-      axios.get(`${API_BASE}/clinics`, { headers: authH(adminToken) })
+      api.get('/clinics')
         .then(r => Array.isArray(r.data) ? r.data : (r.data?.clinics || []))
         .catch(() => []),
     ]).then(([rulesData, tData, clinicsData]) => {
@@ -138,7 +135,7 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
         body.from_clinic_id = fromClinic
         body.to_clinic_id = toClinic
       }
-      await axios.put(`${API_BASE}/call-rules/${selectedId}`, body, { headers: authH(adminToken) })
+      await api.put(`/call-rules/${selectedId}`, body)
       reload()
     } finally {
       setSaving(null)
@@ -147,7 +144,7 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
 
   const resetAll = async () => {
     if (!(await confirm('Удалить все правила (глобальные и по клиникам)?', { danger: true, okText: 'Удалить все' }))) return
-    await axios.delete(`${API_BASE}/call-rules/${selectedId}`, { headers: authH(adminToken) })
+    await api.delete(`/call-rules/${selectedId}`)
     reload()
   }
 

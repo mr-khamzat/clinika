@@ -3,12 +3,13 @@
  * Вкладки: Основное | Интеграции | Модули | Биллинг
  */
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import apiClient from '../api'
 import { useToast, useConfirm } from '../design'
 
-function api(method, url, token, data) {
-  return axios({ method, url: `${API_BASE}${url}`, headers: { Authorization: `Bearer ${token}` }, data })
+// Унификация: все вызовы через единый axios-инстанс (auto-Bearer + auto-refresh).
+// Параметр token сохранён в сигнатуре для обратной совместимости — не используется.
+function api(method, url, _token, data) {
+  return apiClient({ method, url, data })
 }
 
 const STATUS_CLS = {

@@ -1,9 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useConfirm } from '../design'
-
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 export default function ContactsSection({ token }) {
   // Замена window.confirm на Modal-диалог
@@ -19,26 +16,25 @@ export default function ContactsSection({ token }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/contact/admin/list`, {
-        headers: authH(token),
+      const r = await api.get('/contact/admin/list', {
         params: { unread_only: unreadOnly, limit, offset: page * limit },
       })
       setItems(Array.isArray(r.data?.items) ? r.data.items : [])
       setTotal(r.data?.total || 0)
     } catch { setItems([]); setTotal(0) }
     setLoading(false)
-  }, [token, unreadOnly, page])
+  }, [unreadOnly, page])
 
   useEffect(() => { load() }, [load])
 
   async function markRead(id) {
-    await axios.patch(`${API_BASE}/contact/admin/${id}/read`, {}, { headers: authH(token) })
+    await api.patch(`/contact/admin/${id}/read`, {})
     setItems(prev => prev.map(x => x.id === id ? { ...x, is_read: true } : x))
   }
 
   async function del(id) {
     if (!(await confirm('Удалить обращение?', { danger: true, okText: 'Удалить' }))) return
-    await axios.delete(`${API_BASE}/contact/admin/${id}`, { headers: authH(token) })
+    await api.delete(`/contact/admin/${id}`)
     setItems(prev => prev.filter(x => x.id !== id))
     setTotal(t => t - 1)
   }

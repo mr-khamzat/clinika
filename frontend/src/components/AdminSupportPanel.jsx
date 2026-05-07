@@ -9,11 +9,11 @@
  * ========================================
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
+import api from '../api'
 import useAuthStore from '../store/auth'
-import { API_BASE, BASE_PATH, SLUG } from '../config'
 
-const API = API_BASE + '/support'
+// Префикс относительных путей внутри api/index.js (baseURL = API_BASE)
+const PREFIX = '/support'
 
 function fmt(iso) {
   if (!iso) return ''
@@ -27,7 +27,7 @@ function fmt(iso) {
 const ROLE_LABELS = { reg: 'Регистратор', manager: 'Менеджер', partner_doctor: 'Врач-партнёр' }
 
 // ─── Компонент: один диалог ───
-function ThreadView({ userId, userName, onClose, onCloseThread, isClosed, authHeaders }) {
+function ThreadView({ userId, userName, onClose, onCloseThread, isClosed }) {
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -35,22 +35,22 @@ function ThreadView({ userId, userName, onClose, onCloseThread, isClosed, authHe
 
   const load = useCallback(async () => {
     try {
-      const r = await axios.get(`${API}/admin/thread/${userId}`, { headers: authHeaders })
+      const r = await api.get(`${PREFIX}/admin/thread/${userId}`)
       setMessages(r.data)
     } catch {}
-  }, [userId, authHeaders])
+  }, [userId])
 
   // Heartbeat: пока диалог открыт — оператор в сети
   useEffect(() => {
-    const beat = () => axios.post(`${API}/operator/heartbeat`, {}, { headers: authHeaders }).catch(() => {})
+    const beat = () => api.post(`${PREFIX}/operator/heartbeat`, {}).catch(() => {})
     beat() // сразу при открытии
     const id = setInterval(beat, 30000) // каждые 30 сек
     return () => {
       clearInterval(id)
       // При закрытии — немедленно офлайн
-      axios.post(`${API}/operator/offline`, {}, { headers: authHeaders }).catch(() => {})
+      api.post(`${PREFIX}/operator/offline`, {}).catch(() => {})
     }
-  }, [authHeaders])
+  }, [])
 
   useEffect(() => {
     load()
@@ -69,7 +69,7 @@ function ThreadView({ userId, userName, onClose, onCloseThread, isClosed, authHe
     setText('')
     setSending(true)
     try {
-      await axios.post(`${API}/admin/reply/${userId}`, { text: t }, { headers: authHeaders })
+      await api.post(`${PREFIX}/admin/reply/${userId}`, { text: t })
       await load()
     } catch { setText(t) }
     finally { setSending(false) }
@@ -77,14 +77,14 @@ function ThreadView({ userId, userName, onClose, onCloseThread, isClosed, authHe
 
   const handleClose = async () => {
     try {
-      await axios.post(`${API}/admin/close/${userId}`, {}, { headers: authHeaders })
+      await api.post(`${PREFIX}/admin/close/${userId}`, {})
       onCloseThread(userId, true)
     } catch {}
   }
 
   const handleReopen = async () => {
     try {
-      await axios.post(`${API}/admin/reopen/${userId}`, {}, { headers: authHeaders })
+      await api.post(`${PREFIX}/admin/reopen/${userId}`, {})
       onCloseThread(userId, false)
     } catch {}
   }
@@ -212,15 +212,13 @@ export default function AdminSupportPanel({ tokenProp } = {}) {
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('open') // open | closed | all
 
-  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {}
-
   const loadThreads = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await axios.get(`${API}/admin/threads`, { headers: authHeaders })
+      const r = await api.get(`${PREFIX}/admin/threads`)
       setThreads(Array.isArray(r.data) ? r.data : [])
     } catch {} finally { setLoading(false) }
-  }, [token])
+  }, [])
 
   useEffect(() => {
     loadThreads()
@@ -252,7 +250,6 @@ export default function AdminSupportPanel({ tokenProp } = {}) {
           userId={activeThread.userId}
           userName={activeThread.userName}
           isClosed={activeThread.isClosed}
-          authHeaders={authHeaders}
           onClose={() => setActiveThread(null)}
           onCloseThread={handleCloseThread}
         />

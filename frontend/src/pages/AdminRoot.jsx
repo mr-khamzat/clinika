@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import api from '../api'
 import AdminLogin from './AdminLogin'
 import AdminLayout from './AdminLayout'
 import DoctorLayout from './DoctorLayout'
@@ -49,10 +49,8 @@ export default function AdminRoot() {
       setChecking(false)
       return
     }
-    axios
-      .get(API_BASE + '/admins/me', {
-        headers: { Authorization: `Bearer ${adminToken}` },
-      })
+    api
+      .get('/admins/me')
       .then(res => {
         const u = res.data
         const role = (u.role || '').toLowerCase()
@@ -91,7 +89,7 @@ export default function AdminRoot() {
     const ws = new WebSocket(wsUrl)
     let ping
     ws.onopen = () => {
-      axios.put(API_BASE + '/presence/status', { status: 'online' }, { headers: { Authorization: `Bearer ${adminToken}` } }).catch(() => {})
+      api.put('/presence/status', { status: 'online' }).catch(() => {})
       ping = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'heartbeat' })) }, 30000)
     }
     return () => { clearInterval(ping); ws.close() }

@@ -1,13 +1,10 @@
 // База знаний AI (FAQ) — secция для AdminLayout (super_admin) и FranchiseOwnerCabinet.
 // Перед обращением к LLM patient_chat_ai пытается найти ответ здесь — экономит токены.
 import { useState, useEffect, useCallback, useRef } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useToast, useConfirm } from '../design'
 
 const ACCENT = '#7c3aed'
-
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 function truncate(s, n) {
   if (!s) return ''
@@ -231,33 +228,29 @@ export default function AIKnowledgeSection({ token }) {
     try {
       const params = { limit: 200 }
       if (debounced) params.q = debounced
-      const r = await axios.get(`${API_BASE}/ai/knowledge`, {
-        headers: authH(token), params,
-      })
+      const r = await api.get('/ai/knowledge', { params })
       setItems(Array.isArray(r.data) ? r.data : [])
     } catch {
       setItems([])
     }
     setLoading(false)
-  }, [token, debounced])
+  }, [debounced])
 
   const loadStats = useCallback(async () => {
     try {
-      const r = await axios.get(`${API_BASE}/ai/knowledge/stats`, {
-        headers: authH(token), params: { limit: 5 },
-      })
+      const r = await api.get('/ai/knowledge/stats', { params: { limit: 5 } })
       setStats(r.data || null)
     } catch { setStats(null) }
-  }, [token])
+  }, [])
 
   useEffect(() => { load() }, [load])
   useEffect(() => { loadStats() }, [loadStats])
 
   async function saveEntry(form) {
     if (editing && editing !== 'new' && editing.id) {
-      await axios.patch(`${API_BASE}/ai/knowledge/${editing.id}`, form, { headers: authH(token) })
+      await api.patch(`/ai/knowledge/${editing.id}`, form)
     } else {
-      await axios.post(`${API_BASE}/ai/knowledge`, form, { headers: authH(token) })
+      await api.post('/ai/knowledge', form)
     }
     setEditing(null)
     await load()
@@ -267,7 +260,7 @@ export default function AIKnowledgeSection({ token }) {
   async function deleteEntry(entry) {
     if (!(await confirm(`Удалить запись «${truncate(entry.question, 50)}»?`, { danger: true, okText: 'Удалить' }))) return
     try {
-      await axios.delete(`${API_BASE}/ai/knowledge/${entry.id}`, { headers: authH(token) })
+      await api.delete(`/ai/knowledge/${entry.id}`)
       await load(); await loadStats()
     } catch (e) {
       toast(e?.response?.data?.detail || 'Не удалось удалить', 'error')
@@ -281,8 +274,8 @@ export default function AIKnowledgeSection({ token }) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const r = await axios.post(`${API_BASE}/ai/knowledge/import`, fd, {
-        headers: { ...authH(token), 'Content-Type': 'multipart/form-data' },
+      const r = await api.post('/ai/knowledge/import', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       setImportMsg(`Импортировано: ${r.data?.imported ?? 0} из ${r.data?.received ?? 0}`)
       await load(); await loadStats()

@@ -20,8 +20,7 @@
  * ========================================
  */
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import {
   Page,
   PageHeader,
@@ -63,7 +62,6 @@ const PartnerClinicsSection      = lazy(() => import('../sections/PartnerClinics
 const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMatrixSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 const fmtRub = (v) => {
   const n = Number(v || 0)
@@ -386,14 +384,14 @@ function TenantsSection({ adminToken, me, tenants, reload, loading }) {
     }
     setSaving(true)
     try {
-      const r = await axios.post(`${API_BASE}/franchise-owner/tenants`, {
+      const r = await api.post('/franchise-owner/tenants', {
         name: form.name.trim(),
         slug: form.slug.trim(),
         plan: form.plan,
         admin_full_name: form.admin_full_name.trim(),
         admin_login: form.admin_login.trim(),
         admin_password: form.admin_password.trim() || null,
-      }, { headers: authH(adminToken) })
+      })
       setCreated(r.data)
       setForm(EMPTY_TENANT)
       setShowForm(false)
@@ -754,16 +752,16 @@ function ReviewsSection({ adminToken }) {
     try {
       const params = { limit, offset: page * limit }
       if (statusFilter !== 'all') params.status = statusFilter
-      const r = await axios.get(`${API_BASE}/reviews/moderate`, { headers: authH(adminToken), params })
+      const r = await api.get('/reviews/moderate', { params })
       setReviews(Array.isArray(r.data?.items) ? r.data.items : [])
       setTotal(r.data?.total || 0)
     } catch { setReviews([]); setTotal(0) }
     setLoading(false)
-  }, [adminToken, statusFilter, page])
+  }, [statusFilter, page])
 
   const loadStats = useCallback(async () => {
     try {
-      const r = await axios.get(`${API_BASE}/reviews/moderate`, { headers: authH(adminToken), params: { limit: 1000 } })
+      const r = await api.get('/reviews/moderate', { params: { limit: 1000 } })
       const all = Array.isArray(r.data?.items) ? r.data.items : []
       const approved = all.filter(x => x.status === 'approved')
       const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 }
@@ -776,17 +774,17 @@ function ReviewsSection({ adminToken }) {
         breakdown,
       })
     } catch {}
-  }, [adminToken])
+  }, [])
 
   useEffect(() => { loadReviews() }, [loadReviews])
   useEffect(() => { loadStats() }, [loadStats])
 
   async function moderate(id, action) {
-    try { await axios.patch(`${API_BASE}/reviews/${id}/${action}`, {}, { headers: authH(adminToken) }); await loadReviews(); await loadStats() } catch {}
+    try { await api.patch(`/reviews/${id}/${action}`, {}); await loadReviews(); await loadStats() } catch {}
   }
   async function deleteReview(id) {
     if (!(await confirm('Удалить отзыв?', { danger: true, okText: 'Удалить' }))) return
-    try { await axios.delete(`${API_BASE}/reviews/${id}`, { headers: authH(adminToken) }); await loadReviews(); await loadStats() } catch {}
+    try { await api.delete(`/reviews/${id}`); await loadReviews(); await loadStats() } catch {}
   }
 
   const STATUS_CHIP = {
@@ -1083,20 +1081,19 @@ function PartnerDoctorsSection({ adminToken }) {
     setLoading(true)
     try {
       // Используем /admins/external-doctors — он возвращает partner_doctor + visiting_doctor
-      const r = await axios.get(`${API_BASE}/admins/external-doctors`, { headers: authH(adminToken) })
+      const r = await api.get('/admins/external-doctors')
       setDoctors(Array.isArray(r.data) ? r.data : [])
     } catch {
       setDoctors([])
     }
     setLoading(false)
-  }, [adminToken])
+  }, [])
 
   useEffect(() => { load() }, [load])
 
   const loadReferrals = async (doctorId) => {
     try {
-      const r = await axios.get(`${API_BASE}/manager/referrals/`, {
-        headers: authH(adminToken),
+      const r = await api.get('/manager/referrals/', {
         params: { author_id: doctorId, limit: 30 },
       })
       setReferrals({ doctor_id: doctorId, items: Array.isArray(r.data?.items) ? r.data.items : (Array.isArray(r.data) ? r.data : []) })
@@ -1224,22 +1221,21 @@ function RecruitersSection({ adminToken }) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await axios.get(`${API_BASE}/manager/recruiters`, { headers: authH(adminToken) })
+      const r = await api.get('/manager/recruiters')
       setRecruiters(Array.isArray(r.data) ? r.data : [])
     } catch {
       setRecruiters([])
     }
     setLoading(false)
-  }, [adminToken])
+  }, [])
 
   useEffect(() => { load() }, [load])
 
   const savePercent = async () => {
     if (!percentEdit) return
     try {
-      await axios.patch(`${API_BASE}/manager/recruiters/${percentEdit.id}/percent`,
-        { bonus_percent: Number(percentEdit.value) },
-        { headers: authH(adminToken) })
+      await api.patch(`/manager/recruiters/${percentEdit.id}/percent`,
+        { bonus_percent: Number(percentEdit.value) })
       setPercentEdit(null)
       load()
     } catch (err) {
@@ -1252,14 +1248,13 @@ function RecruitersSection({ adminToken }) {
     if (!contactsEdit) return
     setSavingContacts(true)
     try {
-      await axios.patch(
-        `${API_BASE}/franchise-owner/recruiters/${contactsEdit.id}`,
+      await api.patch(
+        `/franchise-owner/recruiters/${contactsEdit.id}`,
         {
           full_name: contactsEdit.full_name || null,
           phone_number: contactsEdit.phone_number || null,
           email: contactsEdit.email || null,
         },
-        { headers: authH(adminToken) },
       )
       toast('Контакты обновлены', 'success')
       setContactsEdit(null)
@@ -1278,10 +1273,7 @@ function RecruitersSection({ adminToken }) {
     )
     if (!ok) return
     try {
-      const r = await axios.delete(
-        `${API_BASE}/franchise-owner/recruiters/${rec.id}`,
-        { headers: authH(adminToken) },
-      )
+      const r = await api.delete(`/franchise-owner/recruiters/${rec.id}`)
       if (r.data?.soft_deleted) {
         toast('Рекрутер деактивирован (есть история бонусов)', 'success')
       } else {
@@ -1480,11 +1472,11 @@ function SettingsSection({ adminToken }) {
     setMisMsg('Сохранение…')
     try {
       // Пробуем endpoint mis_sync, если он есть в бэке
-      await axios.patch(`${API_BASE}/integrations/mis/settings`, {
+      await api.patch('/integrations/mis/settings', {
         mis_api_url: mis.mis_api_url || null,
         mis_api_key: mis.mis_api_key || null,
         mis_clinic_ids: mis.mis_clinic_ids ? mis.mis_clinic_ids.split(',').map(s => s.trim()) : [],
-      }, { headers: authH(adminToken) })
+      })
       setMisMsg('Настройки MIS сохранены')
       setTimeout(() => setMisMsg(''), 4000)
     } catch (err) {
@@ -1678,19 +1670,19 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   // ── Загрузка аналитики ───────────────────────────────────────────────────
   useEffect(() => {
     setAnalyticsLoading(true)
-    axios.get(`${API_BASE}/analytics/overview`, { headers: authH(adminToken) })
+    api.get('/analytics/overview')
       .then(r => setAnalytics(r.data))
       .catch(() => {})
       .finally(() => setAnalyticsLoading(false))
-  }, [adminToken])
+  }, [])
 
   // ── Загрузка профиля франшизы и тенантов ─────────────────────────────────
   const reloadTenants = useCallback(async () => {
     setTenantsLoading(true)
     try {
       const [meR, tR] = await Promise.all([
-        axios.get(`${API_BASE}/franchise-owner/me`, { headers: authH(adminToken) }).catch(() => ({ data: null })),
-        axios.get(`${API_BASE}/franchise-owner/tenants`, { headers: authH(adminToken) }).catch(() => ({ data: [] })),
+        api.get('/franchise-owner/me').catch(() => ({ data: null })),
+        api.get('/franchise-owner/tenants').catch(() => ({ data: [] })),
       ])
       setMe(meR.data)
       setTenants(Array.isArray(tR.data) ? tR.data : [])
@@ -1698,7 +1690,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       setTenants([])
     }
     setTenantsLoading(false)
-  }, [adminToken])
+  }, [])
 
   useEffect(() => { reloadTenants() }, [reloadTenants])
 

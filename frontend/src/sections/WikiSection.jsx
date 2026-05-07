@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useConfirm } from '../design'
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
@@ -107,14 +106,12 @@ export default function WikiSection({ token }) {
   const fileRef = useRef()
   const textareaRef = useRef()
 
-  const hdr = { headers: { Authorization: `Bearer ${token}` } }
-
   const loadPages = useCallback(async () => {
     try {
-      const r = await axios.get(API_BASE + '/wiki/pages/all', hdr)
+      const r = await api.get('/wiki/pages/all')
       setPages(r.data)
     } catch { setPages([]) }
-  }, [token])
+  }, [])
 
   useEffect(() => { loadPages() }, [loadPages])
 
@@ -144,16 +141,16 @@ export default function WikiSection({ token }) {
     setSaving(true); setMsg('')
     try {
       if (selected) {
-        await axios.put(API_BASE + '/wiki/pages/' + selected.id, {
+        await api.put('/wiki/pages/' + selected.id, {
           ...form,
           parent_id: form.parent_id || 'null',
-        }, hdr)
+        })
         setMsg('✅ Сохранено')
       } else {
-        const r = await axios.post(API_BASE + '/wiki/pages', {
+        const r = await api.post('/wiki/pages', {
           ...form,
           parent_id: form.parent_id || null,
-        }, hdr)
+        })
         setSelected(r.data)
         setMsg('✅ Создано')
       }
@@ -166,7 +163,7 @@ export default function WikiSection({ token }) {
     if (!selected) return
     if (!(await confirm('Удалить страницу «' + selected.title + '»?', { danger: true, okText: 'Удалить' }))) return
     try {
-      await axios.delete(API_BASE + '/wiki/pages/' + selected.id, hdr)
+      await api.delete('/wiki/pages/' + selected.id)
       setSelected(null)
       setForm({ title:'', slug:'', icon:'article', content_md:'', parent_id:'', sort_order:0, is_published:true })
       loadPages()
@@ -181,10 +178,11 @@ export default function WikiSection({ token }) {
       const fd = new FormData()
       fd.append('file', file)
       if (selected) fd.append('page_id', selected.id)
-      const r = await axios.post(API_BASE + '/wiki/images', fd, {
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      const r = await api.post('/wiki/images', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
-      const url = API_BASE + '/wiki/images/' + r.data.id
+      // Используем тот же baseURL что и api — но абсолютный путь чтобы img src работал в браузере
+      const url = api.defaults.baseURL + '/wiki/images/' + r.data.id
       const md = `![${file.name}](${url})`
       const ta = textareaRef.current
       if (ta) {
@@ -201,7 +199,7 @@ export default function WikiSection({ token }) {
   async function seedPages() {
     setSeeding(true)
     try {
-      const r = await axios.post(API_BASE + '/wiki/seed', {}, hdr)
+      const r = await api.post('/wiki/seed', {})
       setMsg(`✅ Создано ${r.data.created} стартовых страниц`)
       loadPages()
     } catch(e) { setMsg('❌ ' + (e?.response?.data?.detail || 'Ошибка')) }

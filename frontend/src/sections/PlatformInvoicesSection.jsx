@@ -6,10 +6,7 @@
  *  - Список выставленных счетов (pending/paid)
  */
 import { useEffect, useState } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
-
-const authH = t => ({ Authorization: `Bearer ${t}` })
+import api from '../api'
 
 const STATUS_LABEL = {
   pending: { text: 'К оплате', cls: 'bg-amber-100 text-amber-700' },
@@ -33,9 +30,9 @@ export default function PlatformInvoicesSection({ adminToken }) {
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      axios.get(`${API_BASE}/franchise-owner/billing/summary`, { headers: authH(adminToken) })
-        .then(r => r.data).catch(e => { setError('Доступ только владельцу франшизы'); return null }),
-      axios.get(`${API_BASE}/franchise-owner/billing/invoices`, { headers: authH(adminToken) })
+      api.get('/franchise-owner/billing/summary')
+        .then(r => r.data).catch(() => { setError('Доступ только владельцу франшизы'); return null }),
+      api.get('/franchise-owner/billing/invoices')
         .then(r => r.data || []).catch(() => []),
     ]).then(([s, inv]) => {
       setSummary(s)

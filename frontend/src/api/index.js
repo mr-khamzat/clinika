@@ -5,11 +5,101 @@ import { API_BASE, BASE_PATH, SLUG } from '../config'
 
 const api = axios.create({ baseURL: API_BASE })
 
+// ─── БЛОК: Определение активного токена ───
+// В системе два независимых сторадж-ключа:
+//   • clinika_token_<SLUG>        — для пациентов / партнёров (обычные роли)
+//   • clinika_admin_token_<SLUG>  — для админ-панели (admin/manager/franchise_owner/super_admin)
+// Текущий "активный" определяется тем, какая страница открыта (admin- или partner-панель),
+// но безопаснее всего — пробовать сначала admin (если открыта /admin/...), иначе обычный.
+function _isAdminPath() {
+  // /admin без слага   → платформа super_admin
+  // /<slug>/admin/...  → тенант-админка
+  const p = window.location.pathname
+  return p === '/admin' || p.startsWith('/admin/') || p.endsWith('/admin') || /\/[^/]+\/admin(\/|$)/.test(p)
+}
+
+function _getActiveTokenInfo() {
+  // Возвращает { kind: 'admin'|'user', tokenKey, refreshKey, token } для текущего контекста.
+  const adminKey = 'clinika_admin_token_' + SLUG
+  const userKey = 'clinika_token_' + SLUG
+  const adminToken = localStorage.getItem(adminKey)
+  const userToken = localStorage.getItem(userKey)
+
+  if (_isAdminPath() && adminToken) {
+    return { kind: 'admin', tokenKey: adminKey, refreshKey: 'clinika_admin_refresh_token_' + SLUG, token: adminToken }
+  }
+  if (userToken) {
+    return { kind: 'user', tokenKey: userKey, refreshKey: 'clinika_refresh_token_' + SLUG, token: userToken }
+  }
+  // Fallback: если нет user-токена, но есть admin (например, manager/franchise_owner на /{slug}/manager)
+  if (adminToken) {
+    return { kind: 'admin', tokenKey: adminKey, refreshKey: 'clinika_admin_refresh_token_' + SLUG, token: adminToken }
+  }
+  return { kind: 'user', tokenKey: userKey, refreshKey: 'clinika_refresh_token_' + SLUG, token: null }
+}
+
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('clinika_token_' + SLUG)
-  if (token) config.headers.Authorization = `Bearer ${token}`
+  const info = _getActiveTokenInfo()
+  if (info.token) config.headers.Authorization = `Bearer ${info.token}`
   return config
 })
+
+// ─── БЛОК: Auto-refresh access токена при 401 ───
+// Дедуп параллельных 401: одновременные запросы ждут ОДИН refresh.
+// Кэш per-tokenKey, чтобы admin и user рефрешились независимо.
+const _refreshing = {}
+
+api.interceptors.response.use(
+  r => r,
+  async err => {
+    const cfg = err.config
+    const status = err?.response?.status
+
+    // 401 + нет ретрая в этом запросе + есть конфиг
+    if (status === 401 && cfg && !cfg._retry) {
+      cfg._retry = true
+      const info = _getActiveTokenInfo()
+      const refreshToken = localStorage.getItem(info.refreshKey)
+      if (!refreshToken) {
+        // Нет refresh — чистим access и пробрасываем 401 на login
+        localStorage.removeItem(info.tokenKey)
+        return Promise.reject(err)
+      }
+
+      // Запускаем ОДИН общий refresh на ключ для всех параллельных 401
+      if (!_refreshing[info.tokenKey]) {
+        _refreshing[info.tokenKey] = axios.post(API_BASE + '/auth/refresh', { refresh_token: refreshToken })
+          .then(r => {
+            const newToken = r.data.access_token
+            localStorage.setItem(info.tokenKey, newToken)
+            // Ротация refresh-токена (если бэк возвращает новый)
+            if (r.data.refresh_token) {
+              localStorage.setItem(info.refreshKey, r.data.refresh_token)
+            }
+            return newToken
+          })
+          .catch(e => {
+            // Refresh expired/revoked — чистим оба токена и на login
+            localStorage.removeItem(info.tokenKey)
+            localStorage.removeItem(info.refreshKey)
+            throw e
+          })
+          .finally(() => { delete _refreshing[info.tokenKey] })
+      }
+
+      try {
+        const newToken = await _refreshing[info.tokenKey]
+        cfg.headers = cfg.headers || {}
+        cfg.headers.Authorization = `Bearer ${newToken}`
+        // Повторяем оригинальный запрос с новым токеном
+        return axios.request(cfg)
+      } catch {
+        return Promise.reject(err)
+      }
+    }
+    return Promise.reject(err)
+  }
+)
 
 export const authTelegram = (data) => api.post('/auth/telegram', data)
 export const loginPassword = (username, password) => api.post('/auth/login', { username, password })

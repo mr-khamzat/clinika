@@ -7,11 +7,8 @@
  * Миграция (#29): дизайн-система — Card, KpiRow, KpiCard, Tabs, Chip, EmptyState.
  */
 import { useEffect, useState } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { Card, KpiRow, KpiCard, Tabs, Chip, EmptyState } from '../design'
-
-const authH = t => ({ Authorization: `Bearer ${t}` })
 
 const STATUS_LABEL = {
   pending: 'Ожидает',
@@ -44,7 +41,7 @@ export default function AppointmentsStatsSection({ token }) {
 
   useEffect(() => {
     setLoading(true)
-    axios.get(`${API_BASE}/appointments/stats`, { headers: authH(token), params: { days } })
+    api.get('/appointments/stats', { params: { days } })
       .then(r => setData(r.data))
       .catch(() => setData({ total: 0, today: 0, by_status: {}, doctors: [] }))
       .finally(() => setLoading(false))

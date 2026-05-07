@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 import { useConfirm } from '../design'
-
-function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 const STATUS = {
   pending:  { label: 'На модерации', color: '#d97706', bg: 'rgba(217,119,6,.1)' },
@@ -40,7 +37,7 @@ export default function ReviewsSection({ token }) {
     try {
       const params = { limit: LIMIT, offset: off }
       if (status !== 'all') params.status = status
-      const r = await axios.get(`${API_BASE}/reviews/moderate`, { headers: authH(token), params })
+      const r = await api.get('/reviews/moderate', { params })
       setReviews(r.data.items || [])
       setTotal(r.data.total || 0)
     } catch {}
@@ -49,7 +46,7 @@ export default function ReviewsSection({ token }) {
 
   async function act(id, action) {
     try {
-      await axios.patch(`${API_BASE}/reviews/${id}/${action}`, {}, { headers: authH(token) })
+      await api.patch(`/reviews/${id}/${action}`, {})
       setMsg(action === 'approve' ? 'Одобрено ✓' : 'Отклонено ✓')
       await load(filter, offset)
     } catch (e) {
@@ -61,7 +58,7 @@ export default function ReviewsSection({ token }) {
   async function del(id) {
     if (!(await confirm('Удалить отзыв?', { danger: true, okText: 'Удалить' }))) return
     try {
-      await axios.delete(`${API_BASE}/reviews/${id}`, { headers: authH(token) })
+      await api.delete(`/reviews/${id}`)
       setMsg('Удалено ✓')
       await load(filter, offset)
     } catch (e) {

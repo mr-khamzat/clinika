@@ -17,20 +17,19 @@
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE, SLUG } from '../config'
+import api from '../api'
+import { SLUG } from '../config'
 
 const STORAGE_KEY = `clinika_selected_clinic_${SLUG}`
 
-function readToken() {
-  if (typeof window === 'undefined') return ''
-  return (
+function hasAnyToken() {
+  if (typeof window === 'undefined') return false
+  return !!(
     localStorage.getItem('clinika_admin_token_' + SLUG) ||
     localStorage.getItem('clinika_token_' + SLUG) ||
     localStorage.getItem('clinika_admin_token_') ||
     localStorage.getItem('clinika_token') ||
-    localStorage.getItem('token') ||
-    ''
+    localStorage.getItem('token')
   )
 }
 
@@ -51,16 +50,13 @@ export default function useClinicScope() {
 
   useEffect(() => {
     let cancelled = false
-    const token = readToken()
-    if (!token) {
+    if (!hasAnyToken()) {
       setIsLoading(false)
       return
     }
     setIsLoading(true)
-    axios
-      .get(`${API_BASE}/manager/clinics-accessible`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+    api
+      .get('/manager/clinics-accessible')
       .then((r) => {
         if (cancelled) return
         const list = Array.isArray(r.data) ? r.data : []

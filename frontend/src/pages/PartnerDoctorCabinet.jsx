@@ -15,7 +15,7 @@
  * ========================================
  */
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / KpiRow / Chip / EmptyState
 import { Card, KpiCard, KpiRow, Chip, EmptyState } from '../design'
@@ -54,15 +54,13 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
   const [bonuses, setBonuses] = useState([])
   const [income, setIncome] = useState([])
 
-  const hdr = { headers: { Authorization: `Bearer ${adminToken}` } }
-
   useEffect(() => {
     if (tab === 'referrals' || tab === 'dashboard') {
-      axios.get(API_BASE + '/referrals', hdr).then(r => setReferrals(Array.isArray(r.data) ? r.data : (r.data?.items || []))).catch(() => {})
+      api.get('/referrals').then(r => setReferrals(Array.isArray(r.data) ? r.data : (r.data?.items || []))).catch(() => {})
     }
     if (tab === 'bonuses') {
-      axios.get(API_BASE + '/bonuses', hdr).then(r => setBonuses(Array.isArray(r.data) ? r.data : [])).catch(() => {})
-      axios.get(API_BASE + '/visiting/my-income', hdr).then(r => setIncome(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      api.get('/bonuses').then(r => setBonuses(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+      api.get('/visiting/my-income').then(r => setIncome(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     }
   }, [tab])
 

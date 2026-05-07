@@ -29,7 +29,7 @@ const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekSchedu
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 // В /admin (super_admin) используем mode="admin" + селектор тенанта внутри секции.
 const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
-import axios from 'axios'
+import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
@@ -58,12 +58,9 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function authHeaders(token) {
-  return { Authorization: `Bearer ${token}` }
-}
-
-function apiFetch(method, url, token, data) {
-  return axios({ method, url: `${API_BASE}${url}`, headers: authHeaders(token), data })
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+function apiFetch(method, url, _token, data) {
+  return api({ method, url, data })
 }
 
 function Spinner() {
@@ -1541,12 +1538,7 @@ function ReportsSection({ token }) {
   const handleExport = async () => {
     setExportLoading(true)
     try {
-      const res = await axios({
-        method: 'get',
-        url: API_BASE + '/manager/reports/export',
-        headers: authHeaders(token),
-        responseType: 'blob',
-      })
+      const res = await api.get('/manager/reports/export', { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const a = document.createElement('a')
       a.href = url

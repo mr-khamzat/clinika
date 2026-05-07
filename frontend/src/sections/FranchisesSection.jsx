@@ -17,12 +17,11 @@
  *   POST   /admin/users                   — создать нового пользователя-владельца
  */
 import { useState, useEffect, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../config'
+import api from '../api'
 
-const API = API_BASE
-const authH = (t) => ({ Authorization: `Bearer ${t}` })
-const apiFetch = (m, url, t, d) => axios({ method: m, url: `${API}${url}`, headers: authH(t), data: d })
+// Унификация: единый axios-инстанс с auto-Bearer + auto-refresh.
+// Параметр token оставлен для сигнатуры — больше не используется.
+const apiFetch = (m, url, _t, d) => api({ method: m, url, data: d })
 
 // Преобразование name → slug
 const slugify = (s) =>

@@ -21,11 +21,8 @@
  *       Их можно мигрировать поэтапно отдельным PR.
  */
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import axios from 'axios'
-import { API_BASE } from '../../config'
+import api from '../../api'
 import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal } from '../../design'
-
-const authH = t => ({ Authorization: `Bearer ${t}` })
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -88,7 +85,7 @@ export default function WeekScheduleSection({
   // Подгрузка списка врачей (для mode=full)
   useEffect(() => {
     if (mode !== 'full') return
-    axios.get(`${API_BASE}/doctors`, { headers: authH(token) })
+    api.get('/doctors')
       .then(r => {
         const list = Array.isArray(r.data) ? r.data : []
         setDoctors(list)
@@ -109,8 +106,7 @@ export default function WeekScheduleSection({
     setLoading(true)
     setError('')
     try {
-      const r = await axios.get(`${API_BASE}/doctors/${doctorId}/week`, {
-        headers: authH(token),
+      const r = await api.get(`/doctors/${doctorId}/week`, {
         params: { start_date: ymd(weekStart) },
       })
       setData(r.data)
@@ -120,7 +116,7 @@ export default function WeekScheduleSection({
     } finally {
       setLoading(false)
     }
-  }, [doctorId, weekStart, token])
+  }, [doctorId, weekStart])
 
   useEffect(() => { loadWeek() }, [loadWeek])
 
@@ -164,14 +160,14 @@ export default function WeekScheduleSection({
       throw new Error('Укажите телефон пациента')
     }
     try {
-      await axios.post(`${API_BASE}/appointments`, {
+      await api.post('/appointments', {
         doctor_id: doctorId,
         appointment_date: bookModal.date,
         start_time: bookModal.start_time,
         patient_phone: form.patient_phone.trim(),
         patient_name: form.patient_name || null,
         notes: form.notes || null,
-      }, { headers: authH(token) })
+      })
       setBookModal(null)
       reload()
     } catch (e) {
@@ -187,16 +183,16 @@ export default function WeekScheduleSection({
   }
 
   const onStatus = async (id, status) => {
-    await axios.patch(`${API_BASE}/appointments/${id}/status`, { status }, { headers: authH(token) })
+    await api.patch(`/appointments/${id}/status`, { status })
     setApptModal(null)
     reload()
   }
 
   const onMove = async (id, newDate, newTime) => {
-    await axios.patch(`${API_BASE}/appointments/${id}`, {
+    await api.patch(`/appointments/${id}`, {
       appointment_date: newDate,
       start_time: newTime,
-    }, { headers: authH(token) })
+    })
     setMoveDrag(null)
     setApptModal(null)
     reload()
