@@ -13,6 +13,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="КлиникаСеть" />
+  <!-- Preload иконочного шрифта (3MB) — стартуем параллельно с JS/CSS -->
+  <link rel="preload" href="/assets/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin="anonymous">
   <!-- Telegram Web App SDK подключается динамически только в PatientCabinet (/p/) — см. lib/tg.js loadTelegramSDK() -->
 </head>
 <body>

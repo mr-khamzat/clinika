@@ -52,7 +52,7 @@ export default function WikiCategoryCard({
         }}
       >
         <span
-          className="material-symbols-rounded"
+          className="material-symbols-outlined"
           style={{
             fontSize: '32px',
             color: accent,
@@ -102,7 +102,7 @@ export default function WikiCategoryCard({
       >
         Смотреть статьи
         <span
-          className="material-symbols-rounded transition-transform duration-200"
+          className="material-symbols-outlined transition-transform duration-200"
           style={{
             fontSize: '18px',
             transform: hover ? 'translateX(3px)' : 'translateX(0)',

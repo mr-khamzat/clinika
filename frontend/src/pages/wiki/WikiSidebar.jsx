@@ -39,7 +39,7 @@ export default function WikiSidebar({ grouped, activeSlug, toc = [], onNavigate 
         style={{ fontSize: '13px', color: 'var(--fg-2)', fontWeight: 500 }}
       >
         <span
-          className="material-symbols-rounded"
+          className="material-symbols-outlined"
           style={{ fontSize: '18px' }}
         >
           arrow_back

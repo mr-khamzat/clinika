@@ -55,7 +55,7 @@ export default function WikiHero({ query, onQueryChange, onFocus, inputRef, resu
           }}
         >
           <span
-            className="material-symbols-rounded"
+            className="material-symbols-outlined"
             style={{ fontSize: '14px', color: 'var(--accent)' }}
           >
             auto_stories
@@ -100,7 +100,7 @@ export default function WikiHero({ query, onQueryChange, onFocus, inputRef, resu
           }}
         >
           <span
-            className="material-symbols-rounded"
+            className="material-symbols-outlined"
             style={{ fontSize: '22px', color: 'var(--fg-3)' }}
           >
             search
@@ -118,7 +118,7 @@ export default function WikiHero({ query, onQueryChange, onFocus, inputRef, resu
           {query ? (
             <button
               onClick={() => onQueryChange('')}
-              className="material-symbols-rounded transition-colors"
+              className="material-symbols-outlined transition-colors"
               style={{ fontSize: '20px', color: 'var(--fg-3)' }}
               aria-label="Очистить"
               onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--fg)')}
