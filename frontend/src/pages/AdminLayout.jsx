@@ -7737,7 +7737,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
             </span>
 
             {/* Центр уведомлений (W3) — общий dropdown для audit/activity/contacts */}
-            <NotificationsBell size={40} variant="square" />
+            {/* <NotificationsBell size={40} variant="square" /> временно отключён, infinite re-render */}
 
             {/* Уведомления (бейдж обращений) — старая кнопка, ведёт в раздел /contacts */}
             <button
@@ -8022,7 +8022,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
 
       {/* W3: глобальный поиск Cmd+K */}
-      <CommandPalette />
+      {/* <CommandPalette /> временно отключён, infinite re-render */}
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`
