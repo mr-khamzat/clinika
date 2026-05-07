@@ -82,3 +82,6 @@ from app.models.patient_chat import (
     PatientChatMode,
     PatientChatSender,
 )
+
+# Программа лояльности (Этап 11 ROADMAP)
+from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction, LoyaltyTier, PatientAIConversation
