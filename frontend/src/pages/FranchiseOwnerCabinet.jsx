@@ -1189,11 +1189,15 @@ function PartnerDoctorsSection({ adminToken }) {
 // Раздел: Рекрутеры — менеджеры по привлечению врачей
 // ============================================================================
 function RecruitersSection({ adminToken }) {
-  // Замена alert на Toast
+  // Замена alert на Toast и window.confirm на дизайн-систему Modal
   const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [recruiters, setRecruiters] = useState(null)
   const [loading, setLoading] = useState(true)
   const [percentEdit, setPercentEdit] = useState(null) // {id, value}
+  // Состояние модалки изменения контактов рекрутера: {id, full_name, phone_number, email}
+  const [contactsEdit, setContactsEdit] = useState(null)
+  const [savingContacts, setSavingContacts] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1215,6 +1219,52 @@ function RecruitersSection({ adminToken }) {
         { bonus_percent: Number(percentEdit.value) },
         { headers: authH(adminToken) })
       setPercentEdit(null)
+      load()
+    } catch (err) {
+      toast('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
+    }
+  }
+
+  // ── Сохранить новые контакты рекрутера ────────────────────────────────────
+  const saveContacts = async () => {
+    if (!contactsEdit) return
+    setSavingContacts(true)
+    try {
+      await axios.patch(
+        `${API_BASE}/franchise-owner/recruiters/${contactsEdit.id}`,
+        {
+          full_name: contactsEdit.full_name || null,
+          phone_number: contactsEdit.phone_number || null,
+          email: contactsEdit.email || null,
+        },
+        { headers: authH(adminToken) },
+      )
+      toast('Контакты обновлены', 'success')
+      setContactsEdit(null)
+      load()
+    } catch (err) {
+      toast('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
+    }
+    setSavingContacts(false)
+  }
+
+  // ── Удалить рекрутера (с подтверждением) ──────────────────────────────────
+  const removeRecruiter = async (rec) => {
+    const ok = await confirm(
+      `Удалить рекрутера ${rec.full_name || rec.username}? Если за ним числятся бонусы — он будет деактивирован, иначе удалён полностью.`,
+      { danger: true, okText: 'Удалить' },
+    )
+    if (!ok) return
+    try {
+      const r = await axios.delete(
+        `${API_BASE}/franchise-owner/recruiters/${rec.id}`,
+        { headers: authH(adminToken) },
+      )
+      if (r.data?.soft_deleted) {
+        toast('Рекрутер деактивирован (есть история бонусов)', 'success')
+      } else {
+        toast('Рекрутер удалён', 'success')
+      }
       load()
     } catch (err) {
       toast('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
@@ -1283,9 +1333,24 @@ function RecruitersSection({ adminToken }) {
                   </div>
                 </div>
               </div>
-              <div className="mt-3 flex justify-end">
+              <div className="mt-3 flex flex-wrap justify-end gap-1.5">
                 <Button size="sm" variant="ghost" onClick={() => setPercentEdit({ id: r.id, value: r.bonus_percent || 0 })}>
                   <Icon name="percent" size={14} /> % бонуса
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setContactsEdit({
+                    id: r.id,
+                    full_name: r.full_name || '',
+                    phone_number: r.phone_number || '',
+                    email: r.email || '',
+                  })}
+                >
+                  <Icon name="contacts" size={14} /> Контакты
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => removeRecruiter(r)}>
+                  <Icon name="delete" size={14} /> Удалить
                 </Button>
               </div>
             </Card>
@@ -1316,6 +1381,53 @@ function RecruitersSection({ adminToken }) {
           </FormField>
         )}
       </Modal>
+
+      {/* ─── Модалка изменения контактов рекрутера ─── */}
+      <Modal
+        open={!!contactsEdit}
+        onClose={() => !savingContacts && setContactsEdit(null)}
+        title="Изменить контакты"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setContactsEdit(null)} disabled={savingContacts}>Отмена</Button>
+            <Button onClick={saveContacts} disabled={savingContacts}>
+              {savingContacts ? 'Сохранение…' : 'Сохранить'}
+            </Button>
+          </>
+        }
+      >
+        {contactsEdit && (
+          <div className="flex flex-col gap-3">
+            <FormField label="ФИО">
+              <FormInput
+                value={contactsEdit.full_name}
+                onChange={e => setContactsEdit({ ...contactsEdit, full_name: e.target.value })}
+                placeholder="Иванов Иван Иванович"
+              />
+            </FormField>
+            <FormField label="Телефон">
+              <FormInput
+                type="tel"
+                value={contactsEdit.phone_number}
+                onChange={e => setContactsEdit({ ...contactsEdit, phone_number: e.target.value })}
+                placeholder="+79001234567"
+              />
+            </FormField>
+            <FormField label="Email">
+              <FormInput
+                type="email"
+                value={contactsEdit.email}
+                onChange={e => setContactsEdit({ ...contactsEdit, email: e.target.value })}
+                placeholder="recruiter@example.com"
+              />
+            </FormField>
+          </div>
+        )}
+      </Modal>
+
+      {/* Хост подтверждений (для удаления) */}
+      <ConfirmHost />
     </div>
   )
 }

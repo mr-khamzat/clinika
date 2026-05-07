@@ -1,0 +1,121 @@
+[
+  {
+    "slug": "role-super-admin",
+    "title": "Платформа · супер-админ",
+    "category": "role",
+    "order": 1,
+    "summary": "Управление всей платформой КлиникСеть: тенанты, биллинг, модули, мониторинг."
+  },
+  {
+    "slug": "role-franchise-owner",
+    "title": "Владелец франшизы",
+    "category": "role",
+    "order": 2,
+    "summary": "Запуск и управление сетью клиник: подписка, модули, клиники, отчёты."
+  },
+  {
+    "slug": "role-manager",
+    "title": "Управляющий клиники",
+    "category": "role",
+    "order": 3,
+    "summary": "Операционное управление клиникой: KPI, сотрудники, расписание, финансы."
+  },
+  {
+    "slug": "role-doctor",
+    "title": "Врач",
+    "category": "role",
+    "order": 4,
+    "summary": "Приём пациентов: расписание, протоколы, диагнозы, направления, видеозвонки."
+  },
+  {
+    "slug": "role-reg",
+    "title": "Регистратор",
+    "category": "role",
+    "order": 5,
+    "summary": "Запись пациентов, оформление визитов, оплаты, направления."
+  },
+  {
+    "slug": "role-nurse",
+    "title": "Медсестра",
+    "category": "role",
+    "order": 6,
+    "summary": "Поддержка приёмов: подготовка пациентов, манипуляции, расходники."
+  },
+  {
+    "slug": "role-recruiter",
+    "title": "Рекрутер",
+    "category": "role",
+    "order": 7,
+    "summary": "Привлечение врачей-партнёров и приходящих врачей в сеть."
+  },
+  {
+    "slug": "role-partner-doctor",
+    "title": "Врач-партнёр",
+    "category": "role",
+    "order": 8,
+    "summary": "Внешний врач, направляющий пациентов в клиники сети за бонус."
+  },
+  {
+    "slug": "role-visiting-doctor",
+    "title": "Приходящий врач",
+    "category": "role",
+    "order": 9,
+    "summary": "Врач, ведущий приём в нескольких клиниках сети по контракту."
+  },
+  {
+    "slug": "role-patient",
+    "title": "Пациент",
+    "category": "role",
+    "order": 10,
+    "summary": "Запись онлайн, история приёмов, документы, чат с врачом, AI-ассистент."
+  },
+  {
+    "slug": "concepts-bonuses",
+    "title": "Бонусы и как они работают",
+    "category": "concepts",
+    "order": 1,
+    "summary": "Жизненный цикл бонусов: начисление, удержание, выплата, налоги."
+  },
+  {
+    "slug": "concepts-referrals",
+    "title": "Жизненный цикл направления",
+    "category": "concepts",
+    "order": 2,
+    "summary": "Как работает направление от партнёра: статусы, QR, валидация, бонус."
+  },
+  {
+    "slug": "concepts-appointments",
+    "title": "Запись и расписание",
+    "category": "concepts",
+    "order": 3,
+    "summary": "Как устроены слоты, шаблоны расписания, повторные визиты."
+  },
+  {
+    "slug": "concepts-qr",
+    "title": "QR-сканирование пациента",
+    "category": "concepts",
+    "order": 4,
+    "summary": "Идентификация пациента и направления через QR на ресепшене."
+  },
+  {
+    "slug": "concepts-modules",
+    "title": "Каталог платных модулей",
+    "category": "concepts",
+    "order": 5,
+    "summary": "Видеозвонки, AI, MIS, white-label и другие подключаемые модули."
+  },
+  {
+    "slug": "setup-first-clinic",
+    "title": "Запуск первой клиники",
+    "category": "setup",
+    "order": 1,
+    "summary": "Пошаговая настройка тенанта и открытие первой клиники в сети."
+  },
+  {
+    "slug": "setup-staff",
+    "title": "Создание сотрудников",
+    "category": "setup",
+    "order": 2,
+    "summary": "Приглашение и настройка ролей: врачи, регистраторы, медсёстры."
+  }
+]

@@ -296,3 +296,99 @@ async def update_billing_settings(
     from fastapi import HTTPException, status
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Изменение тарифа делает super_admin")
 
+
+# ── Управление рекрутерами франшизы ───────────────────────────────────────────
+# Владелец франшизы может править контакты и удалять (soft-delete) рекрутеров,
+# которые принадлежат тенантам в составе его франшизы.
+
+class RecruiterContactsIn(BaseModel):
+    """Изменение контактов рекрутера (всё опционально)."""
+    full_name: Optional[str] = Field(None, min_length=2, max_length=200)
+    phone_number: Optional[str] = Field(None, max_length=50)
+    email: Optional[str] = Field(None, max_length=200)
+
+
+async def _get_recruiter_in_my_franchise(
+    db: AsyncSession, owner: User, recruiter_id: uuid.UUID
+) -> User:
+    """Проверяет, что рекрутер принадлежит тенанту моей франшизы."""
+    f = await _get_my_franchise(db, owner)
+    rec = await db.get(User, recruiter_id)
+    if not rec or rec.role != UserRole.RECRUITER:
+        raise HTTPException(status_code=404, detail="Рекрутер не найден")
+
+    # Тенант рекрутера должен входить в мою франшизу
+    if rec.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Рекрутер вне франшизы")
+    t = await db.get(Tenant, rec.tenant_id)
+    if not t or t.franchise_id != f.id:
+        raise HTTPException(status_code=403, detail="Рекрутер не принадлежит вашей франшизе")
+    return rec
+
+
+@router.patch("/recruiters/{recruiter_id}")
+async def update_recruiter_contacts(
+    recruiter_id: uuid.UUID,
+    body: RecruiterContactsIn,
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Изменить контакты рекрутера (ФИО, телефон, email)."""
+    rec = await _get_recruiter_in_my_franchise(db, user, recruiter_id)
+
+    # Проверка уникальности email при смене
+    if body.email is not None and body.email != rec.email:
+        dup = (await db.execute(
+            select(User).where(User.email == body.email, User.id != rec.id)
+        )).scalar_one_or_none()
+        if dup:
+            raise HTTPException(status_code=409, detail="Email уже занят другим пользователем")
+        rec.email = body.email or None
+
+    if body.full_name is not None:
+        rec.full_name = body.full_name
+    if body.phone_number is not None:
+        rec.phone_number = body.phone_number or None
+
+    await db.commit()
+    await db.refresh(rec)
+    return {
+        "id": str(rec.id),
+        "full_name": rec.full_name,
+        "phone_number": rec.phone_number,
+        "email": rec.email,
+        "username": rec.username,
+        "is_active": rec.is_active,
+    }
+
+
+@router.delete("/recruiters/{recruiter_id}")
+async def delete_recruiter(
+    recruiter_id: uuid.UUID,
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Удалить рекрутера. Soft-delete (is_active=False), если за ним
+    числятся бонусы (RecruiterBonus.recruiter_id с CASCADE — иначе мы
+    бы удалили историю выплат). Если бонусов нет — hard-delete.
+    """
+    from app.models.recruiter_bonus import RecruiterBonus
+
+    rec = await _get_recruiter_in_my_franchise(db, user, recruiter_id)
+
+    bonus_count = (await db.execute(
+        select(func.count(RecruiterBonus.id)).where(RecruiterBonus.recruiter_id == rec.id)
+    )).scalar() or 0
+
+    if bonus_count > 0:
+        # Soft-delete: сохраняем историю бонусов
+        rec.is_active = False
+        await db.commit()
+        return {"deleted": False, "soft_deleted": True, "reason": "Есть история бонусов — рекрутер деактивирован"}
+
+    # Hard-delete (без истории)
+    await db.delete(rec)
+    await db.commit()
+    return {"deleted": True, "soft_deleted": False}
+
