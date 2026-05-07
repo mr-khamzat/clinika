@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.8 + 1.0.10, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.10, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -462,8 +462,8 @@ export default function Landing() {
               <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-ghost">
                 {ICONS.download} Calls Win 1.0.10
               </a>
-              <a href="/downloads/KliniknetCalls-Setup-1.0.8.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.8
+              <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-ghost">
+                {ICONS.download} Calls Win 1.0.10
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls Mac 1.0.7
@@ -684,14 +684,14 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версии 1.0.8 / 1.0.10 — adaptive bitrate, RNNoise, update flow.
+                Версия 1.0.10 — adaptive bitrate, RNNoise, update flow.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
                 <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-primary">
                   {ICONS.download} Windows · 1.0.10
                 </a>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.8.exe" download className="ks-btn-secondary">
-                  {ICONS.download} Windows · 1.0.8
+                <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-secondary">
+                  {ICONS.download} Windows · 1.0.10
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ
