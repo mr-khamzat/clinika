@@ -238,13 +238,15 @@ export default function AuditLogSection({ token }) {
           onChange={setTab}
           items={[
             { id: 'feed',   label: 'Лента' },
+            { id: 'tenants', label: 'По тенантам' },
             { id: 'search', label: 'Поиск' },
           ]}
         />
       </div>
 
-      {tab === 'feed'   && <FeedTab token={token} />}
-      {tab === 'search' && <SearchTab token={token} />}
+      {tab === 'feed'    && <FeedTab token={token} />}
+      {tab === 'tenants' && <TenantsGeoTab token={token} />}
+      {tab === 'search'  && <SearchTab token={token} />}
     </div>
   )
 }
@@ -471,6 +473,144 @@ function FeedTab({ token }) {
         </div>
       )}
       </Card>
+    </div>
+  )
+}
+
+// ─── Вкладка «По тенантам» — гео-сводка по каждой франшизе ──────────────
+function TenantsGeoTab({ token }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [days, setDays] = useState(30)
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await api.get('/audit/by-tenant-geo', { params: { days } })
+      setData(r.data)
+    } catch (e) {
+      setErr('Не удалось загрузить статистику')
+      setData(null)
+    } finally {
+      setLoading(false)
+    }
+  }, [days])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <div className="space-y-4">
+      {/* Период */}
+      <Card style={{ padding: 12 }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Период</div>
+          <Tabs
+            value={String(days)}
+            onChange={(v) => setDays(Number(v))}
+            items={[
+              { id: '7',   label: '7 дн' },
+              { id: '30',  label: '30 дн' },
+              { id: '90',  label: '90 дн' },
+              { id: '365', label: '1 год' },
+            ]}
+          />
+          <div style={{ flex: 1 }} />
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, marginRight: 4 }}>refresh</span>
+            Обновить
+          </Button>
+        </div>
+      </Card>
+
+      {loading && (
+        <Card style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
+          Загрузка…
+        </Card>
+      )}
+      {err && (
+        <Card style={{ padding: 24, textAlign: 'center', color: 'oklch(0.55 0.18 25)', fontSize: 13 }}>
+          {err}
+        </Card>
+      )}
+      {!loading && !err && data && data.tenants.length === 0 && (
+        <EmptyState
+          icon={<span className="material-symbols-outlined">storefront</span>}
+          title="Нет данных"
+          message="За выбранный период не зафиксировано событий с гео."
+        />
+      )}
+
+      {!loading && !err && data && data.tenants.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {data.tenants.map((t) => {
+            // Топ-регион для определения «основного» — что бы подсветить если события из других
+            const mainRegion = t.regions[0]
+            return (
+              <Card key={t.tenant_id || 'null'} style={{ padding: 16 }}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
+                      {t.tenant_name}
+                    </div>
+                    {t.tenant_slug && (
+                      <div style={{ fontSize: 11, color: 'var(--fg-4)', fontFamily: 'monospace' }}>
+                        /{t.tenant_slug}
+                      </div>
+                    )}
+                  </div>
+                  <Chip variant="default">
+                    <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4, verticalAlign: -2 }}>history</span>
+                    {t.events_count}
+                  </Chip>
+                </div>
+
+                <div className="flex items-center gap-3 mb-3" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
+                  <div className="flex items-center gap-1">
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>public</span>
+                    <span>{t.unique_ips} IP</span>
+                  </div>
+                  {t.last_event_at && (
+                    <div className="flex items-center gap-1">
+                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>schedule</span>
+                      <span>{relativeTime(t.last_event_at)}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+                  <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 8 }}>Регионы</div>
+                  <div className="space-y-1.5">
+                    {t.regions.map((r, i) => {
+                      const isOther = i > 0 && mainRegion && r.region !== mainRegion.region
+                      const pct = mainRegion ? (r.count / mainRegion.count) * 100 : 0
+                      return (
+                        <div key={i}>
+                          <div className="flex items-center gap-2" style={{ fontSize: 12 }}>
+                            <span style={{ fontSize: 14 }}>{flagFromCountry(r.country)}</span>
+                            <span style={{ flex: 1, color: isOther ? 'oklch(0.55 0.18 25)' : 'var(--fg-2)', fontWeight: isOther ? 600 : 400 }}>
+                              {r.city ? `${r.city}, ${r.region || r.country_name || r.country || '?'}` : (r.region || r.country_name || r.country || 'неизвестно')}
+                              {isOther && (
+                                <span style={{ marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4, background: 'oklch(0.93 0.07 25)', color: 'oklch(0.40 0.18 25)' }}>
+                                  ⚠ другой регион
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{r.count}</span>
+                          </div>
+                          <div style={{ height: 3, marginTop: 2, borderRadius: 2, background: 'var(--bg-2)', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', background: isOther ? 'oklch(0.55 0.18 25)' : 'oklch(0.60 0.16 220)' }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }

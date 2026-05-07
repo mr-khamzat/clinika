@@ -308,3 +308,110 @@ async def get_audit_feed(
 
     return {"total": len(all_entries), "items": all_entries}
 
+
+
+@router.get("/by-tenant-geo")
+async def get_by_tenant_geo(
+    days: int = Query(30, ge=1, le=365),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Гео-статистика по тенантам/франшизам.
+
+    Группирует события audit_log + activity_log по tenant + geo_region/city,
+    возвращает по каждому тенанту:
+      - имя
+      - всего событий
+      - топ-5 регионов (страна/регион/город) с количеством
+      - уникальных IP
+      - последний вход
+
+    Только для super_admin (видит все тенанты) или manager в своём тенанте.
+    """
+    from datetime import timedelta
+    from app.models.audit import AuditEntry
+    from app.models.activity_log import ActivityLog
+    from app.models.tenant import Tenant
+    from app.models.user import UserRole
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    is_superadmin = current_user.role == UserRole.SUPER_ADMIN
+
+    # Тенант-скоуп
+    tenant_filter = None if is_superadmin else (current_user.tenant_id,)
+
+    # Тянем все события с гео за период
+    audit_q = select(AuditEntry).where(AuditEntry.created_at >= cutoff)
+    if not is_superadmin and current_user.tenant_id:
+        audit_q = audit_q.where(AuditEntry.tenant_id == current_user.tenant_id)
+    audit_rows = (await db.execute(audit_q)).scalars().all()
+
+    activity_q = select(ActivityLog).where(ActivityLog.created_at >= cutoff)
+    if not is_superadmin and current_user.tenant_id:
+        activity_q = activity_q.where(ActivityLog.tenant_id == current_user.tenant_id)
+    activity_rows = (await db.execute(activity_q)).scalars().all()
+
+    # Тенанты — для имён
+    tenants_q = select(Tenant)
+    if not is_superadmin and current_user.tenant_id:
+        tenants_q = tenants_q.where(Tenant.id == current_user.tenant_id)
+    tenant_map = {str(t.id): t for t in (await db.execute(tenants_q)).scalars().all()}
+
+    # Агрегация по тенанту
+    by_tenant: dict[str, dict] = {}
+    NULL_KEY = '__null__'
+
+    def add_event(tenant_id, ip, geo_country, geo_country_name, geo_region, geo_city, ts):
+        key = str(tenant_id) if tenant_id else NULL_KEY
+        bucket = by_tenant.setdefault(key, {
+            'tenant_id': str(tenant_id) if tenant_id else None,
+            'tenant_name': None,
+            'events_count': 0,
+            'unique_ips': set(),
+            'last_event_at': None,
+            'regions': {},
+        })
+        bucket['events_count'] += 1
+        if ip:
+            bucket['unique_ips'].add(ip)
+        if ts and (not bucket['last_event_at'] or ts > bucket['last_event_at']):
+            bucket['last_event_at'] = ts
+        # Регион — ключ "страна/регион/город"
+        rkey = (geo_country or '?', geo_region or '', geo_city or '')
+        rbucket = bucket['regions'].setdefault(rkey, {
+            'country': geo_country, 'country_name': geo_country_name,
+            'region': geo_region, 'city': geo_city, 'count': 0,
+        })
+        rbucket['count'] += 1
+
+    for e in audit_rows:
+        add_event(e.tenant_id, e.ip_address, e.geo_country, e.geo_country_name, e.geo_region, e.geo_city, e.created_at)
+    for e in activity_rows:
+        add_event(
+            getattr(e, 'tenant_id', None),
+            getattr(e, 'ip_address', None),
+            getattr(e, 'geo_country', None),
+            getattr(e, 'geo_country_name', None),
+            getattr(e, 'geo_region', None),
+            getattr(e, 'geo_city', None),
+            e.created_at,
+        )
+
+    # Финальное форматирование
+    out = []
+    for key, b in by_tenant.items():
+        tid = b['tenant_id']
+        t = tenant_map.get(tid) if tid else None
+        regions_list = sorted(b['regions'].values(), key=lambda r: r['count'], reverse=True)[:5]
+        out.append({
+            'tenant_id': tid,
+            'tenant_name': (t.name if t else None) or (t.slug if t else 'Без тенанта'),
+            'tenant_slug': t.slug if t else None,
+            'events_count': b['events_count'],
+            'unique_ips': len(b['unique_ips']),
+            'last_event_at': b['last_event_at'].isoformat() if b['last_event_at'] else None,
+            'regions': regions_list,
+        })
+
+    out.sort(key=lambda x: x['events_count'], reverse=True)
+    return {'total_tenants': len(out), 'days': days, 'tenants': out}
