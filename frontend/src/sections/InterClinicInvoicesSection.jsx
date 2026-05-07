@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import ActPrintModal from './ActPrintModal'
 import { useEffect, useState } from 'react'
 import api from '../api'
+import { useToast } from '../design'
 
 const STATUS_LABEL = {
   draft:     { text: 'Черновик',    color: '#6b7280' },
@@ -81,6 +82,8 @@ function InvoiceTable({ invoices, onAction, onPrint, isSupervisor }) {
 }
 
 export default function InterClinicInvoicesSection({ isSupervisor = false, token }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [tab, setTab] = useState(isSupervisor ? 'all' : 'incoming')
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(false)
@@ -110,12 +113,15 @@ export default function InterClinicInvoicesSection({ isSupervisor = false, token
       await api.patch(`/clinic-invoices/${id}/${action}`)
       load(tab)
     } catch (e) {
-      alert(e.response?.data?.detail || 'Ошибка')
+      toast(e.response?.data?.detail || 'Ошибка', 'error')
     }
   }
 
   const handleCreate = async () => {
-    if (!form.recipient_clinic_id || !form.amount) return alert('Заполните получателя и сумму')
+    if (!form.recipient_clinic_id || !form.amount) {
+      toast('Заполните получателя и сумму', 'warn')
+      return
+    }
     try {
       await api.post('/clinic-invoices', {
         recipient_clinic_id: form.recipient_clinic_id,
@@ -127,7 +133,7 @@ export default function InterClinicInvoicesSection({ isSupervisor = false, token
       setForm({ recipient_clinic_id: '', amount: '', description: '', due_date: '' })
       load(tab)
     } catch (e) {
-      alert(e.response?.data?.detail || 'Ошибка создания')
+      toast(e.response?.data?.detail || 'Ошибка создания', 'error')
     }
   }
 

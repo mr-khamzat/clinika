@@ -37,6 +37,8 @@ import {
   PageHeader as DSPageHeader,
   Chip as DSChip,
   Avatar as DSAvatar,
+  useToast,
+  useConfirm,
 } from '../design'
 
 // ---------------------------------------------------------------------------
@@ -236,6 +238,8 @@ function formatPhone(val) {
 }
 
 function StaffModal({ token, clinics, existing, onClose, onDone }) {
+  // Toast вместо alert при ошибке удаления
+  const { toast } = useToast()
   const isEdit = !!existing
   const [form, setForm] = useState(
     isEdit
@@ -486,7 +490,7 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
                     await apiFetch('delete', `/manager/admins/${existing.id}?hard=true`, token)
                     onDone()
                   } catch (e) {
-                    alert(e?.response?.data?.detail || 'Ошибка удаления')
+                    toast(e?.response?.data?.detail || 'Ошибка удаления', 'error')
                     setConfirmDelete(false)
                   } finally { setDeleting(false) }
                 }}
@@ -767,6 +771,9 @@ function HomeDashboard({ token, onNavigate }) {
 
 
 function StaffSection({ token }) {
+  // Toast/Modal вместо alert/confirm
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [admins, setAdmins] = useState([])
   const [clinics, setClinics] = useState([])
   const [loading, setLoading] = useState(true)
@@ -800,13 +807,13 @@ function StaffSection({ token }) {
   useEffect(() => { fetchData() }, [fetchData])
 
   const handleDeactivate = async (admin) => {
-    if (!window.confirm(`Деактивировать ${admin.full_name}?`)) return
+    if (!(await confirm(`Деактивировать ${admin.full_name}?`, { danger: true, okText: 'Деактивировать' }))) return
     setDeactivating(admin.id)
     try {
       await apiFetch('delete', `/manager/admins/${admin.id}`, token)
       fetchData()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Ошибка при деактивации')
+      toast(err?.response?.data?.detail || 'Ошибка при деактивации', 'error')
     } finally {
       setDeactivating(null)
     }
@@ -845,6 +852,7 @@ function StaffSection({ token }) {
 
   return (
     <div>
+      <ConfirmHost />
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">Сотрудники</h2>
         <button
@@ -1669,6 +1677,9 @@ function ReportsSection({ token }) {
 // ---------------------------------------------------------------------------
 
 function BonusesSection({ token }) {
+  // Toast/Modal вместо alert/confirm
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1690,6 +1701,7 @@ function BonusesSection({ token }) {
 
   return (
     <div>
+      <ConfirmHost />
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">Бонусы</h2>
         <button
@@ -1740,12 +1752,12 @@ function BonusesSection({ token }) {
                         {pending > 0 && (
                           <button
                             onClick={async () => {
-                              if (!window.confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`)) return
+                              if (!(await confirm(`Выплатить ${pending} Б сотруднику ${row.full_name}?`, { okText: 'Выплатить' }))) return
                               try {
                                 await apiFetch('post', `/manager/bonuses/mark-paid-all/${row.admin_id}`, token)
                                 fetchData()
                               } catch {
-                                alert('Ошибка при выплате')
+                                toast('Ошибка при выплате', 'error')
                               }
                             }}
                             className="text-xs bg-green-500 hover:bg-green-600 text-white rounded-lg px-2.5 py-1.5 font-medium transition"
@@ -1881,7 +1893,8 @@ function ServiceModal({ token, clinics, existing, onClose, onDone }) {
 // ---------------------------------------------------------------------------
 // Компонент: Строка редактирования услуги внутри категории
 // ---------------------------------------------------------------------------
-function ServiceRow({ svc, token, onUpdated }) {
+// confirm передаётся пропсом из CategoryCard для замены window.confirm
+function ServiceRow({ svc, token, onUpdated, confirm }) {
   const [bonus, setBonus] = useState(String(svc.bonus_amount))
   const [saving, setSaving] = useState(false)
 
@@ -1896,7 +1909,10 @@ function ServiceRow({ svc, token, onUpdated }) {
   }
 
   const handleDeactivate = async () => {
-    if (!window.confirm(`Отключить услугу "${svc.name}"?`)) return
+    const ok = confirm
+      ? await confirm(`Отключить услугу "${svc.name}"?`, { danger: true, okText: 'Отключить' })
+      : window.confirm(`Отключить услугу "${svc.name}"?`)
+    if (!ok) return
     await apiFetch('patch', `/manager/services/${svc.id}`, token, { bonus_amount: 0 })
     onUpdated(svc.id, 0)
   }
@@ -1948,6 +1964,9 @@ function ServiceRow({ svc, token, onUpdated }) {
 // Компонент: Карточка категории (аккордеон)
 // ---------------------------------------------------------------------------
 function CategoryCard({ cat, clinicId, token, onBonusSet, autoExpand = false }) {
+  // Toast/Modal вместо alert и нативного confirm в дочерних строках
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [expanded, setExpanded] = useState(autoExpand)
   const [services, setServices] = useState(null)   // null = не загружено
   const [loadingServices, setLoadingServices] = useState(false)
@@ -2000,7 +2019,7 @@ function CategoryCard({ cat, clinicId, token, onBonusSet, autoExpand = false }) 
       setBonusInput('')
       onBonusSet()
     } catch (err) {
-      alert(err?.response?.data?.detail || 'Ошибка')
+      toast(err?.response?.data?.detail || 'Ошибка', 'error')
     } finally { setApplying(false) }
   }
 
@@ -2011,6 +2030,7 @@ function CategoryCard({ cat, clinicId, token, onBonusSet, autoExpand = false }) 
       ${hasBonus
         ? 'border-blue-200 dark:border-blue-800 bg-white dark:bg-gray-800'
         : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900'}`}>
+      <ConfirmHost />
 
       {/* Заголовок категории */}
       <div className="flex items-center gap-2 px-3 py-3">
@@ -2073,7 +2093,7 @@ function CategoryCard({ cat, clinicId, token, onBonusSet, autoExpand = false }) 
                 {(services || []).length === 0 ? (
                   <tr><td colSpan={4} className="px-4 py-4 text-center text-gray-400 text-xs">Нет услуг</td></tr>
                 ) : (services || []).map(svc => (
-                  <ServiceRow key={svc.id} svc={svc} token={token} onUpdated={handleRowUpdated} />
+                  <ServiceRow key={svc.id} svc={svc} token={token} onUpdated={handleRowUpdated} confirm={confirm} />
                 ))}
               </tbody>
             </table>
@@ -2098,6 +2118,8 @@ const POPULAR_CAT_DEFS = [
 // Компонент: Раздел Услуги — 3-блочная структура
 // ---------------------------------------------------------------------------
 function ServicesSection({ token }) {
+  // Modal вместо window.confirm
+  const { confirm, ConfirmHost } = useConfirm()
   const [clinics, setClinics] = useState([])
   const [selectedClinicId, setSelectedClinicId] = useState('')
   const [categories, setCategories] = useState([])
@@ -2167,7 +2189,7 @@ function ServicesSection({ token }) {
 
   // ─ Синхронизация из МИС ─
   const handleSyncMis = async () => {
-    if (!window.confirm('Синхронизировать все услуги из МИС?\nСуществующие бонусы сохранятся.')) return
+    if (!(await confirm('Синхронизировать все услуги из МИС? Существующие бонусы сохранятся.', { okText: 'Синхронизировать' }))) return
     setSyncing(true)
     setSyncResult(null)
     try {
@@ -2183,6 +2205,7 @@ function ServicesSection({ token }) {
 
   return (
     <div>
+      <ConfirmHost />
       {/* ─── Заголовок и действия ─── */}
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -3363,6 +3386,9 @@ const EMPTY_PARTNER_FORM = {
 }
 
 function PartnerModal({ token, existing, onClose, onDone }) {
+  // Toast/Modal вместо alert/confirm
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const isEdit = !!existing
   const [form, setForm] = useState(
     isEdit
@@ -3412,6 +3438,7 @@ function PartnerModal({ token, existing, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <ConfirmHost />
       <div className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl p-6 w-full sm:max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
         <h2 className="text-lg font-bold text-gray-800 dark:text-white mb-5">
           {isEdit ? 'Редактировать партнёра' : 'Новый партнёр'}
@@ -3508,12 +3535,12 @@ function PartnerModal({ token, existing, onClose, onDone }) {
             {existing.is_active !== false ? (
               <button type="button"
                 onClick={async () => {
-                  if (!window.confirm(`Деактивировать ${existing.full_name}?`)) return
+                  if (!(await confirm(`Деактивировать ${existing.full_name}?`, { danger: true, okText: 'Деактивировать' }))) return
                   try {
                     await apiFetch('delete', `/manager/partners/${existing.id}`, token)
                     onDone()
                   } catch (e) {
-                    alert(e?.response?.data?.detail || 'Ошибка')
+                    toast(e?.response?.data?.detail || 'Ошибка', 'error')
                   }
                 }}
                 className="w-full border border-orange-200 text-orange-500 rounded-xl py-2.5 text-sm font-medium hover:bg-orange-50 transition">
@@ -3547,7 +3574,7 @@ function PartnerModal({ token, existing, onClose, onDone }) {
                     await apiFetch('delete', `/manager/partners/${existing.id}?hard=true`, token)
                     onDone()
                   } catch (e) {
-                    alert(e?.response?.data?.detail || 'Ошибка удаления')
+                    toast(e?.response?.data?.detail || 'Ошибка удаления', 'error')
                     setConfirmDelete(false)
                   } finally { setDeleting(false) }
                 }}
@@ -4085,6 +4112,8 @@ function DiscountModal({ token, existing, services, clinics, onClose, onDone }) 
 }
 
 function DiscountsSection({ token }) {
+  // Modal вместо window.confirm
+  const { confirm, ConfirmHost } = useConfirm()
   const [discounts, setDiscounts] = useState([])
   const [services, setServices] = useState([])
   const [clinics, setClinics] = useState([])
@@ -4125,7 +4154,7 @@ function DiscountsSection({ token }) {
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Удалить скидку?')) return
+    if (!(await confirm('Удалить скидку?', { danger: true, okText: 'Удалить' }))) return
     try {
       await apiFetch('delete', `/manager/discounts/${id}`, token)
       setDiscounts(prev => prev.filter(x => x.id !== id))
@@ -4151,6 +4180,7 @@ function DiscountsSection({ token }) {
 
   return (
     <div>
+      <ConfirmHost />
       {/* ─── Заголовок ─── */}
       <div className="flex items-center justify-between mb-5">
         <div>
@@ -7573,7 +7603,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'monitoring':     return <MonitoringSection token={adminToken} />
       case 'contacts':       return <Suspense fallback={<SectionLoader />}><ContactsSection token={adminToken} /></Suspense>
       case 'reviews':        return <Suspense fallback={<SectionLoader />}><ReviewsSection token={adminToken} /></Suspense>
-      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} mode="admin" /></Suspense>
+      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} /></Suspense>
       case 'plugins':        return <PluginsSection token={adminToken} />
       case 'mis_sync':       return <MisSyncSection token={adminToken} />
       case 'doctors':        return <Suspense fallback={<SectionLoader />}><DoctorsSection token={adminToken} /></Suspense>

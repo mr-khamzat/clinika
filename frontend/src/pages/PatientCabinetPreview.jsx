@@ -27,6 +27,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
 import '../styles/cabinet-dark.css'
+import { useToast, useConfirm } from '../design'
 
 const API = API_BASE
 
@@ -426,6 +427,8 @@ function RescheduleModal({ apt, onClose, onDone }) {
 
 // ── Family Modal ─────────────────────────────────────────────────────────────
 function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwitch }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [phone, setPhone] = useState('+7')
   const [name, setName] = useState('')
   const [relation, setRelation] = useState('')
@@ -450,7 +453,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
   }
 
   async function remove(id) {
-    if (!window.confirm('Удалить из списка?')) return
+    if (!(await confirm('Удалить из списка?', { danger: true, okText: 'Удалить' }))) return
     try {
       const session = localStorage.getItem(SESSION_KEY)
       await axios.delete(`${API}/patient/family/${id}`, { params: { t: session } })
@@ -469,6 +472,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
 
   return (
     <div className="cp-modal-overlay" onClick={onClose}>
+      <ConfirmHost />
       <div className="cp-modal" onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
           <h3>Семейный доступ</h3>
@@ -732,6 +736,8 @@ function Sidebar({ route, setRoute, onLogout, badges }) {
 
 // ── HomePage (Dashboard) ─────────────────────────────────────────────────────
 function HomePage({ data, patientName, patientPhone, onGo, onQr, onReschedule, onCancelled }) {
+  // Toast для info-уведомления "нет QR"
+  const { toast } = useToast()
   const isApt = data?.type === 'appointment'
   const allRefs = isApt ? [] : [data?.current, ...(data?.other_referrals || [])].filter(Boolean)
   const activeRefs = allRefs.filter(r => r.status === 'created' || r.status === 'confirmed')
@@ -846,7 +852,7 @@ function HomePage({ data, patientName, patientPhone, onGo, onQr, onReschedule, o
         <button className="qa" onClick={() => {
           const q = (data?.current?.qr_code) || nextApt?.qr_code
           if (q) onQr(q)
-          else alert('У вас сейчас нет активного QR-кода')
+          else toast('У вас сейчас нет активного QR-кода', 'info')
         }}>
           <div className="qa-icon">⊞</div>
           <div><div className="qa-label">Мой QR</div><div className="qa-sub">для регистратуры</div></div>
@@ -911,6 +917,8 @@ function HomePage({ data, patientName, patientPhone, onGo, onQr, onReschedule, o
 
 // ── Карточка ближайшего приёма ───────────────────────────────────────────────
 function NextApptCard({ apt, onQr, onReschedule, onCancelled }) {
+  // Toast вместо alert
+  const { toast } = useToast()
   const dt = apt.appointment_date ? new Date(apt.appointment_date + 'T00:00') : null
   const day = dt ? dt.getDate() : '—'
   const mon = dt ? MONTHS_R[dt.getMonth()] : ''
@@ -925,14 +933,14 @@ function NextApptCard({ apt, onQr, onReschedule, onCancelled }) {
   const [cancelling, setCancelling] = useState(false)
 
   async function doCancel() {
-    if (!apt.patient_token) { alert('Токен записи отсутствует'); return }
+    if (!apt.patient_token) { toast('Токен записи отсутствует', 'warn'); return }
     setCancelling(true)
     try {
       await axios.post(`${API}/patient/appointment/${apt.id}/cancel`, { reason: 'Отменено пациентом' }, { params: { t: apt.patient_token } })
       setConfirming(false)
       onCancelled && onCancelled(apt.id)
     } catch (e) {
-      alert(e.response?.data?.detail || 'Не удалось отменить')
+      toast(e.response?.data?.detail || 'Не удалось отменить', 'error')
     } finally { setCancelling(false) }
   }
 
@@ -1973,6 +1981,8 @@ function ProfilePage({ data, patientName, patientPhone, onOpenFamily, onPushTogg
 
 // ── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function PatientCabinetPreview() {
+  // Toast вместо alert
+  const { toast } = useToast()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2100,7 +2110,7 @@ export default function PatientCabinetPreview() {
 
   const switchProfile = async (memberPhone, shortCode) => {
     const session = localStorage.getItem(SESSION_KEY)
-    if (!session) { alert('Только из session-режима'); return }
+    if (!session) { toast('Только из session-режима', 'warn'); return }
     try {
       const r = await axios.post(`${API}/patient/session/switch`, { phone: memberPhone, short_code: shortCode }, { params: { t: session } })
       const newSession = r.data.session_token
@@ -2110,7 +2120,7 @@ export default function PatientCabinetPreview() {
         setFamilyOpen(false)
         await restoreFromSession(newSession)
       }
-    } catch (e) { alert(e.response?.data?.detail || 'Не удалось переключиться') }
+    } catch (e) { toast(e.response?.data?.detail || 'Не удалось переключиться', 'error') }
   }
 
   const handlePushToggle = async () => {

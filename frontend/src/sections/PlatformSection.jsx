@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import axios from 'axios'
 const TenantDrawer = lazy(() => import('./TenantDrawer'))
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { useConfirm } from '../design'
 
 const API = API_BASE
 const authH = (t) => ({ Authorization: `Bearer ${t}` })
@@ -37,6 +38,8 @@ const EMPTY_PROVISION = {
 }
 
 export default function PlatformSection({ token }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [tab, setTab] = useState('overview')
   const [metrics, setMetrics] = useState(null)
   const [tenants, setTenants] = useState(null)
@@ -133,7 +136,7 @@ export default function PlatformSection({ token }) {
   }
 
   const resetPassword = async (tenantId) => {
-    if (!confirm('Сгенерировать новый пароль для администратора тенанта?')) return
+    if (!(await confirm('Сгенерировать новый пароль для администратора тенанта?', { okText: 'Сгенерировать' }))) return
     setResetLoading(tenantId)
     try {
       const r = await apiFetch('post', `/admin/tenants/${tenantId}/reset-password`, token)
@@ -191,6 +194,7 @@ export default function PlatformSection({ token }) {
 
   return (
     <div className="space-y-5">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH } from '../../config'
+import { useToast } from '../../design'
 
 const API = `${API_BASE}${BASE_PATH}`
 
@@ -240,6 +241,8 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
 
 // ── Главный компонент таба ───────────────────────────────────────────────────
 export default function VitalsTab({ token, sessionToken, phone }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [summary, setSummary] = useState({})
   const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -274,11 +277,11 @@ export default function VitalsTab({ token, sessionToken, phone }) {
 
   const handleAppleHealth = () => {
     if (!isIOS) {
-      alert('Apple Health доступен только на iPhone/iPad.')
+      toast('Apple Health доступен только на iPhone/iPad.', 'info', 5000)
       return
     }
     if (!hasBridge) {
-      alert('Откройте кабинет в приложении КлиникСеть на iPhone — для синхронизации с Apple Health нужно нативное приложение.')
+      toast('Откройте кабинет в приложении КлиникСеть на iPhone — для синхронизации с Apple Health нужно нативное приложение.', 'info', 6000)
       return
     }
     try {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useToast, useConfirm } from '../design'
 
 const ACCENT = '#7c3aed'
 
@@ -206,6 +207,9 @@ function EntryCard({ entry, onEdit, onDelete }) {
 
 // ── Главная секция ───────────────────────────────────────────────────────────
 export default function AIKnowledgeSection({ token }) {
+  // Замена alert/confirm на Toast и Modal
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -261,12 +265,12 @@ export default function AIKnowledgeSection({ token }) {
   }
 
   async function deleteEntry(entry) {
-    if (!window.confirm(`Удалить запись «${truncate(entry.question, 50)}»?`)) return
+    if (!(await confirm(`Удалить запись «${truncate(entry.question, 50)}»?`, { danger: true, okText: 'Удалить' }))) return
     try {
       await axios.delete(`${API_BASE}/ai/knowledge/${entry.id}`, { headers: authH(token) })
       await load(); await loadStats()
     } catch (e) {
-      alert(e?.response?.data?.detail || 'Не удалось удалить')
+      toast(e?.response?.data?.detail || 'Не удалось удалить', 'error')
     }
   }
 
@@ -292,6 +296,8 @@ export default function AIKnowledgeSection({ token }) {
 
   return (
     <div className="space-y-4 px-1">
+      {/* Хост Modal-подтверждения */}
+      <ConfirmHost />
       {/* Заголовок + статистика */}
       <div className="bg-white rounded-2xl p-4" style={{ boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
         <div className="flex items-start justify-between gap-3 mb-3 flex-wrap">

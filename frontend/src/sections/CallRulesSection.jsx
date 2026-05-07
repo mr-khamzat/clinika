@@ -10,6 +10,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useConfirm } from '../design'
 
 const authH = t => ({ Authorization: `Bearer ${t}` })
 
@@ -25,6 +26,8 @@ const ROLE_INFO = {
 const TELEPHONY_MODULES = ['telephony_basic', 'cross_clinic_audio', 'video_calls', 'video_conference']
 
 export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [tenants, setTenants]       = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [tenantData, setTenantData] = useState(null)
@@ -143,7 +146,7 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
   }
 
   const resetAll = async () => {
-    if (!confirm('Удалить все правила (глобальные и по клиникам)?')) return
+    if (!(await confirm('Удалить все правила (глобальные и по клиникам)?', { danger: true, okText: 'Удалить все' }))) return
     await axios.delete(`${API_BASE}/call-rules/${selectedId}`, { headers: authH(adminToken) })
     reload()
   }
@@ -166,6 +169,7 @@ export default function CallRulesSection({ adminToken, tenantId: fixedTenantId }
 
   return (
     <div className="px-4 pb-24 max-w-6xl mx-auto">
+      <ConfirmHost />
       <div className="mb-5">
         <div className="text-[11px] font-bold uppercase tracking-wider text-[#0097A7] mb-1.5">
           Модуль связи · Правила звонков

@@ -8,6 +8,7 @@
 //   GET /patient/documents/{id}/download
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
+import { useToast } from '../../design'
 
 const DOC_TYPE = {
   reference:  { label: 'Справка',     icon: 'description', color: '#0EA5E9', bg: '#E0F2FE' },
@@ -79,6 +80,8 @@ function DocCard({ doc, onDownload, downloading }) {
 }
 
 export default function DocumentsTab({ sessionToken, apiBase = '/api' }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [docs, setDocs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -118,7 +121,7 @@ export default function DocumentsTab({ sessionToken, apiBase = '/api' }) {
       document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {
-      alert('Не удалось скачать файл')
+      toast('Не удалось скачать файл', 'error')
     } finally {
       setDownloading(null)
     }

@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useToast, useConfirm } from '../design'
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────
 
@@ -102,6 +103,8 @@ function Chip({ status, palette }) {
 // ── Подписки ────────────────────────────────────────────────────────────────
 
 function SubscriptionsTab({ token, onAction }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
@@ -120,7 +123,7 @@ function SubscriptionsTab({ token, onAction }) {
   useEffect(() => { load() }, [load])
 
   const cancel = async (id) => {
-    if (!confirm('Отменить подписку?')) return
+    if (!(await confirm('Отменить подписку?', { danger: true, okText: 'Отменить подписку' }))) return
     try {
       await apiFetch('post', `/admin/subscriptions/${id}/cancel`, token)
       load()
@@ -133,6 +136,7 @@ function SubscriptionsTab({ token, onAction }) {
 
   return (
     <div>
+      <ConfirmHost />
       <div className="flex flex-wrap gap-2 mb-4">
         {['', 'active', 'trial', 'past_due', 'cancelled'].map(s => (
           <button
@@ -213,6 +217,8 @@ function SubscriptionsTab({ token, onAction }) {
 // ── Счета ────────────────────────────────────────────────────────────────────
 
 function InvoicesTab({ token }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
@@ -234,8 +240,8 @@ function InvoicesTab({ token }) {
     try {
       const url = window.location.origin + `/${inv.tenant_slug}/admin?invoice=${inv.id}`
       await navigator.clipboard?.writeText(url)
-      alert('Ссылка на оплату скопирована:\n' + url)
-    } catch { alert('Не удалось скопировать ссылку') }
+      toast('Ссылка на оплату скопирована: ' + url, 'success', 6000)
+    } catch { toast('Не удалось скопировать ссылку', 'error') }
   }
 
   if (loading) {

@@ -6,6 +6,7 @@ import SupportChat from './SupportChat'
 import CallWidget from './CallWidget'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { useConfirm } from '../design'
 
 export const ThemeContext = createContext({ isDark: false, toggleTheme: () => {} })
 export const HelpContext = createContext({ openHelp: () => {} })
@@ -30,6 +31,8 @@ export default function Layout() {
   })
   const [helpOpen, setHelpOpen] = useState(false)
   const { user, logout } = useAuthStore()
+  // Замена window.confirm на Modal-диалог из design-system
+  const { confirm, ConfirmHost } = useConfirm()
 
   useEffect(() => {
     if (isDark) {
@@ -43,11 +46,11 @@ export default function Layout() {
 
   const toggleTheme = () => setIsDark(d => !d)
 
-  const handleLogout = () => {
-    if (window.confirm('Выйти из аккаунта?')) {
-      logout()
-      window.location.href = '/' + SLUG + '/'
-    }
+  const handleLogout = async () => {
+    const ok = await confirm('Выйти из аккаунта?', { okText: 'Выйти', danger: true })
+    if (!ok) return
+    logout()
+    window.location.href = '/' + SLUG + '/'
   }
 
   const initials = (user?.full_name || user?.username || '?')[0].toUpperCase()
@@ -116,6 +119,8 @@ export default function Layout() {
         {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
         {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <CallWidget />}
         {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <SupportChat />}
+        {/* Хост Modal-диалога подтверждения для logout */}
+        <ConfirmHost />
       </HelpContext.Provider>
     </ThemeContext.Provider>
   )

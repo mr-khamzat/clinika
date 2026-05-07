@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { useToast, useConfirm } from '../design'
 
 // Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
 const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
@@ -152,7 +153,8 @@ function googleCalendarUrl(apt) {
 
 // "Чек" визита — открываем красивую HTML-страницу для печати/сохранения в PDF
 // (window.print() поддерживает любые шрифты браузера, включая кириллицу).
-function downloadVisitPdf(visit, patient) {
+// Принимает опциональный toast(message, level) для уведомлений вместо alert
+function downloadVisitPdf(visit, patient, notify) {
   try {
     const services = Array.isArray(visit.services) ? visit.services : []
     let computed = 0
@@ -222,13 +224,13 @@ function downloadVisitPdf(visit, patient) {
     const url = URL.createObjectURL(blob)
     const w = window.open(url, '_blank')
     if (!w) {
-      alert('Разрешите всплывающие окна для скачивания чека')
+      notify ? notify('Разрешите всплывающие окна для скачивания чека', 'warn') : alert('Разрешите всплывающие окна для скачивания чека')
       URL.revokeObjectURL(url)
       return
     }
     setTimeout(() => URL.revokeObjectURL(url), 60000)
   } catch (e) {
-    alert('Не удалось открыть чек')
+    notify ? notify('Не удалось открыть чек', 'error') : alert('Не удалось открыть чек')
   }
 }
 
@@ -505,6 +507,8 @@ function fmtMisDate(str) {
 const VISIT_COLORS = { completed: '#10B981', upcoming: '#3B82F6', refused: '#EF4444' }
 
 function VisitCard({ visit, patientName }) {
+  // Toast вместо alert при ошибках формирования чека
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
   const services = Array.isArray(visit.services) ? visit.services : []
@@ -568,7 +572,7 @@ function VisitCard({ visit, patientName }) {
       )}
       {canPdf && (
         <div className="px-4 pb-3 -mt-1">
-          <button onClick={async () => { if (pdfBusy) return; setPdfBusy(true); await downloadVisitPdf(visit, patientName); setPdfBusy(false) }}
+          <button onClick={async () => { if (pdfBusy) return; setPdfBusy(true); await downloadVisitPdf(visit, patientName, toast); setPdfBusy(false) }}
             className="w-full h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold transition-all active:scale-[.97]"
             style={{ background:'#F1F5F9', color:'#1E293B', border:'1px solid #E2E8F0' }}>
             <span className="material-symbols-outlined text-base">download</span>
@@ -591,6 +595,8 @@ function fmtAptDate(iso) {
 }
 
 function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const status = String(apt.status || '').toLowerCase()
   const cfg = status === 'confirmed'
     ? { label: 'Подтверждена', dot: '#10B981', bg: 'rgba(16,185,129,.1)', text: '#065F46' }
@@ -603,14 +609,14 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
   const [showCal, setShowCal] = useState(false)
 
   async function doCancel() {
-    if (!apt.patient_token) { alert('Токен записи отсутствует'); return }
+    if (!apt.patient_token) { toast('Токен записи отсутствует', 'warn'); return }
     setCancelling(true)
     try {
       await axios.post(`${API}/patient/appointment/${apt.id}/cancel`, { reason: 'Отменено пациентом' }, { params:{ t: apt.patient_token } })
       setConfirming(false)
       onCancelled && onCancelled(apt.id)
     } catch (e) {
-      alert(e.response?.data?.detail || 'Не удалось отменить')
+      toast(e.response?.data?.detail || 'Не удалось отменить', 'error')
     } finally {
       setCancelling(false)
     }
@@ -772,19 +778,21 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
 
 // ── AptControls: блок управления (календарь / перенос / отмена) ─────────────
 function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [confirming, setConfirming] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [showCal, setShowCal] = useState(false)
 
   async function doCancel() {
-    if (!apt.patient_token) { alert('Токен записи отсутствует'); return }
+    if (!apt.patient_token) { toast('Токен записи отсутствует', 'warn'); return }
     setCancelling(true)
     try {
       await axios.post(`${API}/patient/appointment/${apt.id}/cancel`, { reason: 'Отменено пациентом' }, { params:{ t: apt.patient_token } })
       setConfirming(false)
       onCancelled && onCancelled(apt.id)
     } catch (e) {
-      alert(e.response?.data?.detail || 'Не удалось отменить')
+      toast(e.response?.data?.detail || 'Не удалось отменить', 'error')
     } finally { setCancelling(false) }
   }
 
@@ -1868,6 +1876,9 @@ function HealthHub({ sessionToken, phone }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PatientCabinet() {
+  // Замена alert/confirm на Toast и Modal
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2038,7 +2049,7 @@ export default function PatientCabinet() {
 
   const switchProfile = async (memberPhone, shortCode) => {
     const session = localStorage.getItem(SESSION_KEY)
-    if (!session) { alert('Только из session-режима. Войдите по коду заново.'); return }
+    if (!session) { toast('Только из session-режима. Войдите по коду заново.', 'warn', 5000); return }
     try {
       const r = await axios.post(`${API}/patient/session/switch`, { phone: memberPhone, short_code: shortCode }, { params: { t: session } })
       const newSession = r.data.session_token
@@ -2051,7 +2062,7 @@ export default function PatientCabinet() {
         await restoreFromSession(newSession)
       }
     } catch (e) {
-      alert(e.response?.data?.detail || 'Не удалось переключиться')
+      toast(e.response?.data?.detail || 'Не удалось переключиться', 'error')
     }
   }
 
@@ -2687,6 +2698,8 @@ export default function PatientCabinet() {
 
 // ── Семейный аккаунт: модалка ────────────────────────────────────────────────
 function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwitch }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [phone, setPhone] = useState('+7')
   const [name, setName] = useState('')
   const [relation, setRelation] = useState('')
@@ -2723,7 +2736,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
   }
 
   async function remove(id) {
-    if (!window.confirm('Удалить из списка?')) return
+    if (!(await confirm('Удалить из списка?', { danger: true, okText: 'Удалить' }))) return
     try {
       const session = localStorage.getItem('clinika_patient_session')
       await axios.delete(`${API}/patient/family/${id}`, { params: { t: session } })
@@ -2744,6 +2757,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
+      <ConfirmHost />
       <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900 text-base">Семья</h3>

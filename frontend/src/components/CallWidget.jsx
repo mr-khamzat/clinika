@@ -8,6 +8,7 @@ import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 import { startRingback, stopRingback, startRingtone, stopRingtone, stopAllTones } from '../lib/callTones'
+import { useToast } from '../design'
 
 const DEFAULT_RTC_CONFIG = {
   iceServers: [
@@ -24,6 +25,7 @@ const ROLE_LABEL   = { super_admin:'Платформа', franchise_owner:'Фра
 
 export default function CallWidget() {
   const { token, user } = useAuthStore()
+  const { toast } = useToast()
   const [caps, setCaps]         = useState({ enabled:false, audio:false, video:false })
   const [mode, setMode]         = useState('audio')   // 'audio' | 'video'
   const [open, setOpen]         = useState(false)
@@ -286,7 +288,7 @@ export default function CallWidget() {
 
     let stream
     try { stream = await getMedia(mode) }
-    catch { alert('Нет доступа к камере/микрофону'); setOutgoing(null); return }
+    catch { toast('Нет доступа к камере/микрофону', 'error'); setOutgoing(null); return }
 
     const pc = createPC(contact.user_id)
     stream.getTracks().forEach(t => pc.addTrack(t, stream))

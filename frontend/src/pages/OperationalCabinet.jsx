@@ -26,6 +26,7 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  useToast,
 } from '../design'
 
 const BrandingSection = lazy(() => import('../sections/BrandingSection'))
@@ -74,6 +75,8 @@ function Icon({ name, size = 20, fill = 1, className = '', style = {} }) {
 }
 
 export default function OperationalCabinet({ adminToken, user, onLogout }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   // ─── Текущая вкладка и UI-состояние ───
   const [tab, setTab] = useState('dashboard')
   const [stats, setStats] = useState(null)
@@ -1345,7 +1348,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => alert('Включение камеры доступно в HTTPS-режиме. Используйте код или поиск по телефону.')}
+                      onClick={() => toast('Включение камеры доступно в HTTPS-режиме. Используйте код или поиск по телефону.', 'info', 6000)}
                       className="ks-pill-btn-secondary"
                     >
                       <Icon name="qr_code_scanner" size={18} /> QR

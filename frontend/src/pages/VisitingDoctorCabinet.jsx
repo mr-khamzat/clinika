@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
+import { useToast } from '../design'
 
 const P  = '#0097A7'
 const D  = '#004D5F'
@@ -211,6 +212,8 @@ function QueueCard({ apt }) {
 
 // ─── Main ──────────────────────────────────────────────────────
 export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const hdr = useCallback(() => ({ headers:{ Authorization:`Bearer ${adminToken}` } }), [adminToken])
 
   const [tab,      setTab]      = useState('queue')
@@ -270,7 +273,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
     setPushLoading(true)
     try {
       const perm = await Notification.requestPermission()
-      if (perm !== 'granted') { alert('Разрешение на уведомления не выдано'); return }
+      if (perm !== 'granted') { toast('Разрешение на уведомления не выдано', 'warn'); return }
       const ok = await registerPush(adminToken)
       if (ok) { setPushOn(true); new Notification('КлиникСеть', { body:'Уведомления включены!' }) }
     } catch {}
@@ -282,7 +285,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
     try {
       const r = await axios.post(API_BASE + '/visiting/admin/complete-visit', { appointment_id:apt.id }, hdr())
       setAccepted(r.data); loadQueue()
-    } catch(e) { alert('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+    } catch(e) { toast('Ошибка: ' + (e.response?.data?.detail || e.message), 'error') }
     setAccepting(null)
   }
 
@@ -305,7 +308,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
       else body = { qr_value:v }
       const r = await axios.post(API_BASE + '/visiting/admin/complete-visit', body, hdr())
       setAccepted(r.data); loadQueue()
-    } catch(e) { alert('Запись не найдена: ' + (e.response?.data?.detail || v)) }
+    } catch(e) { toast('Запись не найдена: ' + (e.response?.data?.detail || v), 'error') }
     setAccepting(null)
   }
 

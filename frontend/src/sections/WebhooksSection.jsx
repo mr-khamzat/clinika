@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { useToast, useConfirm } from '../design'
 
 const API = API_BASE
 
@@ -28,6 +29,9 @@ const EVENT_LABELS = {
 }
 
 export default function WebhooksSection({ token }) {
+  // Замена alert/confirm на Toast и Modal из design-system
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [webhooks, setWebhooks] = useState([])
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -90,7 +94,7 @@ export default function WebhooksSection({ token }) {
   }
 
   const remove = async (id) => {
-    if (!confirm('Удалить вебхук?')) return
+    if (!(await confirm('Удалить вебхук?', { danger: true, okText: 'Удалить' }))) return
     await apiFetch(token, `/webhooks/${id}`, { method: 'DELETE' })
     load()
   }
@@ -107,7 +111,8 @@ export default function WebhooksSection({ token }) {
     setTestLoading(id)
     const res = await apiFetch(token, `/webhooks/${id}/test`, { method: 'POST' })
     const d = await res.json()
-    alert(res.ok ? `Тест отправлен ✓ статус ${d.status_code}` : `Ошибка: ${d.detail || 'неизвестна'}`)
+    if (res.ok) toast(`Тест отправлен ✓ статус ${d.status_code}`, 'success')
+    else toast(`Ошибка: ${d.detail || 'неизвестна'}`, 'error')
     setTestLoading(null)
   }
 
@@ -125,6 +130,8 @@ export default function WebhooksSection({ token }) {
 
   return (
     <div className="space-y-5">
+      {/* Хост Modal-диалога подтверждения */}
+      <ConfirmHost />
       {/* Заголовок */}
       <div className="flex items-center justify-between">
         <div>

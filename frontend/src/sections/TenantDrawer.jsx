@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useToast, useConfirm } from '../design'
 
 function api(method, url, token, data) {
   return axios({ method, url: `${API_BASE}${url}`, headers: { Authorization: `Bearer ${token}` }, data })
@@ -28,6 +29,8 @@ const CAT_ICONS  = { telephony: 'phone_in_talk', ai: 'auto_awesome', advertising
 
 // ── Основная вкладка ──────────────────────────────────────────────────────────
 function TabMain({ token, tenant, onUpdate }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [resetting, setResetting] = useState(false)
   const [creds, setCreds]         = useState(null)
   const [toggling, setToggling]   = useState(false)
@@ -40,7 +43,7 @@ function TabMain({ token, tenant, onUpdate }) {
       const r = await api('post', `/admin/tenants/${tenant.id}/reset-password`, token)
       setCreds(r.data)
     } catch(e) {
-      alert(e.response?.data?.detail || 'Ошибка сброса пароля')
+      toast(e.response?.data?.detail || 'Ошибка сброса пароля', 'error')
     }
     setResetting(false)
   }
@@ -51,7 +54,7 @@ function TabMain({ token, tenant, onUpdate }) {
       await api('patch', `/admin/tenants/${tenant.id}/toggle`, token, { is_active: !tenant.is_active })
       onUpdate({ ...tenant, is_active: !tenant.is_active })
     } catch(e) {
-      alert(e.response?.data?.detail || 'Ошибка')
+      toast(e.response?.data?.detail || 'Ошибка', 'error')
     }
     setToggling(false)
   }
@@ -127,6 +130,8 @@ function TabMain({ token, tenant, onUpdate }) {
 const EMPTY_INT = { type: 'mis', name: '', base_url: '', api_key: '', extra_config: null }
 
 function TabIntegrations({ token, tenantId }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [items, setItems]       = useState(null)
   const [editing, setEditing]   = useState(null)   // null | 'new' | integration object
   const [form, setForm]         = useState(EMPTY_INT)
@@ -168,7 +173,7 @@ function TabIntegrations({ token, tenantId }) {
   }
 
   const remove = async (i) => {
-    if (!confirm(`Удалить интеграцию «${i.name}»?`)) return
+    if (!(await confirm(`Удалить интеграцию «${i.name}»?`, { danger: true, okText: 'Удалить' }))) return
     await api('delete', `/admin/tenants/${tenantId}/integrations/${i.id}`, token)
     load()
   }
@@ -188,6 +193,7 @@ function TabIntegrations({ token, tenantId }) {
 
   return (
     <div className="space-y-4">
+      <ConfirmHost />
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-500 dark:text-gray-400">{items.length} интегр.</p>
         <button onClick={startNew}
@@ -280,6 +286,9 @@ function TabIntegrations({ token, tenantId }) {
 
 // ── Модули ────────────────────────────────────────────────────────────────────
 function TabModules({ token, tenantId }) {
+  // Замена alert/confirm на Toast и Modal
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [items, setItems]         = useState(null)
   const [expandedKey, setExpanded]= useState(null)
   const [enabling, setEnabling]   = useState(null)
@@ -307,16 +316,16 @@ function TabModules({ token, tenantId }) {
       await api('post', `/admin/tenants/${tenantId}/modules/${key}/enable`, token, payload)
       load()
       setExpanded(null)
-    } catch(e) { alert(e.response?.data?.detail || 'Ошибка') }
+    } catch(e) { toast(e.response?.data?.detail || 'Ошибка', 'error') }
     setEnabling(null)
   }
 
   const disable = async (key) => {
-    if (!confirm('Отключить модуль?')) return
+    if (!(await confirm('Отключить модуль?', { danger: true, okText: 'Отключить' }))) return
     try {
       await api('post', `/admin/tenants/${tenantId}/modules/${key}/disable`, token)
       load()
-    } catch(e) { alert(e.response?.data?.detail || 'Ошибка') }
+    } catch(e) { toast(e.response?.data?.detail || 'Ошибка', 'error') }
   }
 
   const savePrice = async (key) => {
@@ -327,7 +336,7 @@ function TabModules({ token, tenantId }) {
         custom_price: price ? Number(price) : null
       })
       load()
-    } catch(e) { alert(e.response?.data?.detail || 'Ошибка') }
+    } catch(e) { toast(e.response?.data?.detail || 'Ошибка', 'error') }
     setSavingPrice(null)
   }
 
@@ -342,6 +351,7 @@ function TabModules({ token, tenantId }) {
 
   return (
     <div className="space-y-5">
+      <ConfirmHost />
       {Object.entries(byCategory).map(([cat, catItems]) => (
         <div key={cat}>
           <div className="flex items-center gap-2 mb-2">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useConfirm } from '../design'
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
 function renderMd(raw) {
@@ -92,6 +93,8 @@ const ICONS = [
 ]
 
 export default function WikiSection({ token }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [pages, setPages] = useState([])
   const [selected, setSelected] = useState(null)
   const [mode, setMode] = useState('edit') // 'edit' | 'preview'
@@ -160,7 +163,8 @@ export default function WikiSection({ token }) {
   }
 
   async function deletePage() {
-    if (!selected || !confirm('Удалить страницу «' + selected.title + '»?')) return
+    if (!selected) return
+    if (!(await confirm('Удалить страницу «' + selected.title + '»?', { danger: true, okText: 'Удалить' }))) return
     try {
       await axios.delete(API_BASE + '/wiki/pages/' + selected.id, hdr)
       setSelected(null)
@@ -214,6 +218,7 @@ export default function WikiSection({ token }) {
 
   return (
     <div className="flex h-[calc(100vh-120px)] gap-4 min-w-0">
+      <ConfirmHost />
 
       {/* ── Левая панель: дерево страниц ──────────────────── */}
       <div className="w-64 flex-shrink-0 flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

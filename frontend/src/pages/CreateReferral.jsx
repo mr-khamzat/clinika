@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getClinics, getClinicServices, createReferral, verifyPatientInMis } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
+import { useToast, Modal, Button } from '../design'
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -57,6 +58,11 @@ const inputCls = 'w-full bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-[#191c1e] tex
 const selectCls = 'w-full bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-[#191c1e] text-sm outline-none border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white transition-all appearance-none disabled:opacity-50'
 
 export default function CreateReferral() {
+  // Замена alert/prompt на Toast и Modal
+  const { toast } = useToast()
+  // Modal-prompt для названия шаблона (заменяет нативный prompt)
+  const [tplPromptOpen, setTplPromptOpen] = useState(false)
+  const [tplPromptValue, setTplPromptValue] = useState('')
   const [clinics, setClinics] = useState([])
   const [allClinics, setAllClinics] = useState([])
   const [services, setServices] = useState([])
@@ -157,19 +163,30 @@ export default function CreateReferral() {
       const res = await createReferral(payload)
       nav(`/qr/${res.data.id}`)
     } catch (err) {
-      alert(err.response?.data?.detail || 'Ошибка создания направления')
+      toast(err.response?.data?.detail || 'Ошибка создания направления', 'error')
     } finally {
       setLoading(false)
     }
   }
 
+  // Открыть Modal-prompt вместо нативного prompt()
   const handleSaveTemplate = () => {
-    const name = prompt('Название шаблона:')
-    if (!name) return
-    const tpl = { id: Date.now(), name: name.trim(), from_clinic_id: form.from_clinic_id, to_clinic_id: form.to_clinic_id, service_id: form.service_id }
+    setTplPromptValue('')
+    setTplPromptOpen(true)
+  }
+
+  // Подтверждение ввода названия шаблона из Modal
+  const confirmSaveTemplate = () => {
+    const name = tplPromptValue.trim()
+    if (!name) {
+      setTplPromptOpen(false)
+      return
+    }
+    const tpl = { id: Date.now(), name, from_clinic_id: form.from_clinic_id, to_clinic_id: form.to_clinic_id, service_id: form.service_id }
     const updated = [tpl, ...templates]
     setTemplates(updated)
     saveTemplates(updated)
+    setTplPromptOpen(false)
   }
 
   const handleApplyTemplate = (tpl) => {
@@ -196,6 +213,28 @@ export default function CreateReferral() {
 
   return (
     <div className="bg-[#f7f9fb] min-h-screen pb-32">
+      {/* Modal-prompt для названия шаблона направления */}
+      <Modal
+        open={tplPromptOpen}
+        onClose={() => setTplPromptOpen(false)}
+        title="Название шаблона"
+        size="sm"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setTplPromptOpen(false)}>Отмена</Button>
+            <Button onClick={confirmSaveTemplate}>Сохранить</Button>
+          </>
+        }
+      >
+        <input
+          autoFocus
+          value={tplPromptValue}
+          onChange={e => setTplPromptValue(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') confirmSaveTemplate() }}
+          placeholder="Например: Терапевт → УЗИ"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+        />
+      </Modal>
       {/* Шапка */}
       <header className="sticky top-14 z-10 flex items-center px-4 h-14 bg-white/80" style={{ backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(194,198,212,0.3)' }}>
         <button onClick={() => nav(-1)} className="w-10 h-10 flex items-center justify-center text-[#727783] hover:text-[#191c1e] rounded-full hover:bg-[#eceef0] transition -ml-2">

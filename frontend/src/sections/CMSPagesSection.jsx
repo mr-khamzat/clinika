@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_BASE } from '../config';
+import { useConfirm } from '../design';
 
 const PAGE_TYPES = ['info', 'landing', 'service', 'contact', 'faq'];
 
 export default function CMSPagesSection({ token }) {
+  // Замена window.confirm на Modal-подтверждение
+  const { confirm, ConfirmHost } = useConfirm();
   const [pages, setPages] = useState([]);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({});
@@ -49,7 +52,7 @@ export default function CMSPagesSection({ token }) {
   }
 
   async function deletePage(slug) {
-    if (!window.confirm('Удалить страницу?')) return;
+    if (!(await confirm('Удалить страницу?', { danger: true, okText: 'Удалить' }))) return;
     await axios.delete(`${API_BASE}/cms/pages/${slug}`, { headers: { Authorization: `Bearer ${token}` } });
     await load();
   }
@@ -121,6 +124,7 @@ export default function CMSPagesSection({ token }) {
 
   return (
     <div style={{ padding: 24 }}>
+      <ConfirmHost />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ margin: 0 }}>CMS — Страницы тенанта</h2>
         <button onClick={openNew} style={styles.saveBtn}>+ Новая страница</button>

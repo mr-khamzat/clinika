@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useToast, useConfirm } from '../design'
 
 // ─── Константы ────────────────────────────────────────────────────────────────
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -73,6 +74,9 @@ function DoctorAvatar({ photo_url, name, size = 56 }) {
 
 // ─── Главный компонент ────────────────────────────────────────────────────────
 export default function DoctorsSection({ token }) {
+  // Замена alert/confirm на Toast и Modal
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const [doctors, setDoctors] = useState([])
   const [clinics, setClinics] = useState([])
   const [loading, setLoading] = useState(true)
@@ -107,13 +111,13 @@ export default function DoctorsSection({ token }) {
 
   // ── Удаление (мягкое: is_active=false) ─────────────────────────────────────
   async function deleteDoctor(doctor) {
-    if (!confirm(`Удалить врача «${doctor.full_name}»? (он будет деактивирован)`)) return
+    if (!(await confirm(`Удалить врача «${doctor.full_name}»? (он будет деактивирован)`, { danger: true, okText: 'Удалить' }))) return
     try {
       await axios.patch(`${API_BASE}/doctors/${doctor.id}`,
         { is_active: false }, { headers: authH(token) })
       await loadDoctors()
     } catch (e) {
-      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+      toast('Ошибка: ' + (e?.response?.data?.detail || e.message), 'error')
     }
   }
 
@@ -148,6 +152,7 @@ export default function DoctorsSection({ token }) {
 
   return (
     <div className="p-4 md:p-6">
+      <ConfirmHost />
       {/* Заголовок */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
@@ -265,6 +270,9 @@ export default function DoctorsSection({ token }) {
 
 // ─── Подкомпонент: форма создания/редактирования ───────────────────────────────
 function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
+  // Замена alert/confirm на Toast и Modal
+  const { toast } = useToast()
+  const { confirm, ConfirmHost } = useConfirm()
   const isEdit = !!initial
   const [form, setForm] = useState(initial ? {
     full_name: initial.full_name || '',
@@ -315,11 +323,11 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 5 * 1024 * 1024) {
-      alert('Размер файла не должен превышать 5 МБ')
+      toast('Размер файла не должен превышать 5 МБ', 'warn')
       return
     }
     if (!/^image\/(jpeg|jpg|png|webp)$/i.test(file.type)) {
-      alert('Только JPEG, PNG или WEBP')
+      toast('Только JPEG, PNG или WEBP', 'warn')
       return
     }
     setPhotoFile(file)
@@ -334,14 +342,14 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
       setPhotoFile(null); setPhotoPreview(null); setPhotoUrl(null)
       return
     }
-    if (!confirm('Удалить фото врача?')) return
+    if (!(await confirm('Удалить фото врача?', { danger: true, okText: 'Удалить' }))) return
     try {
       await axios.delete(`${API_BASE}/doctors/${doctorId}/photo`, { headers: authH(token) })
       setPhotoFile(null); setPhotoPreview(null); setPhotoUrl(null)
       setMsg('Фото удалено')
       setTimeout(() => setMsg(''), 2500)
     } catch (e) {
-      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+      toast('Ошибка: ' + (e?.response?.data?.detail || e.message), 'error')
     }
   }
 
@@ -406,7 +414,7 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
 
   async function saveSchedule() {
     if (!doctorId) {
-      alert('Сначала сохраните врача')
+      toast('Сначала сохраните врача', 'warn')
       return
     }
     setScheduleSaving(true)
@@ -433,6 +441,7 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
 
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
+      <ConfirmHost />
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <button onClick={onClose}

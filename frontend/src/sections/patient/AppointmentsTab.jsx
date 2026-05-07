@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../../config'
+import { useConfirm } from '../../design'
 
 const STATUS_INFO = {
   pending:   { l: 'Ожидает',     bg: '#fff7ed', c: '#c2410c', icon: 'pending' },
@@ -57,6 +58,8 @@ function timeUntil(date, time) {
 }
 
 export default function AppointmentsTab({ sessionToken, onBookNew }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [appts, setAppts] = useState([])
   const [loading, setLoading] = useState(true)
   const [active, setActive] = useState(null)     // выбранная для действий
@@ -87,7 +90,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
 
   const cancel = async (apt) => {
     if (!apt.patient_token) return setErr('Нет доступа к этой записи')
-    if (!confirm(`Отменить запись ${fmtDate(apt.appointment_date)} в ${apt.start_time}?`)) return
+    if (!(await confirm(`Отменить запись ${fmtDate(apt.appointment_date)} в ${apt.start_time}?`, { danger: true, okText: 'Отменить запись', cancelText: 'Назад' }))) return
     try {
       await axios.post(`${API_BASE}/patient/appointment/${apt.id}/cancel`, { patient_token: apt.patient_token })
       setActive(null)
@@ -101,6 +104,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
 
   return (
     <div className="space-y-4">
+      <ConfirmHost />
       {/* Шапка */}
       <div className="flex items-center justify-between gap-2">
         <div>

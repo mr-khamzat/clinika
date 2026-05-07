@@ -33,6 +33,8 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  useToast,
+  useConfirm,
 } from '../design'
 import CallRulesSection from '../sections/CallRulesSection'
 import PlatformInvoicesSection from '../sections/PlatformInvoicesSection'
@@ -742,6 +744,8 @@ function FormSelect({ children, ...rest }) {
 // Раздел: Отзывы — модерация
 // ============================================================================
 function ReviewsSection({ adminToken }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [reviews, setReviews] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -786,7 +790,7 @@ function ReviewsSection({ adminToken }) {
     try { await axios.patch(`${API_BASE}/reviews/${id}/${action}`, {}, { headers: authH(adminToken) }); await loadReviews(); await loadStats() } catch {}
   }
   async function deleteReview(id) {
-    if (!confirm('Удалить отзыв?')) return
+    if (!(await confirm('Удалить отзыв?', { danger: true, okText: 'Удалить' }))) return
     try { await axios.delete(`${API_BASE}/reviews/${id}`, { headers: authH(adminToken) }); await loadReviews(); await loadStats() } catch {}
   }
 
@@ -798,6 +802,7 @@ function ReviewsSection({ adminToken }) {
 
   return (
     <div className="flex flex-col gap-4">
+      <ConfirmHost />
       {/* ─── KPI ─── */}
       {stats && (
         <KpiRow cols={4}>
@@ -1122,6 +1127,8 @@ function PartnerDoctorsSection({ adminToken }) {
 // Раздел: Рекрутеры — менеджеры по привлечению врачей
 // ============================================================================
 function RecruitersSection({ adminToken }) {
+  // Замена alert на Toast
+  const { toast } = useToast()
   const [recruiters, setRecruiters] = useState(null)
   const [loading, setLoading] = useState(true)
   const [percentEdit, setPercentEdit] = useState(null) // {id, value}
@@ -1148,7 +1155,7 @@ function RecruitersSection({ adminToken }) {
       setPercentEdit(null)
       load()
     } catch (err) {
-      alert('Ошибка: ' + (err.response?.data?.detail || err.message))
+      toast('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
     }
   }
 
@@ -1564,7 +1571,7 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     if (route === 'modules') {
       return (
         <Suspense fallback={<SectionLoader />}>
-          <ModulesCatalogSection token={adminToken} mode="owner" />
+          <ModulesCatalogSection token={adminToken} />
         </Suspense>
       )
     }

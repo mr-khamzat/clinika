@@ -11,9 +11,11 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { useToast } from '../design'
 
 export default function SupportChat() {
   const { token } = useAuthStore()
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState([])
   const [text, setText] = useState('')
@@ -102,7 +104,7 @@ export default function SupportChat() {
 
     const MAX = 20 * 1024 * 1024
     if (file.size > MAX) {
-      alert('Файл слишком большой (макс. 20 МБ)')
+      toast('Файл слишком большой (макс. 20 МБ)', 'warn')
       return
     }
 
@@ -115,7 +117,7 @@ export default function SupportChat() {
       })
       await fetchMessages()
     } catch (err) {
-      alert('Ошибка загрузки файла')
+      toast('Ошибка загрузки файла', 'error')
     } finally {
       setUploading(false)
     }

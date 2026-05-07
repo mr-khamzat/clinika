@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useConfirm } from '../design'
 
 function authH(token) { return { Authorization: `Bearer ${token}` } }
 
 export default function ContactsSection({ token }) {
+  // Замена window.confirm на Modal-диалог
+  const { confirm, ConfirmHost } = useConfirm()
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -34,7 +37,7 @@ export default function ContactsSection({ token }) {
   }
 
   async function del(id) {
-    if (!confirm('Удалить обращение?')) return
+    if (!(await confirm('Удалить обращение?', { danger: true, okText: 'Удалить' }))) return
     await axios.delete(`${API_BASE}/contact/admin/${id}`, { headers: authH(token) })
     setItems(prev => prev.filter(x => x.id !== id))
     setTotal(t => t - 1)
@@ -44,6 +47,8 @@ export default function ContactsSection({ token }) {
 
   return (
     <div>
+      {/* Хост Modal-подтверждения */}
+      <ConfirmHost />
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-800">Обращения с сайта</h2>

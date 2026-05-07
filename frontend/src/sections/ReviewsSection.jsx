@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { useConfirm } from '../design'
 
 function authH(token) { return { Authorization: `Bearer ${token}` } }
 
@@ -21,6 +22,8 @@ function Stars({ rating, size = 'text-base' }) {
 }
 
 export default function ReviewsSection({ token }) {
+  // Замена window.confirm на Modal
+  const { confirm, ConfirmHost } = useConfirm()
   const [reviews, setReviews]   = useState([])
   const [total,   setTotal]     = useState(0)
   const [loading, setLoading]   = useState(true)
@@ -56,7 +59,7 @@ export default function ReviewsSection({ token }) {
   }
 
   async function del(id) {
-    if (!window.confirm('Удалить отзыв?')) return
+    if (!(await confirm('Удалить отзыв?', { danger: true, okText: 'Удалить' }))) return
     try {
       await axios.delete(`${API_BASE}/reviews/${id}`, { headers: authH(token) })
       setMsg('Удалено ✓')
@@ -76,6 +79,7 @@ export default function ReviewsSection({ token }) {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      <ConfirmHost />
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Отзывы пациентов</h1>
