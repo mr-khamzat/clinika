@@ -1,11 +1,26 @@
 /**
+ * ========================================
  * Кабинет приезжего врача (VISITING_DOCTOR)
+ * ========================================
+ * Этап 5 ROADMAP, кабинет 7/9: миграция UI на design-system.
  * Принять пациента — через QR-сканирование или ввод кода.
+ * Сохраняем:
+ *   - gradient header (премиум-вид)
+ *   - bottom navigation
+ *   - QR-сканер и DoneModal — кастомные fullscreen-вьюхи (TODO ниже)
+ * Заменяем:
+ *   - карточки очереди/истории/дохода → <Card>
+ *   - KPI блоки                        → <KpiCard>/<KpiRow> и <Card>
+ *   - пустые состояния                 → <EmptyState>
+ *   - главные CTA (ОК, Готово)         → <Button>
+ * Логику и API НЕ трогаем.
+ * ========================================
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../config'
-import { useToast } from '../design'
+// Дизайн-система: Card / KpiCard / Chip / Button / EmptyState + useToast
+import { Card, KpiCard, Chip, Button, EmptyState, useToast } from '../design'
 
 const P  = '#0097A7'
 const D  = '#004D5F'
@@ -43,6 +58,8 @@ async function registerPush(token) {
 }
 
 // ─── Done Modal ────────────────────────────────────────────────
+// TODO(design-system): полноэкранная success-модалка с кастомной типографикой.
+// <Modal> дизайн-системы пока не покрывает этот кейс (центрированный +N ₽ jumbo-блок).
 function DoneModal({ result, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/70">
@@ -55,16 +72,18 @@ function DoneModal({ result, onClose }) {
           ? <p className="text-5xl font-black text-green-600 my-4" style={{ letterSpacing:-1 }}>+{Number(result.doctor_share).toLocaleString('ru')} ₽</p>
           : <p className="text-gray-400 text-sm my-4">Приём записан в историю</p>
         }
-        <button onClick={onClose}
-          className="w-full py-4 rounded-2xl text-white font-black text-lg" style={{ background:P }}>
+        {/* Главный CTA — <Button> design-system */}
+        <Button variant="primary" size="lg" className="w-full" onClick={onClose}>
           Готово
-        </button>
+        </Button>
       </div>
     </div>
   )
 }
 
 // ─── QR Scanner ────────────────────────────────────────────────
+// TODO(design-system): полноэкранный сканер с overlay рамкой и tinted manual-input —
+// слишком кастомный fullscreen-режим, чтобы упаковать в <Modal>/<Card>.
 function QRScanner({ onDetect, onClose }) {
   const videoRef   = useRef(null)
   const canvasRef  = useRef(null)
@@ -130,7 +149,7 @@ function QRScanner({ onDetect, onClose }) {
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-4 flex-shrink-0" style={{ background:D }}>
         <button onClick={onClose}
-          className="px-4 py-2 rounded-xl font-semibold text-sm text-white" style={{ background:'rgba(255,255,255,0.12)' }}>
+          className="px-4 py-2 min-h-[44px] rounded-xl font-semibold text-sm text-white" style={{ background:'rgba(255,255,255,0.12)' }}>
           ← Назад
         </button>
         <div className="text-white font-bold flex-1">Сканировать QR пациента</div>
@@ -169,12 +188,11 @@ function QRScanner({ onDetect, onClose }) {
         <div className="flex gap-2">
           <input value={manual} onChange={e => setManual(e.target.value.replace(/\D/,'').slice(0,4))}
             placeholder="Код (4 цифры)" maxLength={4} inputMode="numeric"
-            className="flex-1 bg-[#1e1e1e] border border-gray-700 rounded-xl px-4 py-3 text-white text-xl font-bold tracking-widest outline-none"
+            className="flex-1 bg-[#1e1e1e] border border-gray-700 rounded-xl px-4 py-3 min-h-[44px] text-white text-xl font-bold tracking-widest outline-none"
             style={{ letterSpacing:6 }}
             onKeyDown={e => e.key === 'Enter' && manual.trim() && onDetect(manual.trim())} />
           {manual.length === 4 && (
-            <button onClick={() => onDetect(manual.trim())}
-              className="px-5 rounded-xl text-white font-black text-lg" style={{ background:P }}>ОК</button>
+            <Button variant="primary" size="lg" onClick={() => onDetect(manual.trim())}>ОК</Button>
           )}
         </div>
       </div>
@@ -183,9 +201,10 @@ function QRScanner({ onDetect, onClose }) {
 }
 
 // ─── Queue Card ────────────────────────────────────────────────
+// Карточка ожидающего приёма в очереди — оборачиваем в <Card>.
 function QueueCard({ apt }) {
   return (
-    <div className="bg-white rounded-2xl p-4" style={{ boxShadow:'0 2px 12px rgba(0,77,95,0.08)', border:'1px solid #e8f0f2' }}>
+    <Card>
       <div className="flex items-start gap-3">
         <div className="rounded-2xl p-3 text-center flex-shrink-0" style={{ background:'linear-gradient(135deg,#e0f7fa,#b2ebf2)' }}>
           <p className="font-black text-2xl leading-none" style={{ color:D }}>{apt.start_time?.slice(0,5)}</p>
@@ -195,9 +214,9 @@ function QueueCard({ apt }) {
           <p className="font-bold text-base" style={{ color:D }}>{apt.patient_name || 'Пациент'}</p>
           <p className="text-sm text-gray-500">{apt.patient_phone}</p>
           {apt.doctor_share > 0 && (
-            <div className="mt-2 bg-green-50 rounded-xl px-3 py-1.5 inline-flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-green-700 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
-              <span className="font-black text-green-700 text-sm">+{Number(apt.doctor_share).toLocaleString('ru')} ₽</span>
+            <div className="mt-2 inline-flex">
+              {/* Сумма к получению — <Chip> good */}
+              <Chip variant="good" dot>+{Number(apt.doctor_share).toLocaleString('ru')} ₽</Chip>
             </div>
           )}
         </div>
@@ -206,7 +225,7 @@ function QueueCard({ apt }) {
         <span className="material-symbols-outlined text-teal-600 text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_scanner</span>
         <span className="text-xs text-teal-700 font-medium">Нажмите QR-кнопку внизу чтобы принять пациента</span>
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -317,7 +336,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
       {accepted && <DoneModal result={accepted} onClose={() => setAccepted(null)} />}
       {scanner   && <QRScanner onDetect={handleQRScan} onClose={() => setScanner(false)} />}
 
-      {/* Gradient Header */}
+      {/* TODO(design-system): Gradient Header — премиум-вид кабинета. */}
       <div className="relative overflow-hidden px-4 pt-12 pb-5"
         style={{ background:`linear-gradient(135deg,${D} 0%,#006070 100%)` }}>
         <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
@@ -333,17 +352,20 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
           <div className="flex items-center gap-2">
             {'Notification' in window && !pushOn && (
               <button onClick={enablePush} disabled={pushLoading}
-                className="w-11 h-11 flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
+                aria-label="Включить уведомления"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
                 <span className="material-symbols-outlined text-white/80 text-base">notifications</span>
               </button>
             )}
             {pushOn && <span className="material-symbols-outlined text-white/60 text-base" style={{ fontVariationSettings:"'FILL' 1" }}>notifications_active</span>}
-            <button onClick={onLogout} className="w-11 h-11 flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
+            <button onClick={onLogout}
+              aria-label="Выйти"
+              className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl flex-shrink-0" style={{ background:'rgba(255,255,255,0.12)' }}>
               <span className="material-symbols-outlined text-white/80 text-base">logout</span>
             </button>
           </div>
         </div>
-        {/* Quick stats */}
+        {/* Quick stats — оставляем «inverted» статистику внутри gradient header */}
         <div className="mt-4 grid grid-cols-2 gap-2">
           <div className="rounded-xl p-2.5" style={{ background:'rgba(255,255,255,0.12)' }}>
             <p className="text-white font-black text-xl leading-none">{loading ? '—' : queue.length}</p>
@@ -362,36 +384,37 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
         {/* Queue */}
         {tab === 'queue' && (
           <div className="space-y-4">
-            {/* Manual code input */}
-            <div className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-              <span className="material-symbols-outlined text-gray-400 text-xl">pin</span>
-              <input
-                value={manualCode}
-                onChange={e => setManualCode(e.target.value.replace(/\D/,'').slice(0,4))}
-                placeholder="Код пациента (4 цифры)"
-                maxLength={4} inputMode="numeric"
-                className="flex-1 outline-none text-2xl font-black text-gray-800 bg-transparent"
-                style={{ letterSpacing:8 }}
-                onKeyDown={async e => { if (e.key === 'Enter' && manualCode.length === 4) { await handleQRScan(manualCode); setManualCode('') } }}
-              />
-              {manualCode.length === 4 && (
-                <button onClick={async () => { await handleQRScan(manualCode); setManualCode('') }}
-                  className="px-4 py-2 rounded-xl text-white font-bold text-sm" style={{ background:P }}>ОК</button>
-              )}
-            </div>
+            {/* Manual code input — оборачиваем в <Card> */}
+            <Card padded={false} className="p-3">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-gray-400 text-xl">pin</span>
+                <input
+                  value={manualCode}
+                  onChange={e => setManualCode(e.target.value.replace(/\D/,'').slice(0,4))}
+                  placeholder="Код пациента (4 цифры)"
+                  maxLength={4} inputMode="numeric"
+                  className="flex-1 outline-none text-2xl font-black text-gray-800 bg-transparent min-h-[44px]"
+                  style={{ letterSpacing:8 }}
+                  onKeyDown={async e => { if (e.key === 'Enter' && manualCode.length === 4) { await handleQRScan(manualCode); setManualCode('') } }}
+                />
+                {manualCode.length === 4 && (
+                  <Button variant="primary" size="md" onClick={async () => { await handleQRScan(manualCode); setManualCode('') }}>ОК</Button>
+                )}
+              </div>
+            </Card>
 
             {loading ? (
               <div className="flex justify-center py-10">
                 <div className="w-10 h-10 border-3 border-teal-500 border-t-transparent rounded-full animate-spin" style={{ borderWidth:3 }} />
               </div>
             ) : queue.length === 0 ? (
-              <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background:'#e0f7fa' }}>
-                  <span className="material-symbols-outlined text-4xl" style={{ color:P }}>event_available</span>
-                </div>
-                <p className="font-bold text-gray-800 mb-1">Очередь пуста</p>
-                <p className="text-gray-400 text-sm">Записи появятся здесь автоматически</p>
-              </div>
+              <Card>
+                <EmptyState
+                  icon={<span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>event_available</span>}
+                  title="Очередь пуста"
+                  message="Записи появятся здесь автоматически."
+                />
+              </Card>
             ) : (
               <div className="space-y-3">
                 {queue.map(apt => <QueueCard key={apt.id} apt={apt} />)}
@@ -405,24 +428,29 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
           <div className="space-y-3">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Завершённые приёмы</p>
             {history.length === 0 ? (
-              <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-                <span className="material-symbols-outlined text-5xl text-gray-300 block mb-3">history</span>
-                <p className="text-gray-400 text-sm">Завершённых приёмов нет</p>
-              </div>
+              <Card>
+                <EmptyState
+                  icon={<span className="material-symbols-outlined text-3xl">history</span>}
+                  title="Завершённых приёмов нет"
+                  message="Здесь будут отображаться все принятые пациенты."
+                />
+              </Card>
             ) : (
               history.map(v => (
-                <div key={v.id} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'#e8f5e9' }}>
-                    <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+                <Card key={v.id}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'#e8f5e9' }}>
+                      <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-800 text-sm">{v.patient_name || v.patient_phone}</p>
+                      <p className="text-xs text-gray-400">{v.appointment_date} · {v.start_time?.slice(0,5)}</p>
+                    </div>
+                    {v.doctor_share > 0 && (
+                      <p className="font-black text-green-600 text-sm flex-shrink-0">+{Number(v.doctor_share).toLocaleString('ru')} ₽</p>
+                    )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm">{v.patient_name || v.patient_phone}</p>
-                    <p className="text-xs text-gray-400">{v.appointment_date} · {v.start_time?.slice(0,5)}</p>
-                  </div>
-                  {v.doctor_share > 0 && (
-                    <p className="font-black text-green-600 text-sm flex-shrink-0">+{Number(v.doctor_share).toLocaleString('ru')} ₽</p>
-                  )}
-                </div>
+                </Card>
               ))
             )}
           </div>
@@ -431,38 +459,43 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
         {/* Income */}
         {tab === 'income' && (
           <div className="space-y-3">
-            <div className="bg-white rounded-2xl p-5" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-              <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-1">Всего заработано</p>
-              <p className="text-4xl font-black" style={{ color:D }}>{Number(income.total).toLocaleString('ru')} ₽</p>
-            </div>
+            {/* Сумма дохода — <KpiCard> */}
+            <KpiCard label="Всего заработано" value={`${Number(income.total).toLocaleString('ru')} ₽`} />
             {income.entries.length === 0 ? (
-              <div className="bg-white rounded-2xl p-10 text-center" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-                <span className="material-symbols-outlined text-5xl text-gray-300 block mb-3" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
-                <p className="text-gray-400 text-sm">Нет начислений</p>
-              </div>
+              <Card>
+                <EmptyState
+                  icon={<span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>}
+                  title="Нет начислений"
+                  message="Здесь появятся ваши доходы по приёмам."
+                />
+              </Card>
             ) : (
               income.entries.map((e, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 flex items-center gap-3" style={{ boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'#e8f5e9' }}>
-                    <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
+                <Card key={i}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background:'#e8f5e9' }}>
+                      <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-800 text-sm">{e.patient_name || 'Приём'}</p>
+                      <p className="text-xs text-gray-400">{fmtDate(e.created_at)}</p>
+                    </div>
+                    <p className="font-black text-green-600 text-base flex-shrink-0">+{Number(e.amount).toLocaleString('ru')} ₽</p>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm">{e.patient_name || 'Приём'}</p>
-                    <p className="text-xs text-gray-400">{fmtDate(e.created_at)}</p>
-                  </div>
-                  <p className="font-black text-green-600 text-base flex-shrink-0">+{Number(e.amount).toLocaleString('ru')} ₽</p>
-                </div>
+                </Card>
               ))
             )}
           </div>
         )}
       </div>
 
-      {/* QR Scan FAB */}
+      {/* TODO(design-system): QR Scan FAB — кастомный premium-FAB,
+          design-system пока не предоставляет FAB-компонент. */}
       <button
         onClick={() => setScanner(true)}
         disabled={accepting !== null}
-        className="fixed z-40 disabled:opacity-50 active:scale-95 transition-transform"
+        aria-label="Сканировать QR пациента"
+        className="fixed z-40 disabled:opacity-50 active:scale-95 transition-transform min-h-[56px]"
         style={{
           bottom:'calc(5rem + env(safe-area-inset-bottom))',
           left:'50%', transform:'translateX(-50%)',
@@ -479,12 +512,13 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
         )}
       </button>
 
-      {/* Bottom Navigation */}
+      {/* TODO(design-system): Bottom Navigation — мобильный паттерн. */}
       <div className="fixed bottom-0 left-0 right-0 z-50"
         style={{ paddingBottom:'env(safe-area-inset-bottom)', background:'rgba(255,255,255,0.95)', backdropFilter:'blur(20px)', borderTop:'1px solid rgba(0,0,0,0.06)' }}>
         <div className="flex">
           {NAV.map(item => (
             <button key={item.key} onClick={() => setTab(item.key)}
+              aria-label={item.label}
               className="flex-1 flex flex-col items-center justify-center pt-2 pb-1 min-h-[56px] gap-0.5 relative">
               {tab === item.key && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full" style={{ background:P }} />}
               <span className="material-symbols-outlined text-2xl" style={{ color:tab === item.key ? P : '#9ca3af', fontVariationSettings:tab === item.key ? "'FILL' 1" : "'FILL' 0" }}>{item.icon}</span>
