@@ -389,8 +389,8 @@ export default function LtvAnalyticsSection({ adminToken, clinicId: externalClin
       // Передаём текущий горизонт LTV — отчёт сгенерится под выбранный N лет.
       const params = { years }
       if (effectiveClinicId) params.clinic_id = effectiveClinicId
-      const url = `${API_BASE}/analytics/ltv/export/${kind}`
-      const resp = await axios.get(url, {
+      const url = `/analytics/ltv/export/${kind}`
+      const resp = await api.get(url, {
         headers,
         params,
         responseType: 'blob',
