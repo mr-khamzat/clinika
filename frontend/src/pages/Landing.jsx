@@ -462,9 +462,6 @@ export default function Landing() {
               <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-ghost">
                 {ICONS.download} Calls Win 1.0.10
               </a>
-              <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.10
-              </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls Mac 1.0.7
               </a>
@@ -688,9 +685,6 @@ export default function Landing() {
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
                 <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.10
-                </a>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.10.exe" download className="ks-btn-secondary">
                   {ICONS.download} Windows · 1.0.10
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
