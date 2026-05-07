@@ -12,6 +12,8 @@ import PatientCabinet from './PatientCabinet'
 import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 import CallWidget from '../components/CallWidget'
+import { loadTheme } from '../utils/ThemeLoader'
+import useTheme from '../lib/useTheme'
 
 // Проверяем — вдруг это страница принятия приглашения: /invite/{token}
 function getInviteToken() {
@@ -31,9 +33,15 @@ export default function AdminRoot() {
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(!!adminToken)
 
+  // Единая тема для всей панели (хук читает localStorage и применяет класс dark)
+  useTheme()
+
+  // Загружаем брендинг тенанта при старте + перезагружаем при сохранении в BrandingSection
   useEffect(() => {
-    const theme = localStorage.getItem('adminTheme')
-    document.documentElement.classList.toggle('dark', theme === 'dark')
+    loadTheme().catch(() => {})
+    const onBrandingUpdated = () => { loadTheme().catch(() => {}) }
+    window.addEventListener('clinika-branding-updated', onBrandingUpdated)
+    return () => window.removeEventListener('clinika-branding-updated', onBrandingUpdated)
   }, [])
 
   useEffect(() => {

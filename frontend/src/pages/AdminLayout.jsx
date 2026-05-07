@@ -24,10 +24,17 @@ const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSec
 const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
 const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
 const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekScheduleSection'))
+// Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
+// В /admin (super_admin) используем mode="admin" + селектор тенанта внутри секции.
+const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
 import axios from 'axios'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+// ── Единый хук переключения темы (общий для всех кабинетов) ─────────────
+import useTheme from '../lib/useTheme'
+// ── Загрузчик темы тенанта (брендинг: цвета, шрифт, лого) ────────────────
+import { applyTheme as applyTenantTheme } from '../utils/ThemeLoader'
 // ── Premium дизайн-система (design-preview-2) ─────────────────────────────
 // Используется для обёртки секций в Page/PageHeader и для KPI/Chip/Avatar
 // в premium-оболочке AdminLayout. Inline-секции стилизуются через
@@ -115,6 +122,7 @@ const NAV = [
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
   { key: 'modules_catalog', label: 'Каталог модулей', icon: 'storefront' },
+  { key: 'roles',           label: 'Роли и права', icon: 'admin_panel_settings' },
   { key: 'reviews', label: 'Отзывы', icon: 'rate_review' },
   { key: 'contacts', label: 'Обращения', icon: 'mail' },
   { key: 'plugins',        label: 'Плагины',      icon: 'extension' },
@@ -149,6 +157,7 @@ const NAV_GROUP_OF = {
   super_admin:        'PLATFORM',
   franchises:         'PLATFORM',
   modules_catalog:    'PLATFORM',
+  roles:              'PLATFORM',
 
   billing:            'FINANCE',
   billing_ledger:     'FINANCE',
@@ -196,6 +205,7 @@ const PAGE_TITLES = {
   ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
   webhooks:           { title: 'Вебхуки',              subtitle: 'Платформенные интеграции и события' },
   modules_catalog:    { title: 'Каталог модулей',      subtitle: 'Подключаемые тарифные модули платформы' },
+  roles:              { title: 'Роли и права',         subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   reviews:            { title: 'Отзывы',               subtitle: 'Модерация публичных отзывов' },
   contacts:           { title: 'Обращения',            subtitle: 'Входящие сообщения от посетителей лендингов' },
   plugins:            { title: 'Плагины',              subtitle: 'Внешние интеграции тенанта' },
@@ -7504,7 +7514,8 @@ function PluginsSection({ token }) {
 export default function AdminLayout({ adminToken, user, onLogout }) {
   const [activeSection, setActiveSection] = useState('home')
   const [moreOpen, setMoreOpen]   = useState(false)
-  const [dark, setDark]           = useState(() => localStorage.getItem('adminTheme') === 'dark')
+  // Единая тема (localStorage 'clinika-theme') — общий хук с другими кабинетами
+  const { isDark: dark, toggle: toggleDark } = useTheme()
   const [helpOpen, setHelpOpen]   = useState(false)
   const [branding, setBranding]   = useState(null)
 
@@ -7532,21 +7543,32 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   // Закрытие drawer при смене раздела (мобильный UX)
   useEffect(() => { setDrawerOpen(false) }, [activeSection])
 
+  // ── Загрузка брендинга тенанта (цвета, шрифт, лого) ─────────────────────
+  // Использует общий applyTenantTheme из utils/ThemeLoader, чтобы CSS-переменные
+  // ставились единообразно (--color-primary, --color-sidebar и т.п.).
+  // Слушаем событие 'clinika-branding-updated' — после сохранения в
+  // BrandingSection тема применяется без перезагрузки.
   useEffect(() => {
-    apiFetch('get', '/tenant/branding', adminToken).then(r => {
-      const b = r.data
-      setBranding(b)
-      if (b.primary_color) document.documentElement.style.setProperty('--color-primary', b.primary_color)
-      if (b.sidebar_color) document.documentElement.style.setProperty('--color-sidebar', b.sidebar_color)
-      if (b.bg_color)      document.documentElement.style.setProperty('--color-bg', b.bg_color)
-      if (b.font_family)   document.documentElement.style.setProperty('--font-main', b.font_family)
-    }).catch(() => {})
+    let cancelled = false
+    const load = () => {
+      apiFetch('get', '/tenant/branding', adminToken).then(r => {
+        if (cancelled) return
+        const b = r.data || {}
+        setBranding(b)
+        applyTenantTheme(b)
+      }).catch(() => {})
+    }
+    load()
+    const onBrandingUpdated = () => load()
+    window.addEventListener('clinika-branding-updated', onBrandingUpdated)
+    return () => {
+      cancelled = true
+      window.removeEventListener('clinika-branding-updated', onBrandingUpdated)
+    }
   }, [adminToken])
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark)
-    localStorage.setItem('adminTheme', dark ? 'dark' : 'light')
-  }, [dark])
+  // ── Тема (dark/light) синхронизируется самим хуком useTheme,
+  // здесь дополнительный useEffect не нужен ───────────────────────────────
 
   const [contactsBadge, setContactsBadge] = useState(0)
   useEffect(() => {
@@ -7579,6 +7601,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'ai_knowledge',
     'patient_chats',
     'platform_billing', 'platform_analytics', 'payment_gateways',
+    'roles',
   ])
   // Операционные секции — НЕ показывать платформенному super_admin без SLUG
   const TENANT_OPERATIONAL_KEYS = new Set([
@@ -7619,7 +7642,9 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'monitoring':     return <MonitoringSection token={adminToken} />
       case 'contacts':       return <Suspense fallback={<SectionLoader />}><ContactsSection token={adminToken} /></Suspense>
       case 'reviews':        return <Suspense fallback={<SectionLoader />}><ReviewsSection token={adminToken} /></Suspense>
-      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} /></Suspense>
+      case 'modules_catalog':return <Suspense fallback={<SectionLoader />}><ModulesCatalogSection token={adminToken} mode={isSuperAdmin ? 'admin' : undefined} /></Suspense>
+      // Этап 8 ROADMAP — RBAC как данные: матрица прав c селектором тенанта (mode="admin").
+      case 'roles':          return <Suspense fallback={<SectionLoader />}><PermissionsMatrixSection token={adminToken} mode={isSuperAdmin ? 'admin' : undefined} /></Suspense>
       case 'plugins':        return <PluginsSection token={adminToken} />
       case 'mis_sync':       return <MisSyncSection token={adminToken} />
       case 'doctors':        return <Suspense fallback={<SectionLoader />}><DoctorsSection token={adminToken} /></Suspense>
@@ -7836,7 +7861,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         {!sidebarCollapsed && (
           <div className="flex gap-1 mt-2">
             <button
-              onClick={() => setDark(d => !d)}
+              onClick={toggleDark}
               title={dark ? 'Светлая тема' : 'Тёмная тема'}
               className="flex-1 grid place-items-center"
               style={{
@@ -8032,7 +8057,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
             {/* Тёмная тема */}
             <button
-              onClick={() => setDark(d => !d)}
+              onClick={toggleDark}
               className="grid place-items-center flex-shrink-0"
               style={{
                 width: 40, height: 40, borderRadius: 10,

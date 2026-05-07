@@ -48,6 +48,8 @@ import {
   useToast,
 } from '../design'
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
+// Единый хук переключения темы (общий для всех кабинетов)
+import useTheme from '../lib/useTheme'
 
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -800,6 +802,8 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
   const [route, setRoute] = useState('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [doctorInfo, setDoctorInfo] = useState(null)
+  // Единый переключатель темы (синхронизация с другими кабинетами)
+  const { isDark, toggle: toggleTheme } = useTheme()
 
   useEffect(() => {
     apiFetch('get', '/my-doctor', adminToken).then(r => setDoctorInfo(r.data)).catch(() => {})
@@ -971,6 +975,20 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
                 {activeNav.label}
               </div>
             </div>
+            {/* Переключатель темы (mobile) */}
+            <button
+              onClick={toggleTheme}
+              aria-label="Тема"
+              title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+              className="grid place-items-center flex-shrink-0"
+              style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: 'pointer',
+              }}
+            >
+              <MIcon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
+            </button>
             <Avatar name={userName} size="md" />
           </header>
 
@@ -992,6 +1010,20 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               </div>
             </div>
             <Chip variant="default" dot>{userName}</Chip>
+            {/* Переключатель темы — единый хук useTheme */}
+            <button
+              onClick={toggleTheme}
+              aria-label="Тема"
+              title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+              className="grid place-items-center"
+              style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'var(--bg-1)', border: '1px solid var(--border)',
+                color: 'var(--fg-2)', cursor: 'pointer',
+              }}
+            >
+              <MIcon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
+            </button>
             <Button variant="secondary" size="sm" onClick={onLogout} leftIcon={<MIcon name="logout" size={14} />}>
               Выйти
             </Button>

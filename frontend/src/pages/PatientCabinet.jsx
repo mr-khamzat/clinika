@@ -3,6 +3,8 @@ import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 // Дизайн-система: Card/Button/Chip/Tabs/EmptyState/Modal + хуки уведомлений
 import { Card, Button, Chip, Tabs, EmptyState, Modal, useToast, useConfirm } from '../design'
+// Единый хук переключения темы (общий с другими кабинетами)
+import useTheme from '../lib/useTheme'
 
 // Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
 const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
@@ -1897,6 +1899,8 @@ export default function PatientCabinet() {
   // Замена alert/confirm на Toast и Modal
   const { toast } = useToast()
   const { confirm, ConfirmHost } = useConfirm()
+  // Единый переключатель темы (синхронизирован с другими кабинетами)
+  const { isDark, toggle: toggleTheme } = useTheme()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -2203,6 +2207,16 @@ export default function PatientCabinet() {
                   )}
                 </button>
               )}
+              {/* Переключатель темы — единый хук useTheme */}
+              <button onClick={toggleTheme}
+                title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+                aria-label="Тема"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
+                style={{ background: 'rgba(255,255,255,.15)' }}>
+                <span className="material-symbols-outlined text-white/80 text-xl">
+                  {isDark ? 'light_mode' : 'dark_mode'}
+                </span>
+              </button>
               <button onClick={handleLogout}
                 className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-90"
                 style={{ background: 'rgba(255,255,255,.15)' }}>

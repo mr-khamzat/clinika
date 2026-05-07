@@ -41,6 +41,8 @@ import {
 import CallRulesSection from '../sections/CallRulesSection'
 import PlatformInvoicesSection from '../sections/PlatformInvoicesSection'
 import AppointmentsStatsSection from '../sections/AppointmentsStatsSection'
+// Единый хук переключения темы (общий для всех кабинетов)
+import useTheme from '../lib/useTheme'
 
 // ── Лениво подгружаемые секции (расширение кабинета — реклама, контент, контакты, модули) ──
 const DoctorsSection            = lazy(() => import('../sections/DoctorsSection'))
@@ -864,8 +866,56 @@ function ReviewsSection({ adminToken }) {
 }
 
 // ============================================================================
-// Раздел: Аналитика — простая выкладка agg
+// Раздел: Аналитика — структурированный вывод по схеме /analytics/overview
+// ----------------------------------------------------------------------------
+// Бэкенд возвращает:
+//   { period: {from, to, days},
+//     current:  {total, confirmed, cancelled, conversion_pct, bonuses_paid, bonuses_pending},
+//     previous: {…то же…},
+//     delta:    {total_pct, confirmed_pct, conversion_pct_diff, bonuses_paid_pct} }
+// Раньше код делал Object.entries(analytics) → каждый объект превращался в
+// «[object Object]» через String(v). Теперь читаем поля явно.
 // ============================================================================
+
+// Лейблы метрик (порядок отражает важность для владельца сети)
+const METRIC_LABELS = {
+  total:           'Направлений',
+  confirmed:       'Подтверждено',
+  cancelled:       'Отменено',
+  conversion_pct:  'Конверсия, %',
+  bonuses_paid:    'Бонусы выплачены, ₽',
+  bonuses_pending: 'Бонусы в ожидании, ₽',
+}
+const METRIC_ORDER = ['total', 'confirmed', 'cancelled', 'conversion_pct', 'bonuses_paid', 'bonuses_pending']
+
+// ─── Форматирование одной метрики (учитывая суффикс % / ₽) ────────────────
+function fmtMetric(key, val) {
+  if (val === null || val === undefined) return '—'
+  if (typeof val !== 'number') return String(val)
+  if (key === 'conversion_pct') return `${val.toLocaleString('ru')}%`
+  if (key === 'bonuses_paid' || key === 'bonuses_pending') {
+    return val.toLocaleString('ru', { maximumFractionDigits: 0 }) + ' ₽'
+  }
+  return val.toLocaleString('ru')
+}
+
+// ─── Дельта (процент изменения) — может быть null если нет базы ───────────
+function fmtDelta(d) {
+  if (d === null || d === undefined) return '—'
+  const n = Number(d)
+  if (Number.isNaN(n)) return '—'
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toLocaleString('ru')}%`
+}
+
+function deltaTrend(d) {
+  if (d === null || d === undefined || Number.isNaN(Number(d))) return 'flat'
+  const n = Number(d)
+  if (n > 0.01) return 'up'
+  if (n < -0.01) return 'down'
+  return 'flat'
+}
+
 function AnalyticsSection({ analytics }) {
   if (!analytics) {
     return (
@@ -879,30 +929,108 @@ function AnalyticsSection({ analytics }) {
     )
   }
 
+  // Безопасная распаковка структуры (на случай старого формата ответа)
+  const period   = analytics.period   || {}
+  const current  = analytics.current  || (typeof analytics === 'object' ? analytics : {})
+  const previous = analytics.previous || {}
+  const delta    = analytics.delta    || {}
+
+  // Сопоставление ключей дельты с метриками
+  const deltaKeyFor = {
+    total:           'total_pct',
+    confirmed:       'confirmed_pct',
+    conversion_pct:  'conversion_pct_diff',
+    bonuses_paid:    'bonuses_paid_pct',
+  }
+
   return (
-    <Card>
-      <Card.Header>
-        <div>
-          <Card.Title>Сводная аналитика</Card.Title>
-          <Card.Subtitle>Все ключевые метрики по сети клиник</Card.Subtitle>
-        </div>
-        <Chip variant="accent" dot>live</Chip>
-      </Card.Header>
-      <div className="flex flex-col">
-        {Object.entries(analytics).map(([k, v]) => (
-          <div
-            key={k}
-            className="flex items-center justify-between py-2.5"
-            style={{ borderTop: '1px solid var(--line)' }}
-          >
-            <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>{k}</span>
-            <span className="font-semibold tabular-nums" style={{ fontSize: 13.5, color: 'var(--fg)' }}>
-              {typeof v === 'number' ? v.toLocaleString('ru') : String(v)}
-            </span>
+    <div className="flex flex-col gap-4">
+      {/* ─── Шапка с периодом ─── */}
+      <Card>
+        <Card.Header>
+          <div>
+            <Card.Title>Сводная аналитика</Card.Title>
+            <Card.Subtitle>
+              Период:{' '}
+              <b>{period?.from || '—'}</b> – <b>{period?.to || '—'}</b>
+              {period?.days ? ` (${period.days} дн.)` : ''}
+            </Card.Subtitle>
           </div>
-        ))}
-      </div>
-    </Card>
+          <Chip variant="accent" dot>live</Chip>
+        </Card.Header>
+
+        {/* ─── Таблица метрик: текущий период / прошлый / дельта ─── */}
+        <div className="flex flex-col">
+          {/* Заголовок таблицы */}
+          <div
+            className="grid items-center py-2"
+            style={{
+              gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr',
+              gap: 12,
+              borderBottom: '1px solid var(--line)',
+              fontSize: 11,
+              color: 'var(--fg-4)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            <span>Метрика</span>
+            <span style={{ textAlign: 'right' }}>Текущий</span>
+            <span style={{ textAlign: 'right' }}>Прошлый</span>
+            <span style={{ textAlign: 'right' }}>Δ</span>
+          </div>
+
+          {METRIC_ORDER.map(key => {
+            const cur = current?.[key]
+            const prev = previous?.[key]
+            const dKey = deltaKeyFor[key]
+            const dVal = dKey ? delta?.[dKey] : null
+            const trend = deltaTrend(dVal)
+            // Скрываем строку, если у нас нет ни одного значения
+            if (cur === undefined && prev === undefined) return null
+            return (
+              <div
+                key={key}
+                className="grid items-center py-2.5"
+                style={{
+                  gridTemplateColumns: '1.5fr 1fr 1fr 0.8fr',
+                  gap: 12,
+                  borderTop: '1px solid var(--line)',
+                }}
+              >
+                <span style={{ fontSize: 13, color: 'var(--fg-3)' }}>
+                  {METRIC_LABELS[key] || key}
+                </span>
+                <span
+                  className="font-semibold tabular-nums"
+                  style={{ fontSize: 13.5, color: 'var(--fg)', textAlign: 'right' }}
+                >
+                  {fmtMetric(key, cur)}
+                </span>
+                <span
+                  className="tabular-nums"
+                  style={{ fontSize: 13, color: 'var(--fg-3)', textAlign: 'right' }}
+                >
+                  {fmtMetric(key, prev)}
+                </span>
+                <span
+                  className="font-semibold tabular-nums"
+                  style={{
+                    fontSize: 12.5,
+                    textAlign: 'right',
+                    color: trend === 'up' ? 'var(--good, #16a34a)'
+                         : trend === 'down' ? 'var(--bad, #dc2626)'
+                         : 'var(--fg-3)',
+                  }}
+                >
+                  {fmtDelta(dVal)}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+    </div>
   )
 }
 
@@ -1356,6 +1484,8 @@ function SettingsSection({ adminToken }) {
 // Главный компонент кабинета
 // ============================================================================
 export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
+  // Единая тема для кабинета (общий хук с другими кабинетами)
+  const { isDark, toggle: toggleTheme } = useTheme()
   // ── Состояние страницы / навигации ────────────────────────────────────────
   const [route, setRoute] = useState('overview')
   const [analytics, setAnalytics] = useState(null)
@@ -1658,6 +1788,17 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
                   background: 'var(--bad)', boxShadow: '0 0 0 2px var(--surface)',
                 }}
               />
+            </button>
+
+            {/* Переключатель темы — единый хук useTheme */}
+            <button
+              onClick={toggleTheme}
+              className="grid place-items-center rounded-lg flex-shrink-0"
+              style={{ width: 36, height: 36, background: 'var(--bg-1)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}
+              aria-label="Тема"
+              title={isDark ? 'Светлая тема' : 'Тёмная тема'}
+            >
+              <Icon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
             </button>
 
             {/* Выйти */}

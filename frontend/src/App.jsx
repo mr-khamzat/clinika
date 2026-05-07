@@ -82,6 +82,11 @@ function MiniApp() {
   // Порядок важен: сначала проверяем токен (веб-режим, нет задержки),
   // потом — Telegram SDK (только если URL содержит tgWebApp в hash).
   useEffect(() => {
+    // Слушаем глобальное событие — после сохранения брендинга
+    // в BrandingSection тема перезагрузится без F5
+    const onBrandingUpdated = () => { loadTheme().catch(() => {}) }
+    window.addEventListener('clinika-branding-updated', onBrandingUpdated)
+
     const init = async () => {
       loadTheme().catch(() => {})
       try {
@@ -124,6 +129,10 @@ function MiniApp() {
       }
     }
     init()
+
+    return () => {
+      window.removeEventListener('clinika-branding-updated', onBrandingUpdated)
+    }
   }, [])
 
   // ─── Экран загрузки ───

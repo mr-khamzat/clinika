@@ -32,8 +32,23 @@ export default function BrandingSection({ token }) {
   async function save() {
     setSaving(true);
     try {
-      await axios.patch(`${API_BASE}/tenant/branding`, form, { headers: { Authorization: `Bearer ${token}` } });
-      applyTheme(form);
+      // PATCH сохраняет брендинг тенанта; ответ содержит свежие поля
+      // (включая server-side значения, например, домен/проверки).
+      const res = await axios.patch(
+        `${API_BASE}/tenant/branding`,
+        form,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const saved = res?.data || form;
+      // Локально подмешиваем актуальные поля в форму
+      setForm(f => ({ ...f, ...saved }));
+      // Применяем CSS-переменные сразу (без reload)
+      applyTheme(saved);
+      // Сообщаем родительским контейнерам (AdminLayout, App), что тема
+      // изменилась, чтобы они перезагрузили /tenant/branding и /cms/theme.
+      try {
+        window.dispatchEvent(new CustomEvent('clinika-branding-updated', { detail: saved }));
+      } catch {}
       setMsg('Сохранено ✓');
       setTimeout(() => setMsg(''), 3000);
     } catch (e) {

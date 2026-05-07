@@ -7,6 +7,8 @@ import CallWidget from './CallWidget'
 import useAuthStore from '../store/auth'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
 import { useConfirm, useToast } from '../design'
+// Единый хук переключения темы (общий с AdminLayout, DoctorLayout и др.)
+import useThemeHook from '../lib/useTheme'
 
 // ─── Push helpers (Этап 10 ROADMAP) ────────────────────────────────────────
 // Регистрируем service worker и подписываем устройство сотрудника на VAPID
@@ -93,9 +95,8 @@ const ROLE_LABELS = {
 }
 
 export default function Layout() {
-  const [isDark, setIsDark] = useState(() => {
-    try { return localStorage.getItem('theme') === 'dark' } catch { return false }
-  })
+  // Тема — общий хук (синхронизация с AdminLayout, DoctorLayout, PatientCabinet)
+  const { isDark, toggle: toggleTheme } = useThemeHook()
   const [helpOpen, setHelpOpen] = useState(false)
   // Состояние push-подписки сотрудника (granted / denied / null=нужно спросить)
   const [pushState, setPushState] = useState(() => {
@@ -140,17 +141,8 @@ export default function Layout() {
     }
   }
 
-  useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
-    }
-  }, [isDark])
-
-  const toggleTheme = () => setIsDark(d => !d)
+  // Применение темы выполняет сам useThemeHook —
+  // отдельный useEffect больше не требуется.
 
   const handleLogout = async () => {
     const ok = await confirm('Выйти из аккаунта?', { okText: 'Выйти', danger: true })
