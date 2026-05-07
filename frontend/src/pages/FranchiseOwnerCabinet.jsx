@@ -37,6 +37,7 @@ import {
   Tabs,
   useToast,
   useConfirm,
+  InfoHint,
 } from '../design'
 import CallRulesSection from '../sections/CallRulesSection'
 import PlatformInvoicesSection from '../sections/PlatformInvoicesSection'
@@ -137,6 +138,22 @@ const PAGE_TITLES = {
   webhooks:   { title: 'Webhooks',         subtitle: 'Интеграции и исходящие события' },
   knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
   settings:   { title: 'Настройки',        subtitle: 'Брендинг, домен, MIS-интеграция' },
+}
+
+// ── Подсказки (info-hints) для каждой секции — отображаются рядом с заголовком ─
+// Текст видно на десктопе при наведении, на мобильном — в модалке по тапу.
+const PAGE_HINTS = {
+  cms:        'Markdown-страницы для пациентов: правила клиники, FAQ, прайс. Видны в кабинете пациента (Мой кабинет → Информация).',
+  wiki:       'Учебные материалы для сотрудников: как работать с системой, роли, направления. Доступны на /wiki.',
+  calls:      'Кто кому может звонить (аудио/видео). Глобально по ролям + точечно между парами клиник. Требует модуль телефонии.',
+  acts:       'Акты выполненных работ между клиниками сети. Генерация PDF, электронная подпись (в разработке), отправка в ФНС (планируется).',
+  inter_inv:  'Счета внутри сети — между клиниками. Видны у получателя в его /admin → Биллинг.',
+  platform:   'Счета от КлиникСеть владельцу франшизы. Подписка по тарифу (basic/pro/enterprise) + надбавки за модули.',
+  royalty:    'Расчёт ваших роялти от клиник + межклиничные взаиморасчёты + сводный финансовый отчёт. В разработке.',
+  apt_stats:  'Статистика онлайн-записи: сколько пациентов записались, отменили, не пришли. Помогает оценить качество расписания.',
+  analytics:  'Drill-down по клиникам/врачам/услугам. Метрики: воронка, динамика, топы, ledger-trend.',
+  recruiters: 'Менеджеры по привлечению врачей-партнёров. Каждый получает % бонуса от направлений приведённых врачей.',
+  partners:   'Внешние врачи (не штатные) которые направляют пациентов в клиники сети. Получают бонус за каждое подтверждённое направление.',
 }
 
 const PLAN_LABELS = {
@@ -1495,16 +1512,37 @@ function SettingsSection({ adminToken }) {
       />
 
       {tab === 'brand' && (
-        <Suspense fallback={<SectionLoader />}>
-          <BrandingSection token={adminToken} />
-        </Suspense>
+        <>
+          {/* Подсказка о Брендинге над секцией */}
+          <div
+            className="rounded-xl px-3 py-2 inline-flex items-center gap-2"
+            style={{ background: 'var(--bg-1)', border: '1px solid var(--line)', fontSize: 12.5, color: 'var(--fg-3)', alignSelf: 'flex-start' }}
+          >
+            <InfoHint
+              title="Брендинг"
+              text="Логотип, цвета, название и домен — определяют как пациенты видят вашу сеть. Применяется ко всем кабинетам."
+            />
+            <span>Брендинг применяется ко всем дочерним кабинетам сети</span>
+          </div>
+          <Suspense fallback={<SectionLoader />}>
+            <BrandingSection token={adminToken} />
+          </Suspense>
+        </>
       )}
 
       {tab === 'domain' && (
         <Card>
           <Card.Header>
             <div>
-              <Card.Title>Свой домен (CNAME)</Card.Title>
+              <Card.Title>
+                <span className="inline-flex items-center gap-2">
+                  Свой домен (CNAME)
+                  <InfoHint
+                    title="Домен"
+                    text="Привяжите свой домен (например clinic.example.com). Нужно настроить CNAME у вашего регистратора."
+                  />
+                </span>
+              </Card.Title>
               <Card.Subtitle>Настройте свой домен для портала тенанта</Card.Subtitle>
             </div>
             <Chip variant="default">опционально</Chip>
@@ -1930,7 +1968,14 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
           {/* Content */}
           <div className="flex-1 px-4 sm:px-6 py-6 sm:py-8" style={{ overflowX: 'hidden' }}>
             <PageHeader
-              title={pageMeta.title}
+              title={
+                PAGE_HINTS[route] ? (
+                  <span className="inline-flex items-center gap-2">
+                    {pageMeta.title}
+                    <InfoHint text={PAGE_HINTS[route]} title={pageMeta.title} />
+                  </span>
+                ) : pageMeta.title
+              }
               subtitle={pageMeta.subtitle}
               actions={route === 'tenants' ? null : (
                 <>

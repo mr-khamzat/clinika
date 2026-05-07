@@ -28,3 +28,5 @@ maxminddb==2.6.0
 sentry-sdk[fastapi]==2.18.0
 email-validator==2.1.1
 aiosmtplib==3.0.1
+weasyprint==62.3
+pydyf==0.10.0

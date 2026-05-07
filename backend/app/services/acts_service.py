@@ -1,11 +1,22 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 from app.models.billing import Invoice, Subscription
 from app.models.tenant import Tenant, TenantBranding
 import uuid
+
+# ── Шаблоны Jinja2 для PDF ─────────────────────────────────────────────────
+# Подгружаются один раз и переиспользуются между запросами.
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+_jinja_env = Environment(
+    loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+    autoescape=select_autoescape(["html", "xml"]),
+)
 
 
 ACT_OVERDUE_DAYS = 14
@@ -185,3 +196,133 @@ class ActsService:
         q = q.order_by(Invoice.created_at.desc()).limit(limit)
         result = await db.execute(q)
         return result.scalars().all()
+
+    # ────────────────────────────────────────────────────────────────────
+    # PDF-генерация акта оказанных услуг через Jinja2 + WeasyPrint
+    # ────────────────────────────────────────────────────────────────────
+    @staticmethod
+    async def generate_act_pdf(db: AsyncSession, act_id: str) -> bytes:
+        """
+        Генерирует PDF-файл акта по его ID (UUID или act_number).
+
+        Возвращает байты PDF (application/pdf).
+        Поддерживает поиск и по UUID, и по act_number — для гибкости в endpoint.
+
+        ВАЖНО: WeasyPrint импортируется лениво, чтобы не падать на старте,
+        если системные библиотеки (pango/cairo) ещё не установлены.
+        """
+        # Ленивый импорт WeasyPrint (тяжёлая зависимость, требует системных libs)
+        from weasyprint import HTML  # noqa: WPS433
+
+        # Поиск инвойса по UUID или по act_number
+        invoice: Optional[Invoice] = None
+        try:
+            uid = uuid.UUID(str(act_id))
+            r = await db.execute(select(Invoice).where(Invoice.id == uid))
+            invoice = r.scalar_one_or_none()
+        except (ValueError, TypeError):
+            invoice = None
+        if invoice is None:
+            r = await db.execute(select(Invoice).where(Invoice.act_number == str(act_id)))
+            invoice = r.scalar_one_or_none()
+        if invoice is None:
+            raise ValueError(f"Act not found: {act_id}")
+
+        # Загружаем тенанта-исполнителя (та клиника, которая выставила акт)
+        tenant_r = await db.execute(select(Tenant).where(Tenant.id == invoice.tenant_id))
+        tenant = tenant_r.scalar_one_or_none()
+
+        branding = None
+        if tenant is not None:
+            br_r = await db.execute(
+                select(TenantBranding).where(TenantBranding.tenant_id == tenant.id)
+            )
+            branding = br_r.scalar_one_or_none()
+
+        # Формируем контекст для шаблона (русские форматы дат)
+        def _fmt_date(d):
+            if not d:
+                return "—"
+            try:
+                return d.strftime("%d.%m.%Y")
+            except Exception:
+                return str(d)
+
+        provider_name = (
+            (branding.brand_name if branding and branding.brand_name else None)
+            or invoice.legal_entity_name
+            or (tenant.name if tenant else "Исполнитель")
+        )
+        provider_inn = invoice.legal_entity_inn or (
+            getattr(tenant, "legal_inn", None) if tenant else None
+        )
+        provider_address = invoice.legal_address or (
+            getattr(tenant, "legal_address", None) if tenant else None
+        )
+        provider_signer = (getattr(tenant, "legal_signer_name", None) if tenant else None)
+
+        # Заказчик: для подписки платформы — это "сама клиника" (тенант),
+        # для межклиничного акта — другой тенант (если в line_items указан).
+        # В текущей версии — берём legal_entity_name инвойса как заказчика.
+        client_name = invoice.legal_entity_name or (tenant.name if tenant else "Заказчик")
+        client_inn = None
+        client_address = None
+
+        line_items = invoice.act_line_items or invoice.line_items or []
+
+        ctx = {
+            "act_number": invoice.act_number or invoice.invoice_number,
+            "invoice_number": invoice.invoice_number,
+            "period_start": _fmt_date(invoice.period_start),
+            "period_end": _fmt_date(invoice.period_end),
+            "due_date": _fmt_date(invoice.due_date),
+            "created_at": _fmt_date(invoice.created_at),
+            "provider_name": provider_name,
+            "provider_inn": provider_inn,
+            "provider_address": provider_address,
+            "provider_signer": provider_signer,
+            "client_name": client_name,
+            "client_inn": client_inn,
+            "client_address": client_address,
+            "line_items": line_items,
+            "subtotal": invoice.subtotal or invoice.amount or 0,
+            "tax_rate": float(invoice.tax_rate) if invoice.tax_rate is not None else 0,
+            "tax_amount": invoice.tax_amount or 0,
+            "total": invoice.total or invoice.amount or 0,
+            "notes": invoice.notes,
+            "signed_at": _fmt_date(invoice.signed_at) if invoice.signed_at else None,
+            "signer_name": invoice.signer_name,
+            "generated_at": datetime.utcnow().strftime("%d.%m.%Y %H:%M UTC"),
+        }
+
+        template = _jinja_env.get_template("act.html")
+        html_str = template.render(**ctx)
+        pdf_bytes = HTML(string=html_str).write_pdf()
+        return pdf_bytes
+
+    # ────────────────────────────────────────────────────────────────────
+    # Электронная подпись (внутренняя, без КЭП) — TODO: реальная ЭЦП
+    # ────────────────────────────────────────────────────────────────────
+    @staticmethod
+    async def sign_act_electronic(
+        db: AsyncSession,
+        invoice: Invoice,
+        signer_user_id: str,
+        signer_name: str,
+        signer_ip: Optional[str] = None,
+    ) -> Invoice:
+        """
+        Простая внутренняя ЭП: фиксируем signed_at, signer_name (с user_id),
+        signer_ip. Реальная квалифицированная подпись (КЭП) и интеграция с ФНС —
+        отдельная задача (TODO: см. ROADMAP — этап ЭЦП).
+        """
+        if invoice.act_status not in ("generated", "sent"):
+            raise ValueError(f"Cannot sign act in status {invoice.act_status}")
+        invoice.act_status = "signed"
+        invoice.signed_at = datetime.utcnow()
+        invoice.signer_name = signer_name or f"user:{signer_user_id}"
+        invoice.signer_ip = signer_ip
+        invoice.status = "sent"
+        await db.commit()
+        await db.refresh(invoice)
+        return invoice

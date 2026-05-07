@@ -64,6 +64,42 @@ export default function ActsSection({ token, isSuperAdmin }) {
     setTimeout(() => setMsg(''), 3000);
   }
 
+  // Скачивание PDF акта (бэк отдаёт application/pdf)
+  async function downloadPdf(act) {
+    try {
+      const r = await axios.get(`${API_BASE}/acts/${act.id || act.act_number}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `act_${act.act_number || act.invoice_number || 'document'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setMsg('Ошибка PDF: ' + (e.response?.data?.detail || e.message));
+      setTimeout(() => setMsg(''), 4000);
+    }
+  }
+
+  // Электронная подпись (внутренняя, без КЭП — TODO: реальная ЭЦП)
+  async function signElectronic(act) {
+    if (!window.confirm('Подписать акт электронной подписью? Это действие необратимо.')) return;
+    try {
+      await axios.post(`${API_BASE}/acts/${act.id || act.act_number}/sign-electronic`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setMsg('Акт подписан электронно ✓');
+      await load();
+    } catch (e) {
+      setMsg('Ошибка ЭП: ' + (e.response?.data?.detail || e.message));
+    }
+    setTimeout(() => setMsg(''), 4000);
+  }
+
   const MONTHS = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 
   return (
@@ -117,8 +153,20 @@ export default function ActsSection({ token, isSuperAdmin }) {
                 <span style={{ ...styles.badge, background: st.color + '22', color: st.color }}>{st.label}</span>
               </div>
               <div style={{ display: 'flex', gap: 6, flexDirection: 'column' }}>
+                {/* Кнопка скачивания PDF — доступна всегда */}
+                <button onClick={() => downloadPdf(a)} style={styles.pdfBtn} title="Скачать PDF">
+                  Скачать PDF
+                </button>
                 {['generated', 'sent'].includes(a.act_status) && (
-                  <button onClick={() => { setSignModal(a.act_number); setSignerName(''); }} style={styles.signBtn}>Подписать</button>
+                  <>
+                    <button onClick={() => { setSignModal(a.act_number); setSignerName(''); }} style={styles.signBtn}>
+                      Подписать
+                    </button>
+                    {/* Электронная подпись (упрощённая, internal — TODO: реальная ЭЦП) */}
+                    <button onClick={() => signElectronic(a)} style={styles.signEBtn} title="Простая электронная подпись (КЭП в разработке)">
+                      Подписать электронно
+                    </button>
+                  </>
                 )}
                 {a.act_status === 'signed' && isSuperAdmin && (
                   <button onClick={() => payAct(a.act_number, a.total || a.amount)} style={styles.payBtn}>Оплачен</button>
@@ -156,6 +204,8 @@ const styles = {
   filterBtn: { padding: '5px 12px', background: '#f5f5f5', color: '#555', border: '1px solid #ddd', borderRadius: 20, cursor: 'pointer', fontSize: 13 },
   filterActive: { background: '#0097A7', color: '#fff', borderColor: '#0097A7' },
   signBtn: { padding: '5px 12px', background: '#e3f2fd', color: '#1976d2', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
+  signEBtn: { padding: '5px 12px', background: '#f3e5f5', color: '#6a1b9a', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
+  pdfBtn: { padding: '5px 12px', background: '#fff3e0', color: '#e65100', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 },
   payBtn: { padding: '5px 12px', background: '#e8f5e9', color: '#2e7d32', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 },
   cancelBtn: { padding: '7px 16px', background: '#f5f5f5', color: '#555', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' },
   row: { display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', background: '#fff', border: '1px solid #e0e0e0', borderRadius: 10 },

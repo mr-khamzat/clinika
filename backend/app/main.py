@@ -60,7 +60,7 @@ from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.visiting_doctor import router as visiting_router
 from app.routers.cms import router as cms_router
-from app.routers.acts import router as acts_router
+from app.routers.acts import router as acts_router, inter_clinic_router as inter_clinic_acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
 from app.routers.public_booking import router as public_booking_router
 from app.routers.public_clinic import router as public_clinic_router
@@ -929,6 +929,7 @@ app.include_router(recruiter_router)
 app.include_router(visiting_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
+app.include_router(inter_clinic_acts_router)
 app.include_router(public_booking_router)
 app.include_router(public_clinic_router)
 app.include_router(medcard_router)
