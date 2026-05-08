@@ -32,17 +32,15 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        // Vendor splitting — index.js был 1.4MB, разделяем на отдельные кэшируемые чанки
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('react-router-dom')) return 'vendor-router'
-            if (id.includes('react-dom') || id.includes('/react/')) return 'vendor-react'
-            if (id.includes('@sentry')) return 'vendor-sentry'
-            if (id.includes('jspdf') || id.includes('html5-qrcode') || id.includes('jsqr') || id.includes('dompurify')) return 'vendor-heavy'
-            if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-')) return 'vendor-markdown'
-            if (id.includes('axios') || id.includes('zustand')) return 'vendor-state'
-            return 'vendor-other'
-          }
+        // Explicit-list manualChunks — безопаснее чем id-based:
+        // Rollup сам резолвит граф зависимостей и не разрывает React ecosystem.
+        // (id-based с `id.includes('/react/')` ломал порядок инициализации:
+        // createContext оказывался в vendor-other до загрузки vendor-react.)
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-pdf-qr': ['jspdf', 'jspdf-autotable', 'jsqr', 'html5-qrcode'],
+          'vendor-markdown': ['react-markdown', 'remark-gfm', 'rehype-raw'],
+          'vendor-misc': ['axios', 'zustand', 'dompurify'],
         },
         // Даём фиксированное имя woff2 Material Symbols чтобы preload в index.html работал
         assetFileNames: (assetInfo) => {
