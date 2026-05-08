@@ -41,6 +41,8 @@ const CallRecordingsSection = lazy(() => import("../sections/CallRecordingsSecti
 const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection"))
 // SMS-маркетинг — шаблоны/кампании/история/аналитика (модуль sms_marketing)
 const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSection"))
+// W7 — Inventory: учёт расходных материалов и оборудования (модуль inventory)
+const InventorySection = lazy(() => import("../sections/inventory/InventorySection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -160,6 +162,7 @@ const NAV = [
   { key: 'recordings',         label: 'Запись звонков',       icon: 'mic' },
   { key: 'telemedicine',       label: 'Телемедицина',         icon: 'video_call' },
   { key: 'sms_marketing',      label: 'SMS-маркетинг',         icon: 'sms' },
+  { key: 'inventory',          label: 'Инвентарь',             icon: 'inventory_2' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -215,6 +218,7 @@ const NAV_GROUP_OF = {
   recordings:         'TENANT',
   telemedicine:       'TENANT',
   sms_marketing:      'MARKETING',
+  inventory:          'TENANT',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETING', 'SYSTEM', 'TENANT']
 
@@ -256,6 +260,7 @@ const PAGE_TITLES = {
   recordings:         { title: 'Запись звонков',       subtitle: 'Аудио/видео запись, расшифровка через Whisper и AI-резюме' },
   telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   sms_marketing:      { title: 'SMS-маркетинг',         subtitle: 'Шаблоны, рассылки спящим пациентам, история отправок и аналитика' },
+  inventory:          { title: 'Учёт инвентаря',         subtitle: 'Расходные материалы, оборудование, медикаменты — остатки, движения и алерты' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7255,7 +7260,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
-  'loyalty','recordings','telemedicine','sms_marketing',
+  'loyalty','recordings','telemedicine','sms_marketing','inventory',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -7411,7 +7416,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'doctors', 'mis_sync', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
     'ads', 'analytics',
-    'loyalty', 'recordings', 'sms_marketing',
+    'loyalty', 'recordings', 'sms_marketing', 'inventory',
   ])
 
   const visibleNav = NAV.filter(item => {
@@ -7425,6 +7430,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
       if (item.key === 'telemedicine') return !m || m.has('telemedicine')
       if (item.key === 'sms_marketing') return !m || m.has('sms_marketing')
+      if (item.key === 'inventory')    return !m || m.has('inventory')
       return true
     }
     // Платформенный уровень (без SLUG)
@@ -7441,6 +7447,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
     if (item.key === 'telemedicine') return !m || m.has('telemedicine')
     if (item.key === 'sms_marketing') return !m || m.has('sms_marketing')
+    if (item.key === 'inventory')    return !m || m.has('inventory')
     return true
   })
 
@@ -7490,6 +7497,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'recordings':         return <Suspense fallback={<SectionLoader />}><CallRecordingsSection token={adminToken} /></Suspense>
       case 'telemedicine':       return <Suspense fallback={<SectionLoader />}><TelemedicineSection token={adminToken} /></Suspense>
       case 'sms_marketing':      return <Suspense fallback={<SectionLoader />}><SmsMarketingSection token={adminToken} /></Suspense>
+      case 'inventory':          return <Suspense fallback={<SectionLoader />}><InventorySection token={adminToken} /></Suspense>
       default:               return null
     }
   }

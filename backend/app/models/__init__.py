@@ -137,3 +137,12 @@ from app.models.call_recording import (
     CallSessionType,
     CallRecordingStatus,
 )
+
+# Inventory модуль (1990₽/мес) — учёт расходных материалов и оборудования (W7)
+from app.models.inventory import (
+    InventoryItem,
+    InventoryStock,
+    InventoryMovement,
+    InventoryCategory,
+    InventoryMovementType,
+)

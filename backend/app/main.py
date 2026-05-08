@@ -100,6 +100,8 @@ from app.routers.ai_assistant import (
 )
 # Запись звонков + Whisper транскрипция (3990₽/мес) — модуль call_recording (W5)
 from app.routers.call_recording import router as call_recording_router
+# Inventory модуль (1990₽/мес) — учёт материалов, остатков и движений (W7)
+from app.routers.inventory import router as inventory_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -361,6 +363,22 @@ async def transcription_dispatch_job():
             logging.getLogger('scheduler').info(f'transcription: processed {n}')
     except Exception as e:
         logging.getLogger('scheduler').error(f'transcription: {e}')
+
+
+async def inventory_alerts_job():
+    """APScheduler: ежедневный сканер inventory-алертов (cron 09:00).
+
+    Шлёт компактный Telegram-дайджест админу платформы по тенантам с
+    активным модулем inventory: low_stock + expiring + expired.
+    """
+    import logging
+    try:
+        from app.jobs.inventory_alerts import run_inventory_alerts
+        n = await run_inventory_alerts()
+        if n:
+            logging.getLogger('scheduler').info(f'inventory_alerts: notified {n} tenants')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'inventory_alerts: {e}')
 
 
 async def geoip_update_job():
@@ -682,6 +700,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(sms_campaign_dispatch_job, 'interval', minutes=1, id='sms_campaign_dispatch', replace_existing=True)
     # Транскрипция записей звонков (call_recording) — раз в 2 минуты
     scheduler.add_job(transcription_dispatch_job, 'interval', minutes=2, id='transcription_dispatch', replace_existing=True)
+    # Inventory-алерты (low_stock + expiring + expired) — ежедневно в 09:00 UTC
+    scheduler.add_job(inventory_alerts_job, 'cron', hour=9, minute=0, id='inventory_alerts', replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
@@ -1149,6 +1169,8 @@ app.include_router(ai_assistant_router)
 app.include_router(ai_assistant_admin_router)
 # Запись звонков + Whisper транскрипция — модуль call_recording (W5)
 app.include_router(call_recording_router)
+# Inventory — учёт материалов, остатков и движений (W7)
+app.include_router(inventory_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
