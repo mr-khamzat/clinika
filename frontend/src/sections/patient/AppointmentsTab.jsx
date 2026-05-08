@@ -17,6 +17,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE, SLUG } from '../../config'
 import { useConfirm } from '../../design'
+import QuickActions from '../../components/QuickActions'
 
 const STATUS_INFO = {
   pending:   { l: 'Ожидает',     bg: '#fff7ed', c: '#c2410c', icon: 'pending' },
@@ -259,22 +260,35 @@ function ApptDetailsSheet({ apt, onClose, onCancel, onReschedule }) {
         </div>
 
         {isUpcoming && (
-          <div className="grid grid-cols-2 gap-2 mt-5">
-            <button onClick={onReschedule}
-              className="py-3 rounded-xl bg-cyan-50 text-cyan-700 font-bold text-sm hover:bg-cyan-100">
-              ⇆ Перенести
-            </button>
-            <button onClick={onCancel}
-              className="py-3 rounded-xl bg-rose-50 text-rose-700 font-bold text-sm hover:bg-rose-100">
-              × Отменить
-            </button>
-            {route && (
-              <a href={route} target="_blank" rel="noreferrer"
-                className="col-span-2 py-3 rounded-xl bg-gray-900 text-white font-bold text-sm text-center">
-                Маршрут к клинике
-              </a>
-            )}
-          </div>
+          <>
+            {/* ─── Quick Actions (W4): единый ряд из 5 кнопок ─── */}
+            <div className="mt-5 mb-3 flex justify-center">
+              <QuickActions
+                context="appointment"
+                appointment={apt}
+                onReschedule={onReschedule}
+                onCancel={onCancel}
+                size="md"
+                ariaLabel="Действия по записи"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={onReschedule}
+                className="py-3 rounded-xl bg-cyan-50 text-cyan-700 font-bold text-sm hover:bg-cyan-100">
+                ⇆ Перенести
+              </button>
+              <button onClick={onCancel}
+                className="py-3 rounded-xl bg-rose-50 text-rose-700 font-bold text-sm hover:bg-rose-100">
+                × Отменить
+              </button>
+              {route && (
+                <a href={route} target="_blank" rel="noreferrer"
+                  className="col-span-2 py-3 rounded-xl bg-gray-900 text-white font-bold text-sm text-center">
+                  Маршрут к клинике
+                </a>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

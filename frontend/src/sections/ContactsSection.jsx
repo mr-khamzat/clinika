@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api'
 import { useConfirm } from '../design'
+import QuickActions from '../components/QuickActions'
 
 export default function ContactsSection({ token }) {
   // Замена window.confirm на Modal-диалог
@@ -129,6 +130,15 @@ export default function ContactsSection({ token }) {
                   <div className="text-xs text-gray-400">
                     {item.created_at ? new Date(item.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : ''}
                   </div>
+                </div>
+                {/* ─── Quick Actions (W4): быстрые иконки прямо в строке ─── */}
+                <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <QuickActions
+                    context="patient"
+                    patient={{ phone: item.phone, name: item.name }}
+                    size="sm"
+                    hidePrint
+                  />
                 </div>
                 <span className="material-symbols-outlined text-gray-300 text-xl flex-shrink-0">
                   {expanded === item.id ? 'expand_less' : 'expand_more'}

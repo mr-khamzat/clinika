@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 import { Card, Chip, Button, Avatar, EmptyState, Modal } from '../design'
+import QuickActions from '../components/QuickActions'
 import ManagerShell from './_ManagerShell'
 
 function apiFetch(token, path, opts = {}) {
@@ -552,6 +553,15 @@ export default function ManagerRecruitDoctors() {
 
               {/* ─── Действия ─── */}
               <div className="flex flex-wrap gap-2 items-center pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+                {/* Quick Actions: позвонить / WhatsApp по приезжему врачу */}
+                {doc.phone_number && (
+                  <QuickActions
+                    context="doctor"
+                    doctor={doc}
+                    size="sm"
+                    hidePrint
+                  />
+                )}
                 <Button variant="secondary" size="sm" onClick={() => setResetDoc(doc)}>
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>vpn_key</span>
                   Сменить данные
