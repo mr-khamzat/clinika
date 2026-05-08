@@ -466,7 +466,7 @@ export default function Landing() {
             </div>
             {/* Calls download buttons (сохранены из старой версии) */}
             <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.19.exe" download className="ks-btn-ghost">
+              <a href="/downloads/KliniknetCalls-Setup-1.0.21.exe" download className="ks-btn-ghost">
                 {ICONS.download} Calls Win 1.0.19
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
@@ -691,7 +691,7 @@ export default function Landing() {
                 Версия 1.0.19 — окно «Диагностика» с логами и кнопкой копирования.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.19.exe" download className="ks-btn-primary">
+                <a href="/downloads/KliniknetCalls-Setup-1.0.21.exe" download className="ks-btn-primary">
                   {ICONS.download} Windows · 1.0.19
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
