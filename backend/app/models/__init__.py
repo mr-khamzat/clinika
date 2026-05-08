@@ -83,7 +83,7 @@ from app.models.patient_chat import (
 )
 
 # Программа лояльности (Этап 11 ROADMAP)
-from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction, LoyaltyTier, PatientAIConversation
+from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction, LoyaltyTier, PatientAIConversation, LoyaltyRule, LoyaltyReward
 
 # RBAC как данные (Этап 8 ROADMAP) — overrides матрицы прав на уровне тенанта
 from app.models.permission_override import TenantPermissionOverride

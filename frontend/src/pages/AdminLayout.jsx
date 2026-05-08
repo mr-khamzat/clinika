@@ -31,6 +31,8 @@ const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekSchedu
 const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
 // W4 — Аудит-лог как отдельная секция с Tabs «Лента» / «Поиск» + экспорт CSV.
 const AuditLogSection = lazy(() => import("../sections/AuditLogSection"))
+// W5 — Программа лояльности (тиры/правила/история/обмен баллов)
+const LoyaltySection = lazy(() => import("../sections/loyalty/LoyaltySection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -145,6 +147,7 @@ const NAV = [
   { key: 'platform_billing',   label: 'Биллинг платформы',   icon: 'paid' },
   { key: 'platform_analytics', label: 'Аналитика платформы', icon: 'insights' },
   { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
+  { key: 'loyalty',            label: 'Лояльность',           icon: 'loyalty' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -194,6 +197,7 @@ const NAV_GROUP_OF = {
   calls_cfg:          'SYSTEM',
   settings:           'SYSTEM',
   doctors:            'TENANT',
+  loyalty:            'TENANT',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'SYSTEM', 'TENANT']
 
@@ -230,6 +234,7 @@ const PAGE_TITLES = {
   platform_billing:   { title: 'Биллинг платформы',    subtitle: 'Финансы платформы КлиникСеть' },
   platform_analytics: { title: 'Аналитика платформы',  subtitle: 'Сводная статистика по всем тенантам' },
   payment_gateways:   { title: 'Платёжные шлюзы',      subtitle: 'YooKassa, ЮMoney, Stripe и др.' },
+  loyalty:            { title: 'Программа лояльности', subtitle: 'Тиры, автоначисления, история и каталог обмена баллов' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7229,6 +7234,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
+  'loyalty',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -7384,6 +7390,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'doctors', 'mis_sync', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
     'ads', 'analytics',
+    'loyalty',
   ])
 
   const visibleNav = NAV.filter(item => {
@@ -7392,6 +7399,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       const m = activeModules
       if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
       if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
+      if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
       return true
     }
     // Платформенный уровень (без SLUG)
@@ -7403,6 +7411,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     const m = activeModules
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
     if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
+    if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
     return true
   })
 
@@ -7447,6 +7456,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'platform_billing':   return <Suspense fallback={<SectionLoader />}><PlatformBillingSection token={adminToken} /></Suspense>
       case 'platform_analytics': return <Suspense fallback={<SectionLoader />}><PlatformAnalyticsSection token={adminToken} /></Suspense>
       case 'payment_gateways':   return <Suspense fallback={<SectionLoader />}><PaymentGatewaysSection token={adminToken} /></Suspense>
+      case 'loyalty':            return <Suspense fallback={<SectionLoader />}><LoyaltySection token={adminToken} /></Suspense>
       default:               return null
     }
   }

@@ -32,6 +32,8 @@ from app.models.loyalty import (
     LoyaltyAccount,
     LoyaltyTransaction,
     LoyaltyTier,
+    LoyaltyRule,
+    LoyaltyReward,
 )
 
 router = APIRouter(prefix="/loyalty", tags=["loyalty"])
@@ -340,3 +342,417 @@ async def create_tier(
     await db.commit()
     await db.refresh(tier)
     return tier
+
+
+@router.patch("/tiers/{tier_id}", response_model=LoyaltyTierOut)
+async def update_tier(
+    tier_id: uuid.UUID,
+    body: TierCreateRequest,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Редактирование уровня лояльности."""
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyTier).where(LoyaltyTier.id == tier_id, LoyaltyTier.tenant_id == tid)
+    )
+    tier = result.scalar_one_or_none()
+    if not tier:
+        raise HTTPException(status_code=404, detail="Тир не найден")
+    tier.name = body.name
+    tier.threshold_rub = body.threshold_rub
+    tier.discount_percent = body.discount_percent
+    tier.perks = body.perks
+    await db.commit()
+    await db.refresh(tier)
+    return tier
+
+
+@router.delete("/tiers/{tier_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tier(
+    tier_id: uuid.UUID,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удаление уровня лояльности."""
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyTier).where(LoyaltyTier.id == tier_id, LoyaltyTier.tenant_id == tid)
+    )
+    tier = result.scalar_one_or_none()
+    if not tier:
+        raise HTTPException(status_code=404, detail="Тир не найден")
+    await db.delete(tier)
+    await db.commit()
+
+
+# ─────────────────────────── W5 Loyalty UI ──────────────────────────────
+# Расширения: правила автоначисления, каталог обмена, агрегаты для UI.
+
+# ── Pydantic-схемы для rules ────────────────────────────────────────────
+
+class LoyaltyRuleOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    rule_type: str
+    bonus_amount: int
+    bonus_pct: Decimal
+    is_active: bool
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    conditions: Optional[dict] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LoyaltyRuleIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    rule_type: str = Field(..., min_length=1, max_length=30)  # visit/referral/birthday/specialist
+    bonus_amount: int = Field(0, ge=0)
+    bonus_pct: Decimal = Field(Decimal("0"), ge=0, le=100)
+    is_active: bool = True
+    valid_from: Optional[datetime] = None
+    valid_until: Optional[datetime] = None
+    conditions: Optional[dict] = None
+
+
+# ── Pydantic-схемы для rewards ──────────────────────────────────────────
+
+class LoyaltyRewardOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    description: Optional[str] = None
+    reward_type: str
+    cost_points: int
+    discount_percent: Optional[Decimal] = None
+    service_ref: Optional[str] = None
+    is_active: bool
+    icon: Optional[str] = None
+    sort_order: int
+
+    class Config:
+        from_attributes = True
+
+
+class LoyaltyRewardIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+    description: Optional[str] = Field(None, max_length=2000)
+    reward_type: str = Field(..., min_length=1, max_length=30)  # free_service/service_discount/gift
+    cost_points: int = Field(..., gt=0)
+    discount_percent: Optional[Decimal] = Field(None, ge=0, le=100)
+    service_ref: Optional[str] = Field(None, max_length=120)
+    is_active: bool = True
+    icon: Optional[str] = Field(None, max_length=40)
+    sort_order: int = 0
+
+
+class ExchangeRequest(BaseModel):
+    phone: str = Field(..., min_length=5, max_length=20)
+    reward_id: uuid.UUID
+
+
+# ── Эндпоинты: rules CRUD ───────────────────────────────────────────────
+
+@router.get("/rules", response_model=list[LoyaltyRuleOut])
+async def list_rules(
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список правил автоначисления (новые сверху)."""
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyRule)
+        .where(LoyaltyRule.tenant_id == tid)
+        .order_by(LoyaltyRule.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.post("/rules", response_model=LoyaltyRuleOut, status_code=status.HTTP_201_CREATED)
+async def create_rule(
+    body: LoyaltyRuleIn,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создание правила автоначисления."""
+    rule = LoyaltyRule(tenant_id=_tenant_id(tenant), **body.model_dump())
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.patch("/rules/{rule_id}", response_model=LoyaltyRuleOut)
+async def update_rule(
+    rule_id: uuid.UUID,
+    body: LoyaltyRuleIn,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Редактирование правила."""
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyRule).where(LoyaltyRule.id == rule_id, LoyaltyRule.tenant_id == tid)
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Правило не найдено")
+    for k, v in body.model_dump().items():
+        setattr(rule, k, v)
+    rule.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(rule)
+    return rule
+
+
+@router.delete("/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_rule(
+    rule_id: uuid.UUID,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удаление правила."""
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyRule).where(LoyaltyRule.id == rule_id, LoyaltyRule.tenant_id == tid)
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Правило не найдено")
+    await db.delete(rule)
+    await db.commit()
+
+
+# ── Эндпоинты: rewards CRUD ─────────────────────────────────────────────
+
+@router.get("/rewards", response_model=list[LoyaltyRewardOut])
+async def list_rewards(
+    only_active: bool = Query(False),
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Каталог наград (по sort_order, потом cost_points)."""
+    tid = _tenant_id(tenant)
+    q = select(LoyaltyReward).where(LoyaltyReward.tenant_id == tid)
+    if only_active:
+        q = q.where(LoyaltyReward.is_active.is_(True))
+    q = q.order_by(LoyaltyReward.sort_order.asc(), LoyaltyReward.cost_points.asc())
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+@router.post("/rewards", response_model=LoyaltyRewardOut, status_code=status.HTTP_201_CREATED)
+async def create_reward(
+    body: LoyaltyRewardIn,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    reward = LoyaltyReward(tenant_id=_tenant_id(tenant), **body.model_dump())
+    db.add(reward)
+    await db.commit()
+    await db.refresh(reward)
+    return reward
+
+
+@router.patch("/rewards/{reward_id}", response_model=LoyaltyRewardOut)
+async def update_reward(
+    reward_id: uuid.UUID,
+    body: LoyaltyRewardIn,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyReward).where(LoyaltyReward.id == reward_id, LoyaltyReward.tenant_id == tid)
+    )
+    reward = result.scalar_one_or_none()
+    if not reward:
+        raise HTTPException(status_code=404, detail="Награда не найдена")
+    for k, v in body.model_dump().items():
+        setattr(reward, k, v)
+    reward.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(reward)
+    return reward
+
+
+@router.delete("/rewards/{reward_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reward(
+    reward_id: uuid.UUID,
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    tid = _tenant_id(tenant)
+    result = await db.execute(
+        select(LoyaltyReward).where(LoyaltyReward.id == reward_id, LoyaltyReward.tenant_id == tid)
+    )
+    reward = result.scalar_one_or_none()
+    if not reward:
+        raise HTTPException(status_code=404, detail="Награда не найдена")
+    await db.delete(reward)
+    await db.commit()
+
+
+# ── Обмен баллов на награду ─────────────────────────────────────────────
+
+@router.post("/exchange", response_model=LoyaltyAccountOut)
+async def exchange_reward(
+    body: ExchangeRequest,
+    user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Обмен баллов пациента на награду.
+    Создаёт LoyaltyTransaction(type=redeem, ref=reward.id) и уменьшает баланс.
+    """
+    tid = _tenant_id(tenant)
+    # 1. Получаем награду
+    r = await db.execute(
+        select(LoyaltyReward).where(
+            LoyaltyReward.id == body.reward_id,
+            LoyaltyReward.tenant_id == tid,
+            LoyaltyReward.is_active.is_(True),
+        )
+    )
+    reward = r.scalar_one_or_none()
+    if not reward:
+        raise HTTPException(status_code=404, detail="Награда не найдена или отключена")
+
+    # 2. Аккаунт пациента
+    acc = await _get_or_create_account(db, body.phone, tid)
+    if reward.cost_points > acc.points_balance:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Недостаточно баллов: доступно {acc.points_balance}, требуется {reward.cost_points}",
+        )
+
+    # 3. Транзакция списания
+    txn = LoyaltyTransaction(
+        tenant_id=tid,
+        account_id=acc.id,
+        patient_phone=body.phone,
+        delta=-reward.cost_points,
+        op_type="redeem",
+        reference_id=str(reward.id),
+        description=f"Обмен на: {reward.name}",
+        created_by_user_id=user.id,
+    )
+    db.add(txn)
+    acc.points_balance -= reward.cost_points
+    acc.updated_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(acc)
+    return acc
+
+
+# ── Сводка для UI: список последних транзакций по всему тенанту ─────────
+
+@router.get("/transactions", response_model=list[LoyaltyTransactionOut])
+async def list_all_transactions(
+    limit: int = Query(100, ge=1, le=1000),
+    op_type: Optional[str] = Query(None, description="earn/redeem/expire/manual_credit/manual_debit"),
+    phone: Optional[str] = Query(None),
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лента всех транзакций по тенанту (для UI «История начислений»)."""
+    tid = _tenant_id(tenant)
+    q = select(LoyaltyTransaction).where(LoyaltyTransaction.tenant_id == tid)
+    if op_type:
+        q = q.where(LoyaltyTransaction.op_type == op_type)
+    if phone:
+        q = q.where(LoyaltyTransaction.patient_phone == phone)
+    q = q.order_by(LoyaltyTransaction.created_at.desc()).limit(limit)
+    result = await db.execute(q)
+    return result.scalars().all()
+
+
+# ── Сводка для UI: топ-пациенты в каждом тире ───────────────────────────
+
+class TierWithTopOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    threshold_rub: Decimal
+    discount_percent: Decimal
+    perks: Optional[dict] = None
+    patients_count: int = 0
+    top_patients: list[dict] = []  # [{phone, points_balance, points_total}]
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/tiers/with-top", response_model=list[TierWithTopOut])
+async def list_tiers_with_top(
+    top_n: int = Query(10, ge=1, le=50),
+    _user: User = Depends(require_manager),
+    _mod=Depends(require_module("loyalty_pro")),
+    tenant: Tenant | None = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Возвращает тиры тенанта с топ-N пациентами в каждом и общим счётчиком.
+    Используется в UI для секции «Тиры».
+    """
+    from sqlalchemy import func as _func
+    tid = _tenant_id(tenant)
+    tiers_res = await db.execute(
+        select(LoyaltyTier)
+        .where(LoyaltyTier.tenant_id == tid)
+        .order_by(LoyaltyTier.threshold_rub.asc())
+    )
+    tiers = tiers_res.scalars().all()
+
+    out: list[TierWithTopOut] = []
+    for t in tiers:
+        top_res = await db.execute(
+            select(LoyaltyAccount).where(
+                LoyaltyAccount.tenant_id == tid,
+                LoyaltyAccount.tier == t.name,
+            ).order_by(LoyaltyAccount.points_total.desc()).limit(top_n)
+        )
+        accs = top_res.scalars().all()
+        total_res = await db.execute(
+            select(_func.count(LoyaltyAccount.id)).where(
+                LoyaltyAccount.tenant_id == tid,
+                LoyaltyAccount.tier == t.name,
+            )
+        )
+        total = int(total_res.scalar_one() or 0)
+        out.append(TierWithTopOut(
+            id=t.id, name=t.name, threshold_rub=t.threshold_rub,
+            discount_percent=t.discount_percent, perks=t.perks,
+            patients_count=total,
+            top_patients=[
+                {"phone": a.patient_phone, "points_balance": a.points_balance, "points_total": a.points_total}
+                for a in accs
+            ],
+        ))
+    return out

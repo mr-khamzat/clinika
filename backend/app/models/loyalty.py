@@ -11,7 +11,7 @@ Loyalty (программа лояльности пациента).
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from sqlalchemy import String, DateTime, ForeignKey, Numeric, Integer, Text, UniqueConstraint
+from sqlalchemy import String, DateTime, ForeignKey, Numeric, Integer, Text, Boolean, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
@@ -99,3 +99,52 @@ class PatientAIConversation(Base):
     tokens_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+# ─────────────────────────── W5 Loyalty UI ─────────────────────────────────
+# Расширения для UI: правила автоначисления + каталог обмена.
+
+class LoyaltyRule(Base):
+    """Правило автоматического начисления баллов (visit/referral/birthday/specialist)."""
+    __tablename__ = "loyalty_rules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # 'visit' | 'referral' | 'birthday' | 'specialist'
+    rule_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    bonus_amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    bonus_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # conditions — произвольный JSON: {"service_ids":[...], "doctor_ids":[...], "min_amount":...}
+    conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class LoyaltyReward(Base):
+    """Каталог наград (что пациент может купить за баллы)."""
+    __tablename__ = "loyalty_rewards"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 'free_service' | 'service_discount' | 'gift'
+    reward_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    cost_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    service_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    icon: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
