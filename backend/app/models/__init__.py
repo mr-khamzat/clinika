@@ -115,3 +115,14 @@ from app.models.telemedicine import (
     TelemedicineSessionStatus,
     TelemedicineChatRole,
 )
+
+# SMS-маркетинг модуль (1990₽/мес) — рассылки спящим пациентам, акции, реактивация
+from app.models.sms_marketing import (
+    SmsTemplate,
+    SmsCampaign,
+    SmsMessageLog,
+    SmsCampaignStatus,
+    SmsAudienceType,
+    SmsMessageStatus,
+    SmsProvider,
+)

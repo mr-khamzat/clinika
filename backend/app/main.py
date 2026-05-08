@@ -91,6 +91,8 @@ from app.routers.telemedicine import (
     router as telemedicine_router,
     patient_router as telemedicine_patient_router,
 )
+# SMS-маркетинг модуль (1990₽/мес) — рассылки, реактивация спящих пациентов
+from app.routers.sms_marketing import router as sms_marketing_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -324,6 +326,18 @@ async def appointment_reminders_job():
             logging.getLogger('scheduler').info(f'appointment_reminders: sent {sent}')
     except Exception as e:
         logging.getLogger('scheduler').error(f'appointment_reminders: {e}')
+
+
+async def sms_campaign_dispatch_job():
+    """APScheduler: воркер SMS-кампаний (sms_marketing). Тик раз в минуту."""
+    import logging
+    try:
+        from app.jobs.sms_campaign_dispatch import run_sms_campaign_dispatch
+        sent = await run_sms_campaign_dispatch()
+        if sent:
+            logging.getLogger('scheduler').info(f'sms_dispatch: sent {sent}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'sms_dispatch: {e}')
 
 
 async def geoip_update_job():
@@ -641,6 +655,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(archive_audit_job, 'cron', hour=3, minute=0, id='audit_archive', replace_existing=True)
     scheduler.add_job(daily_invoices_job, 'cron', hour=0, minute=0, id='daily_invoices', replace_existing=True)
     scheduler.add_job(appointment_reminders_job, 'interval', minutes=30, id='appointment_reminders', replace_existing=True)
+    # SMS-маркетинг: воркер кампаний (sms_marketing) — раз в минуту
+    scheduler.add_job(sms_campaign_dispatch_job, 'interval', minutes=1, id='sms_campaign_dispatch', replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
@@ -1101,6 +1117,8 @@ app.include_router(onboarding_router)
 # Telemedicine: REST врача + публичный portal + WS signaling
 app.include_router(telemedicine_router)
 app.include_router(telemedicine_patient_router)
+# SMS-маркетинг — модуль рассылок (W5)
+app.include_router(sms_marketing_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
