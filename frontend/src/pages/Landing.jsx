@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.18 NSIS installer, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.19 NSIS installer, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -466,8 +466,8 @@ export default function Landing() {
             </div>
             {/* Calls download buttons (сохранены из старой версии) */}
             <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.18.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.18
+              <a href="/downloads/KliniknetCalls-Setup-1.0.19.exe" download className="ks-btn-ghost">
+                {ICONS.download} Calls Win 1.0.19
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls Mac 1.0.7
@@ -688,11 +688,11 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версия 1.0.18 — diagnostic logs для прокси WhatsApp + фикс BasicAuth (BasicAuth через app.on('login')).
+                Версия 1.0.19 — окно «Диагностика» с логами и кнопкой копирования.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.18.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.18
+                <a href="/downloads/KliniknetCalls-Setup-1.0.19.exe" download className="ks-btn-primary">
+                  {ICONS.download} Windows · 1.0.19
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ
@@ -709,7 +709,7 @@ export default function Landing() {
             <div className="ks-calls-mock">
               <div className="ks-preview-chrome">
                 <div className="ks-preview-dots"><span /><span /><span /></div>
-                <div className="ks-preview-url">КлиникСеть Calls · 1.0.18</div>
+                <div className="ks-preview-url">КлиникСеть Calls · 1.0.19</div>
               </div>
               <div className="ks-calls-mock-body">
                 <div className="ks-calls-tile">
