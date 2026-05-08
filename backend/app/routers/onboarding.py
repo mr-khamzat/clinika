@@ -24,7 +24,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -127,9 +127,17 @@ class Step3Services(BaseModel):
 class StaffMember(BaseModel):
     full_name: str = Field(..., min_length=2, max_length=200)
     username: str = Field(..., min_length=3, max_length=100)
-    password: Optional[str] = Field(None, min_length=6)
+    password: Optional[str] = Field(None, min_length=8)
     role: str = Field(..., pattern=r"^(manager|reg)$")
     phone: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("password")
+    @classmethod
+    def _check_password(cls, v):
+        if v is None:
+            return v
+        from app.utils.password_strength import validate_password_strength
+        return validate_password_strength(v)
 
 
 class Step4Staff(BaseModel):

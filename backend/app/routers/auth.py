@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from app.database import get_db
@@ -133,6 +133,12 @@ class InviteRegisterRequest(BaseModel):
     full_name: str
     phone_number: str
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _check_password(cls, v: str) -> str:
+        from app.utils.password_strength import validate_password_strength
+        return validate_password_strength(v)
 
 
 class RefreshRequest(BaseModel):

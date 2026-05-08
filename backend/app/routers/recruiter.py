@@ -104,24 +104,37 @@ async def get_my_doctors(
         select(User).where(User.recruiter_id == current_user.id).order_by(User.created_at.desc())
     )
     doctors = result.scalars().all()
+    if not doctors:
+        return []
+
+    doc_ids = [d.id for d in doctors]
+
+    # Один batch-запрос на все клиники всех докторов (вместо N запросов в цикле).
+    clinics_rows = (await db.execute(
+        select(DoctorClinicAccess.doctor_id, Clinic.id, Clinic.name)
+        .join(Clinic, DoctorClinicAccess.clinic_id == Clinic.id)
+        .where(DoctorClinicAccess.doctor_id.in_(doc_ids))
+    )).all()
+    clinics_by_doc: dict = {}
+    for did, cid, cname in clinics_rows:
+        clinics_by_doc.setdefault(did, []).append({"id": str(cid), "name": cname})
+
+    # Один batch-запрос на сумму бонусов по каждому доктору с GROUP BY.
+    bonus_rows = (await db.execute(
+        select(
+            RecruiterBonus.doctor_id,
+            func.coalesce(func.sum(RecruiterBonus.amount), 0),
+        )
+        .where(
+            RecruiterBonus.recruiter_id == current_user.id,
+            RecruiterBonus.doctor_id.in_(doc_ids),
+        )
+        .group_by(RecruiterBonus.doctor_id)
+    )).all()
+    bonus_by_doc: dict = {did: float(amt or 0) for did, amt in bonus_rows}
 
     out = []
     for doc in doctors:
-        acc_result = await db.execute(
-            select(DoctorClinicAccess, Clinic)
-            .join(Clinic, DoctorClinicAccess.clinic_id == Clinic.id)
-            .where(DoctorClinicAccess.doctor_id == doc.id)
-        )
-        clinic_list = [{"id": str(c.id), "name": c.name} for _, c in acc_result.all()]
-
-        doc_bonuses = await db.scalar(
-            select(func.coalesce(func.sum(RecruiterBonus.amount), 0))
-            .where(
-                RecruiterBonus.recruiter_id == current_user.id,
-                RecruiterBonus.doctor_id == doc.id,
-            )
-        ) or 0
-
         out.append({
             "id": str(doc.id),
             "full_name": doc.full_name,
@@ -132,8 +145,8 @@ async def get_my_doctors(
             "address": getattr(doc, 'address', None),
             "is_active": doc.is_active,
             "created_at": doc.created_at.isoformat(),
-            "clinics": clinic_list,
-            "bonuses_earned": float(doc_bonuses),
+            "clinics": clinics_by_doc.get(doc.id, []),
+            "bonuses_earned": bonus_by_doc.get(doc.id, 0.0),
         })
 
     return out
