@@ -61,9 +61,12 @@ function urlFor(item) {
 
 export default function CommandPalette() {
   const navigate = useNavigate()
+  // Стабильная пустая ссылка — иначе каждый рендер создаёт новый объект и эффекты, зависящие от data, бесконечно ре-рендерятся
+  const EMPTY = useMemo(() => ({ patients: [], doctors: [], referrals: [], services: [] }), [])
+  const enabled = !!SLUG
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const [data, setData] = useState({ patients: [], doctors: [], referrals: [], services: [] })
+  const [data, setData] = useState(EMPTY)
   const [loading, setLoading] = useState(false)
   const [activeIdx, setActiveIdx] = useState(0)
   const inputRef = useRef(null)
@@ -93,21 +96,23 @@ export default function CommandPalette() {
 
   // При открытии — фокус на input
   useEffect(() => {
-    if (open) {
-      setActiveIdx(0)
-      setTimeout(() => inputRef.current?.focus(), 30)
-    } else {
-      // Сбрасываем запрос при закрытии
-      setQ('')
-      setData({ patients: [], doctors: [], referrals: [], services: [] })
-    }
+    if (!open) return
+    setActiveIdx(0)
+    const t = setTimeout(() => inputRef.current?.focus(), 30)
+    return () => clearTimeout(t)
   }, [open])
+  // При закрытии — сбрасываем запрос (отдельный эффект, чтобы не ловить EMPTY в зависимостях фокуса)
+  useEffect(() => {
+    if (open) return
+    setQ('')
+    setData(EMPTY)
+  }, [open, EMPTY])
 
   // Debounced поиск через /search
   useEffect(() => {
     if (!open) return
-    if (!q || q.trim().length < 2) {
-      setData({ patients: [], doctors: [], referrals: [], services: [] })
+    if (!enabled || !q || q.trim().length < 2) {
+      setData(EMPTY)
       return
     }
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -124,13 +129,13 @@ export default function CommandPalette() {
         setActiveIdx(0)
       } catch (e) {
         // Деградация — показываем пусто
-        setData({ patients: [], doctors: [], referrals: [], services: [] })
+        setData(EMPTY)
       } finally {
         setLoading(false)
       }
     }, 250)
     return () => debounceRef.current && clearTimeout(debounceRef.current)
-  }, [q, open])
+  }, [q, open, enabled, EMPTY])
 
   // Плоский список всех результатов (для навигации стрелками)
   const flat = useMemo(() => {

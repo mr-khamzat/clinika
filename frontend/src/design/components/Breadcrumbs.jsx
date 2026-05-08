@@ -22,9 +22,13 @@
  *   - chevron_right между элементами (Material Symbols)
  * ========================================
  */
+// Безопасное преобразование label в строку (защита от объектов/null/undefined)
+const safeLabel = (l) => (l == null ? '' : String(l))
+
 export default function Breadcrumbs({ items = [], className = '' }) {
-  // Не рендерим, если нет элементов или один пункт (нечего показывать)
-  if (!Array.isArray(items) || items.length < 2) return null
+  // Не рендерим, если нет элементов или менее 2 валидных label'ов
+  if (!Array.isArray(items)) return null
+  if (items.filter(i => i?.label).length < 2) return null
 
   return (
     <nav
@@ -36,7 +40,7 @@ export default function Breadcrumbs({ items = [], className = '' }) {
         const isLast = idx === items.length - 1
         const isLink = !isLast && typeof item.to === 'function'
         return (
-          <span key={`${idx}-${item.label}`} className="inline-flex items-center gap-1 min-w-0">
+          <span key={`${idx}-${safeLabel(item.label)}`} className="inline-flex items-center gap-1 min-w-0">
             {isLink ? (
               <button
                 type="button"
@@ -51,18 +55,18 @@ export default function Breadcrumbs({ items = [], className = '' }) {
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--fg)' }}
                 onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--fg-3)' }}
-                title={item.label}
+                title={safeLabel(item.label)}
               >
-                {item.label}
+                {safeLabel(item.label)}
               </button>
             ) : (
               <span
                 className="truncate"
                 style={{ color: isLast ? 'var(--fg)' : 'var(--fg-3)', fontWeight: isLast ? 500 : 400 }}
-                title={item.label}
+                title={safeLabel(item.label)}
                 aria-current={isLast ? 'page' : undefined}
               >
-                {item.label}
+                {safeLabel(item.label)}
               </span>
             )}
             {!isLast && (

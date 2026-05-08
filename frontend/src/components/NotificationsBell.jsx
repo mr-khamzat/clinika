@@ -18,6 +18,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api'
+import { SLUG } from '../config'
 
 // ===== БЛОК (W4): глобальные keyframes для dropdown slide+fade 200ms =====
 const KS_DROPDOWN_STYLE_ID = 'ks-dropdown-anim'
@@ -75,6 +76,7 @@ function colorFor(type) {
 }
 
 export default function NotificationsBell({ size = 36, variant = 'square' }) {
+  const enabled = !!SLUG
   const [open, setOpen] = useState(false)
   const [mounted, setMounted] = useState(false)   // exit-анимация dropdown'а
   const [closing, setClosing] = useState(false)
@@ -89,12 +91,10 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
   // Mount/unmount sync с open для проигрывания exit-анимации
   useEffect(() => {
     if (open) { setMounted(true); setClosing(false); return }
-    if (mounted) {
-      setClosing(true)
-      const t = setTimeout(() => { setMounted(false); setClosing(false) }, 200)
-      return () => clearTimeout(t)
-    }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+    setClosing(true)
+    const t = setTimeout(() => { setMounted(false); setClosing(false) }, 200)
+    return () => clearTimeout(t)
+  }, [open])
 
   // Загрузка уведомлений
   const load = useCallback(async () => {
@@ -113,11 +113,13 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
   }, [])
 
   // Полная загрузка при открытии и опрос каждые 60 сек для бейджа
-  useEffect(() => { load() }, [load])
+  // Только когда SLUG задан — иначе на платформенном /admin (БЕЗ slug) /notifications/recent шлёт 404 → бесконечный re-fetch
+  useEffect(() => { if (enabled) load() }, [load, enabled])
   useEffect(() => {
+    if (!enabled) return
     const t = setInterval(load, 60000)
     return () => clearInterval(t)
-  }, [load])
+  }, [load, enabled])
 
   // Закрытие при клике вне dropdown
   useEffect(() => {
@@ -144,8 +146,8 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
 
   const toggle = () => {
     setOpen(o => !o)
-    // При открытии — обновим
-    if (!open) load()
+    // При открытии — обновим (если разрешено)
+    if (!open && enabled) load()
   }
 
   // Стилизация кнопки в зависимости от варианта
