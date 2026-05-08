@@ -86,6 +86,11 @@ from app.routers.search import router as search_router
 from app.routers.notifications import router as notifications_router
 # W4: Пошаговый wizard онбординга для franchise_owner
 from app.routers.onboarding import router as onboarding_router
+# Telemedicine модуль (4990₽/мес) — Этап 2: REST + WebSocket signaling
+from app.routers.telemedicine import (
+    router as telemedicine_router,
+    patient_router as telemedicine_patient_router,
+)
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -1093,6 +1098,9 @@ app.include_router(search_router)
 app.include_router(notifications_router)
 # W4: Onboarding wizard для franchise_owner
 app.include_router(onboarding_router)
+# Telemedicine: REST врача + публичный portal + WS signaling
+app.include_router(telemedicine_router)
+app.include_router(telemedicine_patient_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
