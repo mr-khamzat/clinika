@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+
+<html class="light" lang="ru"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Введение в КлиникСеть | Документация</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #f8f9ff;
+            color: #0d1c2e;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                "on-primary-container": "#cadcff",
+                "on-secondary-container": "#626567",
+                "secondary-container": "#e0e3e5",
+                "surface-dim": "#ccdbf3",
+                "error": "#ba1a1a",
+                "surface-variant": "#d5e3fc",
+                "secondary-fixed": "#e0e3e5",
+                "on-primary-fixed-variant": "#00468b",
+                "on-primary": "#ffffff",
+                "background": "#f8f9ff",
+                "surface-container-low": "#eff4ff",
+                "primary-fixed": "#d6e3ff",
+                "surface-bright": "#f8f9ff",
+                "inverse-surface": "#233144",
+                "surface-container-high": "#dce9ff",
+                "on-background": "#0d1c2e",
+                "on-tertiary-container": "#ffd1bc",
+                "on-secondary-fixed-variant": "#444749",
+                "outline-variant": "#c2c6d4",
+                "on-tertiary-fixed-variant": "#783100",
+                "error-container": "#ffdad6",
+                "on-tertiary": "#ffffff",
+                "surface": "#f8f9ff",
+                "secondary": "#5c5f61",
+                "primary-container": "#005fb8",
+                "on-surface-variant": "#424752",
+                "tertiary": "#7b3200",
+                "on-tertiary-fixed": "#341100",
+                "surface-container": "#e6eeff",
+                "on-error": "#ffffff",
+                "on-primary-fixed": "#001b3d",
+                "on-secondary": "#ffffff",
+                "primary-fixed-dim": "#a8c8ff",
+                "on-surface": "#0d1c2e",
+                "surface-container-highest": "#d5e3fc",
+                "on-secondary-fixed": "#191c1e",
+                "tertiary-fixed": "#ffdbcb",
+                "outline": "#727783",
+                "secondary-fixed-dim": "#c4c7c9",
+                "tertiary-fixed-dim": "#ffb691",
+                "inverse-on-surface": "#eaf1ff",
+                "tertiary-container": "#a04401",
+                "primary": "#00488d",
+                "surface-tint": "#005db5",
+                "surface-container-lowest": "#ffffff",
+                "inverse-primary": "#a8c8ff",
+                "on-error-container": "#93000a"
+              },
+              "borderRadius": {
+                "DEFAULT": "0.125rem",
+                "lg": "0.25rem",
+                "xl": "0.5rem",
+                "full": "0.75rem"
+              },
+              "spacing": {
+                "md": "16px",
+                "xl": "32px",
+                "lg": "24px",
+                "sm": "8px",
+                "base": "4px",
+                "xs": "4px",
+                "gutter": "16px",
+                "margin": "24px"
+              },
+              "fontFamily": {
+                "body": ["Inter"],
+                "mono-code": ["JetBrains Mono"],
+                "label-caps": ["Inter"],
+                "h2": ["Inter"],
+                "h1": ["Inter"]
+              },
+              "fontSize": {
+                "body": ["15px", {"lineHeight": "1.7", "letterSpacing": "0em", "fontWeight": "400"}],
+                "mono-code": ["13px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                "label-caps": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                "h2": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                "h1": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+    </script>
+</head>
+<body class="font-body text-body selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- TopNavBar -->
+<header class="fixed top-0 w-full h-[56px] z-50 bg-white border-b border-outline-variant flex items-center justify-between px-md">
+<div class="flex items-center gap-md">
+<span class="font-h1 text-h2 font-bold text-primary">КлиникСеть</span>
+<div class="hidden md:flex items-center ml-lg gap-sm">
+<div class="relative flex items-center bg-surface-container-low rounded px-sm py-xs w-64 border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px] mr-xs">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body p-0 w-full text-on-surface placeholder:text-outline h-5" placeholder="Поиск в документации..." type="text"/>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-md">
+<button class="text-on-surface-variant hover:text-primary flex items-center gap-xs duration-200 font-medium">
+<span>Связаться</span>
+</button>
+<div class="flex items-center gap-sm">
+<span class="material-symbols-outlined cursor-pointer text-on-surface-variant hover:text-primary duration-200">light_mode</span>
+<img alt="User Avatar" class="w-8 h-8 rounded-full border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpAtJ9-B6Wt9u0PlY2eb9BSro4hAa9dk2R8zQxYL2Mbw-m9nPznyXbA0fJkU80ceoX3X-QvREo5sfWzT4a77iUblMAR-gsNKKMzN4vlMpEqNe7sD3mkk_yIgdDzjNMHkvhXbMjKozh8pJt7HhktjT67080Y5tbS03_X-Ap2_EAbRSxhO8vnph8R6IpcTU6rX6hX7YdXvZxWFE_CB9Es9fA2kn4hxCUkPVTt9hWfZMdQ4Zp4CI10iniRzxZEOtIWaBAceIkwQeVJaU"/>
+</div>
+</div>
+</header>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-[56px] w-[260px] h-[calc(100vh-56px)] bg-surface-container-lowest border-r border-outline-variant flex flex-col py-md overflow-y-auto no-scrollbar hidden md:flex">
+<div class="px-md mb-lg">
+<div class="flex items-center gap-sm">
+<div class="p-2 bg-primary-container rounded-lg">
+<span class="material-symbols-outlined text-white">medical_services</span>
+</div>
+<div>
+<h3 class="font-label-caps text-label-caps text-primary tracking-wider uppercase font-bold">КлиникСеть</h3>
+<p class="text-[11px] text-on-surface-variant">Documentation Hub</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<!-- Active Item -->
+<a class="flex items-center gap-sm px-md py-2.5 text-primary border-r-4 border-primary bg-surface-container-high transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">rocket_launch</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider font-bold">Начало работы</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">account_balance</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Управление клиниками</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Пациенты</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Биллинг и франшизы</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Звонки и WhatsApp</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">shield</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Аудит и безопасность</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">videocam</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">Telemedicine</span>
+</a>
+<a class="flex items-center gap-sm px-md py-2.5 text-on-surface-variant hover:text-primary hover:bg-surface-container-low transition-all duration-150 ease-in-out" href="#">
+<span class="material-symbols-outlined text-[20px]">api</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider">API</span>
+</a>
+</nav>
+<div class="mt-xl border-t border-outline-variant pt-md px-md space-y-4">
+<a class="flex items-center gap-sm text-on-surface-variant hover:text-primary" href="#">
+<span class="material-symbols-outlined text-[18px]">help</span>
+<span class="text-[13px] font-medium">Support</span>
+</a>
+<a class="flex items-center gap-sm text-on-surface-variant hover:text-primary" href="#">
+<span class="material-symbols-outlined text-[18px]">send</span>
+<span class="text-[13px] font-medium">Telegram</span>
+</a>
+<a class="flex items-center gap-sm text-on-surface-variant hover:text-primary" href="#">
+<span class="material-symbols-outlined text-[18px]">query_stats</span>
+<span class="text-[13px] font-medium">Status</span>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="md:ml-[260px] lg:mr-[240px] pt-[56px] min-h-screen bg-background">
+<div class="max-w-4xl mx-auto px-md py-lg flex flex-col gap-lg">
+<!-- Breadcrumbs & Meta -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-md">
+<nav class="flex items-center text-[13px] text-on-surface-variant font-medium">
+<span>Документация</span>
+<span class="material-symbols-outlined text-[14px] mx-xs">chevron_right</span>
+<span>Начало работы</span>
+<span class="material-symbols-outlined text-[14px] mx-xs">chevron_right</span>
+<span class="text-primary font-bold">Введение</span>
+</nav>
+<button class="flex items-center gap-xs px-sm py-1.5 border border-outline-variant rounded-lg hover:bg-primary-container hover:text-white transition-all text-[13px] font-bold text-primary">
+<span class="material-symbols-outlined text-[16px]">edit</span>
+                Редактировать в GitHub
+            </button>
+</div>
+<!-- Header Section -->
+<section class="flex flex-col gap-sm">
+<div class="flex items-center group">
+<h1 class="font-h1 text-h1 text-on-surface">Введение в КлиникСеть</h1>
+<button class="opacity-0 group-hover:opacity-100 ml-sm text-outline hover:text-primary transition-all duration-200">
+<span class="material-symbols-outlined text-[20px]">link</span>
+</button>
+</div>
+<div class="flex items-center gap-sm text-[13px] text-on-surface-variant font-medium">
+<img alt="Author" class="w-6 h-6 rounded-full border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAso97xtVsch4qOHGa3yq7vb-C_lXGEu8St9SkgA0zw8iYpV94u_mfUxbfdSkolQGVP97arYxzNQNkIk6rAvTcmb3qJHpm8m0wPAFuVWrzMjcwvCx64KJQrGD11H_k6LSPJ50TzU4R8lHfqgq3qvVsB545lFdhMpXxeA434-pDEDWk1fHQ3-1GAVtOxEhhQLXJRUkR0q3E8VX7MtylvckOAjsbJ9mGc68sgewu8vBCb54Fb1XsPg2OWxh6kc1ENfra9oPEt20V8TOc"/>
+<span>Обновлено 8 мая 2026 · Автор: Хамзат</span>
+</div>
+<p class="text-[17px] leading-relaxed text-on-surface-variant mt-sm">
+                КлиникСеть — единая платформа управления сетью медицинских клиник: пациенты, расписание, биллинг, звонки и аудит в одной системе с поддержкой франшиз и региональных лицензий.
+            </p>
+</section>
+<!-- What you get section -->
+<section class="flex flex-col gap-md">
+<h2 class="font-h2 text-h2 text-on-surface" id="benefits">Что вы получаете</h2>
+<ul class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+<span class="text-on-surface font-medium">Централизованная карта пациента</span>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+<span class="text-on-surface font-medium">Биллинг и франшизные подписки</span>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+<span class="text-on-surface font-medium">Region Lock и комплаенс</span>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+<span class="text-on-surface font-medium">Звонки и WhatsApp-интеграция</span>
+</li>
+<li class="flex items-start gap-sm">
+<span class="material-symbols-outlined text-primary text-[22px]">check_circle</span>
+<span class="text-on-surface font-medium">Полный аудит действий сотрудников</span>
+</li>
+</ul>
+</section>
+<!-- Callout Info -->
+<div class="bg-surface-container-high border-l-4 border-primary p-md flex flex-col gap-xs rounded-r-xl">
+<div class="flex items-center gap-xs text-primary font-bold">
+<span class="material-symbols-outlined text-[18px]">info</span>
+<span class="uppercase tracking-wider text-[12px]">Совет</span>
+</div>
+<p class="text-on-surface-variant text-[14px]">
+                Мы рекомендуем сначала ознакомиться с <a class="text-primary font-bold underline decoration-primary/30 hover:decoration-primary transition-all" href="#">Руководством по быстрому старту</a>, чтобы понять базовую архитектуру распределенных систем КлиникСеть.
+            </p>
+</div>
+<!-- Quick Start -->
+<section class="flex flex-col gap-md" id="quickstart">
+<h2 class="font-h2 text-h2 text-on-surface">Быстрый старт</h2>
+<div class="relative group">
+<div class="absolute right-md top-md opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="bg-white border border-outline-variant p-2 rounded-lg hover:bg-surface-container-high duration-200 shadow-sm">
+<span class="material-symbols-outlined text-[18px] text-primary">content_copy</span>
+</button>
+</div>
+<pre class="font-mono-code text-mono-code bg-surface-container-highest border border-outline-variant p-md rounded-xl overflow-x-auto text-[#233144]"><span class="text-primary font-bold">curl</span> -X POST https://клиниксеть.рф/api/v1/clinics \
+  -H <span class="text-tertiary-container">"Authorization: Bearer $TOKEN"</span> \
+  -d <span class="text-primary-container">'{
+    "name": "Клиника №1",
+    "region": "RU-IN"
+  }'</span></pre>
+</div>
+</section>
+<!-- Warning Callout -->
+<div class="bg-error-container/20 border-l-4 border-error p-md flex flex-col gap-xs rounded-r-xl">
+<div class="flex items-center gap-xs text-error font-bold">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+<span class="uppercase tracking-wider text-[12px]">Внимание</span>
+</div>
+<p class="text-on-surface-variant text-[14px]">
+                Активация функции <b>Region Lock</b> является необратимым действием для текущего API-ключа. Все данные будут физически изолированы в соответствии с законодательством выбранного региона.
+            </p>
+</div>
+<!-- Related Articles -->
+<section class="flex flex-col gap-md" id="related">
+<h2 class="font-h2 text-h2 text-on-surface">Связанные статьи</h2>
+<div class="grid grid-cols-1 gap-sm">
+<a class="group p-md border border-outline-variant hover:border-primary hover:bg-surface-container-low bg-white transition-all duration-200 rounded-xl flex items-center justify-between" href="#">
+<div>
+<h4 class="font-bold text-on-surface mb-1 group-hover:text-primary transition-colors">Управление ролями</h4>
+<p class="text-[13px] text-on-surface-variant">Настройка прав доступа для врачей, администраторов и владельцев.</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transform group-hover:translate-x-1 transition-all">chevron_right</span>
+</a>
+<a class="group p-md border border-outline-variant hover:border-primary hover:bg-surface-container-low bg-white transition-all duration-200 rounded-xl flex items-center justify-between" href="#">
+<div>
+<h4 class="font-bold text-on-surface mb-1 group-hover:text-primary transition-colors">Интеграция WhatsApp</h4>
+<p class="text-[13px] text-on-surface-variant">Автоматические напоминания и чаты с пациентами напрямую из CRM.</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transform group-hover:translate-x-1 transition-all">chevron_right</span>
+</a>
+<a class="group p-md border border-outline-variant hover:border-primary hover:bg-surface-container-low bg-white transition-all duration-200 rounded-xl flex items-center justify-between" href="#">
+<div>
+<h4 class="font-bold text-on-surface mb-1 group-hover:text-primary transition-colors">Региональные лицензии</h4>
+<p class="text-[13px] text-on-surface-variant">Как добавить новую клинику в другом регионе или стране.</p>
+</div>
+<span class="material-symbols-outlined text-outline group-hover:text-primary transform group-hover:translate-x-1 transition-all">chevron_right</span>
+</a>
+</div>
+</section>
+<!-- Feedback -->
+<div class="mt-lg pt-lg border-t border-outline-variant flex flex-col md:flex-row justify-between items-center gap-md">
+<div class="flex items-center gap-md">
+<span class="text-on-surface font-medium text-[14px]">Была ли эта статья полезна?</span>
+<div class="flex items-center gap-xs">
+<button class="p-2 hover:bg-primary hover:text-white rounded-lg border border-outline-variant transition-all group text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px] block">thumb_up</span>
+</button>
+<button class="p-2 hover:bg-error hover:text-white rounded-lg border border-outline-variant transition-all group text-on-surface-variant">
+<span class="material-symbols-outlined text-[20px] block">thumb_down</span>
+</button>
+</div>
+</div>
+<a class="text-[14px] text-primary hover:underline flex items-center gap-xs font-bold" href="#">
+<span class="material-symbols-outlined text-[18px]">bug_report</span>
+                Сообщить о проблеме
+            </a>
+</div>
+<!-- Footer -->
+<footer class="w-full py-lg mt-xl border-t border-outline-variant">
+<div class="flex flex-col md:flex-row justify-between items-center gap-md">
+<p class="text-on-surface-variant text-[13px]">
+                    © 2024 КлиникСеть. v2.4.1
+                </p>
+<div class="flex items-center gap-md">
+<a class="text-on-surface-variant hover:text-primary transition-colors text-[13px] font-medium" href="#">Support</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors text-[13px] font-medium" href="#">Telegram</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors text-[13px] font-medium" href="#">Status</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors text-[13px] font-medium" href="#">Privacy</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors text-[13px] font-medium" href="#">API</a>
+</div>
+</div>
+</footer>
+</div>
+</main>
+<!-- Right Sidebar (TOC) -->
+<aside class="fixed right-0 top-[56px] w-[240px] h-[calc(100vh-56px)] py-lg px-md hidden lg:flex flex-col border-l border-outline-variant bg-surface-container-lowest">
+<h4 class="font-label-caps text-label-caps text-primary uppercase tracking-widest mb-md font-bold">На этой странице</h4>
+<nav class="flex flex-col gap-sm border-l-2 border-outline-variant pl-4 mb-xl">
+<a class="text-[13px] text-on-surface-variant hover:text-primary transition-colors font-medium" href="#benefits">Что вы получаете</a>
+<a class="text-[13px] text-on-surface-variant hover:text-primary transition-colors font-medium" href="#quickstart">Быстрый старт</a>
+<a class="text-[13px] text-on-surface-variant hover:text-primary transition-colors font-medium" href="#related">Связанные статьи</a>
+</nav>
+<div class="p-md border border-outline-variant rounded-xl bg-primary-container/5 flex flex-col gap-sm">
+<h5 class="text-[12px] font-bold text-primary">Нужна помощь?</h5>
+<p class="text-[11px] text-on-surface-variant leading-relaxed">Если у вас возникли трудности с настройкой Region Lock, напишите нам в техническую поддержку.</p>
+<button class="w-full py-2 bg-primary text-white text-[11px] font-bold rounded-lg hover:shadow-lg transition-all">Чат поддержки</button>
+</div>
+</aside>
+</body></html>
