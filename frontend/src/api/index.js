@@ -49,11 +49,47 @@ api.interceptors.request.use(config => {
 // Кэш per-tokenKey, чтобы admin и user рефрешились независимо.
 const _refreshing = {}
 
+// ─── БЛОК: Region Lock 403 ───
+// Backend возвращает HTTP 403 с detail, начинающимся на "Доступ заблокирован: вы вне разрешённого региона"
+// когда франшиза работает в strict-mode и пользователь обращается из чужого региона.
+// Показываем специальное модальное окно вместо общего toast'а — пользователь должен понять,
+// что блокировка географическая, а не из-за прав.
+const REGION_BLOCK_PREFIX = 'Доступ заблокирован: вы вне разрешённого региона'
+let _regionBlockShownAt = 0
+
+function _showRegionBlockModal(detail) {
+  // Дедуп: одно сообщение в 5 секунд (несколько параллельных запросов могут получить 403)
+  const now = Date.now()
+  if (now - _regionBlockShownAt < 5000) return
+  _regionBlockShownAt = now
+  // Используем простой alert как fallback. Если в проекте есть глобальная Modal/toast система —
+  // можно перехватить событие 'region-lock-blocked' через window.addEventListener.
+  try {
+    window.dispatchEvent(new CustomEvent('region-lock-blocked', { detail: { message: detail } }))
+  } catch (_) { /* noop */ }
+  // Браузерный fallback — гарантированно сработает даже без слушателя.
+  setTimeout(() => {
+    if (Date.now() - _regionBlockShownAt < 100) {
+      // Если за это время никто не успел поднять модалку — показываем alert.
+      try { alert(detail) } catch (_) {}
+    }
+  }, 50)
+}
+
 api.interceptors.response.use(
   r => r,
   async err => {
     const cfg = err.config
     const status = err?.response?.status
+
+    // 403 Region Lock — показываем спец-модалку и не ретраим
+    if (status === 403) {
+      const detail = err?.response?.data?.detail
+      if (typeof detail === 'string' && detail.startsWith(REGION_BLOCK_PREFIX)) {
+        _showRegionBlockModal(detail)
+        return Promise.reject(err)
+      }
+    }
 
     // 401 + нет ретрая в этом запросе + есть конфиг
     if (status === 401 && cfg && !cfg._retry) {

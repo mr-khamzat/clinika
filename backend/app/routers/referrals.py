@@ -8,6 +8,7 @@ from app.models.referral_comment import ReferralComment
 from app.schemas.referral import ReferralCreate, ReferralResponse, QRScanRequest, CancelRequestBody
 from app.services.referral_service import create_referral, confirm_referral, confirm_referral_by_short_code
 from app.core.deps import get_current_user
+from app.core.region_lock import enforce_region_lock
 from app.services import webhook_service
 from datetime import datetime
 from pydantic import BaseModel
@@ -66,7 +67,7 @@ async def verify_patient(
     }
 
 
-@router.post("/", response_model=ReferralResponse)
+@router.post("/", response_model=ReferralResponse, dependencies=[Depends(enforce_region_lock)])
 async def create_new_referral(
     data: ReferralCreate,
     request: Request,
@@ -109,7 +110,7 @@ async def create_new_referral(
     await db.commit()
     return await _enrich_referral(referral, db)
 
-@router.post("/confirm-by-code", response_model=ReferralResponse)
+@router.post("/confirm-by-code", response_model=ReferralResponse, dependencies=[Depends(enforce_region_lock)])
 async def confirm_by_short_code(
     data: ShortCodeRequest,
     current_user: User = Depends(get_current_user),
@@ -128,7 +129,7 @@ async def confirm_by_short_code(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/scan", response_model=ReferralResponse)
+@router.post("/scan", response_model=ReferralResponse, dependencies=[Depends(enforce_region_lock)])
 async def scan_qr(
     data: QRScanRequest,
     current_user: User = Depends(get_current_user),

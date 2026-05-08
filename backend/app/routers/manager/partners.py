@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager, require_admin
+from app.core.region_lock import enforce_region_lock
 from app.models.user import User, UserRole
 from app.models.clinic import Clinic
 from app.models.referral import Referral
@@ -54,7 +55,7 @@ async def list_partners(
     return out
 
 
-@router.post("/partners/", response_model=dict, status_code=201)
+@router.post("/partners/", response_model=dict, status_code=201, dependencies=[Depends(enforce_region_lock)])
 async def create_partner(
     body: CreateAdminRequest,
     current_user: User = Depends(require_admin),
@@ -88,7 +89,7 @@ async def create_partner(
             "referrals_count": 0}
 
 
-@router.patch("/partners/{partner_id}", response_model=dict)
+@router.patch("/partners/{partner_id}", response_model=dict, dependencies=[Depends(enforce_region_lock)])
 async def update_partner(
     partner_id: uuid.UUID,
     body: UpdateAdminRequest,
@@ -116,7 +117,7 @@ async def update_partner(
             "referrals_count": ref_count.scalar() or 0}
 
 
-@router.delete("/partners/{partner_id}")
+@router.delete("/partners/{partner_id}", dependencies=[Depends(enforce_region_lock)])
 async def delete_partner(
     partner_id: uuid.UUID,
     hard: bool = Query(False),

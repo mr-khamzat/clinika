@@ -25,6 +25,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_manager
+from app.core.region_lock import enforce_region_lock
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
 from app.models.payments_clinic import (
@@ -108,7 +109,7 @@ def _serialize_config(c: PaymentGatewayConfig) -> dict[str, Any]:
 
 # ── 1) Инициация платежа ─────────────────────────────────────────────────────
 
-@router.post("/payments/init", dependencies=[_pay_module])
+@router.post("/payments/init", dependencies=[_pay_module, Depends(enforce_region_lock)])
 async def init_payment(
     body: PaymentInitRequest,
     user: User = Depends(get_current_user),
@@ -166,7 +167,7 @@ async def get_payment(
 
 # ── 3) Возврат ───────────────────────────────────────────────────────────────
 
-@router.post("/payments/{payment_id}/refund", dependencies=[Depends(require_manager), _pay_module])
+@router.post("/payments/{payment_id}/refund", dependencies=[Depends(require_manager), _pay_module, Depends(enforce_region_lock)])
 async def refund_payment(
     payment_id: uuid.UUID = Path(...),
     amount: Optional[Decimal] = Body(None, embed=True),
@@ -307,7 +308,7 @@ async def get_payment_config(
     }
 
 
-@router.put("/clinics/{clinic_id}/payment-config", dependencies=[Depends(require_manager), _pay_module])
+@router.put("/clinics/{clinic_id}/payment-config", dependencies=[Depends(require_manager), _pay_module, Depends(enforce_region_lock)])
 async def upsert_payment_config(
     body: PaymentConfigBody,
     clinic_id: uuid.UUID = Path(...),

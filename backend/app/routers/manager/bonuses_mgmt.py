@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.core.region_lock import enforce_region_lock
 from app.models.user import User
 from app.models.referral import Referral, ReferralStatus
 from app.models.bonus import Bonus, BonusStatus
@@ -25,7 +26,7 @@ from app.services.audit_service import AuditAction
 router = APIRouter(tags=["manager:bonuses"])
 
 
-@router.patch("/bonuses/{bonus_id}/mark-paid", response_model=MarkPaidResponse)
+@router.patch("/bonuses/{bonus_id}/mark-paid", response_model=MarkPaidResponse, dependencies=[Depends(enforce_region_lock)])
 async def mark_bonus_paid(
     bonus_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -50,7 +51,7 @@ async def mark_bonus_paid(
     return bonus
 
 
-@router.post("/bonuses/mark-paid-all/{admin_id}")
+@router.post("/bonuses/mark-paid-all/{admin_id}", dependencies=[Depends(enforce_region_lock)])
 async def mark_all_paid(
     admin_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -107,7 +108,7 @@ async def list_cancel_requests(
     return items
 
 
-@router.post("/cancel-requests/{referral_id}/approve")
+@router.post("/cancel-requests/{referral_id}/approve", dependencies=[Depends(enforce_region_lock)])
 async def approve_cancel(
     referral_id: uuid.UUID,
     current_user: User = Depends(require_manager),
@@ -129,7 +130,7 @@ async def approve_cancel(
     return {"status": "cancelled"}
 
 
-@router.post("/cancel-requests/{referral_id}/reject")
+@router.post("/cancel-requests/{referral_id}/reject", dependencies=[Depends(enforce_region_lock)])
 async def reject_cancel(
     referral_id: uuid.UUID,
     current_user: User = Depends(require_manager),

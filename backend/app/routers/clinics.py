@@ -7,6 +7,7 @@ from app.models.clinic_schedule import ClinicSchedule
 from app.models.service import Service
 from app.schemas.clinic import ClinicResponse
 from app.core.deps import get_current_user, require_reports_access
+from app.core.region_lock import enforce_region_lock
 from app.models.user import User
 import uuid
 from typing import Optional
@@ -103,7 +104,7 @@ class ScheduleDayInput(BaseModel):
     close_time: str = "18:00"
 
 
-@router.put("/{clinic_id}/schedule")
+@router.put("/{clinic_id}/schedule", dependencies=[Depends(enforce_region_lock)])
 async def update_clinic_schedule(
     clinic_id: uuid.UUID,
     days: list[ScheduleDayInput],

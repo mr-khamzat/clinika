@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.core.region_lock import enforce_region_lock
 from app.models.user import User
 from app.models.clinic import Clinic
 from app.schemas.manager import CreateClinicRequest, UpdateClinicRequest, ClinicResponse
@@ -33,7 +34,7 @@ async def list_clinics(
     return [ClinicResponse.model_validate(c) for c in result.scalars().all()]
 
 
-@router.patch("/clinics/{clinic_id}", response_model=ClinicResponse)
+@router.patch("/clinics/{clinic_id}", response_model=ClinicResponse, dependencies=[Depends(enforce_region_lock)])
 async def update_clinic(
     clinic_id: uuid.UUID,
     body: UpdateClinicRequest,
@@ -56,7 +57,7 @@ async def update_clinic(
     return ClinicResponse.model_validate(clinic)
 
 
-@router.post("/clinics/", response_model=ClinicResponse, status_code=201)
+@router.post("/clinics/", response_model=ClinicResponse, status_code=201, dependencies=[Depends(enforce_region_lock)])
 async def create_clinic(
     body: CreateClinicRequest,
     current_user: User = Depends(require_manager),
@@ -75,7 +76,7 @@ import secrets
 import string
 
 
-@router.post("/clinics/{clinic_id}/onboard-manager", response_model=dict, status_code=201)
+@router.post("/clinics/{clinic_id}/onboard-manager", response_model=dict, status_code=201, dependencies=[Depends(enforce_region_lock)])
 async def onboard_clinic_manager(
     clinic_id: uuid.UUID,
     body: dict,
@@ -185,7 +186,7 @@ async def get_clinic_manager(
     }
 
 
-@router.delete("/clinics/{clinic_id}/manager")
+@router.delete("/clinics/{clinic_id}/manager", dependencies=[Depends(enforce_region_lock)])
 async def remove_clinic_manager(
     clinic_id: uuid.UUID,
     current_user: User = Depends(require_manager),
