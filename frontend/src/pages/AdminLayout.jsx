@@ -39,6 +39,8 @@ const LoyaltySection = lazy(() => import("../sections/loyalty/LoyaltySection"))
 const CallRecordingsSection = lazy(() => import("../sections/CallRecordingsSection"))
 // Telemedicine — раздел телемед-сессий + видео-комната (модуль telemedicine)
 const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection"))
+// SMS-маркетинг — шаблоны/кампании/история/аналитика (модуль sms_marketing)
+const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -157,6 +159,7 @@ const NAV = [
   { key: 'loyalty',            label: 'Лояльность',           icon: 'loyalty' },
   { key: 'recordings',         label: 'Запись звонков',       icon: 'mic' },
   { key: 'telemedicine',       label: 'Телемедицина',         icon: 'video_call' },
+  { key: 'sms_marketing',      label: 'SMS-маркетинг',         icon: 'sms' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -167,6 +170,7 @@ const NAV_GROUP_TITLES = {
   FINANCE:   'Финансы',
   ANALYTICS: 'Аналитика',
   CONTENT:   'Контент',
+  MARKETING: 'Маркетинг',
   SYSTEM:    'Система',
   TENANT:    'Тенант',
 }
@@ -210,8 +214,9 @@ const NAV_GROUP_OF = {
   loyalty:            'TENANT',
   recordings:         'TENANT',
   telemedicine:       'TENANT',
+  sms_marketing:      'MARKETING',
 }
-const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'SYSTEM', 'TENANT']
+const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETING', 'SYSTEM', 'TENANT']
 
 // ── Подписи страниц (заголовок + подзаголовок для PageHeader) ──────────────
 const PAGE_TITLES = {
@@ -250,6 +255,7 @@ const PAGE_TITLES = {
   loyalty:            { title: 'Программа лояльности', subtitle: 'Тиры, автоначисления, история и каталог обмена баллов' },
   recordings:         { title: 'Запись звонков',       subtitle: 'Аудио/видео запись, расшифровка через Whisper и AI-резюме' },
   telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
+  sms_marketing:      { title: 'SMS-маркетинг',         subtitle: 'Шаблоны, рассылки спящим пациентам, история отправок и аналитика' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7249,7 +7255,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
-  'loyalty','recordings','telemedicine',
+  'loyalty','recordings','telemedicine','sms_marketing',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -7405,7 +7411,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'doctors', 'mis_sync', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
     'ads', 'analytics',
-    'loyalty', 'recordings',
+    'loyalty', 'recordings', 'sms_marketing',
   ])
 
   const visibleNav = NAV.filter(item => {
@@ -7418,6 +7424,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'recordings')   return !m || m.has('call_recording')
       if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
       if (item.key === 'telemedicine') return !m || m.has('telemedicine')
+      if (item.key === 'sms_marketing') return !m || m.has('sms_marketing')
       return true
     }
     // Платформенный уровень (без SLUG)
@@ -7433,6 +7440,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     if (item.key === 'recordings')   return !m || m.has('call_recording')
     if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
     if (item.key === 'telemedicine') return !m || m.has('telemedicine')
+    if (item.key === 'sms_marketing') return !m || m.has('sms_marketing')
     return true
   })
 
@@ -7481,6 +7489,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'loyalty':            return <Suspense fallback={<SectionLoader />}><LoyaltySection token={adminToken} /></Suspense>
       case 'recordings':         return <Suspense fallback={<SectionLoader />}><CallRecordingsSection token={adminToken} /></Suspense>
       case 'telemedicine':       return <Suspense fallback={<SectionLoader />}><TelemedicineSection token={adminToken} /></Suspense>
+      case 'sms_marketing':      return <Suspense fallback={<SectionLoader />}><SmsMarketingSection token={adminToken} /></Suspense>
       default:               return null
     }
   }
