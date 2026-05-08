@@ -131,8 +131,8 @@ export default function SmsCampaignsSection({ token }) {
           </button>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-gray-700">
-          <table className="w-full text-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-gray-700 admin-resp-table-wrap">
+          <table className="admin-resp-table w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-900/40 text-left">
               <tr>
                 <th className="px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Название</th>
@@ -152,25 +152,27 @@ export default function SmsCampaignsSection({ token }) {
                 const badge = STATUS_BADGES[c.status] || STATUS_BADGES.draft
                 return (
                   <tr key={c.id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50/60 dark:hover:bg-gray-900/30 cursor-pointer" onClick={() => setDetailsId(c.id)}>
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{c.name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{c.template_name || '—'}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{AUDIENCES.find(a => a.id === c.audience_type)?.label || c.audience_type || '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">{sent} / {total}</div>
-                      <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#0097A7]" style={{ width: `${pct}%` }} />
+                    <td data-label="Название" className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{c.name || '—'}</td>
+                    <td data-label="Шаблон" className="px-4 py-3 text-gray-600 dark:text-gray-300">{c.template_name || '—'}</td>
+                    <td data-label="Аудитория" className="px-4 py-3 text-gray-600 dark:text-gray-300">{AUDIENCES.find(a => a.id === c.audience_type)?.label || c.audience_type || '—'}</td>
+                    <td data-label="Прогресс" className="px-4 py-3">
+                      <div className="flex-1">
+                        <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">{sent} / {total}</div>
+                        <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden" style={{ minWidth: 100 }}>
+                          <div className="h-full bg-[#0097A7]" style={{ width: `${pct}%` }} />
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Статус" className="px-4 py-3">
                       <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>
                         {badge.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{fmtDt(c.scheduled_at || c.created_at)}</td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                      <button onClick={() => setDetailsId(c.id)} className="text-[#0097A7] hover:underline text-xs font-semibold mr-3">Детали</button>
+                    <td data-label="Запуск" className="px-4 py-3 text-xs text-gray-500">{fmtDt(c.scheduled_at || c.created_at)}</td>
+                    <td data-label="Действия" className="px-4 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setDetailsId(c.id)} className="admin-tap-44 text-[#0097A7] hover:underline text-xs font-semibold mr-3 px-2 py-2">Детали</button>
                       {(c.status === 'scheduled' || c.status === 'sending') && (
-                        <button onClick={() => onCancel(c)} className="text-red-500 hover:underline text-xs font-semibold">Отменить</button>
+                        <button onClick={() => onCancel(c)} className="admin-tap-44 text-red-500 hover:underline text-xs font-semibold px-2 py-2">Отменить</button>
                       )}
                     </td>
                   </tr>

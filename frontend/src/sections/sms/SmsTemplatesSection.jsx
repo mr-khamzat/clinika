@@ -217,8 +217,8 @@ export default function SmsTemplatesSection({ token }) {
           </button>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-gray-700">
-          <table className="w-full text-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-gray-700 admin-resp-table-wrap">
+          <table className="admin-resp-table w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-900/40 text-left">
               <tr>
                 <th className="px-4 py-3 font-semibold text-gray-600 dark:text-gray-300">Название</th>
@@ -234,12 +234,12 @@ export default function SmsTemplatesSection({ token }) {
                 const vars = usedVariables(t.body)
                 return (
                   <tr key={t.id} className="border-t border-gray-100 dark:border-gray-700">
-                    <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{t.name}</td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-md">
+                    <td data-label="Название" className="px-4 py-3 font-semibold text-gray-900 dark:text-white">{t.name}</td>
+                    <td data-label="Текст" className="px-4 py-3 text-gray-600 dark:text-gray-300 max-w-md">
                       <div className="truncate" title={t.body}>{t.body}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
+                    <td data-label="Переменные" className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1 justify-end md:justify-start">
                         {vars.length === 0 ? (
                           <span className="text-xs text-gray-400">—</span>
                         ) : vars.map(v => (
@@ -247,13 +247,13 @@ export default function SmsTemplatesSection({ token }) {
                         ))}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
+                    <td data-label="Создан" className="px-4 py-3 text-xs text-gray-500">
                       {t.created_at ? new Date(t.created_at).toLocaleDateString('ru') : '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Активен" className="px-4 py-3">
                       <button
                         onClick={() => toggleActive(t)}
-                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full ${
+                        className={`admin-tap-44 inline-flex items-center gap-1 text-xs font-semibold px-3 py-2 rounded-full ${
                           t.is_active
                             ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
                             : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
@@ -265,9 +265,9 @@ export default function SmsTemplatesSection({ token }) {
                         {t.is_active ? 'Активен' : 'Пауза'}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <button onClick={() => openEdit(t)} className="text-[#0097A7] hover:underline text-xs font-semibold mr-3">Изменить</button>
-                      <button onClick={() => onDelete(t)} className="text-red-500 hover:underline text-xs font-semibold">Удалить</button>
+                    <td data-label="Действия" className="px-4 py-3 text-right whitespace-nowrap">
+                      <button onClick={() => openEdit(t)} className="admin-tap-44 text-[#0097A7] hover:underline text-xs font-semibold mr-3 px-2 py-2">Изменить</button>
+                      <button onClick={() => onDelete(t)} className="admin-tap-44 text-red-500 hover:underline text-xs font-semibold px-2 py-2">Удалить</button>
                     </td>
                   </tr>
                 )

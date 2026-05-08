@@ -91,3 +91,74 @@
     color: rgb(209 213 219);
   }
 }
+
+/* ===== W3 MOBILE: tap-target, responsive tables ===== */
+@layer utilities {
+  /* iOS guideline: минимум 44×44 px для тач-цели. */
+  .admin-tap-44 {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Универсальное поведение таблицы на мобиле:
+     <table class="admin-resp-table"> + <td data-label="Поле">Значение</td>
+     На <768px каждая <tr> превращается в карточку, <td> — в строку
+     "label : value". JS-логика не нужна — только класс. */
+  @media (max-width: 767px) {
+    .admin-resp-table {
+      display: block;
+      width: 100% !important;
+      min-width: 0 !important;
+    }
+    .admin-resp-table thead {
+      display: none;
+    }
+    .admin-resp-table tbody,
+    .admin-resp-table tr {
+      display: block;
+      width: 100%;
+    }
+    .admin-resp-table tr {
+      margin-bottom: 10px;
+      border: 1px solid var(--border, rgba(0,0,0,0.08));
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--bg-1, transparent);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .admin-resp-table td {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border: none;
+      text-align: right;
+      font-size: 13px;
+      min-height: 32px;
+      align-items: center;
+      width: 100%;
+    }
+    .admin-resp-table td::before {
+      content: attr(data-label);
+      flex: 0 0 40%;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--fg-3, #6b7280);
+      text-align: left;
+      align-self: center;
+      white-space: nowrap;
+    }
+    .admin-resp-table td:not([data-label])::before {
+      display: none;
+    }
+    .admin-resp-table td:not([data-label]) {
+      justify-content: flex-end;
+    }
+    /* Когда таблица обёрнута в overflow-x-auto wrapper — отключаем горизонтальный скролл */
+    .admin-resp-table-wrap {
+      overflow: visible !important;
+    }
+  }
+}

@@ -120,8 +120,8 @@ export default function InventoryStocksSection() {
             description="Сделайте приход через раздел «Движения» или загрузите инвентаризацию"
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto admin-resp-table-wrap">
+            <table className="admin-resp-table w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
                   <th className="px-3 py-2">SKU</th>
@@ -138,15 +138,15 @@ export default function InventoryStocksSection() {
                   const isLow = Number(s.quantity) < Number(s.item_min_threshold || 0) && Number(s.item_min_threshold || 0) > 0
                   return (
                     <tr key={s.id} className={isLow ? 'bg-red-50/40 dark:bg-red-900/10' : ''}>
-                      <td className="px-3 py-2 font-mono text-xs">{s.item_sku}</td>
-                      <td className="px-3 py-2">{s.item_name}</td>
-                      <td className="px-3 py-2">{clinicName(s.clinic_id)}</td>
-                      <td className="px-3 py-2 font-mono text-xs">{s.batch_number || '—'}</td>
-                      <td className="px-3 py-2 text-xs">{s.expiry_date || '—'}</td>
-                      <td className={`px-3 py-2 text-right tabular-nums font-mono ${isLow ? 'text-red-600 font-bold' : ''}`}>
+                      <td data-label="SKU" className="px-3 py-2 font-mono text-xs">{s.item_sku}</td>
+                      <td data-label="Название" className="px-3 py-2">{s.item_name}</td>
+                      <td data-label="Клиника" className="px-3 py-2">{clinicName(s.clinic_id)}</td>
+                      <td data-label="Партия" className="px-3 py-2 font-mono text-xs">{s.batch_number || '—'}</td>
+                      <td data-label="Срок" className="px-3 py-2 text-xs">{s.expiry_date || '—'}</td>
+                      <td data-label="Остаток" className={`px-3 py-2 text-right tabular-nums font-mono ${isLow ? 'text-red-600 font-bold' : ''}`}>
                         {Number(s.quantity)} {s.item_unit}
                       </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-xs text-gray-500">
+                      <td data-label="Мин." className="px-3 py-2 text-right tabular-nums text-xs text-gray-500">
                         {Number(s.item_min_threshold)}
                       </td>
                     </tr>

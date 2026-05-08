@@ -109,8 +109,8 @@ export default function InventoryMovementsSection() {
             description="Создайте первую операцию через кнопки выше"
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto admin-resp-table-wrap">
+            <table className="admin-resp-table w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
                   <th className="px-3 py-2">Дата</th>
@@ -133,23 +133,23 @@ export default function InventoryMovementsSection() {
                         className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                         onClick={() => setExpandedId(expanded ? null : m.id)}
                       >
-                        <td className="px-3 py-2 text-xs whitespace-nowrap">
+                        <td data-label="Дата" className="px-3 py-2 text-xs whitespace-nowrap">
                           {new Date(m.created_at).toLocaleString('ru-RU', {
                             day: '2-digit', month: '2-digit', year: '2-digit',
                             hour: '2-digit', minute: '2-digit',
                           })}
                         </td>
-                        <td className="px-3 py-2">
+                        <td data-label="Тип" className="px-3 py-2">
                           <Chip tone={TYPE_TONE[m.type]}>{TYPE_LABEL[m.type] || m.type}</Chip>
                         </td>
-                        <td className="px-3 py-2">{it?.name || m.item_id.slice(0, 8)}</td>
-                        <td className="px-3 py-2">{cl?.name || m.clinic_id.slice(0, 8)}</td>
-                        <td className={`px-3 py-2 text-right font-mono tabular-nums ${
+                        <td data-label="Позиция" className="px-3 py-2">{it?.name || m.item_id.slice(0, 8)}</td>
+                        <td data-label="Клиника" className="px-3 py-2">{cl?.name || m.clinic_id.slice(0, 8)}</td>
+                        <td data-label="Δ" className={`px-3 py-2 text-right font-mono tabular-nums ${
                           Number(m.quantity) >= 0 ? 'text-green-600' : 'text-red-600'
                         }`}>
                           {Number(m.quantity) >= 0 ? '+' : ''}{Number(m.quantity)}
                         </td>
-                        <td className="px-3 py-2 text-right font-mono tabular-nums">
+                        <td data-label="Остаток" className="px-3 py-2 text-right font-mono tabular-nums">
                           {Number(m.balance_after)}
                         </td>
                       </tr>

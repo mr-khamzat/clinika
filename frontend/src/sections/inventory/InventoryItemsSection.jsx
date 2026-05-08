@@ -184,8 +184,8 @@ export default function InventoryItemsSection() {
             description="Добавьте первую позицию через кнопку «+ Новая позиция»"
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto admin-resp-table-wrap">
+            <table className="admin-resp-table w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr className="text-left text-xs uppercase tracking-wider text-gray-500">
                   <th className="px-3 py-2">SKU</th>
@@ -195,37 +195,37 @@ export default function InventoryItemsSection() {
                   <th className="px-3 py-2 text-right">Цена</th>
                   <th className="px-3 py-2 text-right">Мин. порог</th>
                   <th className="px-3 py-2">Срок</th>
-                  <th className="px-3 py-2 w-[120px]"></th>
+                  <th className="px-3 py-2 w-[120px]">Действия</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {items.map(it => (
                   <tr key={it.id} className={it.is_active ? '' : 'opacity-50'}>
-                    <td className="px-3 py-2 font-mono text-xs">{it.sku}</td>
-                    <td className="px-3 py-2">
+                    <td data-label="SKU" className="px-3 py-2 font-mono text-xs">{it.sku}</td>
+                    <td data-label="Название" className="px-3 py-2">
                       <div className="font-medium">{it.name}</div>
                       {it.vendor && <div className="text-xs text-gray-500">{it.vendor}</div>}
                     </td>
-                    <td className="px-3 py-2">
+                    <td data-label="Категория" className="px-3 py-2">
                       <Chip>{CAT_LABEL[it.category] || it.category}</Chip>
                     </td>
-                    <td className="px-3 py-2">{it.unit}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    <td data-label="Ед." className="px-3 py-2">{it.unit}</td>
+                    <td data-label="Цена" className="px-3 py-2 text-right tabular-nums">
                       {Number(it.cost_per_unit).toLocaleString('ru')} ₽
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
+                    <td data-label="Мин. порог" className="px-3 py-2 text-right tabular-nums">
                       {Number(it.min_stock_threshold)}
                     </td>
-                    <td className="px-3 py-2">
+                    <td data-label="Срок" className="px-3 py-2">
                       {it.expiry_tracked ? <Chip tone="warn">отслеж.</Chip> : '—'}
                     </td>
-                    <td className="px-3 py-2 text-right">
+                    <td data-label="Действия" className="px-3 py-2 text-right">
                       <button
-                        className="text-[#0097A7] hover:underline text-xs mr-2"
+                        className="admin-tap-44 text-[#0097A7] hover:underline text-xs mr-2 px-2 py-2"
                         onClick={() => openEdit(it)}
                       >Изм.</button>
                       <button
-                        className="text-red-600 hover:underline text-xs"
+                        className="admin-tap-44 text-red-600 hover:underline text-xs px-2 py-2"
                         onClick={() => handleDelete(it)}
                       >Архив</button>
                     </td>

@@ -252,8 +252,8 @@ export default function SmsHistorySection({ token }) {
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center text-gray-500 text-sm">Сообщений по фильтрам не найдено</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto admin-resp-table-wrap">
+            <table className="admin-resp-table w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900/40 text-left">
                 <tr>
                   <th className="px-3 py-2 font-semibold text-gray-600 dark:text-gray-300">Телефон</th>
@@ -269,20 +269,20 @@ export default function SmsHistorySection({ token }) {
               <tbody>
                 {filtered.slice(0, 500).map(m => (
                   <tr key={`${m._campaign_id}_${m.id}`} className="border-t border-gray-100 dark:border-gray-700">
-                    <td className="px-3 py-2 font-mono text-xs">{m.phone}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 max-w-xs truncate" title={m.body || m.text}>
+                    <td data-label="Телефон" className="px-3 py-2 font-mono text-xs">{m.phone}</td>
+                    <td data-label="Текст" className="px-3 py-2 text-xs text-gray-600 dark:text-gray-300 max-w-xs truncate" title={m.body || m.text}>
                       {m.body || m.text || '—'}
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{m._campaign_name}</td>
-                    <td className="px-3 py-2">
+                    <td data-label="Кампания" className="px-3 py-2 text-xs text-gray-500">{m._campaign_name}</td>
+                    <td data-label="Статус" className="px-3 py-2">
                       <span className={`inline-flex text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_COLOR[m.status] || 'bg-gray-100 text-gray-500'}`}>
                         {STATUS_LABEL[m.status] || m.status || '—'}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{m.provider || '—'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{fmt(m.sent_at)}</td>
-                    <td className="px-3 py-2 text-xs text-gray-500">{fmt(m.delivered_at)}</td>
-                    <td className="px-3 py-2 text-xs text-red-500">{m.error || ''}</td>
+                    <td data-label="Провайдер" className="px-3 py-2 text-xs text-gray-500">{m.provider || '—'}</td>
+                    <td data-label="Отправлено" className="px-3 py-2 text-xs text-gray-500">{fmt(m.sent_at)}</td>
+                    <td data-label="Доставлено" className="px-3 py-2 text-xs text-gray-500">{fmt(m.delivered_at)}</td>
+                    <td data-label="Ошибка" className="px-3 py-2 text-xs text-red-500">{m.error || ''}</td>
                   </tr>
                 ))}
               </tbody>

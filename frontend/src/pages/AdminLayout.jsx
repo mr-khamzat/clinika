@@ -6332,8 +6332,8 @@ function SuperAdminSection({ token }) {
       {/* Tab: Тенанты */}
       {!loading && tab === 'tenants' && (
         <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+          <div className="overflow-x-auto admin-resp-table-wrap">
+            <table className="admin-resp-table min-w-full divide-y divide-gray-100 dark:divide-gray-800">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   {['Тенант','Slug','План','Подписка','Клиники','Польз.','Статус','Действия'].map(h => (
@@ -6344,24 +6344,24 @@ function SuperAdminSection({ token }) {
               <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                 {tenants.map(t => (
                   <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-4 py-3 font-medium text-gray-900 dark:text-white text-sm">{t.name}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500 font-mono">{t.slug}</td>
-                    <td className="px-4 py-3">
+                    <td data-label="Тенант" className="px-4 py-3 font-medium text-gray-900 dark:text-white text-sm">{t.name}</td>
+                    <td data-label="Slug" className="px-4 py-3 text-xs text-gray-500 font-mono">{t.slug}</td>
+                    <td data-label="План" className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[t.plan] || 'bg-gray-100'}`}>{t.plan || '—'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Подписка" className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[t.subscription_status] || 'bg-gray-100'}`}>{t.subscription_status || '—'}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
-                    <td className="px-4 py-3">
+                    <td data-label="Клиники" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
+                    <td data-label="Польз." className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
+                    <td data-label="Статус" className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {t.is_active ? 'Активен' : 'Откл.'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td data-label="Действия" className="px-4 py-3">
                       <button onClick={() => setDrawerTenant(t)}
-                        className="flex items-center gap-1 text-xs text-[#0097A7] hover:text-[#00838f] font-semibold transition">
+                        className="admin-tap-44 flex items-center gap-1 text-xs text-[#0097A7] hover:text-[#00838f] font-semibold transition px-2 py-2">
                         Открыть
                         <span className="material-symbols-outlined text-[14px]">chevron_right</span>
                       </button>
@@ -6385,8 +6385,8 @@ function SuperAdminSection({ token }) {
             <p className="text-xs text-gray-400 mt-1">{billing.subscriptions_count} подписок</p>
           </div>
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100 dark:divide-gray-800">
+            <div className="overflow-x-auto admin-resp-table-wrap">
+              <table className="admin-resp-table min-w-full divide-y divide-gray-100 dark:divide-gray-800">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     {['Тенант','План','Статус','Сумма/период','Конец периода','Trial до','Создан'].map(h => (
@@ -6397,13 +6397,13 @@ function SuperAdminSection({ token }) {
                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {billing.subscriptions.map(s => (
                     <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                      <td className="px-3 py-3 font-medium text-gray-900 dark:text-white text-sm">{s.tenant_name}</td>
-                      <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[s.plan] || ''}`}>{s.plan}</span></td>
-                      <td className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s.status] || ''}`}>{s.status}</span></td>
-                      <td className="px-3 py-3 text-sm font-mono">{s.amount_per_period.toLocaleString('ru-RU')} ₽</td>
-                      <td className="px-3 py-3 text-sm text-gray-500">{s.current_period_end}</td>
-                      <td className="px-3 py-3 text-sm text-gray-500">{s.trial_ends_at ? s.trial_ends_at.slice(0,10) : '—'}</td>
-                      <td className="px-3 py-3 text-xs text-gray-400">{s.created_at.slice(0,10)}</td>
+                      <td data-label="Тенант" className="px-3 py-3 font-medium text-gray-900 dark:text-white text-sm">{s.tenant_name}</td>
+                      <td data-label="План" className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[s.plan] || ''}`}>{s.plan}</span></td>
+                      <td data-label="Статус" className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s.status] || ''}`}>{s.status}</span></td>
+                      <td data-label="Сумма/период" className="px-3 py-3 text-sm font-mono">{s.amount_per_period.toLocaleString('ru-RU')} ₽</td>
+                      <td data-label="Конец периода" className="px-3 py-3 text-sm text-gray-500">{s.current_period_end}</td>
+                      <td data-label="Trial до" className="px-3 py-3 text-sm text-gray-500">{s.trial_ends_at ? s.trial_ends_at.slice(0,10) : '—'}</td>
+                      <td data-label="Создан" className="px-3 py-3 text-xs text-gray-400">{s.created_at.slice(0,10)}</td>
                     </tr>
                   ))}
                 </tbody>

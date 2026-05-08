@@ -368,8 +368,8 @@ function SummaryTab({ summary, loading, p }) {
             Нет данных за выбранный период
           </div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div className="admin-resp-table-wrap" style={{ overflowX: 'auto' }}>
+            <table className="admin-resp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: p.tableTh }}>
                   {['Тип операции', 'Направление', 'Сумма', 'Кол-во'].map(h => (
@@ -384,10 +384,10 @@ function SummaryTab({ summary, loading, p }) {
               <tbody>
                 {bdRows.map((row, i) => (
                   <tr key={i} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
-                    <td style={{ padding: '10px 14px', color: p.text1, borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Тип операции" style={{ padding: '10px 14px', color: p.text1, borderBottom: `1px solid ${p.border}` }}>
                       {row.label}
                     </td>
-                    <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Направление" style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
                       <span style={{
                         padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
                         background: row.direction === 'credit' ? '#d1fae5' : '#fee2e2',
@@ -396,13 +396,13 @@ function SummaryTab({ summary, loading, p }) {
                         {row.direction === 'credit' ? 'Кредит' : 'Дебет'}
                       </span>
                     </td>
-                    <td style={{
+                    <td data-label="Сумма" style={{
                       padding: '10px 14px', color: row.direction === 'credit' ? p.green : p.errText,
                       fontWeight: 600, borderBottom: `1px solid ${p.border}`,
                     }}>
                       {rub(row.amount)}
                     </td>
-                    <td style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Кол-во" style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
                       {row.count}
                     </td>
                   </tr>
@@ -421,8 +421,8 @@ function SummaryTab({ summary, loading, p }) {
           <div style={{ fontSize: 15, fontWeight: 600, color: p.text1, marginBottom: 16 }}>
             Разбивка по модулям
           </div>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div className="admin-resp-table-wrap" style={{ overflowX: 'auto' }}>
+            <table className="admin-resp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ background: p.tableTh }}>
                   {['Модуль', 'Категория', 'Тип', 'Направление', 'Сумма'].map(h => (
@@ -437,10 +437,10 @@ function SummaryTab({ summary, loading, p }) {
               <tbody>
                 {summary.module_breakdown.map((row, i) => (
                   <tr key={i} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
-                    <td style={{ padding: '10px 14px', color: p.text1, fontWeight: 600, borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Модуль" style={{ padding: '10px 14px', color: p.text1, fontWeight: 600, borderBottom: `1px solid ${p.border}` }}>
                       {row.module_name}
                     </td>
-                    <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Категория" style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
                       <span style={{
                         padding: '2px 8px', borderRadius: 20, fontSize: 11,
                         background: p.pillBg, color: p.text2, fontWeight: 600,
@@ -450,10 +450,10 @@ function SummaryTab({ summary, loading, p }) {
                          row.category === 'advertising' ? 'Реклама' : row.category}
                       </span>
                     </td>
-                    <td style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Тип" style={{ padding: '10px 14px', color: p.text2, borderBottom: `1px solid ${p.border}` }}>
                       {ENTRY_LABELS[row.entry_type] || row.entry_type}
                     </td>
-                    <td style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
+                    <td data-label="Направление" style={{ padding: '10px 14px', borderBottom: `1px solid ${p.border}` }}>
                       <span style={{
                         padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
                         background: row.direction === 'credit' ? '#d1fae5' : '#fee2e2',
@@ -462,7 +462,7 @@ function SummaryTab({ summary, loading, p }) {
                         {row.direction === 'credit' ? 'Кредит' : 'Дебет'}
                       </span>
                     </td>
-                    <td style={{
+                    <td data-label="Сумма" style={{
                       padding: '10px 14px',
                       color: row.direction === 'credit' ? p.green : '#ef4444',
                       fontWeight: 700, borderBottom: `1px solid ${p.border}`,
@@ -553,8 +553,8 @@ function JournalTab({ token, days, p }) {
           Нет записей за период · включите модули или выставьте счёт для появления данных
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <div className="admin-resp-table-wrap" style={{ overflowX: 'auto' }}>
+          <table className="admin-resp-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: p.tableTh }}>
                 {['Дата', 'Тип', 'Описание', 'Направление', 'Сумма'].map(h => (
@@ -568,10 +568,10 @@ function JournalTab({ token, days, p }) {
             <tbody>
               {entries.map((row, i) => (
                 <tr key={row.id} style={{ background: i % 2 === 1 ? p.tableRowAlt : 'transparent' }}>
-                  <td style={{ padding: '9px 14px', color: p.text3, borderBottom: `1px solid ${p.border}`, whiteSpace: 'nowrap' }}>
+                  <td data-label="Дата" style={{ padding: '9px 14px', color: p.text3, borderBottom: `1px solid ${p.border}`, whiteSpace: 'nowrap' }}>
                     {fmtDate(row.created_at)}
                   </td>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
+                  <td data-label="Тип" style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
                     <span style={{
                       background: p.pillBg, color: p.text2,
                       padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
@@ -579,10 +579,10 @@ function JournalTab({ token, days, p }) {
                       {ENTRY_LABELS[row.entry_type] || row.entry_type}
                     </span>
                   </td>
-                  <td style={{ padding: '9px 14px', color: p.text1, borderBottom: `1px solid ${p.border}`, maxWidth: 260 }}>
+                  <td data-label="Описание" style={{ padding: '9px 14px', color: p.text1, borderBottom: `1px solid ${p.border}`, maxWidth: 260 }}>
                     {row.description || '—'}
                   </td>
-                  <td style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
+                  <td data-label="Направление" style={{ padding: '9px 14px', borderBottom: `1px solid ${p.border}` }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 600,
                       background: row.direction === 'credit' ? '#d1fae5' : '#fee2e2',
@@ -591,7 +591,7 @@ function JournalTab({ token, days, p }) {
                       {row.direction === 'credit' ? '↑ Кредит' : '↓ Дебет'}
                     </span>
                   </td>
-                  <td style={{
+                  <td data-label="Сумма" style={{
                     padding: '9px 14px', fontWeight: 700,
                     color: row.direction === 'credit' ? p.green : '#ef4444',
                     borderBottom: `1px solid ${p.border}`,
