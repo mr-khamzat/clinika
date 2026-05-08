@@ -228,7 +228,7 @@ function EventRow({ e }) {
 
 // ── Главный компонент ─────────────────────────────────────────────────────
 export default function AuditLogSection({ token }) {
-  const [tab, setTab] = useState('feed') // 'feed' | 'search'
+  const [tab, setTab] = useState('feed')
 
   return (
     <div>
@@ -239,6 +239,7 @@ export default function AuditLogSection({ token }) {
           items={[
             { id: 'feed',   label: 'Лента' },
             { id: 'tenants', label: 'По тенантам' },
+            { id: 'violations', label: 'Нарушения регионов' },
             { id: 'search', label: 'Поиск' },
           ]}
         />
@@ -246,6 +247,7 @@ export default function AuditLogSection({ token }) {
 
       {tab === 'feed'    && <FeedTab token={token} />}
       {tab === 'tenants' && <TenantsGeoTab token={token} />}
+      {tab === 'violations' && <RegionViolationsTab token={token} />}
       {tab === 'search'  && <SearchTab token={token} />}
     </div>
   )
@@ -547,7 +549,15 @@ function TenantsGeoTab({ token }) {
             // Топ-регион для определения «основного» — что бы подсветить если события из других
             const mainRegion = t.regions[0]
             return (
-              <Card key={t.tenant_id || 'null'} style={{ padding: 16 }}>
+              <Card
+                key={t.tenant_id || 'null'}
+                style={{
+                  padding: 16,
+                  // Подсветка карточки рамкой если есть нарушения региона
+                  borderColor: t.violations_count > 0 ? 'oklch(0.65 0.20 25)' : undefined,
+                  borderWidth: t.violations_count > 0 ? 2 : undefined,
+                }}
+              >
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--fg)' }}>
@@ -558,11 +568,38 @@ function TenantsGeoTab({ token }) {
                         /{t.tenant_slug}
                       </div>
                     )}
+                    {/* Region Lock — разрешённый регион франшизы */}
+                    {t.allowed_region && (
+                      <div className="flex items-center gap-1 mt-1.5" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 13 }}>shield_locked</span>
+                        <span>Регион: <b style={{ color: 'var(--fg-2)' }}>{t.allowed_region}</b></span>
+                        {t.region_strict && (
+                          <span style={{ marginLeft: 4, fontSize: 9.5, padding: '1px 4px', borderRadius: 3, background: 'oklch(0.93 0.07 25)', color: 'oklch(0.40 0.18 25)' }}>
+                            STRICT
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <Chip variant="default">
-                    <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4, verticalAlign: -2 }}>history</span>
-                    {t.events_count}
-                  </Chip>
+                  <div className="flex flex-col items-end gap-1">
+                    <Chip variant="default">
+                      <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4, verticalAlign: -2 }}>history</span>
+                      {t.events_count}
+                    </Chip>
+                    {t.violations_count > 0 && (
+                      <Chip
+                        variant="default"
+                        style={{
+                          background: 'oklch(0.93 0.07 25)',
+                          color: 'oklch(0.40 0.18 25)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, marginRight: 4, verticalAlign: -2 }}>gpp_bad</span>
+                        {t.violations_count} наруш.
+                      </Chip>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3 mb-3" style={{ fontSize: 11.5, color: 'var(--fg-3)' }}>
@@ -576,13 +613,23 @@ function TenantsGeoTab({ token }) {
                       <span>{relativeTime(t.last_event_at)}</span>
                     </div>
                   )}
+                  {t.out_of_region_events > 0 && (
+                    <div className="flex items-center gap-1" style={{ color: 'oklch(0.55 0.18 25)' }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>my_location</span>
+                      <span>{t.out_of_region_events} вне зоны</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
                   <div style={{ fontSize: 11, color: 'var(--fg-3)', marginBottom: 8 }}>Регионы</div>
                   <div className="space-y-1.5">
                     {t.regions.map((r, i) => {
-                      const isOther = i > 0 && mainRegion && r.region !== mainRegion.region
+                      // Если у франшизы задан allowed_region — используем серверный флаг,
+                      // иначе фолбэк на старую эвристику «не топовый регион».
+                      const isOther = t.allowed_region
+                        ? !!r.out_of_region
+                        : (i > 0 && mainRegion && r.region !== mainRegion.region)
                       const pct = mainRegion ? (r.count / mainRegion.count) * 100 : 0
                       return (
                         <div key={i}>
@@ -844,6 +891,181 @@ function SearchTab({ token }) {
           </div>
         )}
       </Card>
+    </div>
+  )
+}
+
+// ─── Вкладка «Нарушения регионов» — Region Lock ───────────────────────────
+function RegionViolationsTab({ token }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [days, setDays] = useState(30)
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr('')
+    try {
+      const r = await api.get('/audit/region-violations', { params: { days, limit: 500 } })
+      setItems(Array.isArray(r.data?.items) ? r.data.items : [])
+    } catch (e) {
+      setErr('Не удалось загрузить нарушения')
+      setItems([])
+    } finally {
+      setLoading(false)
+    }
+  }, [days])
+
+  useEffect(() => { load() }, [load])
+
+  // Сводка по франшизам — сколько нарушений у каждой
+  const summary = useMemo(() => {
+    const byFr = new Map()
+    for (const v of items) {
+      const k = v.franchise_id || v.tenant_id || 'unknown'
+      const name = v.franchise_name || v.tenant_name || 'Без франшизы'
+      const cur = byFr.get(k) || { name, count: 0, allowed: v.allowed_region, last: null }
+      cur.count += 1
+      if (!cur.last || v.created_at > cur.last) cur.last = v.created_at
+      byFr.set(k, cur)
+    }
+    return Array.from(byFr.values()).sort((a, b) => b.count - a.count)
+  }, [items])
+
+  return (
+    <div className="space-y-4">
+      <Card style={{ padding: 12 }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Период</div>
+          <Tabs
+            value={String(days)}
+            onChange={(v) => setDays(Number(v))}
+            items={[
+              { id: '7',   label: '7 дн' },
+              { id: '30',  label: '30 дн' },
+              { id: '90',  label: '90 дн' },
+              { id: '365', label: '1 год' },
+            ]}
+          />
+          <div style={{ flex: 1 }} />
+          <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+            Всего: <b style={{ color: 'var(--fg)' }}>{items.length}</b>
+          </div>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, marginRight: 4 }}>refresh</span>
+            Обновить
+          </Button>
+        </div>
+      </Card>
+
+      {/* Сводка по франшизам */}
+      {summary.length > 0 && (
+        <Card style={{ padding: 14 }}>
+          <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 8 }}>
+            Сводка по франшизам
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {summary.map((s, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: 10,
+                  borderRadius: 8,
+                  background: 'oklch(0.96 0.04 25)',
+                  border: '1px solid oklch(0.85 0.08 25)',
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'oklch(0.40 0.18 25)' }}>
+                  {s.name}
+                </div>
+                <div style={{ fontSize: 11, color: 'oklch(0.45 0.12 25)', marginTop: 2 }}>
+                  Разрешён: {s.allowed || '—'} · {s.count} наруш.
+                </div>
+                {s.last && (
+                  <div style={{ fontSize: 10.5, color: 'var(--fg-4)', marginTop: 2 }}>
+                    Последнее: {relativeTime(s.last)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {loading && (
+        <Card style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)', fontSize: 13 }}>
+          Загрузка…
+        </Card>
+      )}
+      {err && (
+        <Card style={{ padding: 24, textAlign: 'center', color: 'oklch(0.55 0.18 25)', fontSize: 13 }}>
+          {err}
+        </Card>
+      )}
+
+      {!loading && !err && items.length === 0 && (
+        <EmptyState
+          icon={<span className="material-symbols-outlined">verified_user</span>}
+          title="Нарушений нет"
+          message="За выбранный период ни одна франшиза не выходила за границы своего региона."
+        />
+      )}
+
+      {!loading && !err && items.length > 0 && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          {items.map((v) => (
+            <div
+              key={v.id}
+              style={{
+                display: 'flex',
+                gap: 12,
+                padding: '10px 14px',
+                borderBottom: '1px solid var(--border)',
+                fontSize: 12.5,
+              }}
+            >
+              <div style={{ minWidth: 130, color: 'var(--fg-3)', fontFamily: 'monospace', fontSize: 11 }}>
+                {v.created_at ? new Date(v.created_at).toLocaleString('ru-RU') : '—'}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, color: 'var(--fg)' }}>
+                  {v.franchise_name || v.tenant_name || 'Без франшизы'}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                  Разрешён: <b>{v.allowed_region || '—'}</b>
+                  {' → '}
+                  Обнаружен:{' '}
+                  <b style={{ color: 'oklch(0.40 0.18 25)' }}>
+                    {v.detected_region || '?'}
+                    {v.detected_city ? ` / ${v.detected_city}` : ''}
+                  </b>
+                  {v.detected_country ? `, ${v.detected_country}` : ''}
+                </div>
+                {(v.original_action || v.actor_name) && (
+                  <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 2, fontFamily: 'monospace' }}>
+                    {v.original_action && <span>{v.original_action}</span>}
+                    {v.actor_name && <span> · {v.actor_name}</span>}
+                    {v.ip_address && <span> · {v.ip_address}</span>}
+                  </div>
+                )}
+              </div>
+              {v.region_strict && (
+                <Chip
+                  variant="default"
+                  style={{
+                    background: 'oklch(0.93 0.07 25)',
+                    color: 'oklch(0.40 0.18 25)',
+                    fontSize: 10,
+                    height: 20,
+                    alignSelf: 'flex-start',
+                  }}
+                >
+                  STRICT
+                </Chip>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
     </div>
   )
 }

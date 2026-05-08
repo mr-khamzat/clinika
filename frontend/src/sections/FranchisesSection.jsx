@@ -52,6 +52,9 @@ const EMPTY_FORM = {
   contact_phone: '',
   brand_color: '#7c3aed',
   notes: '',
+  // Region Lock — географический контроль франшизы
+  allowed_region: '',
+  region_strict: false,
 }
 
 const EMPTY_OWNER_FORM = {
@@ -130,6 +133,8 @@ export default function FranchisesSection({ token }) {
       contact_phone: it.contact_phone || '',
       brand_color: it.brand_color || '#7c3aed',
       notes: it.notes || '',
+      allowed_region: it.allowed_region || '',
+      region_strict: !!it.region_strict,
     })
     setSlugManual(true)
     setShowForm(true)
@@ -179,6 +184,9 @@ export default function FranchisesSection({ token }) {
         contact_phone: form.contact_phone.trim() || null,
         brand_color: form.brand_color || null,
         notes: form.notes.trim() || null,
+        // Region Lock — пустое значение трактуется бэком как «снять регион»
+        allowed_region: form.allowed_region.trim() || '',
+        region_strict: !!form.region_strict,
       }
       if (editing) {
         await apiFetch('patch', `/admin/franchises/${editing.id}`, token, body)
@@ -289,6 +297,19 @@ export default function FranchisesSection({ token }) {
                   {it.owner_full_name || <span className="text-gray-400 italic">— владелец не назначен —</span>}
                 </span>
               </div>
+
+              {/* Region Lock — разрешённый регион */}
+              {it.allowed_region && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="material-symbols-outlined text-sm text-violet-500">shield_locked</span>
+                  <span className="text-violet-700 dark:text-violet-300 font-medium">{it.allowed_region}</span>
+                  {it.region_strict && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">
+                      STRICT
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Контакты */}
               {(it.contact_email || it.contact_phone) && (
@@ -465,6 +486,47 @@ export default function FranchisesSection({ token }) {
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Заметки</label>
                 <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3}
                   className="w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm resize-none" />
+              </div>
+
+              {/* ── Region Lock — географический контроль ─────────────────────── */}
+              <div className="rounded-xl border border-violet-200 dark:border-violet-800/40 bg-violet-50/50 dark:bg-violet-900/10 p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-violet-600 dark:text-violet-400 text-base">shield_locked</span>
+                  <div>
+                    <div className="text-sm font-semibold text-violet-900 dark:text-violet-200">Region Lock</div>
+                    <div className="text-[11px] text-violet-700/70 dark:text-violet-300/70">
+                      Если заполнено — выход за пределы региона будет фиксироваться в аудите и слать алерт владельцу платформы.
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    Разрешённый регион
+                  </label>
+                  <input
+                    type="text"
+                    value={form.allowed_region}
+                    onChange={e => set('allowed_region', e.target.value)}
+                    placeholder="например: Ingushetia, Чеченская Республика, RU-IN"
+                    className="w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm"
+                  />
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                    Сравнение с geo_region из IP пользователя. Пустое значение — проверки выключены.
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!form.region_strict}
+                    onChange={e => set('region_strict', e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Строгий режим (Phase 2 — блокировать действия вне региона)
+                  </span>
+                </label>
               </div>
 
               <div className="flex gap-2 mt-2">

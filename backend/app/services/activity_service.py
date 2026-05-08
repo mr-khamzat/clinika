@@ -78,3 +78,23 @@ async def log_activity(
         geo_city=geo.get('city'),
     )
     db.add(log_entry)
+
+    # Region Lock — параллельно фиксируем нарушение если geo_region не совпадает
+    # с franchise.allowed_region. Хелпер сам пишет AuditEntry + Telegram алерт.
+    try:
+        tenant_id = getattr(user, "tenant_id", None) if user else None
+        if tenant_id:
+            from app.services import region_lock_service
+            await region_lock_service.check_violation(
+                db,
+                tenant_id=tenant_id,
+                geo_region=geo.get('region'),
+                geo_country_name=geo.get('country_name'),
+                geo_city=geo.get('city'),
+                ip_address=ip,
+                original_action=action,
+                actor_id=getattr(user, "id", None) if user else None,
+                actor_name=getattr(user, "full_name", None) if user else None,
+            )
+    except Exception:
+        pass

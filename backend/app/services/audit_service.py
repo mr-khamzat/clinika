@@ -38,6 +38,9 @@ class AuditAction:
     # Реестр
     LEDGER_ADJUSTED   = "ledger.adjusted"
 
+    # Region Lock — нарушение разрешённого региона франшизы
+    REGION_VIOLATION  = "region.violation"
+
     # Скидки / партнёры
     DISCOUNT_CREATED  = "discount.created"
     DISCOUNT_UPDATED  = "discount.updated"
@@ -118,6 +121,25 @@ async def write(
     )
     db.add(entry)
     await db.flush()
+
+    # Region Lock — после основной записи проверяем попадает ли событие
+    # в разрешённый регион франшизы. Все исключения внутри хелпера глотаются.
+    if action != "region.violation":
+        try:
+            from app.services import region_lock_service
+            await region_lock_service.check_violation(
+                db,
+                tenant_id=tenant_id,
+                geo_region=(geo or {}).get("region"),
+                geo_country_name=(geo or {}).get("country_name"),
+                geo_city=(geo or {}).get("city"),
+                ip_address=ip,
+                original_action=action,
+                actor_id=actor_id,
+                actor_name=actor_name,
+            )
+        except Exception:
+            pass
     return entry
 
 

@@ -53,6 +53,17 @@ class Franchise(Base):
     last_invoice_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # ── Region Lock (географический контроль франшизы) ─────────────────────────
+    # Регион, в котором франшиза имеет право работать (например "Ingushetia",
+    # "Чеченская Республика", "RU-IN"). NULL — проверки выключены.
+    # Сравнение делается с geo_region из GeoLite2-City по IP пользователя.
+    allowed_region: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    # False — только алерт владельцу платформы (Phase 1, по умолчанию).
+    # True — нарушение блокирует действие (Phase 2, пока не задействовано).
+    region_strict: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+
     # ── Onboarding wizard (W4) ─────────────────────────────────────────────────
     # Состояние пошагового мастера для нового franchise_owner. После завершения
     # `onboarding_done=True` — кабинет открывается в обычном режиме.

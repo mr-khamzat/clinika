@@ -332,7 +332,9 @@ async def get_by_tenant_geo(
     from app.models.audit import AuditEntry
     from app.models.activity_log import ActivityLog
     from app.models.tenant import Tenant
+    from app.models.franchise import Franchise
     from app.models.user import UserRole
+    from app.services.region_lock_service import _matches as _region_matches
 
     cutoff = datetime.utcnow() - timedelta(days=days)
     is_superadmin = current_user.role == UserRole.SUPER_ADMIN
@@ -357,11 +359,20 @@ async def get_by_tenant_geo(
         tenants_q = tenants_q.where(Tenant.id == current_user.tenant_id)
     tenant_map = {str(t.id): t for t in (await db.execute(tenants_q)).scalars().all()}
 
+    # Франшизы — для allowed_region/region_strict (для каждого тенанта берём через franchise_id)
+    franchise_map: dict[str, Franchise] = {}
+    franchise_ids = {t.franchise_id for t in tenant_map.values() if t.franchise_id}
+    if franchise_ids:
+        franchise_rows = (
+            await db.execute(select(Franchise).where(Franchise.id.in_(franchise_ids)))
+        ).scalars().all()
+        franchise_map = {str(f.id): f for f in franchise_rows}
+
     # Агрегация по тенанту
     by_tenant: dict[str, dict] = {}
     NULL_KEY = '__null__'
 
-    def add_event(tenant_id, ip, geo_country, geo_country_name, geo_region, geo_city, ts):
+    def add_event(tenant_id, ip, geo_country, geo_country_name, geo_region, geo_city, ts, action=None):
         key = str(tenant_id) if tenant_id else NULL_KEY
         bucket = by_tenant.setdefault(key, {
             'tenant_id': str(tenant_id) if tenant_id else None,
@@ -370,6 +381,8 @@ async def get_by_tenant_geo(
             'unique_ips': set(),
             'last_event_at': None,
             'regions': {},
+            'violations_count': 0,
+            'last_violation_at': None,
         })
         bucket['events_count'] += 1
         if ip:
@@ -383,9 +396,17 @@ async def get_by_tenant_geo(
             'region': geo_region, 'city': geo_city, 'count': 0,
         })
         rbucket['count'] += 1
+        # Подсчёт нарушений region.violation
+        if action == "region.violation":
+            bucket['violations_count'] += 1
+            if ts and (not bucket['last_violation_at'] or ts > bucket['last_violation_at']):
+                bucket['last_violation_at'] = ts
 
     for e in audit_rows:
-        add_event(e.tenant_id, e.ip_address, e.geo_country, e.geo_country_name, e.geo_region, e.geo_city, e.created_at)
+        add_event(
+            e.tenant_id, e.ip_address, e.geo_country, e.geo_country_name,
+            e.geo_region, e.geo_city, e.created_at, action=e.action,
+        )
     for e in activity_rows:
         add_event(
             getattr(e, 'tenant_id', None),
@@ -402,16 +423,120 @@ async def get_by_tenant_geo(
     for key, b in by_tenant.items():
         tid = b['tenant_id']
         t = tenant_map.get(tid) if tid else None
+        franchise = None
+        if t and t.franchise_id:
+            franchise = franchise_map.get(str(t.franchise_id))
+        allowed_region = franchise.allowed_region if franchise else None
+        # Если allowed_region задан — пересчитаем violations через _matches:
+        # топовые регионы где geo_region не подпадает под allowed.
+        out_of_region_count = 0
+        if allowed_region:
+            for r in b['regions'].values():
+                if not _region_matches(r['region'], allowed_region):
+                    out_of_region_count += r['count']
         regions_list = sorted(b['regions'].values(), key=lambda r: r['count'], reverse=True)[:5]
+        # Помечаем регионы вне зоны разрешённой франшизы — для подсветки в UI
+        if allowed_region:
+            for r in regions_list:
+                r['out_of_region'] = not _region_matches(r['region'], allowed_region)
         out.append({
             'tenant_id': tid,
             'tenant_name': (t.name if t else None) or (t.slug if t else 'Без тенанта'),
             'tenant_slug': t.slug if t else None,
+            'franchise_id': str(franchise.id) if franchise else None,
+            'franchise_name': franchise.name if franchise else None,
+            'allowed_region': allowed_region,
+            'region_strict': franchise.region_strict if franchise else False,
             'events_count': b['events_count'],
             'unique_ips': len(b['unique_ips']),
             'last_event_at': b['last_event_at'].isoformat() if b['last_event_at'] else None,
             'regions': regions_list,
+            'violations_count': b['violations_count'],
+            'out_of_region_events': out_of_region_count,
+            'last_violation_at': b['last_violation_at'].isoformat() if b['last_violation_at'] else None,
         })
 
-    out.sort(key=lambda x: x['events_count'], reverse=True)
+    out.sort(key=lambda x: (x['violations_count'], x['events_count']), reverse=True)
     return {'total_tenants': len(out), 'days': days, 'tenants': out}
+
+
+@router.get("/region-violations")
+async def list_region_violations(
+    days: int = Query(30, ge=1, le=365),
+    limit: int = Query(200, ge=1, le=1000),
+    tenant_id: uuid.UUID | None = Query(None),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Лента событий action='region.violation' за период.
+
+    Возвращает по каждому событию: when, tenant, franchise, allowed_region,
+    detected_region/city/country, original_action, IP, actor.
+    Только super_admin видит все тенанты, manager — только свой.
+    """
+    from datetime import timedelta
+    from app.models.audit import AuditEntry
+    from app.models.tenant import Tenant
+    from app.models.franchise import Franchise
+    from app.models.user import UserRole
+
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    is_superadmin = current_user.role == UserRole.SUPER_ADMIN
+
+    q = (
+        select(AuditEntry)
+        .where(AuditEntry.action == "region.violation")
+        .where(AuditEntry.created_at >= cutoff)
+        .order_by(AuditEntry.created_at.desc())
+        .limit(limit)
+    )
+    if tenant_id is not None:
+        q = q.where(AuditEntry.tenant_id == tenant_id)
+    if not is_superadmin and current_user.tenant_id:
+        q = q.where(AuditEntry.tenant_id == current_user.tenant_id)
+    rows = (await db.execute(q)).scalars().all()
+
+    # Подгружаем имена тенантов и франшиз батчем
+    tenant_ids = {r.tenant_id for r in rows if r.tenant_id}
+    tenant_map: dict[str, Tenant] = {}
+    franchise_map: dict[str, Franchise] = {}
+    if tenant_ids:
+        tenants = (
+            await db.execute(select(Tenant).where(Tenant.id.in_(tenant_ids)))
+        ).scalars().all()
+        tenant_map = {str(t.id): t for t in tenants}
+        franchise_ids = {t.franchise_id for t in tenants if t.franchise_id}
+        if franchise_ids:
+            franchises = (
+                await db.execute(select(Franchise).where(Franchise.id.in_(franchise_ids)))
+            ).scalars().all()
+            franchise_map = {str(f.id): f for f in franchises}
+
+    items = []
+    for e in rows:
+        after = e.after or {}
+        t = tenant_map.get(str(e.tenant_id)) if e.tenant_id else None
+        f = (
+            franchise_map.get(str(t.franchise_id))
+            if (t and t.franchise_id) else None
+        )
+        items.append({
+            'id': str(e.id),
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+            'tenant_id': str(e.tenant_id) if e.tenant_id else None,
+            'tenant_name': t.name if t else None,
+            'franchise_id': str(f.id) if f else None,
+            'franchise_name': f.name if f else after.get('franchise_name'),
+            'allowed_region': (f.allowed_region if f else None) or after.get('allowed_region'),
+            'detected_region': e.geo_region or after.get('detected_region'),
+            'detected_city': e.geo_city or after.get('detected_city'),
+            'detected_country': e.geo_country_name or after.get('detected_country'),
+            'original_action': after.get('original_action'),
+            'region_strict': after.get('region_strict', False),
+            'ip_address': e.ip_address,
+            'actor_id': str(e.actor_id) if e.actor_id else None,
+            'actor_name': e.actor_name,
+            'comment': e.comment,
+        })
+
+    return {'total': len(items), 'days': days, 'items': items}

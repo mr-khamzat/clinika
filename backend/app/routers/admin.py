@@ -1387,6 +1387,9 @@ class FranchiseCreateRequest(BaseModel):
     brand_color: Optional[str] = None
     logo_url: Optional[str] = None
     notes: Optional[str] = None
+    # Region Lock — задаётся при создании франшизы (можно и потом через PATCH)
+    allowed_region: Optional[str] = Field(None, max_length=100)
+    region_strict: Optional[bool] = False
 
 
 class FranchiseUpdateRequest(BaseModel):
@@ -1399,6 +1402,9 @@ class FranchiseUpdateRequest(BaseModel):
     logo_url: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+    # Region Lock
+    allowed_region: Optional[str] = Field(None, max_length=100)
+    region_strict: Optional[bool] = None
 
 
 def _serialize_franchise(f: Franchise, owner: Optional[User], tenant_count: int, mrr_sum: float) -> dict:
@@ -1416,6 +1422,8 @@ def _serialize_franchise(f: Franchise, owner: Optional[User], tenant_count: int,
         "logo_url": f.logo_url,
         "notes": f.notes,
         "is_active": f.is_active,
+        "allowed_region": f.allowed_region,
+        "region_strict": f.region_strict,
         "tenant_count": tenant_count,
         "mrr_sum": mrr_sum,
         "created_at": f.created_at.isoformat() if f.created_at else None,
@@ -1517,6 +1525,8 @@ async def create_franchise(
         logo_url=body.logo_url,
         notes=body.notes,
         is_active=True,
+        allowed_region=body.allowed_region,
+        region_strict=bool(body.region_strict),
     )
     db.add(f)
     await db.commit()
@@ -1549,6 +1559,10 @@ async def update_franchise(
     if body.logo_url is not None: f.logo_url = body.logo_url
     if body.notes is not None: f.notes = body.notes
     if body.is_active is not None: f.is_active = body.is_active
+    # Region Lock — пустую строку трактуем как «снять регион» (NULL)
+    if body.allowed_region is not None:
+        f.allowed_region = body.allowed_region.strip() or None
+    if body.region_strict is not None: f.region_strict = body.region_strict
 
     if body.owner_user_id is not None and body.owner_user_id != f.owner_user_id:
         owner_r = await db.execute(select(User).where(User.id == body.owner_user_id))
