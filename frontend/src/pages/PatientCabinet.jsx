@@ -424,7 +424,7 @@ function LoginScreen({ onLogin, errorMsg }) {
           </button>
         </form>
       </div>
-      <p className="text-blue-300/60 text-xs mt-8">КлиникаСеть — современная медицина</p>
+      <p className="text-blue-300/60 text-xs mt-8">КлиникСеть — современная медицина</p>
     </div>
   )
 }

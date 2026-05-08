@@ -23,6 +23,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE, SLUG } from '../config'
+import { BrandLogo } from '../components/BrandLogo'
 
 // ===== БЛОК: SVG-иконки (без внешней либы) =====
 function Icon({ d, size = 18, stroke = 'currentColor' }) {
@@ -111,7 +112,7 @@ function LoginModal({ onClose }) {
       <div className="ks-modal-card">
         <button onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
         <div className="ks-modal-head">
-          <div className="ks-modal-mark">⚕</div>
+          <div className="ks-modal-mark"><BrandLogo size={56} /></div>
           <h2>Войти в систему</h2>
           <p>Роль определится автоматически</p>
         </div>
@@ -291,6 +292,7 @@ export default function Landing() {
   const [showLogin, setShowLogin] = useState(false)
   const [showContact, setShowContact] = useState(false)
   const [showCalc, setShowCalc] = useState(false)
+  const [billingPeriod, setBillingPeriod] = useState('monthly')
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeRole, setActiveRole] = useState('patient')
 
@@ -401,7 +403,7 @@ export default function Landing() {
       {/* ===== БЛОК: NAV (sticky, с burger-меню на мобиле) ===== */}
       <nav className="ks-nav">
         <div className="ks-nav-inner">
-          <a className="ks-nav-logo" href="#"><span className="ks-nav-mark">⚕</span>КлиникСеть</a>
+          <a className="ks-nav-logo" href="/"><BrandLogo size={32} className="ks-nav-mark-svg" />КлиникСеть</a>
           <div className="ks-nav-links">
             {[
               ['features', 'Возможности'],
@@ -442,42 +444,48 @@ export default function Landing() {
         )}
       </nav>
 
-      {/* ===== БЛОК: HERO (заголовок + CTA + AI-карточка) ===== */}
+      {/* ===== БЛОК: HERO (mesh-градиент + glassmorphism + AI-карточка) ===== */}
       <section className="ks-hero">
+        {/* Mesh-gradient orbs за hero для глубины */}
+        <div className="ks-hero-orbs" aria-hidden>
+          <div className="ks-hero-orb ks-hero-orb-1" />
+          <div className="ks-hero-orb ks-hero-orb-2" />
+          <div className="ks-hero-orb ks-hero-orb-3" />
+        </div>
         <div className="ks-hero-inner">
           <FadeIn>
             <div className="ks-eyebrow">
               <span className="ks-eyebrow-dot" />
-              SaaS-платформа для медицинских сетей
+              SaaS · работает в Чечне, Ингушетии, Дагестане
             </div>
             <h1 className="ks-hero-title">
-              КлиникСеть — платформа<br />
-              клиник <em>нового поколения</em>
+              Управляйте сетью клиник<br />
+              как <em>единым организмом</em>
             </h1>
             <p className="ks-hero-sub">
-              Запись, ЭМК, биллинг, AI-аналитика, бонусы и кабинеты для пациентов, врачей и управляющих —
-              без зоопарка интеграций. От одной клиники до федеральной сети.
+              ЭМК, расписание, телемедицина, бонусная система, AI-ассистент пациенту, биллинг
+              франшиз, аудит и геозащита — в одной платформе. Без зоопарка интеграций и
+              ежемесячных счетов от 7 разных вендоров.
             </p>
             <div className="ks-hero-actions">
               <button onClick={() => setShowContact(true)} className="ks-btn-primary">
-                Создать клинику <span aria-hidden>{ICONS.arrow}</span>
+                Запустить за 28 дней <span aria-hidden>{ICONS.arrow}</span>
               </button>
               <button onClick={() => setShowCalc(true)} className="ks-btn-secondary">
                 Калькулятор тарифа
               </button>
             </div>
-            {/* Calls download buttons (сохранены из старой версии) */}
             <div className="ks-hero-downloads">
               <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.23
+                {ICONS.download} Calls Windows · 1.0.23 (с AWG VPN)
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
-                {ICONS.download} Calls Mac 1.0.7
+                {ICONS.download} Calls macOS · Apple Silicon
               </a>
             </div>
             <div className="ks-hero-trust">
               <span className="ks-hero-stars">★★★★★</span>
-              <span>УЗ-1 · 152-ФЗ · 99.9% SLA · 222+ API-эндпоинтов</span>
+              <span>152-ФЗ · УЗ-1 · SLA 99.9% · 27 статей в Wiki · <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>обзор платформы</a></span>
             </div>
           </FadeIn>
 
@@ -517,13 +525,13 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== БЛОК: STATS STRIP ===== */}
+      {/* ===== БЛОК: STATS STRIP — реальные показатели ===== */}
       <div className="ks-stats">
         <div className="ks-stats-inner">
           {[
-            ['10+', 'клиник в продакшене'],
-            ['1.2 М', 'приёмов в год'],
-            ['222+', 'API-эндпоинтов'],
+            ['28 дн', 'от заявки до запуска'],
+            ['250+', 'API-эндпоинтов'],
+            ['10', 'ролей с разными правами'],
             ['99.9%', 'SLA платформы'],
           ].map(([n, l]) => (
             <div key={l}>
@@ -533,6 +541,34 @@ export default function Landing() {
           ))}
         </div>
       </div>
+
+      {/* ===== БЛОК: PROBLEMS — то с чем сталкиваются клиники ===== */}
+      <section className="ks-section" style={{ paddingTop: 64, paddingBottom: 32 }}>
+        <div className="ks-section-inner">
+          <header className="ks-section-head">
+            <div className="ks-section-eyebrow">Знакомо?</div>
+            <h2 className="ks-section-title">Что обычно тормозит сеть клиник</h2>
+          </header>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 32 }}>
+            {[
+              ['7 разных систем', 'МИС, CRM, Excel расписаний, мессенджеры, бухгалтерия, IP-телефония, Google Forms — данные в каждой по-своему. Никто не считает реальный LTV.'],
+              ['Регистратор не видит МИС', 'Пациент звонит, регистратор переключается между системами, теряет контекст. Очередь стоит, NPS падает.'],
+              ['Нет единого аудита', 'Кто отменил приём? Кто изменил цену услуги? Когда удалена запись? Узнаёте по жалобе пациента, а не из системы.'],
+              ['Франшизу не отследить', 'Купили право на регион — а они тайком работают в соседнем. Узнаёте через год, когда уже потеряли деньги.'],
+              ['Бонусы — на бумаге', 'Партнёрский трафик есть, но кто кому сколько должен — считаете в Excel вечером в субботу.'],
+              ['Пациенты теряются', 'Не пришёл повторно через 6 месяцев — значит, ушёл к конкуренту. Реактивации нет, рассылок нет.'],
+            ].map(([title, desc]) => (
+              <div key={title} className="ks-feature" style={{ background: 'oklch(0.98 0.02 25)', borderColor: 'oklch(0.92 0.05 25)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 18, lineHeight: 1, color: 'oklch(0.55 0.18 25)' }}>✕</span>
+                  <h3 className="ks-feature-title" style={{ margin: 0 }}>{title}</h3>
+                </div>
+                <p className="ks-feature-desc">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ===== БЛОК: ROLES (табы 3 ключевых + grid из 6 ролей) ===== */}
       <section id="roles" className="ks-section ks-roles">
@@ -646,7 +682,7 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== БЛОК: PRICING (3 плана из BillingService) ===== */}
+      {/* ===== БЛОК: PRICING (3 плана + toggle мес/год) ===== */}
       <section id="pricing" className="ks-section ks-pricing">
         <div className="ks-section-inner">
           <header className="ks-section-head">
@@ -655,25 +691,55 @@ export default function Landing() {
             <p className="ks-section-sub">
               Безлимитные пациенты, врачи и администраторы. Цена зависит только от количества клиник в сети.
             </p>
+            <div className="ks-billing-toggle" role="tablist">
+              <button
+                role="tab"
+                aria-selected={billingPeriod === 'monthly'}
+                onClick={() => setBillingPeriod('monthly')}
+                className={billingPeriod === 'monthly' ? 'is-active' : ''}
+              >Помесячно</button>
+              <button
+                role="tab"
+                aria-selected={billingPeriod === 'annual'}
+                onClick={() => setBillingPeriod('annual')}
+                className={billingPeriod === 'annual' ? 'is-active' : ''}
+              >На год <span className="ks-billing-save">−15%</span></button>
+            </div>
           </header>
           <div className="ks-pricing-grid">
-            {PLANS.map(p => (
-              <article key={p.tier} className={`ks-price-card ${p.featured ? 'is-featured' : ''}`}>
-                <div className="ks-price-tier">{p.tier}</div>
-                <div className="ks-price-name">{p.name}</div>
-                <div className="ks-price-desc">{p.desc}</div>
-                <div className="ks-price-amount">
-                  <strong>{p.price} ₽</strong>
-                  <span>{p.unit}</span>
-                </div>
-                <ul className="ks-price-list">
-                  {p.list.map(l => <li key={l}>{l}</li>)}
-                </ul>
-                <button onClick={() => setShowContact(true)} className="ks-price-cta">{p.cta}</button>
-              </article>
-            ))}
+            {PLANS.map(p => {
+              const monthly = parseInt(p.price.replace(/\s/g, ''), 10)
+              const annualPerMonth = Math.round(monthly * 0.85)
+              const showPrice = billingPeriod === 'annual' ? annualPerMonth.toLocaleString('ru-RU') : p.price
+              const annualTotal = (annualPerMonth * 12).toLocaleString('ru-RU')
+              return (
+                <article key={p.tier} className={`ks-price-card ${p.featured ? 'is-featured' : ''}`}>
+                  {p.featured && <div className="ks-price-badge">Популярный</div>}
+                  <div className="ks-price-tier">{p.tier}</div>
+                  <div className="ks-price-name">{p.name}</div>
+                  <div className="ks-price-desc">{p.desc}</div>
+                  <div className="ks-price-amount">
+                    <strong>{showPrice} ₽</strong>
+                    <span>{p.unit}</span>
+                  </div>
+                  {billingPeriod === 'annual' && (
+                    <div className="ks-price-annual-note">
+                      {annualTotal} ₽ за год при оплате авансом
+                    </div>
+                  )}
+                  <ul className="ks-price-list">
+                    {p.list.map(l => <li key={l}>{l}</li>)}
+                  </ul>
+                  <button onClick={() => setShowContact(true)} className="ks-price-cta">{p.cta}</button>
+                </article>
+              )
+            })}
           </div>
           <div className="ks-pricing-note">
+            <p style={{ fontSize: 13, color: 'var(--fg-3)', marginBottom: 16 }}>
+              Все тарифы включают <b>14 дней бесплатного теста</b> · отказ в любой момент · без скрытых комиссий.
+              Дополнительные модули (Telemedicine, AI-ассистент, Запись звонков) подключаются <a href="#modules">отдельно</a>.
+            </p>
             <button onClick={() => setShowCalc(true)} className="ks-btn-secondary">
               Открыть калькулятор тарифа {ICONS.arrow}
             </button>
@@ -822,7 +888,7 @@ export default function Landing() {
       <footer className="ks-footer">
         <div className="ks-footer-inner">
           <div className="ks-footer-col">
-            <a className="ks-nav-logo" href="#"><span className="ks-nav-mark">⚕</span>КлиникСеть</a>
+            <a className="ks-nav-logo" href="/"><BrandLogo size={32} className="ks-nav-mark-svg" />КлиникСеть</a>
             <p className="ks-footer-tagline">
               SaaS-платформа для медицинских сетей. Запись, ЭМК, биллинг, аналитика и кабинеты для всех ролей.
             </p>
@@ -1007,12 +1073,11 @@ a { color: inherit; text-decoration: none; }
   display: flex; align-items: center; gap: 10px;
   font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
 }
-.ks-nav-mark {
-  width: 30px; height: 30px; border-radius: 9px;
-  background: linear-gradient(140deg, var(--accent), oklch(0.55 0.16 200));
-  display: grid; place-items: center;
-  color: #fff; font-weight: 700; font-size: 14px;
-  box-shadow: 0 4px 10px oklch(0.55 0.16 240 / 0.3);
+/* SVG-логотип в навигации/футере (== favicon.svg, BrandLogo компонент) */
+.ks-nav-mark-svg {
+  flex-shrink: 0;
+  border-radius: 7px;
+  box-shadow: 0 4px 10px oklch(0.55 0.16 240 / 0.25);
 }
 .ks-nav-links { display: flex; gap: 4px; margin-left: auto; }
 .ks-nav-link {
@@ -1048,14 +1113,45 @@ a { color: inherit; text-decoration: none; }
 }
 .ks-nav-mobile-link:hover { background: var(--bg-2); color: var(--fg); }
 
-/* === HERO === */
+/* === HERO с mesh-gradient orbs === */
 .ks-hero {
   position: relative;
-  padding: 88px 28px 64px;
+  padding: 96px 28px 80px;
   overflow: hidden;
   background:
-    radial-gradient(ellipse 70% 60% at 80% -10%, oklch(0.94 0.06 240 / 0.7), transparent 60%),
-    radial-gradient(ellipse 50% 50% at 10% 30%, oklch(0.96 0.05 200 / 0.5), transparent 60%);
+    radial-gradient(ellipse 70% 60% at 80% -10%, oklch(0.94 0.06 240 / 0.6), transparent 60%),
+    radial-gradient(ellipse 50% 50% at 10% 30%, oklch(0.96 0.05 200 / 0.4), transparent 60%);
+}
+.ks-hero-orbs {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0;
+}
+.ks-hero-orb {
+  position: absolute; border-radius: 50%;
+  filter: blur(80px); opacity: 0.55;
+  will-change: transform;
+}
+.ks-hero-orb-1 {
+  top: -180px; left: -120px; width: 480px; height: 480px;
+  background: radial-gradient(circle, oklch(0.78 0.16 200 / 0.7), transparent 70%);
+  animation: ks-orb-float 22s ease-in-out infinite;
+}
+.ks-hero-orb-2 {
+  top: 80px; right: -160px; width: 520px; height: 520px;
+  background: radial-gradient(circle, oklch(0.72 0.20 285 / 0.55), transparent 70%);
+  animation: ks-orb-float 28s ease-in-out infinite reverse;
+}
+.ks-hero-orb-3 {
+  bottom: -200px; left: 30%; width: 380px; height: 380px;
+  background: radial-gradient(circle, oklch(0.82 0.14 145 / 0.5), transparent 70%);
+  animation: ks-orb-float 32s ease-in-out infinite;
+}
+@keyframes ks-orb-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(60px, -40px) scale(1.08); }
+  66% { transform: translate(-40px, 50px) scale(0.95); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-hero-orb { animation: none; }
 }
 .ks-hero-inner {
   max-width: 1240px; margin: 0 auto;
@@ -1354,8 +1450,42 @@ a { color: inherit; text-decoration: none; }
 
 /* === PRICING === */
 .ks-pricing { background: var(--bg); }
+.ks-billing-toggle {
+  display: inline-flex; gap: 4px; margin-top: 24px;
+  padding: 4px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--border);
+}
+.ks-billing-toggle button {
+  padding: 8px 18px; border-radius: 999px;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em;
+  background: transparent; color: var(--fg-2); border: 0; cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.ks-billing-toggle button.is-active {
+  background: var(--surface); color: var(--fg);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.ks-billing-toggle button:hover:not(.is-active) { color: var(--fg); }
+.ks-billing-save {
+  font-size: 11px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px;
+  background: oklch(0.85 0.13 145); color: oklch(0.30 0.18 145);
+}
+.ks-price-badge {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  padding: 4px 12px; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  box-shadow: 0 4px 12px oklch(0.65 0.18 200 / 0.4);
+}
+.ks-price-annual-note {
+  font-size: 12px; color: var(--fg-3); margin: -8px 0 16px; font-weight: 500;
+}
+.ks-price-card.is-featured .ks-price-annual-note { color: oklch(0.78 0.02 250); }
 .ks-pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .ks-price-card {
+  position: relative;
   padding: 32px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1561,11 +1691,9 @@ a { color: inherit; text-decoration: none; }
 .ks-modal-close:hover { background: var(--bg-2); color: var(--fg); }
 .ks-modal-head { text-align: center; margin-bottom: 20px; }
 .ks-modal-mark {
-  width: 48px; height: 48px; border-radius: 12px;
-  background: linear-gradient(140deg, var(--accent), oklch(0.55 0.16 200));
   display: grid; place-items: center; margin: 0 auto 12px;
-  color: #fff; font-size: 22px; font-weight: 700;
 }
+.ks-modal-mark svg { border-radius: 14px; box-shadow: 0 6px 16px oklch(0.55 0.16 240 / 0.30); }
 .ks-modal-head h2 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.02em; }
 .ks-modal-head p  { font-size: 14px; color: var(--fg-2); margin: 0; }
 .ks-modal-body { display: grid; gap: 14px; }

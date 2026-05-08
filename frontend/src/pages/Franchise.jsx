@@ -20,6 +20,7 @@
 import { useState } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
+import { BrandLogo } from '../components/BrandLogo'
 
 // ===== БЛОК: SVG-иконки =====
 function Icon({ d, size = 18, stroke = 'currentColor' }) {
@@ -113,7 +114,7 @@ export default function Franchise() {
       <nav className="ks-nav">
         <div className="ks-nav-inner">
           <a className="ks-nav-logo" href="/">
-            <span className="ks-nav-mark">⚕</span>КлиникСеть
+            <BrandLogo size={30} className="ks-nav-mark-svg" />КлиникСеть
           </a>
           <div className="ks-nav-links">
             <a className="ks-nav-link" href="/">Главная</a>
@@ -333,7 +334,7 @@ export default function Franchise() {
         <div className="ks-footer-inner">
           <div className="ks-footer-col">
             <a className="ks-nav-logo" href="/">
-              <span className="ks-nav-mark">⚕</span>КлиникСеть
+              <BrandLogo size={30} className="ks-nav-mark-svg" />КлиникСеть
             </a>
             <p className="ks-footer-tagline">
               Франшиза медицинской SaaS-платформы. Бренд, технологии и поддержка — для предпринимателей.
@@ -378,7 +379,7 @@ a { color: inherit; text-decoration: none; }
 .ks-nav { position: sticky; top: 0; z-index: 100; background: oklch(1 0 0 / 0.78); backdrop-filter: blur(20px) saturate(1.4); border-bottom: 1px solid var(--border); }
 .ks-nav-inner { max-width: 1240px; margin: 0 auto; display: flex; align-items: center; gap: 24px; padding: 14px 28px; }
 .ks-nav-logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
-.ks-nav-mark { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(140deg, var(--accent), oklch(0.55 0.16 200)); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 14px; box-shadow: 0 4px 10px oklch(0.55 0.16 240 / 0.3); }
+.ks-nav-mark-svg { flex-shrink: 0; border-radius: 7px; box-shadow: 0 4px 10px oklch(0.55 0.16 240 / 0.25); }
 .ks-nav-links { display: flex; gap: 4px; margin-left: auto; }
 .ks-nav-link { padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--fg-2); transition: all 0.15s; }
 .ks-nav-link:hover { color: var(--fg); background: var(--bg-2); }

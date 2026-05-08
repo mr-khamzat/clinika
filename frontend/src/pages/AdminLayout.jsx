@@ -45,6 +45,7 @@ const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSecti
 const InventorySection = lazy(() => import("../sections/inventory/InventorySection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
+import { BrandLogo } from "../components/BrandLogo"
 import AdminSupportPanel from '../components/AdminSupportPanel'
 // W3: глобальный поиск Cmd+K и центр уведомлений
 import CommandPalette from '../components/CommandPalette'
@@ -7582,16 +7583,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         style={{ padding: sidebarCollapsed ? '4px 4px 14px' : '4px 10px 18px' }}
       >
         <div
-          className="grid place-items-center flex-shrink-0"
-          style={{
-            width: 36, height: 36, borderRadius: 11,
-            background: 'linear-gradient(140deg, var(--accent), var(--accent-2))',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 16,
-            boxShadow: '0 6px 18px oklch(0.55 0.16 240 / 0.32)',
-          }}
-        >⌬</div>
+          className="flex-shrink-0"
+          style={{ borderRadius: 9, boxShadow: '0 6px 18px oklch(0.55 0.16 240 / 0.32)' }}
+        >
+          <BrandLogo size={36} />
+        </div>
         {!sidebarCollapsed && (
           <div className="min-w-0 flex-1">
             <div
