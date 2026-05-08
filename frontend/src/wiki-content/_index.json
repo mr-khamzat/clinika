@@ -105,6 +105,55 @@
     "summary": "Видеозвонки, AI, MIS, white-label и другие подключаемые модули."
   },
   {
+    "slug": "concepts-region-lock",
+    "title": "Region Lock — географический контроль франшиз",
+    "category": "concepts",
+    "order": 6,
+    "summary": "Защита от работы франшизы за пределами разрешённого региона: алерты, ручная блокировка, IP whitelist."
+  },
+  {
+    "slug": "module-telemedicine",
+    "title": "Модуль · Телемедицина (4 990 ₽/мес)",
+    "category": "modules",
+    "order": 1,
+    "summary": "Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров. Чат, назначения, история сессий."
+  },
+  {
+    "slug": "module-call-recording",
+    "title": "Модуль · Запись звонков + Whisper (3 990 ₽/мес)",
+    "category": "modules",
+    "order": 2,
+    "summary": "Авто-запись звонков, транскрипция через OpenAI Whisper, AI-резюме приёма через Gemini."
+  },
+  {
+    "slug": "module-ai-assistant",
+    "title": "Модуль · AI-ассистент пациенту (2 990 ₽/мес)",
+    "category": "modules",
+    "order": 3,
+    "summary": "Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём, эскалация."
+  },
+  {
+    "slug": "module-loyalty",
+    "title": "Модуль · Loyalty Pro (2 990 ₽/мес)",
+    "category": "modules",
+    "order": 4,
+    "summary": "Тиры, акции, начисления баллов, обмен на услуги, реферальная система."
+  },
+  {
+    "slug": "module-sms-marketing",
+    "title": "Модуль · SMS-маркетинг (1 990 ₽/мес)",
+    "category": "modules",
+    "order": 5,
+    "summary": "Массовые рассылки, шаблоны, аудитории спящих, расписание, аналитика конверсий."
+  },
+  {
+    "slug": "module-inventory",
+    "title": "Модуль · Inventory (1 990 ₽/мес)",
+    "category": "modules",
+    "order": 6,
+    "summary": "Учёт расходников, остатки, движения, алерты по низким остаткам, ABC-анализ."
+  },
+  {
     "slug": "setup-first-clinic",
     "title": "Запуск первой клиники",
     "category": "setup",
@@ -117,5 +166,26 @@
     "category": "setup",
     "order": 2,
     "summary": "Приглашение и настройка ролей: врачи, регистраторы, медсёстры."
+  },
+  {
+    "slug": "dev-stack",
+    "title": "Технический стек",
+    "category": "dev",
+    "order": 1,
+    "summary": "FastAPI + Postgres + Vite + Docker + coturn + Sentry. Архитектура серверов и сервисов."
+  },
+  {
+    "slug": "dev-api",
+    "title": "API endpoints",
+    "category": "dev",
+    "order": 2,
+    "summary": "REST API, JWT аутентификация, RBAC, основные эндпоинты, webhooks, rate-limit."
+  },
+  {
+    "slug": "dev-integrations",
+    "title": "Интеграции",
+    "category": "dev",
+    "order": 3,
+    "summary": "Renovatio МИС, Telegram, SMS, эквайринг, OFD, Gemini, Whisper, WebRTC, GeoIP."
   }
 ]

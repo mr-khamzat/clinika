@@ -56,6 +56,10 @@ const Wiki = lazy(() => import('./pages/Wiki'))
 const WikiArticle = lazy(() => import('./pages/WikiArticle'))
 // Публичная страница пациента для телемед-приёма (без auth, по одноразовому token)
 const PatientTelemedRoom = lazy(() => import('./pages/PatientTelemedRoom'))
+// ─── Legal (152-ФЗ): /privacy, /terms, /consent ───
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
+const TermsOfService = lazy(() => import('./pages/TermsOfService'))
+const ConsentForm = lazy(() => import('./pages/ConsentForm'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -268,6 +272,29 @@ function AppRouter() {
   // Этап 6 ROADMAP: отдельный лендинг для будущих франчайзи.
   if (path === '/franchise' || path === '/franchise/') {
     return <Franchise />
+  }
+
+  // ─── Legal (152-ФЗ) — публичные страницы без auth ───
+  if (path === '/privacy' || path === '/privacy/') {
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <PrivacyPolicy />
+      </Suspense>
+    )
+  }
+  if (path === '/terms' || path === '/terms/') {
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <TermsOfService />
+      </Suspense>
+    )
+  }
+  if (path === '/consent' || path === '/consent/') {
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <ConsentForm />
+      </Suspense>
+    )
   }
 
   // Корневой лендинг (/) — показываем Landing без slug-роутинга.

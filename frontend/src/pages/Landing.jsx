@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.19 NSIS installer, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.23 NSIS installer + AWG VPN, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -407,6 +407,7 @@ export default function Landing() {
               ['features', 'Возможности'],
               ['roles', 'Кабинеты'],
               ['pricing', 'Тарифы'],
+              ['modules', 'Модули'],
               ['calls', 'Calls'],
             ].map(([id, label]) => (
               <button key={id} onClick={() => scrollTo(id)} className="ks-nav-link">{label}</button>
@@ -427,6 +428,7 @@ export default function Landing() {
               ['features', 'Возможности'],
               ['roles', 'Кабинеты'],
               ['pricing', 'Тарифы'],
+              ['modules', 'Модули'],
               ['calls', 'Calls'],
             ].map(([id, label]) => (
               <button key={id} onClick={() => scrollTo(id)} className="ks-nav-mobile-link">{label}</button>
@@ -467,7 +469,7 @@ export default function Landing() {
             {/* Calls download buttons (сохранены из старой версии) */}
             <div className="ks-hero-downloads">
               <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Win 1.0.19
+                {ICONS.download} Calls Win 1.0.23
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls Mac 1.0.7
@@ -679,6 +681,73 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ===== БЛОК: MODULES (подключаемые модули с реальными ценами из БД) ===== */}
+      <section id="modules" className="ks-section">
+        <div className="ks-section-inner">
+          <header className="ks-section-head">
+            <div className="ks-section-eyebrow">Дополнительно к тарифу</div>
+            <h2 className="ks-section-title">Подключаемые модули</h2>
+            <p className="ks-section-sub">
+              Включайте только то, что нужно конкретной клинике или сети. Без переплат за лишний функционал. Подробности — в <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>Wiki</a>.
+            </p>
+          </header>
+
+          <div className="ks-features" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+            {[
+              {
+                title: 'Телемедицина',
+                price: '4 990 ₽/мес',
+                slug: 'module-telemedicine',
+                desc: 'Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров. Чат, назначения, история сессий.',
+              },
+              {
+                title: 'Запись звонков + Whisper',
+                price: '3 990 ₽/мес',
+                slug: 'module-call-recording',
+                desc: 'Авто-запись звонков и видеоприёмов. Транскрипция через Whisper, AI-резюме приёма через Gemini.',
+              },
+              {
+                title: 'AI-ассистент пациенту',
+                price: '2 990 ₽/мес',
+                slug: 'module-ai-assistant',
+                desc: 'Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём, эскалация.',
+              },
+              {
+                title: 'Loyalty Pro',
+                price: '2 990 ₽/мес',
+                slug: 'module-loyalty',
+                desc: 'Тиры, акции, начисления баллов, обмен на услуги, реферальная программа.',
+              },
+              {
+                title: 'SMS-маркетинг',
+                price: '1 990 ₽/мес',
+                slug: 'module-sms-marketing',
+                desc: 'Массовые рассылки спящим пациентам, шаблоны, аудитории, расписание, аналитика конверсий.',
+              },
+              {
+                title: 'Inventory',
+                price: '1 990 ₽/мес',
+                slug: 'module-inventory',
+                desc: 'Учёт расходников, остатки, движения, алерты по низким остаткам, ABC-анализ.',
+              },
+            ].map(m => (
+              <a key={m.slug} href={`/wiki/${m.slug}`} className="ks-feature" style={{ textDecoration: 'none', color: 'inherit', display: 'block', cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+                  <h3 className="ks-feature-title" style={{ margin: 0 }}>{m.title}</h3>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent, #0097A7)', whiteSpace: 'nowrap' }}>{m.price}</span>
+                </div>
+                <p className="ks-feature-desc" style={{ marginTop: 8 }}>{m.desc}</p>
+                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--fg-3)' }}>Подробнее →</div>
+              </a>
+            ))}
+          </div>
+
+          <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--fg-3)' }}>
+            Полный каталог из 20+ модулей: White-Label, AI-аналитика, видеоконференции, эквайринг, 54-ФЗ — в <a href="/wiki/concepts-modules" style={{ color: 'inherit' }}>Wiki: Каталог модулей</a>.
+          </p>
+        </div>
+      </section>
+
       {/* ===== БЛОК: CALLS (десктоп-приложение) ===== */}
       <section id="calls" className="ks-section ks-calls">
         <div className="ks-section-inner">
@@ -688,11 +757,11 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версия 1.0.19 — окно «Диагностика» с логами и кнопкой копирования.
+                Версия 1.0.23 — встроенный AWG VPN (обход блокировок), окно «Диагностика», WhatsApp Web в боковой панели.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
                 <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.19
+                  {ICONS.download} Windows · 1.0.23 (AWG VPN)
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ
@@ -763,7 +832,9 @@ export default function Landing() {
             <button onClick={() => scrollTo('features')}>Возможности</button>
             <button onClick={() => scrollTo('roles')}>Кабинеты</button>
             <button onClick={() => scrollTo('pricing')}>Тарифы</button>
+            <button onClick={() => scrollTo('modules')}>Модули</button>
             <button onClick={() => scrollTo('calls')}>Calls</button>
+            <a href="/wiki">База знаний</a>
           </div>
           <div className="ks-footer-col">
             <h6>Компания</h6>
@@ -774,9 +845,10 @@ export default function Landing() {
           </div>
           <div className="ks-footer-col">
             <h6>Право</h6>
-            <span>152-ФЗ · УЗ-1</span>
-            <span>Аудит-лог</span>
-            <span>Обработка ПДн</span>
+            <a href="/privacy">Политика конфиденциальности</a>
+            <a href="/terms">Договор-оферта</a>
+            <a href="/consent">Согласие на обработку ПДн</a>
+            <span style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-3)' }}>152-ФЗ · УЗ-1 · Аудит-лог</span>
           </div>
         </div>
         <div className="ks-footer-bottom">
