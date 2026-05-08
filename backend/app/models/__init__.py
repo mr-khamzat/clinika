@@ -106,3 +106,12 @@ from app.models.payments_clinic import (
 
 # Notifications center — отметка прочитанности уведомлений (audit/activity/contact)
 from app.models.notification_read import NotificationRead
+
+# Telemedicine модуль (4990₽/мес) — видеоприём врач↔пациент через WebRTC
+from app.models.telemedicine import (
+    TelemedicineSession,
+    TelemedicineChatMessage,
+    TelemedicinePrescription,
+    TelemedicineSessionStatus,
+    TelemedicineChatRole,
+)
