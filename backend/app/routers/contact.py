@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+from app.utils.phone import mask_phone
 
 from app.database import get_db
 from app.models.contact_request import ContactRequest
@@ -33,7 +34,7 @@ async def send_contact(form: ContactForm, db: AsyncSession = Depends(get_db)):
     )
     db.add(req)
     await db.commit()
-    logger.info(f'[CONTACT] saved phone={form.phone}')
+    logger.info(f"[CONTACT] saved phone={mask_phone(form.phone)}")
     return {'ok': True}
 
 

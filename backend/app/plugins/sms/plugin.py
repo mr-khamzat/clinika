@@ -5,6 +5,7 @@ SMS-плагин.
 Провайдер выбирается через SMS_PROVIDER в .env: "telegram" | "smsc" | "smsru" | "stub"
 """
 import logging
+from app.utils.phone import mask_phone
 from app.plugins.base import BasePlugin
 from app.config import settings
 
@@ -35,7 +36,7 @@ class SMSPlugin(BasePlugin):
         provider = getattr(settings, "sms_provider", "stub")
 
         if provider == "stub":
-            logger.info(f"[SMS STUB] → {phone}: {message}")
+            logger.info(f"[SMS STUB] → {mask_phone(phone)}: {message[:60]!r}")
             return False
 
         if provider == "smsc":
@@ -66,7 +67,7 @@ class SMSPlugin(BasePlugin):
                 if data.get("error_code"):
                     logger.error(f"[SMS] SMSC ошибка: {data}")
                     return False
-                logger.info(f"[SMS] SMSC отправлено → {phone}, id={data.get(id)}")
+                logger.info(f"[SMS] SMSC отправлено → {mask_phone(phone)}, id={data.get("id")}")
                 return True
         except Exception as e:
             logger.error(f"[SMS] SMSC исключение: {e}")
@@ -91,7 +92,7 @@ class SMSPlugin(BasePlugin):
                 if status != "OK":
                     logger.error(f"[SMS] SMSRU ошибка: {data}")
                     return False
-                logger.info(f"[SMS] SMSRU отправлено → {phone}")
+                logger.info(f"[SMS] SMSRU отправлено → {mask_phone(phone)}")
                 return True
         except Exception as e:
             logger.error(f"[SMS] SMSRU исключение: {e}")

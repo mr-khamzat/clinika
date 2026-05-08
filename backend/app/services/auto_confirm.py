@@ -17,7 +17,7 @@ logger = logging.getLogger("auto_confirm")
 POLL_INTERVAL = 600  # 10 минут
 
 
-from app.utils.phone import normalize_phone as _normalize_phone
+from app.utils.phone import normalize_phone as _normalize_phone, mask_phone, mask_name
 
 
 def _normalize_name(name: str) -> str:
@@ -185,7 +185,7 @@ async def _process_tenant_confirmations(db, tenant, done: list[dict]) -> int:
                     ))
 
             confirmed_count += 1
-            logger.info(f"Авто-подтверждение направления {referral.id} (пациент {referral.patient_name or referral.patient_phone})")
+            logger.info(f"Авто-подтверждение направления {referral.id} (пациент {mask_name(referral.patient_name)} {mask_phone(referral.patient_phone)})")
 
         matched_ref_ids: set = set()
 

@@ -12,6 +12,7 @@
 opt-out — это всё в следующих итерациях.
 """
 import logging
+from app.utils.phone import mask_phone
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -69,7 +70,7 @@ async def _send_via_provider(
     Реальный провайдер (smsc.ru) подключается отдельным сервисом.
     """
     # Формат логирования удобен для отладки сегментации.
-    logger.info(f"sms.stub → {phone}: {text[:80]!r}")
+    logger.info(f"sms.stub → {mask_phone(phone)}: {text[:60]!r}")
     return True, uuid.uuid4().hex, None
 
 
