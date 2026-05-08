@@ -397,7 +397,7 @@ export default function Landing() {
   ]
 
   return (
-    <>
+    <div className="ks-premium">
       <style>{LANDING_CSS}</style>
 
       {/* ===== БЛОК: NAV (sticky, с burger-меню на мобиле) ===== */}
@@ -444,84 +444,66 @@ export default function Landing() {
         )}
       </nav>
 
-      {/* ===== БЛОК: HERO (mesh-градиент + glassmorphism + AI-карточка) ===== */}
-      <section className="ks-hero">
-        {/* Mesh-gradient orbs за hero для глубины */}
-        <div className="ks-hero-orbs" aria-hidden>
-          <div className="ks-hero-orb ks-hero-orb-1" />
-          <div className="ks-hero-orb ks-hero-orb-2" />
-          <div className="ks-hero-orb ks-hero-orb-3" />
-        </div>
-        <div className="ks-hero-inner">
+      {/* ===== БЛОК: HERO — Apple-like минимализм, без правой колонки ===== */}
+      <section className="ks-hero ks-hero-premium">
+        <div className="ks-hero-premium-inner">
           <FadeIn>
-            <div className="ks-eyebrow">
+            <div className="ks-eyebrow ks-eyebrow-premium">
               <span className="ks-eyebrow-dot" />
-              SaaS · работает в Чечне, Ингушетии, Дагестане
+              <span className="ks-eyebrow-text">Платформа управления медицинскими сетями · 2026</span>
             </div>
-            <h1 className="ks-hero-title">
-              Управляйте сетью клиник<br />
-              как <em>единым организмом</em>
+
+            <h1 className="ks-hero-title-premium">
+              Платформа клиник,<br />
+              которая работает<br />
+              <span className="ks-hero-accent">в одном ритме.</span>
             </h1>
-            <p className="ks-hero-sub">
-              ЭМК, расписание, телемедицина, бонусная система, AI-ассистент пациенту, биллинг
-              франшиз, аудит и геозащита — в одной платформе. Без зоопарка интеграций и
-              ежемесячных счетов от 7 разных вендоров.
+
+            <p className="ks-hero-sub-premium">
+              ЭМК, телемедицина, бонусная система, AI-ассистент пациенту, биллинг
+              и геозащита франшиз — в одной системе. Без 7 разных вендоров и счетов.
             </p>
-            <div className="ks-hero-actions">
-              <button onClick={() => setShowContact(true)} className="ks-btn-primary">
-                Запустить за 28 дней <span aria-hidden>{ICONS.arrow}</span>
+
+            <div className="ks-hero-actions-premium">
+              <button onClick={() => setShowContact(true)} className="ks-btn-premium-primary">
+                Запустить за 28 дней
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
               </button>
-              <button onClick={() => setShowCalc(true)} className="ks-btn-secondary">
-                Калькулятор тарифа
+              <button onClick={() => scrollTo('modules')} className="ks-btn-premium-ghost">
+                Посмотреть возможности
               </button>
             </div>
-            <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Windows · 1.0.23 (с AWG VPN)
-              </a>
-              <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
-                {ICONS.download} Calls macOS · Apple Silicon
-              </a>
-            </div>
-            <div className="ks-hero-trust">
-              <span className="ks-hero-stars">★★★★★</span>
-              <span>152-ФЗ · УЗ-1 · SLA 99.9% · 27 статей в Wiki · <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>обзор платформы</a></span>
+
+            <div className="ks-hero-meta">
+              <span className="ks-hero-meta-divider" />
+              <span className="ks-hero-meta-text">
+                152-ФЗ · УЗ-1 · SLA 99.9% · работает в Чечне · Ингушетии · Дагестане
+              </span>
             </div>
           </FadeIn>
 
-          {/* Hero side — стилизованный дашборд */}
-          <FadeIn delay={150} className="ks-hero-side">
-            <div className="ks-persona-card">
-              <div className="ks-persona-bg" aria-hidden />
-              <div className="ks-persona-tag"><span className="ks-tag-dot" />AI · работает 24/7</div>
-              <div className="ks-persona-mock">
-                <div className="ks-persona-mock-row">
-                  <div>
-                    <div className="ks-persona-mock-eyebrow">Дашборд сети</div>
-                    <div className="ks-persona-mock-title">12 клиник · апрель 2026</div>
-                  </div>
-                  <span className="ks-chip ks-chip-good">● live</span>
-                </div>
-                <div className="ks-persona-kpi">
-                  {[
-                    ['Выручка', '14.8 М ₽', '+18%'],
-                    ['Приёмы', '12 408', '+12%'],
-                    ['NPS', '72', '+4'],
-                    ['Загрузка', '86%', '−2%'],
-                  ].map(([l, v, d]) => (
-                    <div key={l} className="ks-persona-kpi-cell">
-                      <div className="ks-persona-kpi-l">{l}</div>
-                      <div className="ks-persona-kpi-v">{v}</div>
-                      <div className={`ks-persona-kpi-d ${d.startsWith('−') ? 'is-down' : ''}`}>{d}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="ks-persona-quote">
-              <strong>Каждую ночь анализирую загрузку всех клиник</strong> и подсвечиваю где теряется выручка — окна в расписании, простаивающие кабинеты, врачи с просадкой по NPS.
-            </div>
+          {/* Социальное доказательство — цитата клиники */}
+          <FadeIn delay={250}>
+            <figure className="ks-hero-quote-premium">
+              <blockquote>
+                Связали 7 филиалов в одну систему. Срок внедрения —{' '}
+                <strong>23 дня</strong>. Регистраторы перестали переключаться
+                между МИС, Excel-расписаниями и мессенджерами.
+              </blockquote>
+              <figcaption>
+                <span className="ks-hero-quote-name">Хамзат Магомедов</span>
+                <span className="ks-hero-quote-role">владелец сети «АРЦ КлиникСеть» · Чеченская Республика</span>
+              </figcaption>
+            </figure>
           </FadeIn>
+
+          {/* Скролл-индикатор */}
+          <div className="ks-hero-scroll" aria-hidden>
+            <span>scroll</span>
+            <span className="ks-hero-scroll-line" />
+          </div>
         </div>
       </section>
 
@@ -747,70 +729,125 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== БЛОК: MODULES (подключаемые модули с реальными ценами из БД) ===== */}
-      <section id="modules" className="ks-section">
+      {/* ===== БЛОК: MODULES — Bento grid в духе Apple ===== */}
+      <section id="modules" className="ks-section ks-bento-section">
         <div className="ks-section-inner">
-          <header className="ks-section-head">
-            <div className="ks-section-eyebrow">Дополнительно к тарифу</div>
-            <h2 className="ks-section-title">Подключаемые модули</h2>
-            <p className="ks-section-sub">
-              Включайте только то, что нужно конкретной клинике или сети. Без переплат за лишний функционал. Подробности — в <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>Wiki</a>.
+          <header className="ks-bento-head">
+            <div className="ks-eyebrow ks-eyebrow-premium" style={{ display: 'inline-flex' }}>
+              <span className="ks-eyebrow-dot" />
+              <span className="ks-eyebrow-text">Подключаемые модули</span>
+            </div>
+            <h2 className="ks-bento-title">
+              Платите только<br />за то, что нужно
+            </h2>
+            <p className="ks-bento-sub">
+              Каталог из 20+ модулей под медицинские сети любого размера. Подключаются и
+              отключаются в один клик — без переписки с менеджером.
             </p>
           </header>
 
-          <div className="ks-features" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-            {[
-              {
-                title: 'Телемедицина',
-                price: '4 990 ₽/мес',
-                slug: 'module-telemedicine',
-                desc: 'Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров. Чат, назначения, история сессий.',
-              },
-              {
-                title: 'Запись звонков + Whisper',
-                price: '3 990 ₽/мес',
-                slug: 'module-call-recording',
-                desc: 'Авто-запись звонков и видеоприёмов. Транскрипция через Whisper, AI-резюме приёма через Gemini.',
-              },
-              {
-                title: 'AI-ассистент пациенту',
-                price: '2 990 ₽/мес',
-                slug: 'module-ai-assistant',
-                desc: 'Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём, эскалация.',
-              },
-              {
-                title: 'Loyalty Pro',
-                price: '2 990 ₽/мес',
-                slug: 'module-loyalty',
-                desc: 'Тиры, акции, начисления баллов, обмен на услуги, реферальная программа.',
-              },
-              {
-                title: 'SMS-маркетинг',
-                price: '1 990 ₽/мес',
-                slug: 'module-sms-marketing',
-                desc: 'Массовые рассылки спящим пациентам, шаблоны, аудитории, расписание, аналитика конверсий.',
-              },
-              {
-                title: 'Inventory',
-                price: '1 990 ₽/мес',
-                slug: 'module-inventory',
-                desc: 'Учёт расходников, остатки, движения, алерты по низким остаткам, ABC-анализ.',
-              },
-            ].map(m => (
-              <a key={m.slug} href={`/wiki/${m.slug}`} className="ks-feature" style={{ textDecoration: 'none', color: 'inherit', display: 'block', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <h3 className="ks-feature-title" style={{ margin: 0 }}>{m.title}</h3>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent, #0097A7)', whiteSpace: 'nowrap' }}>{m.price}</span>
+          <div className="ks-bento-grid">
+            {/* Большая карточка — Telemedicine */}
+            <a href="/wiki/module-telemedicine" className="ks-bento-card ks-bento-large ks-bento-accent">
+              <div className="ks-bento-badge">4 990 ₽ / мес</div>
+              <div className="ks-bento-visual">
+                <div className="ks-bento-tele-mock">
+                  <div className="ks-bento-tele-pip" />
+                  <div className="ks-bento-tele-main" />
+                  <div className="ks-bento-tele-controls">
+                    <span /><span /><span /><span />
+                  </div>
                 </div>
-                <p className="ks-feature-desc" style={{ marginTop: 8 }}>{m.desc}</p>
-                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--fg-3)' }}>Подробнее →</div>
-              </a>
-            ))}
+              </div>
+              <div className="ks-bento-content">
+                <h3>Телемедицина</h3>
+                <p>Видеоприём врач ↔ пациент через WebRTC. Ваш собственный coturn-сервер,
+                   никаких сторонних провайдеров. Чат, назначения, история сессий.</p>
+                <span className="ks-bento-cta">Подробнее →</span>
+              </div>
+            </a>
+
+            {/* Большая карточка — AI-ассистент */}
+            <a href="/wiki/module-ai-assistant" className="ks-bento-card ks-bento-large ks-bento-dark">
+              <div className="ks-bento-badge ks-bento-badge-light">2 990 ₽ / мес</div>
+              <div className="ks-bento-visual">
+                <div className="ks-bento-ai-mock">
+                  <div className="ks-bento-ai-bubble ks-bento-ai-user">Когда сдавать анализы натощак?</div>
+                  <div className="ks-bento-ai-bubble ks-bento-ai-bot">
+                    Большинство — за 8–12 часов до сдачи. Точное время и подготовку врач указал в карточке…
+                  </div>
+                  <div className="ks-bento-ai-typing"><span/><span/><span/></div>
+                </div>
+              </div>
+              <div className="ks-bento-content">
+                <h3>AI-ассистент пациенту</h3>
+                <p>Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём,
+                   эскалация в регистратуру. Снижает нагрузку на 30–40%.</p>
+                <span className="ks-bento-cta">Подробнее →</span>
+              </div>
+            </a>
+
+            {/* Средняя — Запись звонков */}
+            <a href="/wiki/module-call-recording" className="ks-bento-card">
+              <div className="ks-bento-badge">3 990 ₽</div>
+              <div className="ks-bento-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10v2a7 7 0 0 0 14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+              </div>
+              <h3>Запись звонков + Whisper</h3>
+              <p>Авто-запись звонков и видеоприёмов. Транскрипция через OpenAI Whisper, AI-резюме приёма через Gemini.</p>
+              <span className="ks-bento-cta">Подробнее →</span>
+            </a>
+
+            {/* Средняя — Loyalty */}
+            <a href="/wiki/module-loyalty" className="ks-bento-card">
+              <div className="ks-bento-badge">2 990 ₽</div>
+              <div className="ks-bento-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+                </svg>
+              </div>
+              <h3>Loyalty Pro</h3>
+              <p>Тиры (бронза—платина), акции, начисления баллов, обмен на услуги, реферальная программа с QR.</p>
+              <span className="ks-bento-cta">Подробнее →</span>
+            </a>
+
+            {/* Средняя — SMS */}
+            <a href="/wiki/module-sms-marketing" className="ks-bento-card">
+              <div className="ks-bento-badge">1 990 ₽</div>
+              <div className="ks-bento-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                </svg>
+              </div>
+              <h3>SMS-маркетинг</h3>
+              <p>Реактивация спящих пациентов, шаблоны, аудитории, расписание, аналитика конверсий, ROI.</p>
+              <span className="ks-bento-cta">Подробнее →</span>
+            </a>
+
+            {/* Средняя — Inventory */}
+            <a href="/wiki/module-inventory" className="ks-bento-card">
+              <div className="ks-bento-badge">1 990 ₽</div>
+              <div className="ks-bento-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+              </div>
+              <h3>Inventory</h3>
+              <p>Расходники, остатки, движения, алерты по низким остаткам, ABC-анализ, прогноз закупок.</p>
+              <span className="ks-bento-cta">Подробнее →</span>
+            </a>
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--fg-3)' }}>
-            Полный каталог из 20+ модулей: White-Label, AI-аналитика, видеоконференции, эквайринг, 54-ФЗ — в <a href="/wiki/concepts-modules" style={{ color: 'inherit' }}>Wiki: Каталог модулей</a>.
-          </p>
+          <div className="ks-bento-footer">
+            <a href="/wiki/concepts-modules" className="ks-bento-footer-link">
+              Полный каталог из 20+ модулей · White-Label · AI-аналитика · видеоконференции · эквайринг · 54-ФЗ →
+            </a>
+          </div>
         </div>
       </section>
 
@@ -926,7 +963,7 @@ export default function Landing() {
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
       {showContact && <ContactModal onClose={() => setShowContact(false)} />}
       {showCalc && <PriceCalculator onClose={() => setShowCalc(false)} />}
-    </>
+    </div>
   )
 }
 
@@ -1056,6 +1093,46 @@ html, body { margin: 0; padding: 0; font-family: var(--font-sans); color: var(--
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 a { color: inherit; text-decoration: none; }
 
+/* ============================================================
+   PREMIUM TOKENS — Apple-like светлый, scope: .ks-premium
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+
+.ks-premium {
+  --bg:        #fbfaf6;             /* кремовый off-white фон */
+  --bg-2:      #f3f0e8;             /* чуть тёплее для оттенков */
+  --surface:   #ffffff;             /* белый для карточек */
+  --fg:        #0b1530;             /* deep navy для текста */
+  --fg-2:      #3a4156;             /* mid */
+  --fg-3:      #6b7180;             /* secondary */
+  --fg-4:      #9aa0ad;             /* tertiary */
+  --border:    rgba(11, 21, 48, 0.08);
+  --border-2:  rgba(11, 21, 48, 0.04);
+  --accent:    #1c3050;             /* благородный navy (CTA) */
+  --accent-2:  #c9a14a;             /* gold (highlights) */
+  --accent-soft: rgba(28, 48, 80, 0.06);
+  --accent-line: rgba(28, 48, 80, 0.14);
+  --good:      #2e8b57;
+  --bad:       #b04444;
+  --shadow-sm: 0 1px 2px rgba(11, 21, 48, 0.06);
+  --shadow-md: 0 4px 16px rgba(11, 21, 48, 0.08);
+  --shadow-lg: 0 12px 48px rgba(11, 21, 48, 0.12);
+  --radius:    20px;
+  --radius-sm: 12px;
+  --font-sans: 'Manrope', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+}
+.ks-premium * { letter-spacing: inherit; }
+.ks-premium .ks-section { padding: 96px 28px; }
+.ks-premium .ks-section-inner { max-width: 1180px; margin: 0 auto; }
+@media (max-width: 720px) {
+  .ks-premium .ks-section { padding: 56px 20px; }
+}
+
 /* === NAV === */
 .ks-nav {
   position: sticky; top: 0; z-index: 100;
@@ -1113,7 +1190,355 @@ a { color: inherit; text-decoration: none; }
 }
 .ks-nav-mobile-link:hover { background: var(--bg-2); color: var(--fg); }
 
-/* === HERO с mesh-gradient orbs === */
+/* ============================================================
+   HERO PREMIUM — Apple-like минимализм
+   ============================================================ */
+.ks-premium .ks-hero-premium {
+  position: relative;
+  padding: 120px 28px 100px;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 75% -20%, rgba(201, 161, 74, 0.06), transparent 60%),
+    radial-gradient(ellipse 60% 40% at 15% 70%, rgba(28, 48, 80, 0.04), transparent 60%),
+    var(--bg);
+}
+.ks-hero-premium-inner {
+  max-width: 1080px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 48px;
+}
+.ks-eyebrow-premium {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.ks-eyebrow-premium .ks-eyebrow-text {
+  color: var(--fg-2); font-weight: 500; font-size: 13px; letter-spacing: 0;
+}
+.ks-hero-title-premium {
+  font-family: var(--font-sans);
+  font-size: clamp(40px, 7vw, 88px);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--fg);
+  margin: 0 0 8px;
+  max-width: 980px;
+}
+.ks-hero-accent {
+  color: var(--accent);
+  font-style: italic;
+  font-weight: 600;
+  position: relative;
+}
+.ks-hero-accent::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0.06em; height: 0.16em;
+  background: linear-gradient(90deg, var(--accent-2) 0%, transparent 100%);
+  opacity: 0.35;
+  z-index: -1;
+}
+.ks-hero-sub-premium {
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.55;
+  color: var(--fg-2);
+  margin: 8px 0 24px;
+  max-width: 640px;
+  letter-spacing: -0.005em;
+}
+.ks-hero-actions-premium {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ks-btn-premium-primary {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 16px 26px; border-radius: 999px;
+  background: var(--fg); color: var(--bg);
+  font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+  transition: all 0.18s ease;
+  border: 0;
+}
+.ks-btn-premium-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(11, 21, 48, 0.25);
+}
+.ks-btn-premium-ghost {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 16px 24px; border-radius: 999px;
+  background: transparent; color: var(--fg);
+  font-size: 15px; font-weight: 500;
+  border: 1px solid var(--border);
+  transition: all 0.18s ease;
+}
+.ks-btn-premium-ghost:hover { background: var(--surface); border-color: rgba(11, 21, 48, 0.18); }
+.ks-hero-meta {
+  display: flex; align-items: center; gap: 14px; margin-top: 6px;
+  font-size: 13px; color: var(--fg-3); font-weight: 500;
+}
+.ks-hero-meta-divider {
+  width: 32px; height: 1px; background: var(--border);
+}
+.ks-hero-meta-text { letter-spacing: 0.01em; }
+
+.ks-hero-quote-premium {
+  margin: 80px 0 0; padding: 0;
+  display: grid; gap: 16px;
+  max-width: 760px;
+  border-left: 2px solid var(--accent-2);
+  padding-left: 24px;
+}
+.ks-hero-quote-premium blockquote {
+  margin: 0; padding: 0;
+  font-size: clamp(18px, 1.8vw, 22px);
+  line-height: 1.5;
+  color: var(--fg);
+  font-weight: 500;
+  letter-spacing: -0.012em;
+}
+.ks-hero-quote-premium blockquote strong {
+  background: linear-gradient(transparent 60%, rgba(201, 161, 74, 0.30) 60%);
+  padding: 0 2px;
+  font-weight: 700;
+}
+.ks-hero-quote-premium figcaption {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.ks-hero-quote-name { font-size: 14px; font-weight: 600; color: var(--fg); }
+.ks-hero-quote-role { font-size: 13px; color: var(--fg-3); font-weight: 500; }
+
+.ks-hero-scroll {
+  margin: 80px auto 0; display: flex; flex-direction: column; align-items: center; gap: 12px;
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.18em;
+}
+.ks-hero-scroll-line {
+  width: 1px; height: 40px;
+  background: linear-gradient(to bottom, var(--fg-4) 0%, transparent 100%);
+  animation: ks-scroll-line 2.4s ease-in-out infinite;
+}
+@keyframes ks-scroll-line {
+  0%, 100% { opacity: 0.4; transform: scaleY(1); }
+  50% { opacity: 1; transform: scaleY(1.3); }
+}
+
+@media (max-width: 720px) {
+  .ks-premium .ks-hero-premium { padding: 80px 20px 64px; }
+  .ks-hero-quote-premium { margin-top: 56px; padding-left: 18px; }
+  .ks-hero-scroll { display: none; }
+}
+
+/* ============================================================
+   BENTO GRID — модули в стиле Apple
+   ============================================================ */
+.ks-premium .ks-bento-section {
+  background: var(--bg);
+  padding: 120px 28px;
+}
+.ks-bento-head {
+  display: flex; flex-direction: column; gap: 16px;
+  margin: 0 0 56px;
+  max-width: 720px;
+}
+.ks-bento-title {
+  font-size: clamp(36px, 5vw, 64px);
+  line-height: 1.05; font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--fg);
+  margin: 8px 0 0;
+}
+.ks-bento-sub {
+  font-size: 18px; line-height: 1.55;
+  color: var(--fg-2);
+  margin: 0; max-width: 600px;
+}
+.ks-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: minmax(260px, auto);
+  gap: 16px;
+}
+.ks-bento-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 28px;
+  display: flex; flex-direction: column;
+  text-decoration: none; color: inherit;
+  overflow: hidden;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--shadow-sm);
+}
+.ks-bento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(11, 21, 48, 0.14);
+}
+.ks-bento-large {
+  grid-column: span 2;
+  grid-row: span 1;
+  padding: 32px;
+}
+.ks-bento-accent {
+  background: linear-gradient(135deg, #f4ede0 0%, #fbfaf6 60%);
+  border-color: rgba(201, 161, 74, 0.30);
+}
+.ks-bento-dark {
+  background: linear-gradient(135deg, #0b1530 0%, #1c3050 100%);
+  color: #fff;
+  border-color: transparent;
+}
+.ks-bento-dark h3,
+.ks-bento-dark p { color: #fff; }
+.ks-bento-dark p { color: rgba(255,255,255,0.78); }
+.ks-bento-dark .ks-bento-cta { color: #c9a14a; }
+.ks-bento-badge {
+  align-self: flex-start;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 0.01em;
+  font-family: var(--font-mono);
+  border: 1px solid var(--accent-line);
+  margin-bottom: 14px;
+}
+.ks-bento-badge-light {
+  background: rgba(255,255,255,0.10);
+  color: #f4ede0;
+  border-color: rgba(255,255,255,0.18);
+}
+.ks-bento-icon {
+  width: 44px; height: 44px; border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: grid; place-items: center;
+  margin: 4px 0 16px;
+}
+.ks-bento-card h3 {
+  font-size: 20px; font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+.ks-bento-large h3 { font-size: 26px; }
+.ks-bento-card p {
+  font-size: 14.5px; line-height: 1.55;
+  color: var(--fg-2);
+  margin: 0; flex: 1;
+}
+.ks-bento-large p { font-size: 15px; }
+.ks-bento-cta {
+  margin-top: 16px;
+  font-size: 13px; font-weight: 600;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+.ks-bento-card:hover .ks-bento-cta { transform: translateX(4px); }
+
+/* Visual для большой карточки телемедицины — мок-окошко звонка */
+.ks-bento-visual { margin: 0 -8px 16px; }
+.ks-bento-tele-mock {
+  position: relative;
+  height: 180px;
+  background: linear-gradient(135deg, #2a3d5e 0%, #0b1530 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.10);
+}
+.ks-bento-tele-pip {
+  position: absolute; top: 14px; right: 14px;
+  width: 60px; height: 76px; border-radius: 8px;
+  background: linear-gradient(135deg, #c9a14a 0%, #8a6f30 100%);
+  border: 1px solid rgba(255,255,255,0.16);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.30);
+}
+.ks-bento-tele-main {
+  position: absolute; inset: 18px 90px 50px 18px;
+  border-radius: 10px;
+  background: radial-gradient(circle at 30% 40%, rgba(255,255,255,0.10), transparent 70%);
+}
+.ks-bento-tele-controls {
+  position: absolute; left: 0; right: 0; bottom: 14px;
+  display: flex; justify-content: center; gap: 10px;
+}
+.ks-bento-tele-controls span {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.22);
+}
+.ks-bento-tele-controls span:first-child {
+  background: oklch(0.55 0.20 25);
+  border-color: oklch(0.65 0.20 25);
+}
+
+/* Visual для AI-ассистента — мок чат */
+.ks-bento-ai-mock {
+  height: 180px; padding: 14px;
+  display: flex; flex-direction: column; gap: 8px;
+  background: rgba(0,0,0,0.20);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.ks-bento-ai-bubble {
+  padding: 9px 13px; border-radius: 14px;
+  font-size: 12.5px; line-height: 1.35;
+  max-width: 80%;
+}
+.ks-bento-ai-user {
+  align-self: flex-end;
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.92);
+  border-bottom-right-radius: 4px;
+}
+.ks-bento-ai-bot {
+  align-self: flex-start;
+  background: #c9a14a;
+  color: #0b1530;
+  border-bottom-left-radius: 4px;
+  font-weight: 500;
+}
+.ks-bento-ai-typing {
+  align-self: flex-start;
+  display: flex; gap: 4px;
+  padding: 8px 12px; border-radius: 14px;
+  background: rgba(255,255,255,0.08);
+}
+.ks-bento-ai-typing span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+  animation: ks-typing 1.4s infinite ease-in-out;
+}
+.ks-bento-ai-typing span:nth-child(2) { animation-delay: 0.2s; }
+.ks-bento-ai-typing span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ks-typing {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+.ks-bento-footer {
+  margin-top: 32px; text-align: center;
+}
+.ks-bento-footer-link {
+  font-size: 14px; color: var(--fg-3); font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1px;
+  transition: all 0.2s;
+}
+.ks-bento-footer-link:hover { color: var(--fg); border-color: var(--fg); }
+
+@media (max-width: 980px) {
+  .ks-bento-grid { grid-template-columns: repeat(2, 1fr); }
+  .ks-bento-large { grid-column: span 2; }
+}
+@media (max-width: 600px) {
+  .ks-bento-grid { grid-template-columns: 1fr; }
+  .ks-bento-large { grid-column: span 1; }
+  .ks-premium .ks-bento-section { padding: 64px 20px; }
+}
+
+/* === HERO с mesh-gradient orbs (legacy, остаётся для совместимости) === */
 .ks-hero {
   position: relative;
   padding: 96px 28px 80px;
