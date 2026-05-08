@@ -7220,8 +7220,43 @@ function CallsConfigSection({ token }) {
 // Main AdminLayout
 // ---------------------------------------------------------------------------
 
+// W5 рефакторинг: список валидных ключей секций для URL-синхронизации
+// (deep-links /admin/<section>). Источник истины — switch в renderSection().
+// При добавлении новой секции добавляйте ключ сюда же.
+const ADMIN_SECTIONS = new Set([
+  'home','wiki','settings','analytics','audit','billing','billing_ledger',
+  'monitoring','contacts','reviews','modules_catalog','roles','mis_sync',
+  'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
+  'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
+  'cms','acts','platform_billing','platform_analytics','payment_gateways',
+])
+
+// Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
+// Поддерживает как глобальный /admin, так и тенантный /<slug>/admin/<section>.
+function sectionFromPath(pathname) {
+  if (typeof pathname !== 'string') return 'home'
+  const m = pathname.match(/\/admin(?:\/([a-z_]+))?\/?$/i)
+  if (!m) return 'home'
+  const key = (m[1] || '').toLowerCase()
+  if (!key) return 'home'
+  return ADMIN_SECTIONS.has(key) ? key : 'home'
+}
+
+// Базовый префикс для /admin (учитывает SLUG, если задан)
+function adminBasePath() {
+  if (typeof window === 'undefined') return '/admin'
+  const p = window.location.pathname
+  // /<slug>/admin/...  → /<slug>/admin
+  const m = p.match(/^(\/[^/]+\/admin)(?:\/|$)/)
+  if (m) return m[1]
+  return '/admin'
+}
+
 export default function AdminLayout({ adminToken, user, onLogout }) {
-  const [activeSection, setActiveSection] = useState('home')
+  // W5: activeSection инициализируется из URL — поддержка deep-link /admin/<section>.
+  const [activeSection, setActiveSection] = useState(() =>
+    sectionFromPath(typeof window !== 'undefined' ? window.location.pathname : '/admin')
+  )
   // W4: третий уровень хлебных крошек — для выбранного тенанта/счёта/события.
   // Дочерние секции могут вызывать setBreadcrumbExtra(label) при детализации.
   const [breadcrumbExtra, setBreadcrumbExtra] = useState(null)
@@ -7257,6 +7292,32 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   useEffect(() => { setDrawerOpen(false) }, [activeSection])
   // W4: сбрасываем третий уровень breadcrumbs при переходе между разделами
   useEffect(() => { setBreadcrumbExtra(null) }, [activeSection])
+
+  // ── W5: URL ↔ activeSection синхронизация ─────────────────────────────
+  // 1) При смене activeSection (handleNav, программная навигация) обновляем
+  //    адресную строку через history.pushState — без перезагрузки страницы.
+  //    /admin → home, /admin/<key> → <key>.
+  // 2) Слушаем popstate (back/forward в браузере) → восстанавливаем секцию.
+  // Это даёт настоящие deep-links без введения BrowserRouter в эту ветку
+  // (AdminRoot выбирается path-matching из App.jsx, а не <Routes>).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const base = adminBasePath()
+    const target = activeSection === 'home' ? base : `${base}/${activeSection}`
+    if (window.location.pathname !== target) {
+      try { window.history.pushState({ adminSection: activeSection }, '', target) } catch {}
+    }
+  }, [activeSection])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onPop = () => {
+      const next = sectionFromPath(window.location.pathname)
+      setActiveSection(prev => (prev === next ? prev : next))
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   // ── Загрузка брендинга тенанта (цвета, шрифт, лого) ─────────────────────
   // Использует общий applyTenantTheme из utils/ThemeLoader, чтобы CSS-переменные

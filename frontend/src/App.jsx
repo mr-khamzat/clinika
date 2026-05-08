@@ -282,8 +282,10 @@ function AppRouter() {
     return <Landing />
   }
 
-  // Глобальная платформа khamzat: /admin (без тенантного слага)
-  if (PLATFORM_MODE || path === '/admin') {
+  // Глобальная платформа khamzat: /admin (без тенантного слага).
+  // Поддерживаем deep-link секций /admin/<section> — AdminLayout сам
+  // синхронизирует URL ↔ activeSection (см. useEffect в AdminLayout.jsx).
+  if (PLATFORM_MODE || path === '/admin' || path === '/admin/' || path.startsWith('/admin/')) {
     return <AdminRoot />
   }
 
