@@ -85,6 +85,9 @@ from app.models.patient_chat import (
 # Программа лояльности (Этап 11 ROADMAP)
 from app.models.loyalty import LoyaltyAccount, LoyaltyTransaction, LoyaltyTier, PatientAIConversation, LoyaltyRule, LoyaltyReward
 
+# AI-ассистент (W6) — Gemini-чат для пациентов
+from app.models.ai_assistant import AiConversation, AiMessage
+
 # RBAC как данные (Этап 8 ROADMAP) — overrides матрицы прав на уровне тенанта
 from app.models.permission_override import TenantPermissionOverride
 
@@ -125,4 +128,12 @@ from app.models.sms_marketing import (
     SmsAudienceType,
     SmsMessageStatus,
     SmsProvider,
+)
+
+# Запись звонков + Whisper транскрипция (3990₽/мес) — модуль call_recording (W5)
+from app.models.call_recording import (
+    CallRecording,
+    CallTranscript,
+    CallSessionType,
+    CallRecordingStatus,
 )

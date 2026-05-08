@@ -93,6 +93,13 @@ from app.routers.telemedicine import (
 )
 # SMS-маркетинг модуль (1990₽/мес) — рассылки, реактивация спящих пациентов
 from app.routers.sms_marketing import router as sms_marketing_router
+# AI-ассистент пациенту через Gemini (2990₽/мес) — модуль ai_assistant (W6)
+from app.routers.ai_assistant import (
+    router as ai_assistant_router,
+    admin_router as ai_assistant_admin_router,
+)
+# Запись звонков + Whisper транскрипция (3990₽/мес) — модуль call_recording (W5)
+from app.routers.call_recording import router as call_recording_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -338,6 +345,22 @@ async def sms_campaign_dispatch_job():
             logging.getLogger('scheduler').info(f'sms_dispatch: sent {sent}')
     except Exception as e:
         logging.getLogger('scheduler').error(f'sms_dispatch: {e}')
+
+
+async def transcription_dispatch_job():
+    """APScheduler: воркер транскрипции записей звонков (call_recording).
+
+    Раз в 2 минуты берёт записи в статусе 'ready', шлёт в Whisper,
+    делает AI-summary через Gemini, выставляет 'done' / 'failed'.
+    """
+    import logging
+    try:
+        from app.jobs.transcription_dispatch import run_transcription_dispatch
+        n = await run_transcription_dispatch()
+        if n:
+            logging.getLogger('scheduler').info(f'transcription: processed {n}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'transcription: {e}')
 
 
 async def geoip_update_job():
@@ -657,6 +680,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(appointment_reminders_job, 'interval', minutes=30, id='appointment_reminders', replace_existing=True)
     # SMS-маркетинг: воркер кампаний (sms_marketing) — раз в минуту
     scheduler.add_job(sms_campaign_dispatch_job, 'interval', minutes=1, id='sms_campaign_dispatch', replace_existing=True)
+    # Транскрипция записей звонков (call_recording) — раз в 2 минуты
+    scheduler.add_job(transcription_dispatch_job, 'interval', minutes=2, id='transcription_dispatch', replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
@@ -1119,6 +1144,11 @@ app.include_router(telemedicine_router)
 app.include_router(telemedicine_patient_router)
 # SMS-маркетинг — модуль рассылок (W5)
 app.include_router(sms_marketing_router)
+# AI-ассистент пациенту через Gemini — модуль ai_assistant (W6)
+app.include_router(ai_assistant_router)
+app.include_router(ai_assistant_admin_router)
+# Запись звонков + Whisper транскрипция — модуль call_recording (W5)
+app.include_router(call_recording_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

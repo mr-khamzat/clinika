@@ -33,6 +33,8 @@ const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatri
 const AuditLogSection = lazy(() => import("../sections/AuditLogSection"))
 // W5 — Программа лояльности (тиры/правила/история/обмен баллов)
 const LoyaltySection = lazy(() => import("../sections/loyalty/LoyaltySection"))
+// W5 — Запись звонков + Whisper транскрипция (модуль call_recording)
+const CallRecordingsSection = lazy(() => import("../sections/CallRecordingsSection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -148,6 +150,7 @@ const NAV = [
   { key: 'platform_analytics', label: 'Аналитика платформы', icon: 'insights' },
   { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
   { key: 'loyalty',            label: 'Лояльность',           icon: 'loyalty' },
+  { key: 'recordings',         label: 'Запись звонков',       icon: 'mic' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -198,6 +201,7 @@ const NAV_GROUP_OF = {
   settings:           'SYSTEM',
   doctors:            'TENANT',
   loyalty:            'TENANT',
+  recordings:         'TENANT',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'SYSTEM', 'TENANT']
 
@@ -235,6 +239,7 @@ const PAGE_TITLES = {
   platform_analytics: { title: 'Аналитика платформы',  subtitle: 'Сводная статистика по всем тенантам' },
   payment_gateways:   { title: 'Платёжные шлюзы',      subtitle: 'YooKassa, ЮMoney, Stripe и др.' },
   loyalty:            { title: 'Программа лояльности', subtitle: 'Тиры, автоначисления, история и каталог обмена баллов' },
+  recordings:         { title: 'Запись звонков',       subtitle: 'Аудио/видео запись, расшифровка через Whisper и AI-резюме' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7234,7 +7239,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
-  'loyalty',
+  'loyalty','recordings',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -7390,7 +7395,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'doctors', 'mis_sync', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
     'ads', 'analytics',
-    'loyalty',
+    'loyalty', 'recordings',
   ])
 
   const visibleNav = NAV.filter(item => {
@@ -7400,6 +7405,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
       if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
       if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
+      if (item.key === 'recordings')   return !m || m.has('call_recording')
       return true
     }
     // Платформенный уровень (без SLUG)
@@ -7412,6 +7418,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     if (item.key === 'ads')          return !m || m.has('ads_basic') || m.has('ads_agency')
     if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
     if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
+    if (item.key === 'recordings')   return !m || m.has('call_recording')
     return true
   })
 
@@ -7457,6 +7464,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'platform_analytics': return <Suspense fallback={<SectionLoader />}><PlatformAnalyticsSection token={adminToken} /></Suspense>
       case 'payment_gateways':   return <Suspense fallback={<SectionLoader />}><PaymentGatewaysSection token={adminToken} /></Suspense>
       case 'loyalty':            return <Suspense fallback={<SectionLoader />}><LoyaltySection token={adminToken} /></Suspense>
+      case 'recordings':         return <Suspense fallback={<SectionLoader />}><CallRecordingsSection token={adminToken} /></Suspense>
       default:               return null
     }
   }
