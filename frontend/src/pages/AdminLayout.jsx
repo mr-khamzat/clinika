@@ -20,6 +20,8 @@ const ContactsSection = lazy(() => import('../sections/ContactsSection'))
 const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 const PatientChatsSection = lazy(() => import('../sections/PatientChatsSection'))
 const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
+// W6: AI-ассистент пациенту через Gemini — список и история диалогов
+const AiAssistantSection = lazy(() => import('../sections/AiAssistantSection'))
 const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSection'))
 const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
 const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
@@ -35,6 +37,8 @@ const AuditLogSection = lazy(() => import("../sections/AuditLogSection"))
 const LoyaltySection = lazy(() => import("../sections/loyalty/LoyaltySection"))
 // W5 — Запись звонков + Whisper транскрипция (модуль call_recording)
 const CallRecordingsSection = lazy(() => import("../sections/CallRecordingsSection"))
+// Telemedicine — раздел телемед-сессий + видео-комната (модуль telemedicine)
+const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import AdminSupportPanel from '../components/AdminSupportPanel'
@@ -126,6 +130,7 @@ const NAV = [
   { key: 'analytics',      label: 'Аналитика',    icon: 'bar_chart' },
   { key: 'ai_analytics',   label: 'AI-анализ',    icon: 'auto_awesome' },
   { key: 'ai_knowledge',   label: 'База знаний AI', icon: 'library_books' },
+  { key: 'ai_assistant',   label: 'AI-ассистент пациенту', icon: 'smart_toy' },
   { key: 'audit',          label: 'Аудит',        icon: 'manage_search' },
   { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
@@ -151,6 +156,7 @@ const NAV = [
   { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
   { key: 'loyalty',            label: 'Лояльность',           icon: 'loyalty' },
   { key: 'recordings',         label: 'Запись звонков',       icon: 'mic' },
+  { key: 'telemedicine',       label: 'Телемедицина',         icon: 'video_call' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -180,6 +186,7 @@ const NAV_GROUP_OF = {
   analytics:          'ANALYTICS',
   ai_analytics:       'ANALYTICS',
   ai_knowledge:       'ANALYTICS',
+  ai_assistant:       'CONTENT',
   platform_analytics: 'ANALYTICS',
   monitoring:         'ANALYTICS',
   audit:              'ANALYTICS',
@@ -202,6 +209,7 @@ const NAV_GROUP_OF = {
   doctors:            'TENANT',
   loyalty:            'TENANT',
   recordings:         'TENANT',
+  telemedicine:       'TENANT',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'SYSTEM', 'TENANT']
 
@@ -215,6 +223,7 @@ const PAGE_TITLES = {
   analytics:          { title: 'Аналитика',            subtitle: 'Drill-down по клиникам, врачам, услугам' },
   ai_analytics:       { title: 'AI-анализ',            subtitle: 'Модели, инсайты и автообработка обращений' },
   ai_knowledge:       { title: 'База знаний AI',       subtitle: 'FAQ-ответы для AI-чата пациентов' },
+  ai_assistant:       { title: 'AI-ассистент пациенту', subtitle: 'Диалоги пациентов с Gemini-ассистентом + эскалация к менеджеру' },
   audit:              { title: 'Аудит',                subtitle: 'Журнал действий пользователей платформы' },
   monitoring:         { title: 'Мониторинг',           subtitle: 'Состояние сервисов и API в реальном времени' },
   ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
@@ -240,6 +249,7 @@ const PAGE_TITLES = {
   payment_gateways:   { title: 'Платёжные шлюзы',      subtitle: 'YooKassa, ЮMoney, Stripe и др.' },
   loyalty:            { title: 'Программа лояльности', subtitle: 'Тиры, автоначисления, история и каталог обмена баллов' },
   recordings:         { title: 'Запись звонков',       subtitle: 'Аудио/видео запись, расшифровка через Whisper и AI-резюме' },
+  telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7239,7 +7249,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
-  'loyalty','recordings',
+  'loyalty','recordings','telemedicine',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -7406,6 +7416,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
       if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
       if (item.key === 'recordings')   return !m || m.has('call_recording')
+      if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
+      if (item.key === 'telemedicine') return !m || m.has('telemedicine')
       return true
     }
     // Платформенный уровень (без SLUG)
@@ -7419,6 +7431,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     if (item.key === 'ai_analytics') return !m || m.has('ai_analytics_basic') || m.has('ai_analytics_pro')
     if (item.key === 'loyalty')      return !m || m.has('loyalty_pro')
     if (item.key === 'recordings')   return !m || m.has('call_recording')
+    if (item.key === 'ai_assistant') return !m || m.has('ai_assistant')
+    if (item.key === 'telemedicine') return !m || m.has('telemedicine')
     return true
   })
 
@@ -7455,6 +7469,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         </Suspense>
       )
       case 'ai_knowledge':   return <Suspense fallback={<SectionLoader />}><AIKnowledgeSection token={adminToken} /></Suspense>
+      case 'ai_assistant':   return <Suspense fallback={<SectionLoader />}><AiAssistantSection token={adminToken} /></Suspense>
       case 'super_admin':    return <Suspense fallback={<SectionLoader />}><PlatformSection token={adminToken} /></Suspense>
       case 'franchises':     return <Suspense fallback={<SectionLoader />}><FranchisesSection token={adminToken} /></Suspense>
       case 'branding':       return <Suspense fallback={<SectionLoader />}><BrandingSection token={adminToken} /></Suspense>
@@ -7465,6 +7480,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'payment_gateways':   return <Suspense fallback={<SectionLoader />}><PaymentGatewaysSection token={adminToken} /></Suspense>
       case 'loyalty':            return <Suspense fallback={<SectionLoader />}><LoyaltySection token={adminToken} /></Suspense>
       case 'recordings':         return <Suspense fallback={<SectionLoader />}><CallRecordingsSection token={adminToken} /></Suspense>
+      case 'telemedicine':       return <Suspense fallback={<SectionLoader />}><TelemedicineSection token={adminToken} /></Suspense>
       default:               return null
     }
   }

@@ -14,6 +14,8 @@ const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
 const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
+// W6: AI-ассистент пациенту через Gemini — плавающий чат-виджет
+const PatientAiWidget  = lazy(() => import('../sections/patient/PatientAiWidget'))
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
@@ -2734,6 +2736,18 @@ export default function PatientCabinet() {
           onClose={() => setFamilyOpen(false)}
           onChanged={loadFamily}
           onSwitch={switchProfile} />
+      )}
+
+      {/* W6: AI-ассистент через Gemini — плавающий чат-виджет.
+          Сам прячется при 402 (модуль ai_assistant не подключён). */}
+      {patient_phone && SLUG && (
+        <Suspense fallback={null}>
+          <PatientAiWidget
+            apiBase={API}
+            patientPhone={patient_phone}
+            tenantSlug={SLUG}
+          />
+        </Suspense>
       )}
     </div>
   )
