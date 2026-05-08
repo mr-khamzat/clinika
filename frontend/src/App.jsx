@@ -54,6 +54,8 @@ const DesignSystem = lazy(() => import('./pages/DesignSystem'))
 // Lazy: статьи и react-markdown не нужны рядовому пользователю кабинета.
 const Wiki = lazy(() => import('./pages/Wiki'))
 const WikiArticle = lazy(() => import('./pages/WikiArticle'))
+// Публичная страница пациента для телемед-приёма (без auth, по одноразовому token)
+const PatientTelemedRoom = lazy(() => import('./pages/PatientTelemedRoom'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -317,6 +319,17 @@ function AppRouter() {
     return (
       <Suspense fallback={<div style={{ background: '#161a1f', minHeight: '100vh' }} />}>
         <PatientCabinetPreview />
+      </Suspense>
+    )
+  }
+
+  // Публичная страница телемед-приёма пациента: /p/telemed/:token или /<slug>/p/telemed/:token.
+  // Открывается из ссылки приглашения, без авторизации (auth по одноразовому JWT в URL).
+  // Должна перехватываться ПЕРЕД PatientCabinet (тот ловит /<slug>/p/...).
+  if (/\/p\/telemed\//.test(path)) {
+    return (
+      <Suspense fallback={<div style={{ background: '#0b0e13', minHeight: '100vh' }} />}>
+        <PatientTelemedRoom />
       </Suspense>
     )
   }

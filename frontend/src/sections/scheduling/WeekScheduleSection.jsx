@@ -23,6 +23,9 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import api from '../../api'
 import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal, QuickActions, buildPatientCardActions } from '../../design'
+// Видео-комната телемед-приёма (lazy, чтобы не утяжелять основной bundle расписания)
+import { lazy, Suspense } from 'react'
+const TelemedRoomModal = lazy(() => import('../../components/telemed/TelemedRoomModal'))
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -68,7 +71,14 @@ export default function WeekScheduleSection({
   selfDoctorId = null,    // если mode='self' — id своего врача
   selfDoctorName = '',
 }) {
+  const [telemedRoomId, setTelemedRoomId] = useState(null)
   const [doctors, setDoctors] = useState([])
+  // Слушаем глобальное событие для открытия телемед-комнаты (из ApptModal)
+  useEffect(() => {
+    const onOpen = (e) => { if (e?.detail?.sessionId) setTelemedRoomId(e.detail.sessionId) }
+    window.addEventListener('open-telemed-room', onOpen)
+    return () => window.removeEventListener('open-telemed-room', onOpen)
+  }, [])
   const [doctorId, setDoctorId] = useState(selfDoctorId || '')
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date()))
   const [data, setData] = useState(null)         // ответ /doctors/{id}/week
@@ -160,14 +170,23 @@ export default function WeekScheduleSection({
       throw new Error('Укажите телефон пациента')
     }
     try {
-      await api.post('/appointments', {
+      // is_telemed: backend принимает либо нативное поле, либо хранит в notes JSON.
+      // Дублируем флаг в notes, чтобы на бэкенде без миграции тоже было видно (#telemed marker).
+      const payload = {
         doctor_id: doctorId,
         appointment_date: bookModal.date,
         start_time: bookModal.start_time,
         patient_phone: form.patient_phone.trim(),
         patient_name: form.patient_name || null,
         notes: form.notes || null,
-      })
+        is_telemed: !!form.is_telemed,
+      }
+      if (form.is_telemed && !payload.notes) {
+        payload.notes = '[ТЕЛЕМЕД] Видео-консультация'
+      } else if (form.is_telemed && payload.notes && !/телемед|telemed/i.test(payload.notes)) {
+        payload.notes = '[ТЕЛЕМЕД] ' + payload.notes
+      }
+      await api.post('/appointments', payload)
       setBookModal(null)
       reload()
     } catch (e) {
@@ -278,6 +297,15 @@ export default function WeekScheduleSection({
       </KpiRow>
 
       {/* ===== БЛОК: Модалы ===== */}
+      {telemedRoomId && (
+        <Suspense fallback={null}>
+          <TelemedRoomModal
+            sessionId={telemedRoomId}
+            onClose={() => { setTelemedRoomId(null); reload() }}
+          />
+        </Suspense>
+      )}
+
       {bookModal && (
         <BookModal
           ctx={bookModal}
@@ -559,7 +587,7 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
 
 // ── Модал создания записи ────────────────────────────────────────────────────
 function BookModal({ ctx, doctorName, onClose, onCreate }) {
-  const [form, setForm] = useState({ patient_phone: '', patient_name: '', notes: '' })
+  const [form, setForm] = useState({ patient_phone: '', patient_name: '', notes: '', is_telemed: false })
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
 
@@ -602,6 +630,18 @@ function BookModal({ ctx, doctorName, onClose, onCreate }) {
         <textarea placeholder="Примечания (необязательно)" value={form.notes}
           onChange={e => setForm({ ...form, notes: e.target.value })} rows={2}
           style={{ ...inputStyle, resize: 'none' }} />
+
+        {/* Чекбокс телемед-приёма — добавляет флаг is_telemed в payload */}
+        <label className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: 'var(--fg)' }}>
+          <input
+            type="checkbox"
+            checked={!!form.is_telemed}
+            onChange={e => setForm({ ...form, is_telemed: e.target.checked })}
+            className="w-4 h-4 accent-[#0097A7]"
+          />
+          <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>video_call</span>
+          Тип приёма: Телемедицина (видео-консультация)
+        </label>
       </div>
 
       {err && (
@@ -678,6 +718,41 @@ img{width:280px;height:280px;border:1px solid #e2e8f0;border-radius:12px;padding
           />
         </div>
       )}
+
+      {/* ===== Кнопка «Начать телемед-приём» (только для записей с маркером телемед) ===== */}
+      {(() => {
+        const isTelemed = !!a.is_telemed || (a.notes && /телемед|telemed/i.test(a.notes))
+        if (!isTelemed) return null
+        if (!['pending', 'confirmed'].includes(a.status)) return null
+        return (
+          <div className="mb-4">
+            <Button
+              variant="primary"
+              onClick={async () => {
+                try {
+                  // Запрашиваем у backend session_id для этой записи. Если её ещё нет — создаём.
+                  let sessionId = a.telemed_session_id
+                  if (!sessionId) {
+                    const r = await api.post('/telemed/sessions', { appointment_id: a.id })
+                    sessionId = r.data?.id
+                  }
+                  if (sessionId) {
+                    // Открываем модалку через глобальное событие (TelemedRoomModal монтируется ниже)
+                    window.dispatchEvent(new CustomEvent('open-telemed-room', { detail: { sessionId } }))
+                    onClose()
+                  }
+                } catch (e) {
+                  alert('Не удалось открыть телемед-комнату: ' + (e?.response?.data?.detail || e.message))
+                }
+              }}
+              className="w-full"
+            >
+              <span className="material-symbols-outlined text-base mr-1" style={{ verticalAlign: 'middle' }}>videocam</span>
+              Начать телемед-приём
+            </Button>
+          </div>
+        )
+      })()}
 
       {!canEdit ? (
         <div className="text-xs text-center py-2" style={{ color: 'var(--fg-3)' }}>Только просмотр</div>
