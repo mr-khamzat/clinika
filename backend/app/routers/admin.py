@@ -1424,6 +1424,10 @@ def _serialize_franchise(f: Franchise, owner: Optional[User], tenant_count: int,
         "is_active": f.is_active,
         "allowed_region": f.allowed_region,
         "region_strict": f.region_strict,
+        "is_blocked": f.is_blocked,
+        "blocked_until": f.blocked_until.isoformat() if f.blocked_until else None,
+        "block_reason": f.block_reason,
+        "blocked_at": f.blocked_at.isoformat() if f.blocked_at else None,
         "tenant_count": tenant_count,
         "mrr_sum": mrr_sum,
         "created_at": f.created_at.isoformat() if f.created_at else None,
@@ -1661,4 +1665,192 @@ async def update_franchise_billing(
         fr.billing_period_days = max(1, int(body.billing_period_days))
     await db.commit()
     return {"ok": True, "franchise_id": str(franchise_id)}
+
+
+# ===== БЛОК: Region Lock Phase 2 v2 — manual block + IP allowlist =====
+# Все эндпоинты — только super_admin. Действия пишутся в audit_log.
+
+class FranchiseBlockRequest(BaseModel):
+    reason: Optional[str] = Field(None, max_length=500)
+    blocked_until: Optional[datetime] = None  # null — бессрочно
+
+
+@router.post("/franchises/{franchise_id}/block")
+async def block_franchise(
+    franchise_id: uuid.UUID,
+    body: FranchiseBlockRequest,
+    current: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручная блокировка франшизы. Срабатывает enforce_region_lock на защищённых endpoint'ах.
+    blocked_until=null — бессрочно. Чтобы снять — POST /unblock."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+
+    f.is_blocked = True
+    f.block_reason = (body.reason or "").strip() or None
+    f.blocked_until = body.blocked_until
+    f.blocked_by = current.id
+    f.blocked_at = datetime.utcnow()
+
+    from app.services import audit_service
+    await audit_service.write_safe(
+        db, "franchise.blocked",
+        actor_id=current.id, actor_name=current.full_name,
+        entity_type="franchise", entity_id=f.id,
+        after={
+            "franchise_id": str(f.id), "franchise_name": f.name,
+            "reason": f.block_reason,
+            "blocked_until": f.blocked_until.isoformat() if f.blocked_until else None,
+        },
+        comment=f"Ручная блокировка франшизы «{f.name}»",
+    )
+    await db.commit()
+    return {
+        "ok": True,
+        "is_blocked": True,
+        "blocked_until": f.blocked_until.isoformat() if f.blocked_until else None,
+        "block_reason": f.block_reason,
+    }
+
+
+@router.post("/franchises/{franchise_id}/unblock")
+async def unblock_franchise(
+    franchise_id: uuid.UUID,
+    current: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Снять ручную блокировку франшизы."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+    f.is_blocked = False
+    f.blocked_until = None
+    f.block_reason = None
+    f.blocked_by = None
+    f.blocked_at = None
+    from app.services import audit_service
+    await audit_service.write_safe(
+        db, "franchise.unblocked",
+        actor_id=current.id, actor_name=current.full_name,
+        entity_type="franchise", entity_id=f.id,
+        comment=f"Разблокировка франшизы «{f.name}»",
+    )
+    await db.commit()
+    return {"ok": True, "is_blocked": False}
+
+
+# ── IP allowlist ──────────────────────────────────────────────────────────────
+
+class IpAllowlistRequest(BaseModel):
+    ip_cidr: str = Field(..., min_length=3, max_length=43)  # IPv4/CIDR or IPv6
+    comment: Optional[str] = Field(None, max_length=500)
+    bypass_block: Optional[bool] = False
+
+
+@router.get("/franchises/{franchise_id}/ip-allowlist")
+async def list_ip_allowlist(
+    franchise_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список разрешённых IP/CIDR франшизы."""
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+    from app.models.franchise_ip_allowlist import FranchiseIpAllowlist
+    rows = (await db.execute(
+        select(FranchiseIpAllowlist)
+        .where(FranchiseIpAllowlist.franchise_id == franchise_id)
+        .order_by(FranchiseIpAllowlist.created_at.desc())
+    )).scalars().all()
+    out = []
+    for r in rows:
+        creator = None
+        if r.created_by:
+            creator = (await db.execute(select(User).where(User.id == r.created_by))).scalar_one_or_none()
+        out.append({
+            "id": str(r.id),
+            "ip_cidr": str(r.ip_cidr),
+            "comment": r.comment,
+            "bypass_block": r.bypass_block,
+            "created_by": str(r.created_by) if r.created_by else None,
+            "created_by_name": creator.full_name if creator else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+    return out
+
+
+@router.post("/franchises/{franchise_id}/ip-allowlist", status_code=201)
+async def add_ip_allowlist(
+    franchise_id: uuid.UUID,
+    body: IpAllowlistRequest,
+    current: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Добавить IP/CIDR в whitelist франшизы. INET-формат: '1.2.3.4' или '1.2.0.0/16'."""
+    import ipaddress
+    f = await db.get(Franchise, franchise_id)
+    if not f:
+        raise HTTPException(status_code=404, detail="Франшиза не найдена")
+    raw = (body.ip_cidr or "").strip()
+    try:
+        # Валидация: ipaddress принимает host или network с маской
+        ipaddress.ip_network(raw, strict=False)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Некорректный IP/CIDR: {raw}")
+
+    from app.models.franchise_ip_allowlist import FranchiseIpAllowlist
+    entry = FranchiseIpAllowlist(
+        franchise_id=franchise_id,
+        ip_cidr=raw,
+        comment=(body.comment or "").strip() or None,
+        bypass_block=bool(body.bypass_block),
+        created_by=current.id,
+    )
+    db.add(entry)
+    from app.services import audit_service
+    await audit_service.write_safe(
+        db, "franchise.ip_allowlist_added",
+        actor_id=current.id, actor_name=current.full_name,
+        entity_type="franchise", entity_id=franchise_id,
+        after={"ip_cidr": raw, "comment": entry.comment, "bypass_block": entry.bypass_block},
+        comment=f"IP {raw} добавлен в whitelist «{f.name}»",
+    )
+    await db.commit()
+    await db.refresh(entry)
+    return {
+        "id": str(entry.id),
+        "ip_cidr": str(entry.ip_cidr),
+        "comment": entry.comment,
+        "bypass_block": entry.bypass_block,
+        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+    }
+
+
+@router.delete("/franchises/{franchise_id}/ip-allowlist/{entry_id}")
+async def delete_ip_allowlist(
+    franchise_id: uuid.UUID,
+    entry_id: uuid.UUID,
+    current: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить запись из whitelist."""
+    from app.models.franchise_ip_allowlist import FranchiseIpAllowlist
+    entry = await db.get(FranchiseIpAllowlist, entry_id)
+    if not entry or entry.franchise_id != franchise_id:
+        raise HTTPException(status_code=404, detail="Запись не найдена")
+    snapshot = {"ip_cidr": str(entry.ip_cidr), "comment": entry.comment, "bypass_block": entry.bypass_block}
+    await db.delete(entry)
+    from app.services import audit_service
+    await audit_service.write_safe(
+        db, "franchise.ip_allowlist_removed",
+        actor_id=current.id, actor_name=current.full_name,
+        entity_type="franchise", entity_id=franchise_id,
+        before=snapshot,
+        comment=f"IP {snapshot['ip_cidr']} удалён из whitelist",
+    )
+    await db.commit()
+    return {"ok": True, "deleted_id": str(entry_id)}
 

@@ -64,6 +64,22 @@ class Franchise(Base):
         Boolean, nullable=False, default=False, server_default="false"
     )
 
+    # ── Manual Block (Phase 2 v2) ──────────────────────────────────────────────
+    # Ручная блокировка франшизы владельцем платформы. Никогда не выставляется
+    # автоматически — только из UI «Нарушения регионов» / форма редактирования.
+    # При is_blocked=True (или blocked_until > NOW()) защищённые endpoints возвращают
+    # 403 «Доступ заблокирован администратором платформы».
+    # Реализовано в core.region_lock.enforce_region_lock — bypass'ится IP allowlist'ом.
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    blocked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    blocked_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     # ── Onboarding wizard (W4) ─────────────────────────────────────────────────
     # Состояние пошагового мастера для нового franchise_owner. После завершения
     # `onboarding_done=True` — кабинет открывается в обычном режиме.

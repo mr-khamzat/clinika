@@ -528,6 +528,8 @@ async def list_region_violations(
             'franchise_id': str(f.id) if f else None,
             'franchise_name': f.name if f else after.get('franchise_name'),
             'allowed_region': (f.allowed_region if f else None) or after.get('allowed_region'),
+            'franchise_is_blocked': bool(f.is_blocked) if f else False,
+            'franchise_blocked_until': (f.blocked_until.isoformat() if (f and f.blocked_until) else None),
             'detected_region': e.geo_region or after.get('detected_region'),
             'detected_city': e.geo_city or after.get('detected_city'),
             'detected_country': e.geo_country_name or after.get('detected_country'),

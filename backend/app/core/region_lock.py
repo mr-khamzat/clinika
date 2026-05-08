@@ -1,19 +1,29 @@
-# ===== БЛОК: Region Lock — активная блокировка действий вне разрешённого региона =====
-# Phase 2: если franchise.region_strict=True И geo_region не совпадает с allowed_region,
-# критичные операции (POST/PATCH/DELETE) возвращают HTTP 403 с понятным сообщением.
+# ===== БЛОК: Region Lock — активная блокировка действий =====
+# Два независимых режима, каждый можно включать/выключать флагом:
+#
+# (A) Manual block — `franchise.is_blocked=True` ИЛИ `blocked_until > NOW()`.
+#     Ставится вручную из UI «Нарушения регионов» / форма редактирования франшизы.
+#     Никакой автоматики. Bypass: запись в IP allowlist с `bypass_block=True`.
+#
+# (B) Auto-block по региону — `franchise.region_strict=True` (per-franchise тоггл).
+#     Когда geo_region не совпадает с allowed_region — 403. Bypass: IP в allowlist.
+#     По умолчанию ВЫКЛЮЧЕН (region_strict=False) — только алерт через
+#     audit_service / activity_service hook (Phase 1).
 #
 # Используется как FastAPI Depends в чувствительных роутерах (clinics, referrals,
 # bonuses, payments, manager/*) и в /auth/login.
 #
-# Граничные правила:
-#   • super_admin — bypass всегда (надплатформенный, не должен self-lock'ить себя)
-#   • geo_region == None (приватный IP / нет mmdb) — НЕ блокируем (graceful)
-#   • franchise.allowed_region == None — НЕ блокируем (Phase 2 не активирован)
-#   • franchise.region_strict == False — только мониторинг (Phase 1), не блок
+# Общие граничные правила:
+#   • super_admin — bypass всегда (надплатформенный)
+#   • Юзер без tenant_id — нечего проверять
+#   • IP в franchise_ip_allowlist — bypass auto-block (и manual block если bypass_block=True)
+#   • Любая внутренняя ошибка — graceful (не блокируем)
 
 import logging
+from datetime import datetime
 from typing import Optional
 from fastapi import Depends, HTTPException, Request, status
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user
@@ -23,8 +33,9 @@ from app.services import region_lock_service
 
 log = logging.getLogger("region_lock_enforce")
 
-# Префикс detail в 403 — фронт ловит его и показывает специальную модалку.
+# Префиксы detail в 403 — фронт ловит их и показывает специальную модалку.
 BLOCK_MESSAGE_PREFIX = "Доступ заблокирован: вы вне разрешённого региона франшизы"
+MANUAL_BLOCK_PREFIX = "Доступ заблокирован администратором платформы"
 
 
 def _client_ip(request: Request) -> Optional[str]:
@@ -69,20 +80,52 @@ async def enforce_region_lock(
         if not current_user.tenant_id:
             return
 
-        # ── 3. Загружаем франшизу. Если её нет / allowed_region не задан — bypass.
+        # ── 3. Загружаем франшизу ─────────────────────────────────────────────
         franchise = await region_lock_service._load_franchise_for_tenant(
             db, current_user.tenant_id
         )
-        if franchise is None or not franchise.allowed_region:
+        if franchise is None:
             return
 
-        # ── 4. Если region_strict=False — только мониторинг (Phase 1) ─────────
-        # Хук в audit_service / activity_service уже зафиксирует нарушение.
-        if not franchise.region_strict:
-            return
-
-        # ── 5. Получаем geo_region текущего IP ─────────────────────────────────
         ip = _client_ip(request)
+
+        # ── 4. Manual block (приоритет над auto-region) ───────────────────────
+        # Активен если is_blocked=True или blocked_until > NOW(). Bypass только
+        # для записей allowlist с bypass_block=True.
+        if franchise.is_blocked or (
+            franchise.blocked_until and franchise.blocked_until > datetime.utcnow()
+        ):
+            bypass_row = None
+            if ip:
+                try:
+                    bypass_row = (await db.execute(
+                        sa_text(
+                            "SELECT 1 FROM franchise_ip_allowlist "
+                            "WHERE franchise_id = :fid AND bypass_block = TRUE "
+                            "AND CAST(:ip AS inet) <<= ip_cidr LIMIT 1"
+                        ),
+                        {"fid": str(franchise.id), "ip": ip},
+                    )).first()
+                except Exception as e:
+                    log.warning(f"manual block bypass check failed: {e}")
+                    bypass_row = None
+            if bypass_row is None:
+                detail = MANUAL_BLOCK_PREFIX
+                if franchise.block_reason:
+                    detail = f"{detail}. Причина: {franchise.block_reason}"
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+        # ── 5. Auto-region block — только если allowed_region задан и strict=True ─
+        if not franchise.allowed_region:
+            return  # Phase 2 не активирован
+        if not franchise.region_strict:
+            return  # только Phase 1 — мониторинг через audit_service hook
+
+        # ── 6. IP в allowlist? — bypass auto-region (без bypass_block требования)
+        if ip and await region_lock_service.is_ip_allowlisted(db, franchise.id, ip):
+            return
+
+        # ── 7. Получаем geo_region текущего IP ─────────────────────────────────
         if not ip:
             return  # graceful — без IP не блокируем
         geo: Optional[dict] = None
@@ -96,16 +139,14 @@ async def enforce_region_lock(
             return  # graceful — без geo не блокируем (приватный IP / нет mmdb)
 
         geo_region = geo.get("region")
-        # ── 6. Если geo_region не определился — graceful bypass ────────────────
         if not geo_region:
             return
 
-        # ── 7. Сравнение через нормализатор из service ─────────────────────────
+        # ── 8. Сравнение через нормализатор из service ─────────────────────────
         if region_lock_service._matches(geo_region, franchise.allowed_region):
             return
 
-        # ── 8. НАРУШЕНИЕ. Пишем мягкий аудит + Telegram через check_violation. ─
-        # check_violation сам делает дедуп алертов и flush в БД.
+        # ── 9. НАРУШЕНИЕ. Пишем мягкий аудит + Telegram через check_violation. ─
         try:
             await region_lock_service.check_violation(
                 db,
@@ -123,7 +164,7 @@ async def enforce_region_lock(
         except Exception as e:
             log.warning(f"region_lock enforce: audit write failed: {e}")
 
-        # ── 9. Блокируем запрос ────────────────────────────────────────────────
+        # ── 10. Блокируем запрос ───────────────────────────────────────────────
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(

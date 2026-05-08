@@ -516,15 +516,19 @@ export default function FranchisesSection({ token }) {
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+                <label className="flex items-start gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={!!form.region_strict}
                     onChange={e => set('region_strict', e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300"
+                    className="w-4 h-4 mt-0.5 rounded border-gray-300"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">
-                    Строгий режим (Phase 2 — блокировать действия вне региона)
+                    Строгий режим — авто-блокировка действий вне региона
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                      ⚠️ Не включайте если у клиентов VPN или спутниковый интернет — будет ложная блокировка.
+                      Используйте IP whitelist для исключений.
+                    </div>
                   </span>
                 </label>
               </div>

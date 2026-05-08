@@ -901,6 +901,7 @@ function RegionViolationsTab({ token }) {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [days, setDays] = useState(30)
+  const [busyId, setBusyId] = useState(null)  // id строки с активным действием
 
   const load = useCallback(async () => {
     setLoading(true); setErr('')
@@ -916,6 +917,69 @@ function RegionViolationsTab({ token }) {
   }, [days])
 
   useEffect(() => { load() }, [load])
+
+  // Действия с франшизой по конкретному нарушению
+  const addToWhitelist = useCallback(async (v) => {
+    if (!v.franchise_id || !v.ip_address) {
+      window.alert('Не хватает данных: franchise_id или IP')
+      return
+    }
+    const comment = window.prompt(
+      `Добавить IP ${v.ip_address} в whitelist франшизы «${v.franchise_name || ''}»?\n` +
+      `Комментарий (необязательно):`,
+      `${v.detected_city || v.detected_region || ''} (${new Date(v.created_at).toLocaleDateString('ru-RU')})`
+    )
+    if (comment === null) return
+    setBusyId(v.id)
+    try {
+      await api.post(`/admin/franchises/${v.franchise_id}/ip-allowlist`, {
+        ip_cidr: v.ip_address,
+        comment: comment || null,
+        bypass_block: false,
+      })
+      await load()
+    } catch (e) {
+      window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setBusyId(null)
+    }
+  }, [load])
+
+  const blockFranchise = useCallback(async (v) => {
+    if (!v.franchise_id) return
+    const reason = window.prompt(
+      `Заблокировать франшизу «${v.franchise_name || ''}»?\n` +
+      `Причина (будет видна пользователю):`,
+      'Нарушение разрешённого региона'
+    )
+    if (reason === null) return
+    setBusyId(v.id)
+    try {
+      await api.post(`/admin/franchises/${v.franchise_id}/block`, {
+        reason: reason || null,
+        blocked_until: null,
+      })
+      await load()
+    } catch (e) {
+      window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setBusyId(null)
+    }
+  }, [load])
+
+  const unblockFranchise = useCallback(async (v) => {
+    if (!v.franchise_id) return
+    if (!window.confirm(`Снять блокировку с франшизы «${v.franchise_name || ''}»?`)) return
+    setBusyId(v.id)
+    try {
+      await api.post(`/admin/franchises/${v.franchise_id}/unblock`)
+      await load()
+    } catch (e) {
+      window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setBusyId(null)
+    }
+  }, [load])
 
   // Сводка по франшизам — сколько нарушений у каждой
   const summary = useMemo(() => {
@@ -1021,14 +1085,26 @@ function RegionViolationsTab({ token }) {
                 padding: '10px 14px',
                 borderBottom: '1px solid var(--border)',
                 fontSize: 12.5,
+                flexWrap: 'wrap',
               }}
             >
               <div style={{ minWidth: 130, color: 'var(--fg-3)', fontFamily: 'monospace', fontSize: 11 }}>
                 {v.created_at ? new Date(v.created_at).toLocaleString('ru-RU') : '—'}
               </div>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
                 <div style={{ fontWeight: 600, color: 'var(--fg)' }}>
                   {v.franchise_name || v.tenant_name || 'Без франшизы'}
+                  {v.franchise_is_blocked && (
+                    <Chip
+                      variant="default"
+                      style={{
+                        background: 'oklch(0.40 0.20 25)', color: 'white',
+                        fontSize: 10, height: 18, marginLeft: 6,
+                      }}
+                    >
+                      BLOCKED
+                    </Chip>
+                  )}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
                   Разрешён: <b>{v.allowed_region || '—'}</b>
@@ -1048,20 +1124,61 @@ function RegionViolationsTab({ token }) {
                   </div>
                 )}
               </div>
-              {v.region_strict && (
-                <Chip
-                  variant="default"
-                  style={{
-                    background: 'oklch(0.93 0.07 25)',
-                    color: 'oklch(0.40 0.18 25)',
-                    fontSize: 10,
-                    height: 20,
-                    alignSelf: 'flex-start',
-                  }}
-                >
-                  STRICT
-                </Chip>
-              )}
+
+              {/* Действия по нарушению — IP whitelist + ручной блок */}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignSelf: 'center' }}>
+                {v.region_strict && (
+                  <Chip
+                    variant="default"
+                    style={{
+                      background: 'oklch(0.93 0.07 25)',
+                      color: 'oklch(0.40 0.18 25)',
+                      fontSize: 10,
+                      height: 20,
+                    }}
+                  >
+                    STRICT
+                  </Chip>
+                )}
+                {v.ip_address && v.franchise_id && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busyId === v.id}
+                    onClick={() => addToWhitelist(v)}
+                    title={`Добавить ${v.ip_address} в whitelist франшизы`}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 4 }}>shield_person</span>
+                    В whitelist
+                  </Button>
+                )}
+                {v.franchise_id && !v.franchise_is_blocked && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busyId === v.id}
+                    onClick={() => blockFranchise(v)}
+                    title="Ручная блокировка франшизы"
+                    style={{ color: 'oklch(0.50 0.20 25)' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 4 }}>block</span>
+                    Заблокировать
+                  </Button>
+                )}
+                {v.franchise_id && v.franchise_is_blocked && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busyId === v.id}
+                    onClick={() => unblockFranchise(v)}
+                    title="Снять ручную блокировку"
+                    style={{ color: 'oklch(0.45 0.18 145)' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, marginRight: 4 }}>lock_open</span>
+                    Разблокировать
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
         </Card>

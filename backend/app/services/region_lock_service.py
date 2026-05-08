@@ -12,7 +12,7 @@ import html
 import logging
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import select
+from sqlalchemy import select, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit import AuditEntry
@@ -68,6 +68,28 @@ async def _load_franchise_for_tenant(
     return row
 
 
+async def is_ip_allowlisted(
+    db: AsyncSession, franchise_id: uuid.UUID, ip: Optional[str]
+) -> bool:
+    """True если IP попадает хотя бы в одну запись franchise_ip_allowlist франшизы.
+    Использует postgres-оператор `<<=`: ip ∈ cidr. Невалидные IP / None → False.
+    """
+    if not ip or not franchise_id:
+        return False
+    try:
+        row = await db.execute(
+            sa_text(
+                "SELECT 1 FROM franchise_ip_allowlist "
+                "WHERE franchise_id = :fid AND CAST(:ip AS inet) <<= ip_cidr LIMIT 1"
+            ),
+            {"fid": str(franchise_id), "ip": ip},
+        )
+        return row.first() is not None
+    except Exception as e:
+        log.warning(f"is_ip_allowlisted failed for ip={ip}: {e}")
+        return False
+
+
 def _should_alert(franchise_id: uuid.UUID, geo_region: str) -> bool:
     """Дедуп: одна и та же связка франшиза×регион — раз в _DEDUP_MINUTES минут."""
     key = f"{franchise_id}:{_normalize(geo_region)}"
@@ -117,6 +139,11 @@ async def check_violation(
             return False
 
         if _matches(geo_region, franchise.allowed_region):
+            return False
+
+        # IP в allowlist — не считаем нарушением, не пишем violation, не алертим.
+        # Кейс: VPN/спутник, IP заранее одобрен владельцем платформы.
+        if await is_ip_allowlisted(db, franchise.id, ip_address):
             return False
 
         # ── Фиксируем нарушение в audit_log ────────────────────────────────────
