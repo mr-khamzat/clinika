@@ -918,7 +918,10 @@ function RegionViolationsTab({ token }) {
 
   useEffect(() => { load() }, [load])
 
-  // Действия с франшизой по конкретному нарушению
+  // doneIds — id нарушений по которым уже выполнено действие в этой сессии,
+  // показываем inline-подтверждение чтобы было ясно что кнопка сработала
+  const [doneIds, setDoneIds] = useState({})  // { [violation_id]: 'whitelisted'|'blocked'|'unblocked' }
+
   const addToWhitelist = useCallback(async (v) => {
     if (!v.franchise_id || !v.ip_address) {
       window.alert('Не хватает данных: franchise_id или IP')
@@ -937,13 +940,23 @@ function RegionViolationsTab({ token }) {
         comment: comment || null,
         bypass_block: false,
       })
-      await load()
+      setDoneIds(prev => ({ ...prev, [v.id]: 'whitelisted' }))
+      // Помечаем все нарушения с тем же IP+franchise — больше алертов оттуда не будет
+      setItems(prev => prev.map(x =>
+        (x.franchise_id === v.franchise_id && x.ip_address === v.ip_address)
+          ? { ...x, _whitelisted: true } : x
+      ))
     } catch (e) {
-      window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+      const detail = e?.response?.data?.detail || e.message
+      if (e?.response?.status === 409) {
+        setDoneIds(prev => ({ ...prev, [v.id]: 'whitelisted' }))
+      } else {
+        window.alert('Ошибка: ' + detail)
+      }
     } finally {
       setBusyId(null)
     }
-  }, [load])
+  }, [])
 
   const blockFranchise = useCallback(async (v) => {
     if (!v.franchise_id) return
@@ -959,13 +972,16 @@ function RegionViolationsTab({ token }) {
         reason: reason || null,
         blocked_until: null,
       })
-      await load()
+      setDoneIds(prev => ({ ...prev, [v.id]: 'blocked' }))
+      setItems(prev => prev.map(x =>
+        x.franchise_id === v.franchise_id ? { ...x, franchise_is_blocked: true } : x
+      ))
     } catch (e) {
       window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
     } finally {
       setBusyId(null)
     }
-  }, [load])
+  }, [])
 
   const unblockFranchise = useCallback(async (v) => {
     if (!v.franchise_id) return
@@ -973,13 +989,16 @@ function RegionViolationsTab({ token }) {
     setBusyId(v.id)
     try {
       await api.post(`/admin/franchises/${v.franchise_id}/unblock`)
-      await load()
+      setDoneIds(prev => ({ ...prev, [v.id]: 'unblocked' }))
+      setItems(prev => prev.map(x =>
+        x.franchise_id === v.franchise_id ? { ...x, franchise_is_blocked: false } : x
+      ))
     } catch (e) {
       window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
     } finally {
       setBusyId(null)
     }
-  }, [load])
+  }, [])
 
   // Сводка по франшизам — сколько нарушений у каждой
   const summary = useMemo(() => {
@@ -1140,7 +1159,40 @@ function RegionViolationsTab({ token }) {
                     STRICT
                   </Chip>
                 )}
-                {v.ip_address && v.franchise_id && (
+                {/* Inline-подтверждение что действие выполнено в этой сессии */}
+                {doneIds[v.id] === 'whitelisted' && (
+                  <Chip variant="default" style={{
+                    background: 'oklch(0.93 0.10 145)', color: 'oklch(0.35 0.18 145)',
+                    fontSize: 10, height: 20,
+                  }}>
+                    ✓ IP в whitelist
+                  </Chip>
+                )}
+                {doneIds[v.id] === 'blocked' && (
+                  <Chip variant="default" style={{
+                    background: 'oklch(0.40 0.20 25)', color: 'white',
+                    fontSize: 10, height: 20,
+                  }}>
+                    ✓ Заблокировано
+                  </Chip>
+                )}
+                {doneIds[v.id] === 'unblocked' && (
+                  <Chip variant="default" style={{
+                    background: 'oklch(0.93 0.10 145)', color: 'oklch(0.35 0.18 145)',
+                    fontSize: 10, height: 20,
+                  }}>
+                    ✓ Разблокировано
+                  </Chip>
+                )}
+                {v._whitelisted && doneIds[v.id] !== 'whitelisted' && (
+                  <Chip variant="default" style={{
+                    background: 'oklch(0.95 0.06 145)', color: 'oklch(0.40 0.15 145)',
+                    fontSize: 10, height: 20,
+                  }}>
+                    в whitelist
+                  </Chip>
+                )}
+                {v.ip_address && v.franchise_id && !v._whitelisted && (
                   <Button
                     variant="ghost"
                     size="sm"

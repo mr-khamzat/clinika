@@ -1802,6 +1802,16 @@ async def add_ip_allowlist(
         raise HTTPException(status_code=400, detail=f"Некорректный IP/CIDR: {raw}")
 
     from app.models.franchise_ip_allowlist import FranchiseIpAllowlist
+    # Защита от дубликата: тот же IP/CIDR в той же франшизе уже добавлен
+    dup = (await db.execute(
+        text(
+            "SELECT id FROM franchise_ip_allowlist "
+            "WHERE franchise_id = :fid AND ip_cidr = CAST(:ip AS inet) LIMIT 1"
+        ),
+        {"fid": str(franchise_id), "ip": raw},
+    )).first()
+    if dup:
+        raise HTTPException(status_code=409, detail=f"IP {raw} уже в whitelist этой франшизы")
     entry = FranchiseIpAllowlist(
         franchise_id=franchise_id,
         ip_cidr=raw,

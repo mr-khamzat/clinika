@@ -512,6 +512,34 @@ async def list_region_violations(
             ).scalars().all()
             franchise_map = {str(f.id): f for f in franchises}
 
+    # Подгружаем для каждой пары (franchise, ip) — есть ли запись в whitelist.
+    # Один запрос: WHERE (franchise_id, ip) ∈ pairs. Используем VALUES + JOIN.
+    whitelist_pairs: set[tuple[str, str]] = set()
+    pairs_to_check = {
+        (str(franchise_map.get(str(t.franchise_id)).id), e.ip_address)
+        for e in rows
+        if e.ip_address and e.tenant_id
+        and (t := tenant_map.get(str(e.tenant_id)))
+        and t.franchise_id
+        and franchise_map.get(str(t.franchise_id))
+    }
+    if pairs_to_check:
+        from sqlalchemy import text as sa_text
+        # Проверяем каждую пару, попадает ли IP в один из cidr этой франшизы
+        for fid, ip in pairs_to_check:
+            try:
+                hit = (await db.execute(
+                    sa_text(
+                        "SELECT 1 FROM franchise_ip_allowlist "
+                        "WHERE franchise_id = :fid AND CAST(:ip AS inet) <<= ip_cidr LIMIT 1"
+                    ),
+                    {"fid": fid, "ip": ip},
+                )).first()
+                if hit:
+                    whitelist_pairs.add((fid, ip))
+            except Exception:
+                pass
+
     items = []
     for e in rows:
         after = e.after or {}
@@ -539,6 +567,10 @@ async def list_region_violations(
             'actor_id': str(e.actor_id) if e.actor_id else None,
             'actor_name': e.actor_name,
             'comment': e.comment,
+            '_whitelisted': (
+                f is not None and e.ip_address is not None
+                and (str(f.id), e.ip_address) in whitelist_pairs
+            ),
         })
 
     return {'total': len(items), 'days': days, 'items': items}
