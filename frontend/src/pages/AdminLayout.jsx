@@ -8172,7 +8172,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
 
       {/* W3: глобальный поиск Cmd+K */}
-      <CommandPalette />
+      {/* <CommandPalette /> отключён до фикса useNavigate в renderer */}
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`
