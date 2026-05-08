@@ -26,7 +26,8 @@ from app.core.domain_router import DomainRouterMiddleware, router as domain_rout
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from app.config import settings
-from app.database import engine, Base
+from app.database import engine, Base, AsyncSessionLocal
+from sqlalchemy import text
 import asyncio
 from app.routers import auth, referrals, bonuses, clinics, admins, integrations
 from app.routers.manager import router as manager_router
@@ -1103,6 +1104,91 @@ plugin_registry.register(ReviewsPlugin())
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "clinika-backend"}
+
+
+@app.get("/health/full")
+async def health_full():
+    """Расширенный health-чек для Uptime-Kuma и алёртов.
+    Возвращает JSON со статусом критичных подсистем:
+      - db: PostgreSQL (SELECT 1)
+      - redis: Redis (PING)
+      - disk: свободное место на /
+      - scheduler: APScheduler (running + кол-во job)
+      - version: содержимое /app/VERSION
+    Никогда не падает с 5xx — все ошибки ловим, чтобы Uptime-Kuma
+    видел JSON, а не connection error.
+    """
+    import shutil
+
+    result: dict = {"status": "ok"}
+
+    # ── DB ───────────────────────────────────────────────────────────────
+    try:
+        async with AsyncSessionLocal() as _s:
+            r = await _s.execute(text("SELECT 1"))
+            r.scalar()
+        result["db"] = {"status": "ok"}
+    except Exception as e:
+        result["db"] = {"status": "fail", "error": str(e)[:200]}
+        result["status"] = "degraded"
+
+    # ── Redis ────────────────────────────────────────────────────────────
+    try:
+        import redis.asyncio as aioredis
+        _r = aioredis.from_url(settings.redis_url, decode_responses=True)
+        pong = await _r.ping()
+        await _r.close()
+        result["redis"] = {"status": "ok" if pong else "fail"}
+        if not pong:
+            result["status"] = "degraded"
+    except Exception as e:
+        result["redis"] = {"status": "fail", "error": str(e)[:200]}
+        result["status"] = "degraded"
+
+    # ── Disk ─────────────────────────────────────────────────────────────
+    try:
+        usage = shutil.disk_usage("/")
+        free_gb = round(usage.free / 1024 / 1024 / 1024, 2)
+        total_gb = round(usage.total / 1024 / 1024 / 1024, 2)
+        used_pct = round((usage.used / usage.total) * 100, 1)
+        disk_status = "ok"
+        if used_pct >= 95:
+            disk_status = "fail"
+            result["status"] = "degraded"
+        elif used_pct >= 85:
+            disk_status = "warn"
+        result["disk"] = {
+            "status": disk_status,
+            "free_gb": free_gb,
+            "total_gb": total_gb,
+            "used_percent": used_pct,
+        }
+    except Exception as e:
+        result["disk"] = {"status": "fail", "error": str(e)[:200]}
+
+    # ── Scheduler (APScheduler) ─────────────────────────────────────────
+    try:
+        running = bool(getattr(scheduler, "running", False))
+        jobs = scheduler.get_jobs() if running else []
+        result["scheduler"] = {
+            "status": "ok" if running else "fail",
+            "running": running,
+            "jobs": len(jobs),
+        }
+        if not running:
+            result["status"] = "degraded"
+    except Exception as e:
+        result["scheduler"] = {"status": "fail", "error": str(e)[:200]}
+        result["status"] = "degraded"
+
+    # ── Version ──────────────────────────────────────────────────────────
+    try:
+        with open("/app/VERSION", "r", encoding="utf-8") as f:
+            result["version"] = f.read().strip()
+    except Exception:
+        result["version"] = os.environ.get("APP_VERSION", "unknown")
+
+    return result
 
 
 @app.get("/_test_alert_500", include_in_schema=False)

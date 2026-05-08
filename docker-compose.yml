@@ -65,7 +65,13 @@ services:
       - clinika-net
 
   clinika-frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      # Sentry DSN передаётся как build-arg, чтобы Vite запёк его в бандл.
+      # Если переменная пустая — Sentry просто не инициализируется в браузере.
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SENTRY_ENVIRONMENT: ${VITE_SENTRY_ENVIRONMENT:-production}
     container_name: clinika-frontend
     restart: always
     ports:
