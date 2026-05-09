@@ -25,6 +25,7 @@
  */
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import axios from 'axios'
+import { BrandLogo, BrandMark } from '../components/BrandLogo'
 import { API_BASE, SLUG } from '../config'
 import '../styles/cabinet-dark.css'
 import { useToast, useConfirm } from '../design'
@@ -233,14 +234,9 @@ function LoginScreen({ onLogin, errorMsg }) {
       background: 'radial-gradient(ellipse 80% 60% at 50% 20%, oklch(0.30 0.05 200), oklch(0.16 0.012 215))',
     }}>
       <div style={{ marginBottom: 36, textAlign: 'center' }}>
-        <div style={{
-          width: 84, height: 84, borderRadius: 22,
-          background: 'linear-gradient(140deg, var(--accent), var(--accent-2))',
-          display: 'grid', placeItems: 'center',
-          margin: '0 auto 18px',
-          color: 'var(--accent-fg)', fontSize: 38, fontWeight: 700,
-          boxShadow: '0 12px 40px oklch(0.78 0.14 200 / 0.35)',
-        }}>⚕</div>
+        <div style={{ margin: '0 auto 18px', borderRadius: 22, boxShadow: '0 12px 40px oklch(0.78 0.14 200 / 0.35)', display: 'inline-block' }}>
+          <BrandLogo size={84} />
+        </div>
         <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--fg)' }}>КлиникСеть</h1>
         <p style={{ color: 'var(--fg-3)', marginTop: 6, fontSize: 14 }}>Личный кабинет пациента</p>
       </div>
@@ -283,11 +279,9 @@ function QrFullscreen({ qr, onClose }) {
   return (
     <div className="qr-fullscreen" onClick={onClose}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: 12,
-          background: 'rgba(255,255,255,.15)',
-          display: 'grid', placeItems: 'center', fontSize: 22,
-        }}>⚕</div>
+        <div style={{ display: 'grid', placeItems: 'center' }}>
+          <BrandLogo size={44} white />
+        </div>
         <span style={{ fontSize: 22, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em' }}>КлиникСеть</span>
       </div>
       <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginBottom: 20, textAlign: 'center' }}>
@@ -715,7 +709,7 @@ function Sidebar({ route, setRoute, onLogout, badges }) {
   return (
     <aside className="side">
       <div className="side-brand">
-        <div className="side-brand-mark">⚕</div>
+        <div className="side-brand-mark" style={{ background: "transparent", boxShadow: "none" }}><BrandLogo size={32} /></div>
         <div className="side-brand-name">КлиникСеть<span>личный кабинет</span></div>
       </div>
       <div className="side-section">Основное</div>

@@ -15,7 +15,7 @@ export function BrandLogo({ size = 32, color = '#0097A7', white = false, style, 
   const r = size * 0.18  // 12 при size=64 (как в favicon)
   const fg = white ? '#fff' : color
   const bg = white ? 'transparent' : color
-  const cross = white ? color : '#fff'
+  const cross = '#fff'  // плюс всегда белый — white=true делает фон прозрачным (тёмный родитель)
 
   return (
     <svg

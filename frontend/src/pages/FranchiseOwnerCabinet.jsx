@@ -21,6 +21,7 @@
  */
 import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import api from '../api'
+import { BrandLogo } from '../components/BrandLogo'
 import {
   Page,
   PageHeader,
@@ -2042,14 +2043,12 @@ function Sidebar({ collapsed, route, onRoute, user, onLogout, me }) {
         <div
           className="grid place-items-center flex-shrink-0"
           style={{
-            width: 34, height: 34, borderRadius: 10,
-            background: 'linear-gradient(140deg, var(--accent), var(--accent-2))',
-            color: '#fff',
-            fontWeight: 700,
-            fontSize: 15,
+            borderRadius: 9,
             boxShadow: '0 4px 12px oklch(0.55 0.16 240 / 0.30)',
           }}
-        >⌬</div>
+        >
+          <BrandLogo size={34} />
+        </div>
         {!collapsed && (
           <div className="min-w-0">
             <div className="font-semibold truncate" style={{ fontSize: 14, color: 'var(--fg)', letterSpacing: '-0.01em' }}>
