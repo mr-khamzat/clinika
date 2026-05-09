@@ -363,6 +363,34 @@ export default function CallWidget() {
   // На случай выгрузки компонента/закрытия страницы — глушим всё
   useEffect(() => () => stopAllTones(), [])
 
+  // ── Внешний триггер звонка через CustomEvent (cross-clinic directory) ─────
+  // Слушаем window-event clinika:start-call с detail = {user_id, full_name, call_type}
+  // и инициируем звонок как обычный startCall(contact).
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e?.detail || {}
+      if (!d.user_id) return
+      const wantedMode = d.call_type === "video" ? "video" : "audio"
+      const supported = wantedMode === "video" ? caps.video : caps.audio
+      if (!supported) {
+        toast(wantedMode === "video"
+          ? "Видеозвонки не подключены к вашему тенанту"
+          : "Аудиозвонки не подключены к вашему тенанту", "error")
+        return
+      }
+      // Синхронно меняем mode и запускаем call (startCall использует mode из state,
+      // поэтому ставим mode и вызываем через setTimeout — даём React обновиться).
+      setMode(wantedMode)
+      setTimeout(() => {
+        startCall({ user_id: d.user_id, full_name: d.full_name || "…" })
+      }, 30)
+    }
+    window.addEventListener("clinika:start-call", handler)
+    return () => window.removeEventListener("clinika:start-call", handler)
+  }, [caps.audio, caps.video])
+
+
+
   // ── Реаттач удалённого потока к видео/аудио элементам при их монтаже ───────
   // (overlay рендерится позже, чем приходит ontrack — без эффекта видео не виден)
   useEffect(() => {

@@ -515,3 +515,104 @@ async def get_call(
     )).scalars().all()
     users_by_id = {u.id: u for u in users}
     return _row_to_dict(row, users_by_id)
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# GET /calls/directory — справочник сотрудников всех клиник, доступных для
+# звонка текущему пользователю (Cross-Clinic Directory).
+# Возвращает список users (manager / reg / nurse / doctor / franchise_owner /
+# recruiter) из:
+#   • тенанта самого пользователя (свои клиники + сотрудники без clinic_id)
+#   • всех тенантов одной франшизы (для franchise_owner / super_admin)
+# Группировка по клинике, с признаком partner-clinic-контракта (если есть).
+# Доступно с ролью manager+ (manager / super_admin / franchise_owner).
+# Используется в админке (раздел «Сотрудники сети») для инициации звонков.
+# ───────────────────────────────────────────────────────────────────────────
+
+@router.get("/directory")
+async def call_directory(
+    role: Optional[str] = Query(None, description="Фильтр по роли (manager/reg/doctor/...)"),
+    search: Optional[str] = Query(None, description="Подстрока по ФИО"),
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список сотрудников всех связанных клиник для cross-clinic звонков.
+
+    Скоуп:
+      • super_admin без tenant: все клиники платформы (ограничение по роли).
+      • super_admin / manager с tenant_id: только свой tenant.
+      • franchise_owner: все tenant'ы своей франшизы.
+
+    Returns:
+        {
+            "clinics": [{id, name, tenant_id, tenant_name, contract_type, partner_status, is_self_clinic}, ...],
+            "users":   [{user_id, full_name, role, clinic_id, clinic_name, tenant_id, phone}, ...],
+        }
+    """
+    from app.services.call_rules_service import EXCLUDED_ROLES
+
+    tenant_ids = await _accessible_tenant_ids(db, user)
+    if tenant_ids is not None and not tenant_ids:
+        return {"clinics": [], "users": []}
+
+    # ── Загружаем все доступные клиники (для группировки) ───────────────────
+    cq = select(Clinic, Tenant).join(Tenant, Tenant.id == Clinic.tenant_id)
+    if tenant_ids is not None:
+        cq = cq.where(Clinic.tenant_id.in_(tenant_ids))
+    cq = cq.where(Clinic.is_active.is_(True)).order_by(Tenant.name, Clinic.name)
+    clinic_rows = (await db.execute(cq)).all()
+
+    clinics_out: list[dict] = []
+    clinics_by_id: dict[uuid.UUID, dict] = {}
+    for c, t in clinic_rows:
+        item = {
+            "id": str(c.id),
+            "name": c.name,
+            "tenant_id": str(t.id),
+            "tenant_name": t.name,
+            "contract_type": c.contract_type,
+            "partner_status": c.partner_status or "active",
+            "is_self_clinic": (user.clinic_id is not None and c.id == user.clinic_id),
+        }
+        clinics_out.append(item)
+        clinics_by_id[c.id] = item
+
+    # ── Загружаем сотрудников ──────────────────────────────────────────────
+    excluded = [r.value for r in EXCLUDED_ROLES]
+    uq = select(User).where(
+        User.is_active.is_(True),
+        User.role.not_in(excluded),
+        User.id != user.id,
+    )
+    if tenant_ids is not None:
+        uq = uq.where(User.tenant_id.in_(tenant_ids))
+
+    if role:
+        uq = uq.where(User.role == role)
+    if search:
+        s = f"%{search.strip().lower()}%"
+        uq = uq.where(func.lower(User.full_name).like(s))
+    uq = uq.order_by(User.role, User.full_name).limit(500)
+    users = (await db.execute(uq)).scalars().all()
+
+    out: list[dict] = []
+    for u in users:
+        clinic = clinics_by_id.get(u.clinic_id) if u.clinic_id else None
+        out.append({
+            "user_id": str(u.id),
+            "full_name": u.full_name,
+            "role": u.role.value if hasattr(u.role, "value") else str(u.role),
+            "clinic_id": str(u.clinic_id) if u.clinic_id else None,
+            "clinic_name": clinic["name"] if clinic else None,
+            "tenant_id": str(u.tenant_id) if u.tenant_id else None,
+            "tenant_name": clinic["tenant_name"] if clinic else None,
+            "phone": u.phone_number,
+            "is_cross_tenant": (user.tenant_id is not None and u.tenant_id != user.tenant_id),
+            "is_cross_clinic": (
+                user.clinic_id is not None
+                and u.clinic_id is not None
+                and u.clinic_id != user.clinic_id
+            ),
+        })
+
+    return {"clinics": clinics_out, "users": out}

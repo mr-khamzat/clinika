@@ -62,9 +62,15 @@ async def list_services(
     category: str | None = None,
     has_bonus: bool | None = None,
     search: str | None = None,
+    for_referrals: bool | None = None,
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    """
+    Список услуг с tenant-isolation.
+    for_referrals=true — только услуги с visible_for_referrals=true (для формы направления).
+    Лимит увеличен до 2000: нужно отдать все услуги для группировки/поиска на UI.
+    """
     filters = [Service.is_active == True]
     # Tenant isolation
     if current_user.tenant_id is not None:
@@ -74,13 +80,20 @@ async def list_services(
         filters.append(Service.category.is_(None) if category == "Без категории" else Service.category == category)
     if has_bonus is True: filters.append(Service.bonus_amount > 0)
     elif has_bonus is False: filters.append(Service.bonus_amount == 0)
+    if for_referrals is True: filters.append(Service.visible_for_referrals == True)
     if search: filters.append(Service.name.ilike(f"%{search}%"))
 
-    result = await db.execute(select(Service).where(and_(*filters)).order_by(Service.name).limit(500))
+    result = await db.execute(
+        select(Service).where(and_(*filters))
+        .order_by(Service.category.nulls_first(), Service.name).limit(2000)
+    )
     return [
         {"id": str(s.id), "name": s.name, "code": s.code, "category": s.category or "Без категории",
-         "clinic_id": str(s.clinic_id) if s.clinic_id else None, "bonus_amount": float(s.bonus_amount),
+         "clinic_id": str(s.clinic_id) if s.clinic_id else None,
+         "bonus_amount": float(s.bonus_amount),
+         "price": float(s.price) if s.price is not None else None,
          "original_price": float(s.original_price) if s.original_price else None,
+         "visible_for_referrals": bool(s.visible_for_referrals),
          "is_active": s.is_active, "mis_id": s.mis_id}
         for s in result.scalars().all()
     ]
@@ -98,10 +111,23 @@ async def create_service(
         clinic_obj = clinic_check.scalar_one_or_none()
         if not clinic_obj or clinic_obj.tenant_id != current_user.tenant_id:
             raise HTTPException(status_code=404, detail="Клиника не найдена")
-    existing = await db.execute(select(Service).where(Service.code == body.code.upper(), Service.clinic_id == body.clinic_id))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Услуга с таким кодом уже есть у этой клиники")
-    svc = Service(name=body.name, code=body.code.upper(), bonus_amount=body.bonus_amount, clinic_id=body.clinic_id, tenant_id=current_user.tenant_id)
+    code_upper = body.code.upper() if body.code else None
+    if code_upper:
+        existing = await db.execute(select(Service).where(Service.code == code_upper, Service.clinic_id == body.clinic_id))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Услуга с таким кодом уже есть у этой клиники")
+    cat = body.category.strip() if body.category else None
+    if cat in ('', 'Без категории'):
+        cat = None
+    svc = Service(
+        name=body.name, code=code_upper,
+        bonus_amount=body.bonus_amount,
+        clinic_id=body.clinic_id,
+        tenant_id=current_user.tenant_id,
+        category=cat,
+        price=body.price,
+        visible_for_referrals=body.visible_for_referrals,
+    )
     db.add(svc)
     await db.commit()
     await db.refresh(svc)
@@ -126,11 +152,13 @@ async def update_service(
         if not clinic_obj or clinic_obj.tenant_id != current_user.tenant_id:
             raise HTTPException(status_code=404, detail="Клиника не найдена")
     if body.name is not None: svc.name = body.name
-    if body.code is not None: svc.code = body.code.upper()
+    if body.code is not None: svc.code = body.code.upper() if body.code else None
     if body.clinic_id is not None: svc.clinic_id = body.clinic_id
     if body.bonus_amount is not None: svc.bonus_amount = body.bonus_amount
     if body.is_active is not None: svc.is_active = body.is_active
     if body.category is not None: svc.category = None if body.category.strip() in ('', 'Без категории') else body.category.strip()
+    if body.price is not None: svc.price = body.price
+    if body.visible_for_referrals is not None: svc.visible_for_referrals = body.visible_for_referrals
     await db.commit()
     await db.refresh(svc)
     return ServiceSchema.model_validate(svc)

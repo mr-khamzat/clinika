@@ -32,6 +32,11 @@ class Service(Base):
     # SLA: срок (в днях) до автоматической просрочки направления на эту услугу.
     # Используется при расчёте дедлайна: Referral.created_at + sla_days
     sla_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14, server_default="14")
+    # Цена пациенту (редактируется клиникой). original_price — цена из МИС, не трогается.
+    price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Видна ли услуга при создании направления (партнёр / реферал-форма).
+    # По умолчанию TRUE для совместимости — миграция svcv2_01.
+    visible_for_referrals: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     referrals: Mapped[list["Referral"]] = relationship("Referral", back_populates="service")
     clinic: Mapped["Clinic | None"] = relationship("Clinic", back_populates="services")

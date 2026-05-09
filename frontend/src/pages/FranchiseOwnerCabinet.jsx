@@ -61,6 +61,9 @@ const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInv
 const PartnerClinicsSection      = lazy(() => import('../sections/PartnerClinicsSection'))
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMatrixSection'))
+// LTV-аналитика пациентов (модуль ltv_pro) и cross-clinic directory сотрудников
+const LtvAnalyticsSection        = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
+const CrossClinicDirectorySection = lazy(() => import('../sections/CrossClinicDirectorySection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -88,12 +91,14 @@ const NAV_GROUPS = [
     title: 'Управление',
     items: [
       { id: 'analytics', label: 'Аналитика',   icon: 'bar_chart'             },
+      { id: 'ltv',       label: 'LTV пациентов', icon: 'insights'             },
       { id: 'apt_stats', label: 'Записи',      icon: 'query_stats'           },
       { id: 'royalty',   label: 'Биллинг',     icon: 'account_balance_wallet'},
       { id: 'platform',  label: 'Счета платформы', icon: 'receipt_long'      },
       { id: 'acts',      label: 'Межклин. акты', icon: 'description'         },
       { id: 'inter_inv', label: 'Счета клиник', icon: 'request_quote'        },
       { id: 'calls',     label: 'Звонки',      icon: 'call'                  },
+      { id: 'cross_dir', label: 'Сотрудники сети', icon: 'group'             },
     ],
   },
   {
@@ -132,6 +137,8 @@ const PAGE_TITLES = {
   acts:       { title: 'Межклиничные акты',subtitle: 'Акты выполненных работ между клиниками' },
   inter_inv:  { title: 'Счета между клиниками', subtitle: 'Внутренние взаиморасчёты сети' },
   calls:      { title: 'Правила звонков',  subtitle: 'Кто кому звонит — глобально и по клиникам' },
+  cross_dir:  { title: 'Сотрудники сети',     subtitle: 'Справочник всех клиник: позвонить регистратору/врачу/менеджеру другой клиники' },
+  ltv:        { title: 'LTV пациентов',       subtitle: 'Пожизненная ценность пациентов: топ, когорты, риск оттока' },
   ads:        { title: 'Реклама',          subtitle: 'Баннеры, статистика кликов и расписания' },
   wiki:       { title: 'База знаний',      subtitle: 'Wiki-страницы для сотрудников и пациентов' },
   cms:        { title: 'CMS-страницы',     subtitle: 'Публичные страницы лендинга и портала' },
@@ -158,6 +165,8 @@ const PAGE_HINTS = {
   recruiters: 'Менеджеры по привлечению врачей-партнёров. Каждый получает % бонуса от направлений приведённых врачей.',
   partners:   'Внешние врачи (не штатные) которые направляют пациентов в клиники сети. Получают бонус за каждое подтверждённое направление.',
   partners_clinics: 'Клиники-партнёры в составе ваших тенантов. У каждой свой контракт: % с выручки, ₽ за направление или гибрид.',
+  cross_dir:  'Единый справочник сотрудников всех клиник вашей сети. Позвонить регистратору или врачу другой клиники-партнёра одним кликом (WebRTC через виджет звонков).',
+  ltv:        'LTV (Lifetime Value) — пожизненная ценность пациента. Считается из МИС Renovatio: топ пациентов, когорты, риск оттока, средний чек. Требует модуль ltv_pro.',
 }
 
 const PLAN_LABELS = {
@@ -1806,6 +1815,20 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <ActsSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'cross_dir') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <CrossClinicDirectorySection adminToken={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'ltv') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <LtvAnalyticsSection adminToken={adminToken} />
         </Suspense>
       )
     }

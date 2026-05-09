@@ -35,6 +35,8 @@ import ManagerAnalytics from './pages/ManagerAnalytics'
 import ManagerKPI from './pages/ManagerKPI'
 import ManagerActivity from './pages/ManagerActivity'
 import ManagerRecruitDoctors from './pages/ManagerRecruitDoctors'
+import ManagerVisitingDoctors from './pages/ManagerVisitingDoctors'
+import ManagerPartnerDoctors from './pages/ManagerPartnerDoctors'
 import ManagerSettings from './pages/ManagerSettings'
 import ManagerInvoices from './pages/ManagerInvoices'
 import ManagerAppointments from './pages/ManagerAppointments'
@@ -228,6 +230,8 @@ function MiniApp() {
               <Route path="manager/activity" element={<ManagerActivity />} />
               <Route path="manager/settings" element={<ManagerSettings />} />
               <Route path="manager/recruit-doctors" element={<ManagerRecruitDoctors />} />
+              <Route path="manager/visiting-doctors" element={<ManagerVisitingDoctors />} />
+              <Route path="manager/partner-doctors"  element={<ManagerPartnerDoctors />} />
               <Route path="manager/invoices" element={<ManagerInvoices />} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}

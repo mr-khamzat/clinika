@@ -90,11 +90,14 @@ class UpdateAdminRequest(BaseModel):
 class ServiceSchema(BaseModel):
     id: UUID
     name: str
-    code: str
+    code: Optional[str] = None
     clinic_id: Optional[UUID]
     bonus_amount: float
     is_active: bool
     created_at: datetime
+    category: Optional[str] = None
+    price: Optional[float] = None
+    visible_for_referrals: bool = True
 
     class Config:
         from_attributes = True
@@ -102,9 +105,12 @@ class ServiceSchema(BaseModel):
 
 class CreateServiceRequest(BaseModel):
     name: str
-    code: str
+    code: Optional[str] = None
     clinic_id: Optional[UUID] = None
     bonus_amount: float = 0.0
+    category: Optional[str] = None
+    price: Optional[float] = None
+    visible_for_referrals: bool = True
 
 
 class UpdateServiceRequest(BaseModel):
@@ -114,6 +120,8 @@ class UpdateServiceRequest(BaseModel):
     bonus_amount: Optional[float] = None
     is_active: Optional[bool] = None
     category: Optional[str] = None
+    price: Optional[float] = None
+    visible_for_referrals: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------

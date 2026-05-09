@@ -31,7 +31,9 @@ export const MGR_NAV = [
   { key:'history',      label:'История',   icon:'history',      path:'/manager/history' },
   { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings' },
   { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices' },
-  { key:'recruit',      label:'Врачи',     icon:'groups',       path:'/manager/recruit-doctors' },
+  { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors' },
+  { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
+  { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },
   { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']

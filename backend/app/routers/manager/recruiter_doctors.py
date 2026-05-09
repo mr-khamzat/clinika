@@ -154,6 +154,62 @@ class RegisterExternalDoctorRequest(BaseModel):
     doctor_percent: Optional[float] = 70.0
 
 
+@router.get("/all-partner-doctors")
+async def list_all_partner_doctors(
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Врачи-партнёры (PARTNER_DOCTOR) текущего тенанта.
+
+    Используется на странице ManagerPartnerDoctors — показ всех
+    привлечённых врачей сети с возможностью блокировки/активации.
+    """
+    all_doctors = (await db.execute(
+        select(User).where(
+            User.tenant_id == current_user.tenant_id,
+            User.role == UserRole.PARTNER_DOCTOR,
+        ).order_by(User.created_at.desc())
+    )).scalars().all()
+
+    out = []
+    for doc in all_doctors:
+        recruiter_name = None
+        if doc.recruiter_id:
+            recruiter = await db.get(User, doc.recruiter_id)
+            recruiter_name = recruiter.full_name if recruiter else "—"
+        manager_name = None
+        if doc.manager_id:
+            mgr = await db.get(User, doc.manager_id)
+            manager_name = mgr.full_name if mgr else None
+
+        acc_res = await db.execute(
+            select(DoctorClinicAccess, Clinic)
+            .join(Clinic, DoctorClinicAccess.clinic_id == Clinic.id)
+            .where(DoctorClinicAccess.doctor_id == doc.id)
+        )
+        clinic_list = [{"id": str(c.id), "name": c.name} for _, c in acc_res.all()]
+
+        out.append({
+            "id":             str(doc.id),
+            "full_name":      doc.full_name,
+            "email":          doc.email,
+            "username":       doc.username,
+            "phone_number":   doc.phone_number,
+            "specialization": getattr(doc, "specialization", None),
+            "address":        getattr(doc, "address", None),
+            "is_active":      doc.is_active,
+            "created_at":     doc.created_at.isoformat(),
+            "clinics":        clinic_list,
+            "type":           "partner",
+            "type_label":     "Партнёр",
+            "recruiter_name": recruiter_name,
+            "manager_name":   manager_name,
+            "is_suspended":   getattr(doc, "is_suspended", False),
+        })
+
+    return out
+
+
 @router.get("/all-external-doctors")
 async def list_all_external_doctors(
     current_user: User = Depends(require_manager),

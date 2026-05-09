@@ -97,6 +97,79 @@ const REVENUE_SOURCE_LABEL = {
   export: 'Импорт/экспорт',
 }
 
+// ── Карточки-объяснялки типов контрактов (отображаются над таблицей) ───────
+const CONTRACT_TYPES = [
+  {
+    id: 'royalty',
+    icon: 'percent',
+    title: '% с выручки',
+    short: 'Роялти',
+    color: 'var(--accent)',
+    summary: 'Партнёр платит вам % от выручки по подтверждённым направлениям.',
+    example: 'Например: 5% от 100 000 ₽ = 5 000 ₽ за период.',
+    when: 'Когда у клиники прогнозируемый поток пациентов и стабильный средний чек.',
+  },
+  {
+    id: 'per_referral',
+    icon: 'paid',
+    title: '₽ за направление',
+    short: 'Фикс-бонус',
+    color: '#10b981',
+    summary: 'Партнёр платит фикс. сумму за каждое подтверждённое направление.',
+    example: 'Например: 500 ₽ × 30 направлений = 15 000 ₽ за период.',
+    when: 'Когда легче считать в штуках, а средний чек сильно колеблется.',
+  },
+  {
+    id: 'hybrid',
+    icon: 'auto_awesome',
+    title: 'Гибрид % + ₽',
+    short: 'Комбинация',
+    color: '#f59e0b',
+    summary: 'Оба механизма одновременно: и % с выручки, и ₽ за каждое направление.',
+    example: 'Например: 3% + 200 ₽/напр. — баланс риска и фикса.',
+    when: 'Когда хотите подстраховаться от низкой выручки фиксом и получить апсайд от роста.',
+  },
+]
+
+function ContractTypeCards({ activeType }) {
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: 12,
+      }}
+    >
+      {CONTRACT_TYPES.map(t => {
+        const active = t.id === activeType
+        return (
+          <Card key={t.id}>
+            <div style={{ padding: 8, borderLeft: `3px solid ${t.color}`, paddingLeft: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Icon name={t.icon} size={20} style={{ color: t.color }} />
+                <div style={{ fontWeight: 700, color: 'var(--fg)', fontSize: 14 }}>{t.title}</div>
+                {active && <Chip variant="accent">Выбрано</Chip>}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5, marginBottom: 6 }}>
+                {t.summary}
+              </div>
+              <div style={{
+                fontSize: 11, color: 'var(--fg-3)', fontStyle: 'italic',
+                background: 'var(--bg-1)', padding: '6px 8px', borderRadius: 6, marginBottom: 6,
+              }}>
+                {t.example}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--fg-4)', lineHeight: 1.4 }}>
+                <b>Когда:</b> {t.when}
+              </div>
+            </div>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
 const HINT_TEXT = (
   <div style={{ fontSize: 13, lineHeight: 1.5 }}>
     <b>Клиники-партнёры</b> — это клиники под вашим тенантом, которые работают
@@ -191,7 +264,7 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
     <Modal open={open} onClose={onClose} title={`Контракт: ${partner.name}`}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div>
-          <label style={{ fontSize: 12, color: 'var(--fg-3)', fontWeight: 500 }}>Тип контракта</label>
+          <label style={{ fontSize: 12, color: 'var(--fg-3)', fontWeight: 500 }}>Тип контракта *</label>
           <select
             value={form.contract_type}
             onChange={(e) => set('contract_type', e.target.value)}
@@ -202,6 +275,12 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
             <option value="per_referral">₽ за направление (per_referral)</option>
             <option value="hybrid">Гибрид (royalty + per_referral)</option>
           </select>
+          <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.4 }}>
+            {form.contract_type === 'royalty' && '% от выручки — партнёр перечисляет вам процент с каждого подтверждённого направления.'}
+            {form.contract_type === 'per_referral' && 'Фикс. сумма ₽ за каждое подтверждённое направление, независимо от чека.'}
+            {form.contract_type === 'hybrid' && 'Оба механизма одновременно: % с выручки + фикс. бонус за каждое направление.'}
+            {!form.contract_type && 'Выберите механику расчёта выплат партнёра.'}
+          </div>
         </div>
 
         {showRoyalty && (
@@ -214,6 +293,9 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
               placeholder="например 5.50"
               style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, background: 'var(--bg-1)', color: 'var(--fg)' }}
             />
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.4 }}>
+              Процент от <b>original_price</b> услуг по подтверждённым направлениям. Допускаются десятые: 5.5 = 5,5 %.
+            </div>
           </div>
         )}
 
@@ -227,6 +309,9 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
               placeholder="например 500"
               style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, marginTop: 4, background: 'var(--bg-1)', color: 'var(--fg)' }}
             />
+            <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.4 }}>
+              Фикс. сумма в рублях за <b>каждое</b> подтверждённое направление в эту клинику.
+            </div>
           </div>
         )}
 
@@ -263,6 +348,52 @@ function ContractEditModal({ open, partner, onClose, onSaved, adminToken }) {
             <option value="manual">Вручную</option>
             <option value="export">Импорт/экспорт файла</option>
           </select>
+          <div style={{ fontSize: 11, color: 'var(--fg-4)', marginTop: 4, lineHeight: 1.4 }}>
+            <b>МИС</b> — выручка тянется автоматически из Renovatio.{' '}
+            <b>Вручную</b> — менеджер вводит сам.{' '}
+            <b>Импорт/экспорт</b> — загружается файлом.
+          </div>
+        </div>
+
+        {/* Live preview расчёта выплат — пример на 100 000 ₽ выручки и 30 направлениях */}
+        <div style={{
+          padding: 10, borderRadius: 8, background: 'var(--bg-1)',
+          border: '1px dashed var(--border)', fontSize: 12, color: 'var(--fg-2)', lineHeight: 1.5,
+        }}>
+          <div style={{ fontWeight: 600, color: 'var(--fg)', marginBottom: 4 }}>
+            Пример расчёта (100 000 ₽ выручки, 30 направлений):
+          </div>
+          {form.contract_type === 'royalty' && form.royalty_percent !== '' && (
+            <div>{Number(form.royalty_percent).toFixed(2)}% × 100 000 ₽ ={' '}
+              <b>{Math.round(100000 * Number(form.royalty_percent || 0) / 100).toLocaleString('ru')} ₽</b>
+            </div>
+          )}
+          {form.contract_type === 'per_referral' && form.bonus_per_referral !== '' && (
+            <div>{Number(form.bonus_per_referral).toLocaleString('ru')} ₽ × 30 ={' '}
+              <b>{Math.round(30 * Number(form.bonus_per_referral || 0)).toLocaleString('ru')} ₽</b>
+            </div>
+          )}
+          {form.contract_type === 'hybrid' && (
+            <div>
+              {form.royalty_percent !== '' && (<>
+                {Number(form.royalty_percent || 0).toFixed(2)}% × 100 000 ₽ ={' '}
+                <b>{Math.round(100000 * Number(form.royalty_percent || 0) / 100).toLocaleString('ru')} ₽</b><br />
+              </>)}
+              {form.bonus_per_referral !== '' && (<>
+                + {Number(form.bonus_per_referral || 0).toLocaleString('ru')} ₽ × 30 ={' '}
+                <b>{Math.round(30 * Number(form.bonus_per_referral || 0)).toLocaleString('ru')} ₽</b><br />
+              </>)}
+              <div style={{ marginTop: 4, color: 'var(--accent)', fontWeight: 700 }}>
+                Итого: {(
+                  Math.round(100000 * Number(form.royalty_percent || 0) / 100) +
+                  Math.round(30 * Number(form.bonus_per_referral || 0))
+                ).toLocaleString('ru')} ₽
+              </div>
+            </div>
+          )}
+          {!form.contract_type && (
+            <div style={{ color: 'var(--fg-4)' }}>Заполните поля выше — здесь появится оценка.</div>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
@@ -437,6 +568,9 @@ export default function PartnerClinicsSection({ adminToken }) {
           Обновить
         </Button>
       </div>
+
+      {/* ─── Объяснение типов контрактов (3 карточки) ─── */}
+      <ContractTypeCards activeType={null} />
 
       {/* ─── Тело: таблица или EmptyState ─── */}
       {loading ? (

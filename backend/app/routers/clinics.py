@@ -35,7 +35,11 @@ async def get_clinic_services(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Услуги клиники для формы направления — только с настроенным бонусом."""
+    """
+    Услуги клиники для формы создания направления.
+    Фильтр: is_active=True AND visible_for_referrals=True
+    (раньше — bonus_amount>0, что мешало показывать услуги без бонуса).
+    """
     # Tenant isolation: проверяем что клиника принадлежит тенанту пользователя
     clinic_obj = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
     if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
@@ -44,7 +48,7 @@ async def get_clinic_services(
         select(Service).where(
             Service.clinic_id == clinic_id,
             Service.is_active == True,
-            Service.bonus_amount > 0,
+            Service.visible_for_referrals == True,
         ).order_by(Service.category.nulls_last(), Service.name)
     )
     services = result.scalars().all()
@@ -55,6 +59,7 @@ async def get_clinic_services(
             "code": s.code,
             "category": s.category,
             "bonus_amount": float(s.bonus_amount),
+            "price": float(s.price) if s.price is not None else None,
             "original_price": float(s.original_price) if s.original_price else None,
         }
         for s in services

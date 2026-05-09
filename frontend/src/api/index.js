@@ -195,6 +195,8 @@ export const testMisConnection = () => api.post('/manager/settings/test-mis')
 // Manager services
 export const listManagerServices = () => api.get('/manager/services/')
 export const updateService = (id, data) => api.patch(`/manager/services/${id}`, data)
+export const createService = (data) => api.post("/manager/services/", data)
+export const deleteService = (id) => api.delete(`/manager/services/${id}`)
 
 // ─── БЛОК: Партнёры ───
 export const listPartners = () => api.get('/manager/partners/')

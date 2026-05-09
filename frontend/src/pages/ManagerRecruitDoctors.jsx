@@ -11,17 +11,31 @@
  * ========================================
  */
 import { useState, useEffect } from 'react'
-import useAuthStore from '../store/auth'
-import { API_BASE } from '../config'
+import api from '../api'
 import { Card, Chip, Button, Avatar, EmptyState, Modal } from '../design'
 import QuickActions from '../components/QuickActions'
 import ManagerShell from './_ManagerShell'
 
-function apiFetch(token, path, opts = {}) {
-  return fetch(API_BASE + path, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...opts.headers },
-    ...opts,
-  })
+// ─── apiFetch (совместимость): все вызовы идут через единый axios `api`
+//     с auto-Bearer + auto-refresh (см. /src/api/index.js).
+//     `token` остаётся первым аргументом для обратной совместимости со старыми
+//     местами вызова — он не используется (Bearer ставит interceptor).
+function apiFetch(_token, path, opts = {}) {
+  const method = (opts.method || 'GET').toUpperCase()
+  const config = {
+    method,
+    url: path,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    // axios сам обработает body — нужно отдать как data
+    data: opts.body !== undefined ? (typeof opts.body === 'string' ? JSON.parse(opts.body) : opts.body) : undefined,
+    // Не выкидывать ошибку при 4xx — даём коду самостоятельно обработать `r.ok`
+    validateStatus: () => true,
+  }
+  return api.request(config).then(res => ({
+    ok: res.status >= 200 && res.status < 300,
+    status: res.status,
+    json: async () => res.data,
+  }))
 }
 
 // ─── Поле формы ───
@@ -387,7 +401,9 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
 
 // ─── Главный компонент ───
 export default function ManagerRecruitDoctors() {
-  const { token } = useAuthStore()
+  // Токен больше не нужен — apiFetch использует общий axios `api` с auto-Bearer.
+  // Оставлено для обратной совместимости — некоторые компоненты-формы ниже принимают prop `token`.
+  const token = null
   const [doctors, setDoctors]   = useState([])
   const [clinics, setClinics]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -407,7 +423,8 @@ export default function ManagerRecruitDoctors() {
   useEffect(() => {
     load()
     apiFetch(token, '/manager/clinics/').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
-  }, [token])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const toggleActive = async (doc) => {
     setToggling(doc.id)
@@ -425,8 +442,8 @@ export default function ManagerRecruitDoctors() {
   return (
     <ManagerShell
       active="recruit"
-      title="Приезжие врачи"
-      subtitle={`${doctors.length} врачей зарегистрировано`}
+      title="Сотрудники"
+      subtitle={`${doctors.length} приезжих врачей · добавление сотрудников всех ролей`}
       icon="groups"
       topbarRight={
         <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
@@ -443,7 +460,7 @@ export default function ManagerRecruitDoctors() {
       <div className="mb-4 sm:hidden">
         <Button variant="primary" size="md" className="w-full" onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
-          Добавить врача
+          Добавить сотрудника
         </Button>
       </div>
 
@@ -477,11 +494,11 @@ export default function ManagerRecruitDoctors() {
         <Card>
           <EmptyState
             icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>group_off</span>}
-            title={search ? 'Ничего не найдено' : 'Нет приезжих врачей'}
-            message={search ? 'Попробуйте изменить запрос.' : 'Добавьте первого врача, чтобы начать работу.'}
+            title={search ? 'Ничего не найдено' : 'Список приезжих врачей пуст'}
+            message={search ? 'Попробуйте изменить запрос.' : 'Используйте кнопку «Добавить» — можно создать сотрудника любой роли (регистратор, врач, рекрутер, приезжий, партнёр и т. д.).'}
             action={!search ? (
               <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>
-                Добавить первого врача
+                Добавить сотрудника
               </Button>
             ) : null}
           />

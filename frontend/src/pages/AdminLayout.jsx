@@ -43,6 +43,10 @@ const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection")
 const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSection"))
 // W7 — Inventory: учёт расходных материалов и оборудования (модуль inventory)
 const InventorySection = lazy(() => import("../sections/inventory/InventorySection"))
+// Cross-clinic directory: справочник сотрудников всех клиник тенанта
+const CrossClinicDirectorySection = lazy(() => import("../sections/CrossClinicDirectorySection"))
+// LTV-аналитика пациентов (модуль ltv_pro)
+const LtvAnalyticsSection = lazy(() => import("../sections/ltv/LtvAnalyticsSection"))
 import api from '../api'
 import HelpModal from '../components/HelpModal'
 import { BrandLogo } from "../components/BrandLogo"
@@ -150,6 +154,8 @@ const NAV = [
   { key: 'patient_chats',  label: 'Чаты пациентов', icon: 'chat_bubble' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
   { key: 'calls_log',      label: 'Звонки',       icon: 'call' },
+  { key: 'cross_dir',      label: 'Сотрудники сети', icon: 'group' },
+  { key: 'ltv_patients',   label: 'LTV пациентов',   icon: 'insights' },
   { key: 'push_notify',    label: 'Push',         icon: 'notifications' },
   { key: 'wiki',           label: 'Документация', icon: 'auto_stories' },
   { key: 'settings',       label: 'Настройки',    icon: 'settings' },
@@ -199,6 +205,8 @@ const NAV_GROUP_OF = {
   monitoring:         'ANALYTICS',
   audit:              'ANALYTICS',
   calls_log:          'ANALYTICS',
+  cross_dir:          'TENANT',
+  ltv_patients:       'ANALYTICS',
 
   reviews:            'CONTENT',
   contacts:           'CONTENT',
@@ -248,6 +256,8 @@ const PAGE_TITLES = {
   patient_chats:      { title: 'Чаты пациентов',       subtitle: 'Все чаты пациентов на платформе' },
   calls_cfg:          { title: 'Звонки и SMS',         subtitle: 'Правила обзвонов и подключение шлюзов' },
   calls_log:          { title: 'Звонки',                subtitle: 'История и аналитика звонков сотрудников' },
+  cross_dir:          { title: 'Сотрудники сети',     subtitle: 'Справочник сотрудников всех клиник: позвонить одним кликом' },
+  ltv_patients:       { title: 'LTV пациентов',       subtitle: 'Пожизненная ценность пациентов: топ, когорты, риск оттока' },
   push_notify:        { title: 'Push-уведомления',     subtitle: 'Рассылки пациентам и сотрудникам' },
   wiki:               { title: 'Документация',         subtitle: 'Справочник по платформе' },
   settings:           { title: 'Настройки',            subtitle: 'Параметры тенанта и платформы' },
@@ -7476,6 +7486,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'patient_chats':  return <Suspense fallback={<SectionLoader />}><PatientChatsSection token={adminToken} /></Suspense>
       case 'calls_cfg':      return <CallsConfigSection token={adminToken} />
       case 'calls_log':      return <Suspense fallback={<SectionLoader />}><CallLogSection /></Suspense>
+      case 'cross_dir':      return <Suspense fallback={<SectionLoader />}><CrossClinicDirectorySection adminToken={adminToken} /></Suspense>
+      case 'ltv_patients':   return <Suspense fallback={<SectionLoader />}><LtvAnalyticsSection adminToken={adminToken} /></Suspense>
       case 'push_notify':    return <PushSection token={adminToken} />
       case 'webhooks':       return <Suspense fallback={<SectionLoader />}><WebhooksSection token={adminToken} /></Suspense>
       case 'ads':            return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
