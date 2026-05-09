@@ -348,13 +348,29 @@ export default function CreateReferral() {
             </Section>
           )}
 
-          {/* Услуга */}
+          {/* Услуга
+              Финансовая модель: при создании направления показываем сумму, которую
+              получит создающий (referral_payout). Менеджер видит ещё и цену пациенту. */}
           <Section icon="medical_services" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Услуга"
-            badge={form.service_id && services.find(s => s.id === form.service_id) ? (
-              <span className="bg-[#dcfce7] text-[#166534] text-xs font-bold px-3 py-1 rounded-full">
-                +{services.find(s => s.id === form.service_id)?.bonus_amount ?? 0} Б
-              </span>
-            ) : null}>
+            badge={(() => {
+              const svc = form.service_id ? services.find(s => s.id === form.service_id) : null
+              if (!svc) return null
+              // referral_payout — приоритет, fallback на bonus_amount.
+              const payout = svc.referral_payout != null ? svc.referral_payout : svc.bonus_amount
+              return (
+                <div className="flex items-center gap-1.5">
+                  <span className="bg-[#dcfce7] text-[#166534] text-xs font-bold px-3 py-1 rounded-full">
+                    Получите: {Number(payout || 0).toLocaleString('ru-RU')} ₽
+                  </span>
+                  {/* Менеджеру (роль создаёт cross-clinic направление) — показываем цену пациенту */}
+                  {isManager && svc.price != null && (
+                    <span className="bg-[#dae5ff] text-[#1565c0] text-[11px] font-semibold px-2.5 py-1 rounded-full">
+                      Цена: {Number(svc.price).toLocaleString('ru-RU')} ₽
+                    </span>
+                  )}
+                </div>
+              )
+            })()}>
 
             {/* Фильтры */}
             {services.length > 0 && cats.length > 0 && (
@@ -384,9 +400,14 @@ export default function CreateReferral() {
                   : (
                     <>
                       <option value="">Выберите услугу ({filteredServices.length})</option>
-                      {filteredServices.map(s => (
-                        <option key={s.id} value={s.id}>{s.name} (+{s.bonus_amount} Б)</option>
-                      ))}
+                      {filteredServices.map(s => {
+                        const payout = s.referral_payout != null ? s.referral_payout : s.bonus_amount
+                        // Партнёру/админу показываем только payout. Менеджеру — обе суммы.
+                        const label = isManager && s.price != null
+                          ? `${s.name} — Цена ${s.price} ₽ / Партнёру ${payout} ₽`
+                          : `${s.name} (+${payout} ₽)`
+                        return <option key={s.id} value={s.id}>{label}</option>
+                      })}
                     </>
                   )
                 }

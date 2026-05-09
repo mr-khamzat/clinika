@@ -136,12 +136,22 @@ async def _apply_confirmation(
     referral.confirmed_at = datetime.utcnow()
     referral.confirmed_by_admin_id = confirmed_by_admin_id
 
-    # Бонус за услугу
+    # Бонус за услугу.
+    # Финансовая модель (svcfin01): приоритет — service.referral_payout (новое поле,
+    # «сумма видимая создающему направление»). Fallback на bonus_amount для совместимости.
     svc_result = await db.execute(select(Service).where(Service.id == referral.service_id))
     service = svc_result.scalar_one_or_none()
 
-    if service and service.bonus_amount > 0:
-        full_amount = float(service.bonus_amount)
+    # Эффективная сумма выплаты партнёру / клинике-источнику.
+    payout_amount = 0.0
+    if service is not None:
+        if service.referral_payout is not None:
+            payout_amount = float(service.referral_payout)
+        else:
+            payout_amount = float(service.bonus_amount or 0)
+
+    if service and payout_amount > 0:
+        full_amount = payout_amount
         applied_commission = False
 
         commission_enabled = (await _get_setting(db, "commission_enabled", "false")) == "true"
@@ -240,28 +250,121 @@ async def _apply_confirmation(
     except Exception:
         logger.exception("Не удалось начислить бонус рекрутеру для referral_id=%s author_id=%s", referral.id, referral.created_by_admin_id)
 
-    # Автоматически создаём межклиничный счёт при начислении бонуса
+    # Автоматически создаём межклиничный счёт при начислении бонуса.
+    # Финансовая модель (svcfin01): сумма счёта = service.referral_payout (то, что
+    # видит создающий направление — клиника-источник получит эту сумму). Fallback
+    # на bonus_amount для совместимости со старыми услугами.
+    is_cross_clinic = (
+        service
+        and payout_amount > 0
+        and referral.from_clinic_id
+        and referral.to_clinic_id
+        and referral.from_clinic_id != referral.to_clinic_id
+    )
     try:
-        if service and service.bonus_amount > 0 and referral.from_clinic_id and referral.to_clinic_id and referral.from_clinic_id != referral.to_clinic_id:
+        if is_cross_clinic:
             from app.services.inter_clinic_invoice_service import auto_create_from_referral
             from app.models.clinic import Clinic as _Clinic2
             _fc = await db.execute(select(_Clinic2).where(_Clinic2.id == referral.from_clinic_id))
             _from_clinic = _fc.scalar_one_or_none()
             _tc = await db.execute(select(_Clinic2).where(_Clinic2.id == referral.to_clinic_id))
             _to_clinic = _tc.scalar_one_or_none()
-            await auto_create_from_referral(
+            invoice = await auto_create_from_referral(
                 db,
                 referral_id=referral.id,
                 from_clinic_id=referral.from_clinic_id,
                 from_tenant_id=_from_clinic.tenant_id if _from_clinic else referral.tenant_id,
                 to_clinic_id=referral.to_clinic_id,
                 to_tenant_id=_to_clinic.tenant_id if _to_clinic else None,
-                bonus_amount=float(service.bonus_amount),
+                bonus_amount=payout_amount,
                 service_name=service.name if hasattr(service, 'name') else None,
                 created_by_id=referral.created_by_admin_id,
             )
+            # Аудит: создание межклиничного счёта.
+            try:
+                from app.services import audit_service
+                await audit_service.write_safe(
+                    db,
+                    "interclinic_invoice.created",
+                    actor_id=confirmed_by_admin_id,
+                    tenant_id=referral.tenant_id,
+                    entity_type="inter_clinic_invoice",
+                    entity_id=invoice.id if invoice else None,
+                    after={
+                        "referral_id": str(referral.id),
+                        "amount": payout_amount,
+                        "from_clinic_id": str(referral.from_clinic_id),
+                        "to_clinic_id": str(referral.to_clinic_id),
+                    },
+                )
+            except Exception:
+                logger.exception("Не удалось записать аудит interclinic_invoice.created")
     except Exception:
         logger.exception("Не удалось создать межклиничный счёт для referral_id=%s from=%s to=%s", referral.id, referral.from_clinic_id, referral.to_clinic_id)
+
+    # ── Накопление platform_fee для франшизного биллинга ──────────────────
+    # Записываем «комиссию платформы» в BillingLedger (entry_type=platform_fee_per_bonus).
+    # Эту сумму потом соберёт franchise_billing_job → FranchiseInvoice.
+    # Логика расчёта: max(price - referral_payout, Franchise.platform_fee_per_bonus).
+    try:
+        if service and payout_amount > 0:
+            from app.services.franchise_billing_service import record_platform_fee_for_bonus
+            from app.models.franchise import Franchise
+            from app.models.tenant import Tenant
+            from app.models.billing_ledger import BillingLedger
+            from decimal import Decimal as _D
+
+            # Берём бонус автора направления как «опорный объект» для записи fee.
+            author_bonus_q = await db.execute(
+                select(Bonus).where(
+                    Bonus.referral_id == referral.id,
+                    Bonus.admin_id == referral.created_by_admin_id,
+                )
+            )
+            anchor_bonus = author_bonus_q.scalar_one_or_none()
+
+            if anchor_bonus and referral.tenant_id:
+                tenant_q = await db.execute(select(Tenant).where(Tenant.id == referral.tenant_id))
+                tenant = tenant_q.scalar_one_or_none()
+                franchise_fee = _D("0")
+                if tenant and tenant.franchise_id:
+                    fr_q = await db.execute(select(Franchise).where(Franchise.id == tenant.franchise_id))
+                    fr = fr_q.scalar_one_or_none()
+                    if fr:
+                        franchise_fee = _D(str(fr.platform_fee_per_bonus or 0))
+
+                # Эффективная комиссия платформы:
+                # max(price - referral_payout, franchise_fee).
+                spread = _D("0")
+                if service.price is not None:
+                    spread = _D(str(service.price)) - _D(str(payout_amount))
+                effective_fee = max(spread, franchise_fee)
+                if effective_fee > 0:
+                    entry = BillingLedger(
+                        tenant_id=referral.tenant_id,
+                        clinic_id=referral.from_clinic_id,
+                        entry_type="platform_fee_per_bonus",
+                        direction="debit",
+                        amount=effective_fee,
+                        currency="RUB",
+                        reference_type="bonus",
+                        reference_id=anchor_bonus.id,
+                        description=(
+                            f"Комиссия платформы за направление #{str(referral.id)[:8]} "
+                            f"(price={service.price}, payout={payout_amount})"
+                        ),
+                        meta={
+                            "referral_id": str(referral.id),
+                            "service_id": str(service.id),
+                            "price": float(service.price) if service.price is not None else None,
+                            "referral_payout": payout_amount,
+                            "franchise_fee_floor": float(franchise_fee),
+                        },
+                    )
+                    db.add(entry)
+                    await db.flush()
+    except Exception:
+        logger.exception("Не удалось записать platform_fee_per_bonus для referral_id=%s", referral.id)
 
     await db.commit()
     await db.refresh(referral)

@@ -99,6 +99,8 @@ const NAV_GROUPS = [
       { id: 'platform',  label: 'Счета платформы', icon: 'receipt_long'      },
       { id: 'acts',      label: 'Межклин. акты', icon: 'description'         },
       { id: 'inter_inv', label: 'Счета клиник', icon: 'request_quote'        },
+      // svcfin01: «Биллинг сети» — кто кому должен в франшизе + ручной триггер biling
+      { id: 'network_billing', label: 'Биллинг сети', icon: 'account_tree'   },
       { id: 'calls',     label: 'Звонки',      icon: 'call'                  },
       { id: 'cross_dir', label: 'Сотрудники сети', icon: 'group'             },
     ],
@@ -138,6 +140,8 @@ const PAGE_TITLES = {
   platform:   { title: 'Счета платформы',  subtitle: 'Тарифы, начисления и счета от КлиникСеть' },
   acts:       { title: 'Межклиничные акты',subtitle: 'Акты выполненных работ между клиниками' },
   inter_inv:  { title: 'Счета между клиниками', subtitle: 'Внутренние взаиморасчёты сети' },
+  // svcfin01
+  network_billing: { title: 'Биллинг сети', subtitle: 'Кто кому должен + ручной триггер счёта от платформы' },
   calls:      { title: 'Правила звонков',  subtitle: 'Кто кому звонит — глобально и по клиникам' },
   cross_dir:  { title: 'Сотрудники сети',     subtitle: 'Справочник всех клиник: позвонить регистратору/врачу/менеджеру другой клиники' },
   ltv:        { title: 'LTV пациентов',       subtitle: 'Пожизненная ценность пациентов: топ, когорты, риск оттока' },
@@ -1094,6 +1098,180 @@ function BillingSection() {
 }
 
 // ============================================================================
+// Раздел: Биллинг сети (svcfin01)
+// Сводка платформенного долга по тенантам + матрица «кто кому должен» внутри сети.
+// + Кнопка «Сгенерировать счёт за период» (ручной триггер franchise_billing_job).
+// ============================================================================
+function NetworkBillingSection() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [triggering, setTriggering] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const r = await api.get('/franchise-owner/finance/network-overview')
+      setData(r.data)
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.response?.data?.detail || 'Ошибка загрузки' })
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() }, [])
+
+  const handleTrigger = async () => {
+    if (!confirm('Сгенерировать счёт за текущий период от платформы?')) return
+    setTriggering(true)
+    setMsg(null)
+    try {
+      const r = await api.post('/franchise-owner/finance/trigger-billing')
+      if (r.data?.created) {
+        setMsg({ type: 'ok', text: `Счёт создан: ${r.data.number} на ${Number(r.data.total_amount).toLocaleString('ru-RU')} ₽` })
+      } else {
+        setMsg({ type: 'info', text: r.data?.reason || 'За период не накопилось fee' })
+      }
+      await load()
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.response?.data?.detail || 'Не удалось создать счёт' })
+    } finally {
+      setTriggering(false)
+    }
+  }
+
+  if (loading) return <Card><div className="py-12 text-center" style={{ color: 'var(--fg-muted)' }}>Загрузка…</div></Card>
+  if (!data) return <Card><EmptyState icon={<Icon name="account_tree" size={28} />} title="Нет данных" /></Card>
+
+  const tenantsById = {}
+  ;(data.tenants || []).forEach(t => { tenantsById[t.id] = t })
+
+  // Матрица: ключ = issuer→recipient
+  const matrixMap = {}
+  ;(data.matrix || []).forEach(m => {
+    matrixMap[`${m.issuer_tenant_id}__${m.recipient_tenant_id}`] = m
+  })
+
+  const fmtRub = v => Number(v || 0).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽'
+
+  return (
+    <div className="space-y-4">
+      {msg && (
+        <div className="px-4 py-3 rounded-lg text-sm"
+          style={{
+            background: msg.type === 'ok' ? 'var(--good-soft)' : msg.type === 'error' ? 'var(--bad-soft)' : 'var(--accent-soft)',
+            color: msg.type === 'ok' ? 'var(--good)' : msg.type === 'error' ? 'var(--bad)' : 'var(--accent)',
+          }}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* Шапка с действиями */}
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Card.Title>Сводка по сети «{data.franchise_name}»</Card.Title>
+            <Card.Subtitle>
+              Период: {data.billing_period_days} дн. · с {new Date(data.period_start).toLocaleDateString('ru-RU')}
+            </Card.Subtitle>
+          </div>
+          <Button onClick={handleTrigger} disabled={triggering}>
+            {triggering ? 'Генерация…' : 'Сгенерировать счёт от платформы'}
+          </Button>
+        </div>
+      </Card>
+
+      {/* Платформенный долг каждой клиники */}
+      <Card padded={false}>
+        <div className="p-4 pb-2" style={{ borderBottom: '1px solid var(--line)' }}>
+          <Card.Title>Долг платформе за текущий период</Card.Title>
+          <Card.Subtitle>
+            Сумма platform_fee_per_bonus, накопленная с момента last_invoice_at.
+          </Card.Subtitle>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead style={{ background: 'var(--bg-1)' }}>
+              <tr style={{ color: 'var(--fg-muted)' }}>
+                <th className="text-left p-3 font-semibold">Клиника</th>
+                <th className="text-right p-3 font-semibold">Бонусов</th>
+                <th className="text-right p-3 font-semibold">Сумма к оплате</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.platform_dues || []).length === 0 ? (
+                <tr><td colSpan={3} className="p-6 text-center" style={{ color: 'var(--fg-muted)' }}>
+                  За период комиссий не накопилось.
+                </td></tr>
+              ) : (data.platform_dues || []).map(d => (
+                <tr key={d.tenant_id} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td className="p-3">{d.tenant_name || d.tenant_id}</td>
+                  <td className="p-3 text-right">{d.current_period_count}</td>
+                  <td className="p-3 text-right font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtRub(d.current_period_amount)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {/* Матрица «Кто кому должен» */}
+      <Card padded={false}>
+        <div className="p-4 pb-2" style={{ borderBottom: '1px solid var(--line)' }}>
+          <Card.Title>Кто кому должен в сети</Card.Title>
+          <Card.Subtitle>
+            Сумма непогашенных межклиничных счетов (status=draft|sent).
+            Строки — получатели платежа (issuer), колонки — плательщики (recipient).
+          </Card.Subtitle>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="text-sm" style={{ minWidth: '100%' }}>
+            <thead style={{ background: 'var(--bg-1)' }}>
+              <tr style={{ color: 'var(--fg-muted)' }}>
+                <th className="text-left p-3 font-semibold sticky left-0" style={{ background: 'var(--bg-1)' }}>
+                  Получатель ↓ / Плательщик →
+                </th>
+                {(data.tenants || []).map(t => (
+                  <th key={t.id} className="text-center p-3 font-semibold whitespace-nowrap">{t.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(data.tenants || []).map(issuer => (
+                <tr key={issuer.id} style={{ borderTop: '1px solid var(--line)' }}>
+                  <td className="p-3 font-semibold sticky left-0" style={{ background: 'var(--bg)' }}>
+                    {issuer.name}
+                  </td>
+                  {(data.tenants || []).map(rec => {
+                    if (issuer.id === rec.id) {
+                      return <td key={rec.id} className="p-3 text-center" style={{ color: 'var(--fg-muted)' }}>—</td>
+                    }
+                    const cell = matrixMap[`${issuer.id}__${rec.id}`]
+                    if (!cell || !cell.amount) {
+                      return <td key={rec.id} className="p-3 text-center" style={{ color: 'var(--fg-muted)' }}>—</td>
+                    }
+                    return (
+                      <td key={rec.id} className="p-3 text-center font-semibold" style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+                        {fmtRub(cell.amount)}
+                        <div className="text-[10px] font-normal" style={{ color: 'var(--fg-muted)' }}>
+                          {cell.invoice_count} счёт(ов)
+                        </div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+// ============================================================================
 // Раздел: Партнёрские врачи (partner_doctor + visiting_doctor)
 // ============================================================================
 function PartnerDoctorsSection({ adminToken }) {
@@ -1864,6 +2042,10 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
           <InterClinicInvoicesSection token={adminToken} />
         </Suspense>
       )
+    }
+    // svcfin01: «Биллинг сети» — финансовая модель платформы
+    if (route === 'network_billing') {
+      return <NetworkBillingSection />
     }
     return null
   }

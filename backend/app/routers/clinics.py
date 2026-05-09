@@ -61,6 +61,8 @@ async def get_clinic_services(
             "bonus_amount": float(s.bonus_amount),
             "price": float(s.price) if s.price is not None else None,
             "original_price": float(s.original_price) if s.original_price else None,
+            # Финансовая модель: что увидит создающий направление в качестве своей выплаты.
+            "referral_payout": float(s.referral_payout) if s.referral_payout is not None else None,
         }
         for s in services
     ]

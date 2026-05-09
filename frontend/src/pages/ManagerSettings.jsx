@@ -56,6 +56,10 @@ function ServiceFormModal({ open, onClose, initial, categories, onSubmit, saving
       setForm({
         name: initial.name || '',
         price: initial.price != null ? String(initial.price) : '',
+        // Финансовая модель: «бонус партнёру» = referral_payout (приоритет),
+        // fallback на bonus_amount — для услуг до миграции svcfin01.
+        referral_payout: (initial.referral_payout != null ? String(initial.referral_payout)
+                         : (initial.bonus_amount != null ? String(initial.bonus_amount) : '')),
         bonus_amount: initial.bonus_amount != null ? String(initial.bonus_amount) : '',
         category: initial.category && initial.category !== NO_CAT ? initial.category : '',
         visible_for_referrals: initial.visible_for_referrals !== false,
@@ -63,17 +67,28 @@ function ServiceFormModal({ open, onClose, initial, categories, onSubmit, saving
       })
       setNewCategory(false)
     } else {
-      setForm({ name: '', price: '', bonus_amount: '', category: '', visible_for_referrals: true, code: '' })
+      setForm({ name: '', price: '', referral_payout: '', bonus_amount: '', category: '', visible_for_referrals: true, code: '' })
       setNewCategory(false)
     }
   }, [open, initial])
 
+  // ── Computed: комиссия платформы = price - referral_payout ────────────
+  // Если referral_payout > price — отрицательное (показываем как 0 + ошибка).
+  const priceNum = parseFloat(form.price) || 0
+  const payoutNum = parseFloat(form.referral_payout) || 0
+  const platformFee = Math.max(0, priceNum - payoutNum)
+  const payoutOverPrice = priceNum > 0 && payoutNum > priceNum
+
   const submit = () => {
     if (!form.name.trim()) return
+    if (payoutOverPrice) return
     onSubmit({
       name: form.name.trim(),
       code: form.code.trim() || null,
       price: form.price === '' ? null : parseFloat(form.price),
+      // referral_payout — основное поле финансовой модели.
+      referral_payout: form.referral_payout === '' ? null : parseFloat(form.referral_payout),
+      // bonus_amount оставлен для совместимости со старой логикой / отчётами.
       bonus_amount: form.bonus_amount === '' ? 0 : parseFloat(form.bonus_amount) || 0,
       category: form.category.trim() || null,
       visible_for_referrals: !!form.visible_for_referrals,
@@ -106,7 +121,8 @@ function ServiceFormModal({ open, onClose, initial, categories, onSubmit, saving
           />
         </Field>
 
-        <div className="grid grid-cols-2 gap-3">
+        {/* ═══ Финансовая модель: цена пациенту / бонус партнёру / комиссия ═══ */}
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Цена пациенту, ₽">
             <input
               type="number" min="0" step="0.01"
@@ -114,18 +130,54 @@ function ServiceFormModal({ open, onClose, initial, categories, onSubmit, saving
               onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
               placeholder="0"
               className="ds-input"
+              title="Сумма, которую заплатит пациент"
             />
           </Field>
-          <Field label="Бонус сотруднику, Б">
+          <Field label="Бонус партнёру, ₽">
             <input
               type="number" min="0" step="0.01"
-              value={form.bonus_amount}
-              onChange={e => setForm(f => ({ ...f, bonus_amount: e.target.value }))}
+              value={form.referral_payout}
+              onChange={e => setForm(f => ({ ...f, referral_payout: e.target.value }))}
               placeholder="0"
+              className={`ds-input ${payoutOverPrice ? 'ds-input-error' : ''}`}
+              title="Сумма, которую видит партнёр / клиника-источник при создании направления (что они получат)"
+            />
+          </Field>
+          <Field label="Комиссия платформы, ₽">
+            <input
+              type="number"
+              value={platformFee}
+              readOnly
+              disabled
               className="ds-input"
+              style={{ opacity: 0.7 }}
+              title="Автоматически: цена пациенту − бонус партнёру"
             />
           </Field>
         </div>
+        {/* Подсказки и ошибки */}
+        <div className="text-[11px] -mt-1" style={{ color: 'var(--fg-muted)' }}>
+          <span className="material-symbols-outlined align-middle" style={{ fontSize: 14 }}>info</span>
+          {' '}<b>Бонус партнёру</b> — что увидит создающий направление (например 200 ₽).
+          {' '}<b>Комиссия платформы</b> рассчитывается автоматически = цена − бонус.
+        </div>
+        {payoutOverPrice && (
+          <div className="text-[12px] px-3 py-2 rounded-lg"
+            style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}>
+            Бонус партнёру не может быть больше цены пациенту.
+          </div>
+        )}
+
+        {/* Опционально: отдельный «Бонус сотруднику в баллах» (старая модель) */}
+        <Field label="Бонус сотруднику, Б (опционально, для отчётов)">
+          <input
+            type="number" min="0" step="0.01"
+            value={form.bonus_amount}
+            onChange={e => setForm(f => ({ ...f, bonus_amount: e.target.value }))}
+            placeholder="0"
+            className="ds-input"
+          />
+        </Field>
 
         <Field label="Категория">
           {newCategory ? (
@@ -196,6 +248,7 @@ function ServiceFormModal({ open, onClose, initial, categories, onSubmit, saving
           outline: none;
         }
         .ds-input:focus { border-color: var(--accent); }
+        .ds-input-error { border-color: var(--bad); background: var(--bad-soft); }
       `}</style>
     </Modal>
   )
@@ -490,7 +543,17 @@ function ServiceRow({ svc, last, onEdit, onDelete, onBonus, onToggleVisible }) {
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           {svc.price != null && (
             <span className="text-xs" style={{ color: 'var(--fg-muted)' }}>
-              {Number(svc.price).toLocaleString('ru-RU')} ₽
+              Цена: {Number(svc.price).toLocaleString('ru-RU')} ₽
+            </span>
+          )}
+          {svc.referral_payout != null && (
+            <span className="text-xs" style={{ color: 'var(--accent)' }}>
+              Партнёру: {Number(svc.referral_payout).toLocaleString('ru-RU')} ₽
+            </span>
+          )}
+          {svc.price != null && svc.referral_payout != null && Number(svc.price) > 0 && (
+            <span className="text-xs" style={{ color: 'var(--good)' }}>
+              Платформе: {Math.max(0, Number(svc.price) - Number(svc.referral_payout)).toLocaleString('ru-RU')} ₽
             </span>
           )}
           {svc.code && (

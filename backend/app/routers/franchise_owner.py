@@ -392,3 +392,131 @@ async def delete_recruiter(
     await db.commit()
     return {"deleted": True, "soft_deleted": False}
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# БЛОК: Финансы сети (svcfin01) — обзор кто кому должен в сети
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/finance/network-overview")
+async def network_finance_overview(
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Сводка финансов сети для franchise_owner:
+    - Сколько каждый тенант сети должен платформе за текущий период.
+    - Матрица «кто кому должен» внутри сети (по непогашенным InterClinicInvoice).
+    """
+    from app.models.inter_clinic_invoice import InterClinicInvoice, ICIStatus
+    from app.models.billing_ledger import BillingLedger
+
+    fr = await _get_my_franchise(db, user)
+
+    # Все тенанты франшизы.
+    tenants = (await db.execute(
+        select(Tenant).where(Tenant.franchise_id == fr.id)
+    )).scalars().all()
+    tenant_ids = [t.id for t in tenants]
+    tenant_map = {t.id: t for t in tenants}
+
+    # Платформенный долг каждого тенанта за текущий период
+    # (BillingLedger.platform_fee_per_bonus, начиная с last_invoice_at).
+    period_start = fr.last_invoice_at or (datetime.utcnow() - __import__("datetime").timedelta(days=fr.billing_period_days))
+    platform_dues = []
+    if tenant_ids:
+        rows = (await db.execute(
+            select(
+                BillingLedger.tenant_id,
+                func.coalesce(func.sum(BillingLedger.amount), 0).label("total"),
+                func.count(BillingLedger.id).label("cnt"),
+            )
+            .where(
+                BillingLedger.tenant_id.in_(tenant_ids),
+                BillingLedger.entry_type == "platform_fee_per_bonus",
+                BillingLedger.created_at >= period_start,
+            )
+            .group_by(BillingLedger.tenant_id)
+        )).all()
+        for r in rows:
+            t = tenant_map.get(r.tenant_id)
+            platform_dues.append({
+                "tenant_id": str(r.tenant_id),
+                "tenant_name": t.name if t else None,
+                "current_period_amount": float(r.total or 0),
+                "current_period_count": int(r.cnt or 0),
+            })
+
+    # Матрица «кто кому должен» по непогашенным InterClinicInvoice.
+    # Строки: issuer (получает деньги), Колонки: recipient (должен заплатить).
+    matrix_rows = []
+    if tenant_ids:
+        inv_rows = (await db.execute(
+            select(
+                InterClinicInvoice.issuer_tenant_id,
+                InterClinicInvoice.recipient_tenant_id,
+                func.coalesce(func.sum(InterClinicInvoice.amount), 0).label("total"),
+                func.count(InterClinicInvoice.id).label("cnt"),
+            )
+            .where(
+                InterClinicInvoice.issuer_tenant_id.in_(tenant_ids),
+                InterClinicInvoice.recipient_tenant_id.in_(tenant_ids),
+                InterClinicInvoice.status.in_([ICIStatus.SENT, ICIStatus.DRAFT]),
+            )
+            .group_by(
+                InterClinicInvoice.issuer_tenant_id,
+                InterClinicInvoice.recipient_tenant_id,
+            )
+        )).all()
+        for r in inv_rows:
+            issuer = tenant_map.get(r.issuer_tenant_id)
+            recipient = tenant_map.get(r.recipient_tenant_id)
+            matrix_rows.append({
+                "issuer_tenant_id": str(r.issuer_tenant_id),
+                "issuer_name": issuer.name if issuer else None,
+                "recipient_tenant_id": str(r.recipient_tenant_id),
+                "recipient_name": recipient.name if recipient else None,
+                "amount": float(r.total or 0),
+                "invoice_count": int(r.cnt or 0),
+            })
+
+    return {
+        "franchise_id": str(fr.id),
+        "franchise_name": fr.name,
+        "billing_period_days": fr.billing_period_days,
+        "period_start": period_start.isoformat(),
+        "tenants": [
+            {
+                "id": str(t.id),
+                "name": t.name,
+                "slug": t.slug,
+            }
+            for t in tenants
+        ],
+        "platform_dues": platform_dues,
+        "matrix": matrix_rows,
+    }
+
+
+@router.post("/finance/trigger-billing")
+async def trigger_billing_for_my_franchise(
+    user: User = Depends(require_franchise_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной триггер выставления FranchiseInvoice для моей франшизы.
+    Использует тот же сервис, что и cron-job (за исключением фильтра по периоду).
+    """
+    from app.services.franchise_billing_service import generate_invoice_for_franchise
+
+    fr = await _get_my_franchise(db, user)
+    inv = await generate_invoice_for_franchise(db, fr, period_end=datetime.utcnow())
+    if not inv:
+        return {"created": False, "reason": "За период не накопилось fee"}
+    return {
+        "created": True,
+        "invoice_id": str(inv.id),
+        "number": inv.number,
+        "total_amount": float(inv.total_amount),
+        "period_start": inv.period_start.isoformat(),
+        "period_end": inv.period_end.isoformat(),
+    }
+

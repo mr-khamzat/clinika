@@ -94,6 +94,8 @@ async def list_services(
          "price": float(s.price) if s.price is not None else None,
          "original_price": float(s.original_price) if s.original_price else None,
          "visible_for_referrals": bool(s.visible_for_referrals),
+         # Финансовая модель: что получит партнёр / клиника-источник.
+         "referral_payout": float(s.referral_payout) if s.referral_payout is not None else None,
          "is_active": s.is_active, "mis_id": s.mis_id}
         for s in result.scalars().all()
     ]
@@ -119,6 +121,13 @@ async def create_service(
     cat = body.category.strip() if body.category else None
     if cat in ('', 'Без категории'):
         cat = None
+    # ── Валидация финансовой модели ──────────────────────────────────────
+    # referral_payout >= 0 и не больше price (если price задана).
+    if body.referral_payout is not None:
+        if body.referral_payout < 0:
+            raise HTTPException(status_code=400, detail="referral_payout не может быть отрицательным")
+        if body.price is not None and body.referral_payout > body.price:
+            raise HTTPException(status_code=400, detail="referral_payout не может быть больше price")
     svc = Service(
         name=body.name, code=code_upper,
         bonus_amount=body.bonus_amount,
@@ -127,6 +136,7 @@ async def create_service(
         category=cat,
         price=body.price,
         visible_for_referrals=body.visible_for_referrals,
+        referral_payout=body.referral_payout,
     )
     db.add(svc)
     await db.commit()
@@ -159,6 +169,15 @@ async def update_service(
     if body.category is not None: svc.category = None if body.category.strip() in ('', 'Без категории') else body.category.strip()
     if body.price is not None: svc.price = body.price
     if body.visible_for_referrals is not None: svc.visible_for_referrals = body.visible_for_referrals
+    # ── Финансовая модель: валидация и обновление referral_payout ─────────
+    if body.referral_payout is not None:
+        if body.referral_payout < 0:
+            raise HTTPException(status_code=400, detail="referral_payout не может быть отрицательным")
+        # Сравниваем с финальной price (после применения body.price, если она пришла).
+        final_price = svc.price
+        if final_price is not None and body.referral_payout > float(final_price):
+            raise HTTPException(status_code=400, detail="referral_payout не может быть больше price")
+        svc.referral_payout = body.referral_payout
     await db.commit()
     await db.refresh(svc)
     return ServiceSchema.model_validate(svc)

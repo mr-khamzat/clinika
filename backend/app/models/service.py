@@ -37,6 +37,11 @@ class Service(Base):
     # Видна ли услуга при создании направления (партнёр / реферал-форма).
     # По умолчанию TRUE для совместимости — миграция svcv2_01.
     visible_for_referrals: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    # ── Финансовая модель платформы (миграция svcfin01) ────────────────────────
+    # Сумма, видимая создающему направление = что получит партнёр / клиника-источник.
+    # platform_fee = price - referral_payout (но не меньше Franchise.platform_fee_per_bonus).
+    # Если NULL — fallback на bonus_amount (старая логика, обратная совместимость).
+    referral_payout: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     referrals: Mapped[list["Referral"]] = relationship("Referral", back_populates="service")
     clinic: Mapped["Clinic | None"] = relationship("Clinic", back_populates="services")

@@ -98,6 +98,10 @@ class ServiceSchema(BaseModel):
     category: Optional[str] = None
     price: Optional[float] = None
     visible_for_referrals: bool = True
+    # ── Финансовая модель ─────────────────────────────────────────────────
+    # referral_payout — сумма, которую видит создающий направление
+    # (что получит клиника-источник / партнёр). Если NULL — фолбэк на bonus_amount.
+    referral_payout: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -111,6 +115,7 @@ class CreateServiceRequest(BaseModel):
     category: Optional[str] = None
     price: Optional[float] = None
     visible_for_referrals: bool = True
+    referral_payout: Optional[float] = None
 
 
 class UpdateServiceRequest(BaseModel):
@@ -122,6 +127,7 @@ class UpdateServiceRequest(BaseModel):
     category: Optional[str] = None
     price: Optional[float] = None
     visible_for_referrals: Optional[bool] = None
+    referral_payout: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------

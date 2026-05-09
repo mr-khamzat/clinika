@@ -31,6 +31,8 @@ export const MGR_NAV = [
   { key:'history',      label:'История',   icon:'history',      path:'/manager/history' },
   { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings' },
   { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices' },
+  // svcfin01: финансовая модель платформы — счета платформе/сети/сотрудникам
+  { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance' },
   { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors' },
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },

@@ -39,6 +39,8 @@ import ManagerVisitingDoctors from './pages/ManagerVisitingDoctors'
 import ManagerPartnerDoctors from './pages/ManagerPartnerDoctors'
 import ManagerSettings from './pages/ManagerSettings'
 import ManagerInvoices from './pages/ManagerInvoices'
+// svcfin01: финансовая модель платформы — 3 таба (Платформе/Сети/Сотрудникам)
+import ManagerFinance from './pages/ManagerFinance'
 import ManagerAppointments from './pages/ManagerAppointments'
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
@@ -233,6 +235,7 @@ function MiniApp() {
               <Route path="manager/visiting-doctors" element={<ManagerVisitingDoctors />} />
               <Route path="manager/partner-doctors"  element={<ManagerPartnerDoctors />} />
               <Route path="manager/invoices" element={<ManagerInvoices />} />
+              <Route path="manager/finance" element={<ManagerFinance />} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
