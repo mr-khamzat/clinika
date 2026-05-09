@@ -555,6 +555,16 @@ async def reset_manager_password(
     await db.commit()
     await db.refresh(manager)
 
+    # Уведомление админу платформы — graceful
+    try:
+        from app.services import alert_service
+        await alert_service.notify_password_reset(
+            tenant_name=t.name, username=manager.username,
+            actor=user.full_name or user.username,
+        )
+    except Exception:
+        pass
+
     email_sent = False
     email_error: Optional[str] = None
     if send_email_flag:

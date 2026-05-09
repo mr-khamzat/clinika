@@ -177,6 +177,21 @@ async def create_clinic_invoice(
         auto_send=True,
     )
     await db.commit()
+
+    # Уведомление админу при крупных счетах (>100k) — graceful
+    try:
+        if float(body.amount or 0) > 100_000:
+            from app.services import alert_service
+            await alert_service.notify_big_invoice(
+                invoice_number=str(getattr(inv, "number", inv.id))[:64],
+                amount=float(body.amount),
+                issuer=(issuer_clinic.name if issuer_clinic else "—"),
+                recipient=recipient_clinic.name,
+                overdue=False,
+            )
+    except Exception:
+        pass
+
     return _ici_out(inv,
         issuer_name=issuer_clinic.name if issuer_clinic else None,
         recipient_name=recipient_clinic.name,

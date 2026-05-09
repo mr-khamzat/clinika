@@ -1,5 +1,6 @@
 """Мониторинг системы — состояние сервера, контейнеров, БД, Redis, МИС."""
 import asyncio
+import json
 import time
 import os
 from datetime import datetime, date, timezone
@@ -635,3 +636,502 @@ async def get_db_pool_stats(
 
     return {"pool": pool_stats, "pg_sessions": pg_sessions,
             "longest_query_sec": round(max_query_sec, 1) if max_query_sec else None}
+
+
+# ─── API статистика (24h по часам) ────────────────────────────────────────────
+
+@router.get("/api-stats")
+async def get_api_stats(
+    hours: int = 24,
+    _: User = Depends(require_manager),
+):
+    """API stats за последние N часов (≤24): hourly bar, top endpoints, p50/p95/p99."""
+    from app.utils.metrics import get_request_metrics_hourly as _hourly
+    return await _hourly(hours=hours)
+
+
+# ─── Активные пользователи (онлайн + recent activity) ─────────────────────────
+
+@router.get("/active-users")
+async def get_active_users(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    """Онлайн через WS-presence + топ-10 за 24ч + login events за 7 дней."""
+    online_count = 0
+    online_users = []
+    try:
+        import redis.asyncio as aioredis
+        from app.config import settings
+        r = aioredis.from_url(settings.redis_url, encoding="utf8", decode_responses=True,
+                              socket_connect_timeout=2, socket_timeout=2)
+        # presence:{tenant_id} → hash {user_id: status}
+        keys = await r.keys("presence:*")
+        all_online_ids: set = set()
+        for k in keys:
+            try:
+                presence_map = await r.hgetall(k)
+                for uid, status in presence_map.items():
+                    if status and status != "offline":
+                        all_online_ids.add(uid)
+            except Exception:
+                continue
+        online_count = len(all_online_ids)
+        await r.aclose()
+
+        if all_online_ids:
+            try:
+                # PG: достать имена пользователей через ANY-массив (без bind expansion)
+                ids_list = list(all_online_ids)
+                res = await db.execute(
+                    text("SELECT id::text, full_name, role FROM users WHERE id::text = ANY(:ids)"),
+                    {"ids": ids_list},
+                )
+                online_users = [{"id": row[0], "full_name": row[1], "role": row[2]} for row in res.fetchall()]
+            except Exception:
+                online_users = []
+    except Exception:
+        pass
+
+    # Топ-10 активных за 24ч (по числу действий в activity_log)
+    top_active = []
+    try:
+        r = await db.execute(text("""
+            SELECT user_id::text AS uid, MAX(user_name) AS user_name, COUNT(*) AS cnt
+            FROM activity_log
+            WHERE created_at > NOW() - INTERVAL '24 hours' AND user_id IS NOT NULL
+            GROUP BY user_id
+            ORDER BY cnt DESC
+            LIMIT 10
+        """))
+        top_active = [{"id": row.uid, "full_name": row.user_name or "—", "actions": row.cnt}
+                      for row in r.fetchall()]
+    except Exception:
+        top_active = []
+
+    # Login events за 7 дней (агрегат по дням)
+    login_history = []
+    try:
+        r = await db.execute(text("""
+            SELECT date_trunc('day', created_at) AS day, COUNT(*) AS cnt
+            FROM activity_log
+            WHERE (action ILIKE '%login%' OR action ILIKE '%вход%' OR action ILIKE '%signin%')
+              AND created_at > NOW() - INTERVAL '7 days'
+            GROUP BY date_trunc('day', created_at)
+            ORDER BY day
+        """))
+        login_history = [{"day": row.day.isoformat() if row.day else None, "count": row.cnt}
+                         for row in r.fetchall()]
+    except Exception:
+        login_history = []
+
+    # Последние 20 login-событий
+    recent_logins = []
+    try:
+        r = await db.execute(text("""
+            SELECT user_name, action, ip_address, geo_country_name, geo_city, created_at
+            FROM activity_log
+            WHERE action ILIKE '%login%' OR action ILIKE '%вход%' OR action ILIKE '%signin%'
+            ORDER BY created_at DESC
+            LIMIT 20
+        """))
+        recent_logins = [
+            {"user": row.user_name or "—", "action": row.action,
+             "ip": row.ip_address, "country": row.geo_country_name, "city": row.geo_city,
+             "at": row.created_at.isoformat() if row.created_at else None}
+            for row in r.fetchall()
+        ]
+    except Exception:
+        recent_logins = []
+
+    return {
+        "online_count": online_count,
+        "online_users": online_users[:50],
+        "top_active_24h": top_active,
+        "login_history_7d": login_history,
+        "recent_logins": recent_logins,
+    }
+
+
+# ─── Бизнес-метрики реалтайм ──────────────────────────────────────────────────
+
+@router.get("/business-now")
+async def get_business_now(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_manager),
+):
+    """Live бизнес-метрики: приёмы сегодня/завтра, выручка, активные телемед-сессии."""
+    today_status = {"created": 0, "confirmed": 0, "completed": 0, "cancelled": 0, "no_show": 0}
+    try:
+        r = await db.execute(text("""
+            SELECT status, COUNT(*) AS cnt
+            FROM appointments
+            WHERE appointment_date = CURRENT_DATE
+            GROUP BY status
+        """))
+        for row in r.fetchall():
+            today_status[row.status] = row.cnt
+    except Exception:
+        pass
+
+    # Приёмы на завтра + capacity по клиникам
+    tomorrow_by_clinic = []
+    try:
+        r = await db.execute(text("""
+            SELECT c.id::text AS cid, c.name AS clinic_name, COUNT(a.id) AS cnt
+            FROM clinics c
+            LEFT JOIN appointments a ON a.clinic_id = c.id
+                AND a.appointment_date = CURRENT_DATE + INTERVAL '1 day'
+                AND a.status IN ('created', 'confirmed')
+            GROUP BY c.id, c.name
+            ORDER BY cnt DESC
+            LIMIT 20
+        """))
+        tomorrow_by_clinic = [{"clinic_id": row.cid, "clinic_name": row.clinic_name, "appointments": row.cnt}
+                              for row in r.fetchall()]
+    except Exception:
+        tomorrow_by_clinic = []
+
+    # Выручка за сегодня (sum price из appointments completed)
+    revenue_today = 0
+    revenue_count = 0
+    try:
+        r = await db.execute(text("""
+            SELECT COALESCE(SUM(price), 0) AS total, COUNT(*) AS cnt
+            FROM appointments
+            WHERE appointment_date = CURRENT_DATE AND status = 'completed'
+        """))
+        row = r.fetchone()
+        if row:
+            revenue_today = float(row.total or 0)
+            revenue_count = int(row.cnt or 0)
+    except Exception:
+        pass
+
+    # Активные телемед-сессии
+    telemed_active = 0
+    try:
+        r = await db.execute(text("""
+            SELECT COUNT(*) FROM telemedicine_sessions
+            WHERE status IN ('active', 'in_call', 'started')
+              AND (ended_at IS NULL OR ended_at > NOW() - INTERVAL '5 minutes')
+        """))
+        telemed_active = r.scalar() or 0
+    except Exception:
+        pass
+
+    # Пациенты за сегодня (уникальные приёмы)
+    unique_patients_today = 0
+    try:
+        r = await db.execute(text("""
+            SELECT COUNT(DISTINCT patient_phone) FROM appointments
+            WHERE appointment_date = CURRENT_DATE AND patient_phone IS NOT NULL
+        """))
+        unique_patients_today = r.scalar() or 0
+    except Exception:
+        pass
+
+    # Активные тенанты (с приёмами за неделю)
+    active_tenants = 0
+    try:
+        r = await db.execute(text("""
+            SELECT COUNT(DISTINCT tenant_id) FROM appointments
+            WHERE created_at > NOW() - INTERVAL '7 days'
+        """))
+        active_tenants = r.scalar() or 0
+    except Exception:
+        pass
+
+    return {
+        "appointments_today": today_status,
+        "appointments_today_total": sum(today_status.values()),
+        "tomorrow_by_clinic": tomorrow_by_clinic,
+        "tomorrow_total": sum(c["appointments"] for c in tomorrow_by_clinic),
+        "revenue_today": revenue_today,
+        "revenue_today_count": revenue_count,
+        "telemed_active": telemed_active,
+        "unique_patients_today": unique_patients_today,
+        "active_tenants_7d": active_tenants,
+    }
+
+
+# ─── Storage / Disk детально ──────────────────────────────────────────────────
+
+@router.get("/storage-detail")
+async def get_storage_detail(
+    _: User = Depends(require_manager),
+):
+    """Детальная разбивка диска: docker images, build cache, backups, uploads, journalctl."""
+    import subprocess
+
+    breakdown = {}
+
+    def _run(cmd: list, timeout=8) -> str:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return (r.stdout or "").strip()
+        except Exception as e:
+            return f"err: {e}"
+
+    def _du_bytes(path: str) -> int:
+        if not path or not os.path.exists(path):
+            return 0
+        try:
+            r = subprocess.run(["du", "-sb", path], capture_output=True, text=True, timeout=10)
+            if r.returncode == 0 and r.stdout:
+                return int(r.stdout.split()[0])
+        except Exception:
+            pass
+        return 0
+
+    # Uploads (volume mounted в контейнер на /app/uploads)
+    uploads_path = "/app/uploads"
+    breakdown["uploads_bytes"] = _du_bytes(uploads_path)
+    breakdown["data_bytes"] = _du_bytes("/app/data")
+
+    # Top-10 больших файлов в uploads
+    biggest_files = []
+    try:
+        if os.path.exists(uploads_path):
+            r = subprocess.run(
+                ["find", uploads_path, "-type", "f", "-printf", "%s\t%p\n"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                lines = [l for l in r.stdout.split("\n") if l.strip()]
+                items = []
+                for line in lines:
+                    parts = line.split("\t", 1)
+                    if len(parts) == 2:
+                        try:
+                            items.append({"size_bytes": int(parts[0]), "path": parts[1]})
+                        except Exception:
+                            continue
+                items.sort(key=lambda x: x["size_bytes"], reverse=True)
+                biggest_files = items[:10]
+    except Exception:
+        pass
+
+    # Disk usage всего корня (вызовы docker proxy не нужны — через psutil)
+    total = used = free = 0
+    try:
+        import psutil
+        d = psutil.disk_usage("/")
+        total, used, free = d.total, d.used, d.free
+    except Exception:
+        pass
+
+    # Возвращаем последний disk_check (если есть в Redis)
+    last_disk_check = None
+    try:
+        import redis.asyncio as aioredis
+        from app.config import settings
+        r = aioredis.from_url(settings.redis_url, encoding="utf8", decode_responses=True,
+                              socket_connect_timeout=2, socket_timeout=2)
+        snap = await r.lindex("metrics:health_snapshots", 0)
+        if snap:
+            try:
+                snap_data = json.loads(snap) if isinstance(snap, str) else snap
+                last_disk_check = {
+                    "saved_at": snap_data.get("saved_at"),
+                    "disk_percent": snap_data.get("disk"),
+                }
+            except Exception:
+                pass
+        await r.aclose()
+    except Exception:
+        pass
+
+    # Auto-cleanup и disk_check job: следующий запуск
+    cleanup_info = {
+        "disk_check_interval_minutes": 60,
+        "ltv_recompute_cron": "04:00 UTC daily",
+        "audit_archive_cron": "03:00 UTC daily",
+        "daily_digest_cron": "06:00 UTC daily",
+        "last_disk_check": last_disk_check,
+    }
+
+    return {
+        "disk": {"total_bytes": total, "used_bytes": used, "free_bytes": free,
+                 "percent": round(used / total * 100, 1) if total else 0},
+        "breakdown": breakdown,
+        "biggest_files": biggest_files,
+        "cleanup": cleanup_info,
+    }
+
+
+# ─── Алерты живые (audit_log + region.violation) ──────────────────────────────
+
+@router.get("/alerts")
+async def get_alerts(
+    limit: int = 50,
+    severity: str = "all",   # all | critical | warn | info
+    _: User = Depends(require_manager),
+):
+    """Последние алерты: region.violation, login fail, security events. Фильтр по severity."""
+    limit = min(max(limit, 1), 200)
+    alerts = []
+
+    # 1. Region violations (критично) + аудит-события
+    try:
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            r = await db.execute(text("""
+                SELECT id::text AS id, action, actor_name, comment, before, after,
+                       ip_address, geo_country_name, geo_city, created_at
+                FROM audit_log
+                WHERE action ILIKE '%alert%'
+                   OR action ILIKE '%violation%'
+                   OR action ILIKE '%region%'
+                   OR action ILIKE '%critical%'
+                   OR action ILIKE '%failed%'
+                ORDER BY created_at DESC
+                LIMIT :lim
+            """), {"lim": limit})
+            for row in r.fetchall():
+                act = (row.action or "").lower()
+                if "violation" in act or "critical" in act or "alert.critical" in act:
+                    sev = "critical"
+                elif "failed" in act or "warn" in act or "region" in act:
+                    sev = "warn"
+                else:
+                    sev = "info"
+                alerts.append({
+                    "id": row.id, "severity": sev, "action": row.action,
+                    "actor": row.actor_name, "comment": row.comment,
+                    "ip": row.ip_address, "country": row.geo_country_name, "city": row.geo_city,
+                    "at": row.created_at.isoformat() if row.created_at else None,
+                    "source": "audit_log",
+                })
+    except Exception as e:
+        alerts.append({"id": "err-audit", "severity": "info",
+                       "action": "audit_log_query_failed", "comment": str(e),
+                       "source": "internal", "at": datetime.now(timezone.utc).isoformat()})
+
+    # 2. Failed logins из activity_log (последние)
+    try:
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            r = await db.execute(text("""
+                SELECT id::text, user_name, action, ip_address, geo_country_name, geo_city, created_at
+                FROM activity_log
+                WHERE (action ILIKE '%fail%' OR action ILIKE '%неверн%' OR action ILIKE '%denied%')
+                ORDER BY created_at DESC
+                LIMIT 20
+            """))
+            for row in r.fetchall():
+                alerts.append({
+                    "id": "act-" + row[0], "severity": "warn", "action": row.action,
+                    "actor": row.user_name, "comment": None,
+                    "ip": row.ip_address, "country": row.geo_country_name, "city": row.geo_city,
+                    "at": row.created_at.isoformat() if row.created_at else None,
+                    "source": "activity_log",
+                })
+    except Exception:
+        pass
+
+    # 3. Live system alerts (CPU/RAM/Disk/DB/Redis) — текущее состояние
+    try:
+        loop = asyncio.get_event_loop()
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            srv, db_s, redis_s = await asyncio.gather(
+                loop.run_in_executor(None, _get_server_stats),
+                _get_db_stats(db),
+                _get_redis_stats(),
+            )
+        now = datetime.now(timezone.utc).isoformat()
+        if srv.get("cpu_percent", 0) > 85:
+            alerts.append({"id": "live-cpu", "severity": "critical", "action": "system.cpu_high",
+                           "actor": "system", "comment": f"CPU {srv['cpu_percent']}%",
+                           "at": now, "source": "live"})
+        if srv.get("ram_percent", 0) > 90:
+            alerts.append({"id": "live-ram", "severity": "critical", "action": "system.ram_high",
+                           "actor": "system", "comment": f"RAM {srv['ram_percent']}%",
+                           "at": now, "source": "live"})
+        if srv.get("disk_percent", 0) > 85:
+            alerts.append({"id": "live-disk", "severity": "warn" if srv["disk_percent"] < 95 else "critical",
+                           "action": "system.disk_high", "actor": "system",
+                           "comment": f"Диск {srv['disk_percent']}%",
+                           "at": now, "source": "live"})
+        if db_s.get("status") != "ok":
+            alerts.append({"id": "live-db", "severity": "critical", "action": "system.db_down",
+                           "actor": "system", "comment": "PostgreSQL недоступен",
+                           "at": now, "source": "live"})
+        if redis_s.get("status") != "ok":
+            alerts.append({"id": "live-redis", "severity": "critical", "action": "system.redis_down",
+                           "actor": "system", "comment": "Redis недоступен",
+                           "at": now, "source": "live"})
+    except Exception:
+        pass
+
+    # Сортировка по времени, фильтр severity
+    alerts.sort(key=lambda x: x.get("at") or "", reverse=True)
+    if severity != "all":
+        alerts = [a for a in alerts if a.get("severity") == severity]
+    alerts = alerts[:limit]
+
+    counts = {"critical": 0, "warn": 0, "info": 0}
+    for a in alerts:
+        s = a.get("severity") or "info"
+        counts[s] = counts.get(s, 0) + 1
+
+    return {"alerts": alerts, "total": len(alerts), "by_severity": counts}
+
+
+# ─── Performance графики (CPU/RAM/Disk за 24h из Prometheus) ──────────────────
+
+@router.get("/perf-history")
+async def get_perf_history(
+    hours: int = 24,
+    _: User = Depends(require_manager),
+):
+    """История CPU/RAM/Disk за N часов из health snapshots (Redis)."""
+    from app.utils.metrics import get_health_history as _history
+    # один снапшот = ~5 минут (пишется через health_watchdog_job каждые 5 мин)
+    # на 24h → 288 снапшотов; ограничиваем
+    hours = max(1, min(hours, 24))
+    limit = hours * 12  # снапшоты каждые 5 минут
+    snapshots = await _history(limit=limit)
+
+    series = []
+    for s in reversed(snapshots):  # от старых к новым
+        ts = s.get("saved_at")
+        try:
+            ts_iso = datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat() if ts else None
+        except Exception:
+            ts_iso = None
+        series.append({
+            "ts": ts_iso,
+            "cpu": s.get("cpu"),
+            "ram": s.get("ram"),
+            "disk": s.get("disk"),
+            "db_connections": s.get("db_connections"),
+            "redis_mb": s.get("redis_mb"),
+        })
+
+    # Если есть Prometheus — попытаться обогатить (опционально)
+    prom_url = os.environ.get("PROMETHEUS_URL")
+    prom_data = None
+    if prom_url:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # postgres connections от postgres-exporter
+                resp = await client.get(f"{prom_url}/api/v1/query_range", params={
+                    "query": "pg_stat_activity_count",
+                    "start": int(time.time() - hours * 3600),
+                    "end": int(time.time()),
+                    "step": "300",
+                })
+                if resp.status_code == 200:
+                    prom_data = resp.json().get("data")
+        except Exception:
+            pass
+
+    return {
+        "hours": hours,
+        "snapshots_count": len(series),
+        "series": series,
+        "prometheus": prom_data,
+        "prometheus_available": prom_url is not None,
+    }

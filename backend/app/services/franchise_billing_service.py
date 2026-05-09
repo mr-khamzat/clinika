@@ -134,6 +134,22 @@ async def generate_invoice_for_franchise(
     franchise.last_invoice_at = period_end
     await db.commit()
     await db.refresh(inv)
+
+    # Уведомление админу платформы — graceful (никогда не падаем)
+    try:
+        from app.services import alert_service
+        period_label = (
+            f"{period_start.strftime('%d.%m.%Y')} — "
+            f"{period_end.strftime('%d.%m.%Y')}"
+        )
+        await alert_service.notify_franchise_invoice(
+            franchise_name=franchise.name,
+            amount=float(inv.total_amount),
+            period=period_label,
+        )
+    except Exception:
+        pass
+
     return inv
 
 

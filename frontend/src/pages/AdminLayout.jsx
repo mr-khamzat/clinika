@@ -3185,6 +3185,20 @@ function MonitoringSection({ token }) {
   const [dbAnalysis, setDbAnalysis] = useState(null)
   const [dbLoading, setDbLoading] = useState(false)
   const [logsFilter, setLogsFilter] = useState('all')  // all | errors | warnings
+  // ── Расширенные метрики (W14): API / Users / Business / Storage / Alerts / Perf ──
+  const [apiStats, setApiStats] = useState(null)
+  const [apiLoading, setApiLoading] = useState(false)
+  const [usersStats, setUsersStats] = useState(null)
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [businessStats, setBusinessStats] = useState(null)
+  const [businessLoading, setBusinessLoading] = useState(false)
+  const [storageStats, setStorageStats] = useState(null)
+  const [storageLoading, setStorageLoading] = useState(false)
+  const [alertsList, setAlertsList] = useState(null)
+  const [alertsLoading, setAlertsLoading] = useState(false)
+  const [alertsSeverity, setAlertsSeverity] = useState('all')
+  const [perfHistory, setPerfHistory] = useState(null)
+  const [perfLoading, setPerfLoading] = useState(false)
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -3219,10 +3233,72 @@ function MonitoringSection({ token }) {
     } catch {} finally { setDbLoading(false) }
   }
 
+  // ── Загрузчики новых вкладок (W14) ─────────────────────────────────────────
+  const loadApi = async () => {
+    setApiLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/api-stats?hours=24', token)
+      setApiStats(res.data)
+    } catch {} finally { setApiLoading(false) }
+  }
+  const loadUsers = async () => {
+    setUsersLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/active-users', token)
+      setUsersStats(res.data)
+    } catch {} finally { setUsersLoading(false) }
+  }
+  const loadBusiness = async () => {
+    setBusinessLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/business-now', token)
+      setBusinessStats(res.data)
+    } catch {} finally { setBusinessLoading(false) }
+  }
+  const loadStorage = async () => {
+    setStorageLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/storage-detail', token)
+      setStorageStats(res.data)
+    } catch {} finally { setStorageLoading(false) }
+  }
+  const loadAlerts = async (sev = alertsSeverity) => {
+    setAlertsLoading(true)
+    try {
+      const res = await apiFetch('get', `/monitoring/alerts?limit=50&severity=${sev}`, token)
+      setAlertsList(res.data)
+    } catch {} finally { setAlertsLoading(false) }
+  }
+  const loadPerf = async () => {
+    setPerfLoading(true)
+    try {
+      const res = await apiFetch('get', '/monitoring/perf-history?hours=24', token)
+      setPerfHistory(res.data)
+    } catch {} finally { setPerfLoading(false) }
+  }
+
   useEffect(() => {
     if (activeTab === 'logs' && !logs) loadLogs()
     if (activeTab === 'db' && !dbAnalysis) loadDbAnalysis()
+    if (activeTab === 'api' && !apiStats) loadApi()
+    if (activeTab === 'users' && !usersStats) loadUsers()
+    if (activeTab === 'business' && !businessStats) loadBusiness()
+    if (activeTab === 'storage' && !storageStats) loadStorage()
+    if (activeTab === 'alerts' && !alertsList) loadAlerts()
+    if (activeTab === 'system' && !perfHistory) loadPerf()
   }, [activeTab])
+
+  // Авто-рефреш каждые 30 сек для активной вкладки (новые вкладки)
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (activeTab === 'api') loadApi()
+      else if (activeTab === 'users') loadUsers()
+      else if (activeTab === 'business') loadBusiness()
+      else if (activeTab === 'storage') loadStorage()
+      else if (activeTab === 'alerts') loadAlerts(alertsSeverity)
+    }, 30000)
+    return () => clearInterval(id)
+  }, [activeTab, alertsSeverity])
 
   if (loading) return <Spinner />
 
@@ -3279,15 +3355,20 @@ function MonitoringSection({ token }) {
         </button>
       </div>
 
-      {/* Табы */}
-      <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-2xl p-1" style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+      {/* Табы (7 вкладок: Система / Логи / БД / API / Пользователи / Бизнес / Алерты) */}
+      <div className="flex gap-1 bg-white dark:bg-gray-800 rounded-2xl p-1 overflow-x-auto" style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
         {[
-          {key:'system', label:'Система', icon:'monitor_heart'},
-          {key:'logs',   label:'Логи',    icon:'receipt_long'},
-          {key:'db',     label:'База данных', icon:'database'},
+          {key:'system',   label:'Система',     icon:'monitor_heart'},
+          {key:'logs',     label:'Логи',        icon:'receipt_long'},
+          {key:'db',       label:'БД',          icon:'database'},
+          {key:'api',      label:'API',         icon:'api'},
+          {key:'users',    label:'Пользователи',icon:'group'},
+          {key:'business', label:'Бизнес',      icon:'business_center'},
+          {key:'storage',  label:'Хранилище',   icon:'hard_drive'},
+          {key:'alerts',   label:'Алерты',      icon:'notifications_active'},
         ].map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+            className={`flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
               activeTab === tab.key ? 'bg-[#1565c0] text-white' : 'text-[#727783] hover:text-[#424752]'
             }`}
             style={activeTab === tab.key ? {boxShadow:'0 4px 12px rgba(21,101,192,0.2)'} : {}}>
@@ -3396,7 +3477,437 @@ function MonitoringSection({ token }) {
         </div>
       )}
 
-      {activeTab !== 'system' && null}
+      {/* ─── Tab API: 24h hourly bar + top endpoints + p95/p99 ──────────────── */}
+      {activeTab === 'api' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">API за 24 часа</p>
+            <button onClick={loadApi} disabled={apiLoading}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+              <span className={`material-symbols-outlined text-sm ${apiLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {apiLoading && !apiStats ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : !apiStats?.available ? (
+            <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 text-sm text-[#727783] text-center" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              {apiStats?.reason || 'Метрики пока недоступны'}
+            </div>
+          ) : (
+            <>
+              {/* KPI: total / errors / p50 / p95 / p99 */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <StatCard icon="trending_up" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Запросов"
+                  value={apiStats.total?.toLocaleString('ru') ?? '—'} sub={`за ${apiStats.hours}ч`} />
+                <StatCard icon="error" iconBg="bg-red-100" iconColor="#ba1a1a" title="Ошибок 5xx"
+                  value={apiStats.error_count?.toLocaleString('ru') ?? '0'} sub={`${apiStats.error_rate_pct ?? 0}%`} />
+                <StatCard icon="speed" iconBg="bg-orange-100" iconColor="#c2410c" title="Avg / p50"
+                  value={`${apiStats.latency?.avg ?? 0}мс`} sub={`p50 ${apiStats.latency?.p50 ?? 0}мс`} />
+                <StatCard icon="bolt" iconBg="bg-yellow-100" iconColor="#a16207" title="p95"
+                  value={`${apiStats.latency?.p95 ?? 0}мс`} sub="95-й перцентиль" />
+                <StatCard icon="warning" iconBg="bg-red-100" iconColor="#ba1a1a" title="p99"
+                  value={`${apiStats.latency?.p99 ?? 0}мс`} sub="99-й перцентиль" />
+              </div>
+
+              {/* Часовая bar-диаграмма */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Запросы по часам</p>
+                <div className="flex items-end gap-1 h-32">
+                  {(apiStats.hourly || []).map((h, i) => {
+                    const max = Math.max(...(apiStats.hourly || []).map(x => x.total), 1)
+                    const pct = Math.round((h.total / max) * 100)
+                    const errPct = h.total ? Math.round((h.errors / h.total) * 100) : 0
+                    const bgColor = errPct > 5 ? '#ba1a1a' : errPct > 1 ? '#c2410c' : '#1565c0'
+                    const ts = new Date(h.ts * 1000)
+                    const hour = ts.getHours()
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                        <div className="absolute top-0 bg-[#191c1e] text-white text-[10px] rounded-md px-2 py-1 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-10"
+                          style={{transform:'translateY(-100%)'}}>
+                          {hour}:00 — {h.total} зап. ({h.errors} ош.) avg {h.avg_ms}мс
+                        </div>
+                        <div className="w-full rounded-t-md transition-all" style={{height: `${Math.max(pct, 2)}%`, background: bgColor}} />
+                        <span className="text-[10px] text-[#727783] font-mono">{hour}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Топ-10 endpoints */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Топ-10 эндпоинтов</p>
+                </div>
+                <div className="px-5 py-2 border-b border-[#f2f4f6] dark:border-gray-700 grid grid-cols-12 gap-2 text-[10px] font-bold text-[#727783] uppercase tracking-wider">
+                  <span className="col-span-7">Endpoint</span>
+                  <span className="col-span-2 text-right">Запросов</span>
+                  <span className="col-span-1 text-right">Avg</span>
+                  <span className="col-span-2 text-right">p95</span>
+                </div>
+                {(apiStats.top_endpoints || []).map((ep, i) => (
+                  <div key={i} className={`px-5 py-2.5 grid grid-cols-12 gap-2 ${i < apiStats.top_endpoints.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                    <span className="col-span-7 text-sm font-mono text-[#191c1e] dark:text-white truncate">{ep.endpoint}</span>
+                    <span className="col-span-2 text-sm text-right font-bold text-[#1565c0]">{ep.count?.toLocaleString('ru')}</span>
+                    <span className="col-span-1 text-sm text-right text-[#727783]">{ep.avg_ms}</span>
+                    <span className={`col-span-2 text-sm text-right font-semibold ${ep.p95_ms > 500 ? 'text-[#ba1a1a]' : ep.p95_ms > 200 ? 'text-[#c2410c]' : 'text-[#727783]'}`}>{ep.p95_ms}мс</span>
+                  </div>
+                ))}
+                {(!apiStats.top_endpoints || apiStats.top_endpoints.length === 0) && (
+                  <p className="px-5 py-6 text-sm text-[#727783] text-center">Нет данных</p>
+                )}
+              </div>
+
+              {/* HTTP status breakdown */}
+              {apiStats.status_breakdown && Object.keys(apiStats.status_breakdown).length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">HTTP статусы</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(apiStats.status_breakdown).map(([code, cnt]) => {
+                      const c = parseInt(code)
+                      const cls = c >= 500 ? 'bg-red-100 text-[#ba1a1a]' : c >= 400 ? 'bg-orange-100 text-orange-700' : c >= 300 ? 'bg-yellow-100 text-yellow-700' : 'bg-emerald-50 text-emerald-700'
+                      return (
+                        <span key={code} className={`text-xs px-2.5 py-1 rounded-full font-bold ${cls}`}>
+                          {code}: {cnt}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab Users: онлайн через WS-presence + 24h топ + 7d login history ── */}
+      {activeTab === 'users' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Активные пользователи</p>
+            <button onClick={loadUsers} disabled={usersLoading}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+              <span className={`material-symbols-outlined text-sm ${usersLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {usersLoading && !usersStats ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <StatCard icon="circle" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Онлайн сейчас"
+                  value={usersStats?.online_count ?? 0} sub="WebSocket presence" />
+                <StatCard icon="trending_up" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Активных за 24ч"
+                  value={(usersStats?.top_active_24h || []).length} sub="по числу действий" />
+                <StatCard icon="login" iconBg="bg-orange-100" iconColor="#c2410c" title="Входов за 7д"
+                  value={(usersStats?.login_history_7d || []).reduce((s,d) => s + (d.count||0), 0)} sub="login events" />
+              </div>
+
+              {/* Онлайн сейчас */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Онлайн ({usersStats?.online_count || 0})</p>
+                </div>
+                {(usersStats?.online_users || []).length === 0 ? (
+                  <p className="px-5 py-6 text-sm text-[#727783] text-center">Никого онлайн</p>
+                ) : (
+                  (usersStats?.online_users || []).map((u, i, arr) => (
+                    <div key={u.id} className={`px-5 py-2.5 flex items-center gap-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                      <span className="w-2 h-2 rounded-full bg-[#166534] flex-shrink-0" />
+                      <span className="text-sm font-semibold text-[#191c1e] dark:text-white flex-1 truncate">{u.full_name || '—'}</span>
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f2f4f6] text-[#424752] font-bold">{u.role}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Топ-10 активных за 24h */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Топ-10 активных (24ч)</p>
+                </div>
+                {(usersStats?.top_active_24h || []).map((u, i, arr) => (
+                  <div key={u.id || i} className={`px-5 py-2.5 flex items-center gap-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                    <span className="text-xs font-bold text-[#727783] w-6">#{i+1}</span>
+                    <span className="text-sm font-semibold text-[#191c1e] dark:text-white flex-1 truncate">{u.full_name}</span>
+                    <span className="text-sm font-bold text-[#1565c0]">{u.actions} действий</span>
+                  </div>
+                ))}
+                {(!usersStats?.top_active_24h || usersStats.top_active_24h.length === 0) && (
+                  <p className="px-5 py-6 text-sm text-[#727783] text-center">Нет данных</p>
+                )}
+              </div>
+
+              {/* Login history 7d */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Входы за 7 дней</p>
+                <div className="flex items-end gap-1 h-24">
+                  {(() => {
+                    const days = usersStats?.login_history_7d || []
+                    const max = Math.max(...days.map(d => d.count || 0), 1)
+                    return days.map((d, i) => {
+                      const pct = Math.round(((d.count || 0) / max) * 100)
+                      const dayLabel = d.day ? new Date(d.day).toLocaleDateString('ru-RU', {day:'2-digit', month:'short'}) : '?'
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
+                          <div className="absolute top-0 bg-[#191c1e] text-white text-[10px] rounded-md px-2 py-1 opacity-0 group-hover:opacity-100 transition pointer-events-none whitespace-nowrap z-10"
+                            style={{transform:'translateY(-100%)'}}>
+                            {dayLabel}: {d.count} входов
+                          </div>
+                          <div className="w-full rounded-t-md transition-all bg-[#1565c0]" style={{height: `${Math.max(pct, 2)}%`}} />
+                          <span className="text-[10px] text-[#727783] font-mono">{dayLabel.slice(0,2)}</span>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              </div>
+
+              {/* Recent logins */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Последние входы</p>
+                </div>
+                {(usersStats?.recent_logins || []).slice(0, 15).map((l, i, arr) => (
+                  <div key={i} className={`px-5 py-2.5 flex items-center gap-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                    <span className="text-sm font-semibold text-[#191c1e] dark:text-white truncate flex-1">{l.user}</span>
+                    <span className="text-[11px] text-[#727783] font-mono truncate hidden sm:inline">{l.ip}</span>
+                    {l.country && <span className="text-[11px] text-[#727783] truncate hidden md:inline">{l.country}</span>}
+                    <span className="text-[11px] text-[#727783] flex-shrink-0">{l.at ? new Date(l.at).toLocaleString('ru-RU', {hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit'}) : '—'}</span>
+                  </div>
+                ))}
+                {(!usersStats?.recent_logins || usersStats.recent_logins.length === 0) && (
+                  <p className="px-5 py-6 text-sm text-[#727783] text-center">Нет данных</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab Business: live приёмы / выручка / телемед ───────────────────── */}
+      {activeTab === 'business' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Бизнес-метрики (live)</p>
+            <button onClick={loadBusiness} disabled={businessLoading}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+              <span className={`material-symbols-outlined text-sm ${businessLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {businessLoading && !businessStats ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
+            <>
+              {/* KPI: today total / revenue / telemed / patients / tomorrow / tenants */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <StatCard icon="event" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Сегодня"
+                  value={businessStats?.appointments_today_total ?? 0} sub="всего приёмов" />
+                <StatCard icon="payments" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Выручка сегодня"
+                  value={(businessStats?.revenue_today || 0).toLocaleString('ru', {style:'currency', currency:'RUB', maximumFractionDigits:0})}
+                  sub={`${businessStats?.revenue_today_count ?? 0} оплат`} />
+                <StatCard icon="video_call" iconBg="bg-orange-100" iconColor="#c2410c" title="Телемед сейчас"
+                  value={businessStats?.telemed_active ?? 0} sub="активных сессий" />
+                <StatCard icon="person" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Пациентов сегодня"
+                  value={businessStats?.unique_patients_today ?? 0} sub="уникальных" />
+                <StatCard icon="event_upcoming" iconBg="bg-yellow-100" iconColor="#a16207" title="На завтра"
+                  value={businessStats?.tomorrow_total ?? 0} sub="записей" />
+                <StatCard icon="business" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Активных тенантов"
+                  value={businessStats?.active_tenants_7d ?? 0} sub="за 7 дней" />
+              </div>
+
+              {/* Today by status — pie/breakdown */}
+              {businessStats?.appointments_today && (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Приёмы сегодня по статусам</p>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    {Object.entries(businessStats.appointments_today).map(([status, cnt]) => {
+                      const labels = {created:'Создано', confirmed:'Подтв.', completed:'Заверш.', cancelled:'Отменено', no_show:'Не явился'}
+                      const colors = {created:'#1565c0', confirmed:'#a16207', completed:'#166534', cancelled:'#727783', no_show:'#ba1a1a'}
+                      return (
+                        <div key={status} className="text-center">
+                          <p className="text-2xl font-extrabold" style={{color: colors[status] || '#1565c0'}}>{cnt}</p>
+                          <p className="text-xs text-[#727783] font-semibold">{labels[status] || status}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Tomorrow by clinic */}
+              {(businessStats?.tomorrow_by_clinic || []).length > 0 && (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                  <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                    <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Записи на завтра по клиникам</p>
+                  </div>
+                  {businessStats.tomorrow_by_clinic.map((c, i, arr) => (
+                    <div key={c.clinic_id} className={`px-5 py-2.5 flex items-center gap-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                      <span className="text-sm font-semibold text-[#191c1e] dark:text-white flex-1 truncate">{c.clinic_name}</span>
+                      <span className={`text-sm font-bold ${c.appointments > 10 ? 'text-[#166534]' : c.appointments > 0 ? 'text-[#1565c0]' : 'text-[#727783]'}`}>
+                        {c.appointments} зап.
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab Storage: docker / uploads / биждайшие файлы / cleanup info ──── */}
+      {activeTab === 'storage' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Хранилище</p>
+            <button onClick={loadStorage} disabled={storageLoading}
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+              <span className={`material-symbols-outlined text-sm ${storageLoading ? 'animate-spin' : ''}`}>refresh</span>
+              Обновить
+            </button>
+          </div>
+          {storageLoading && !storageStats ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
+            <>
+              {/* Disk overall */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <StatCard icon="hard_drive" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Диск"
+                  value={`${storageStats?.disk?.percent ?? 0}%`}
+                  sub={storageStats?.disk?.total_bytes ? `${(storageStats.disk.used_bytes/1024/1024/1024).toFixed(1)} / ${(storageStats.disk.total_bytes/1024/1024/1024).toFixed(1)} ГБ` : '—'}
+                  gauge={storageStats?.disk?.percent} warnAt={75} critAt={90} />
+                <StatCard icon="folder" iconBg="bg-orange-100" iconColor="#c2410c" title="Uploads"
+                  value={storageStats?.breakdown?.uploads_bytes != null ? `${(storageStats.breakdown.uploads_bytes/1024/1024).toFixed(1)} МБ` : '—'}
+                  sub="/app/uploads" />
+                <StatCard icon="folder_open" iconBg="bg-yellow-100" iconColor="#a16207" title="Data"
+                  value={storageStats?.breakdown?.data_bytes != null ? `${(storageStats.breakdown.data_bytes/1024/1024).toFixed(1)} МБ` : '—'}
+                  sub="/app/data" />
+                <StatCard icon="cleaning_services" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Disk Check"
+                  value="каждый час" sub="60 мин interval" />
+              </div>
+
+              {/* Top-10 биждейших */}
+              <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                <div className="px-5 py-3 border-b border-[#f2f4f6] dark:border-gray-700">
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Топ-10 больших файлов в uploads</p>
+                </div>
+                {(storageStats?.biggest_files || []).map((f, i, arr) => (
+                  <div key={i} className={`px-5 py-2 flex items-center gap-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                    <span className="text-xs font-bold text-[#727783] w-6">#{i+1}</span>
+                    <span className="text-xs font-mono text-[#191c1e] dark:text-white flex-1 truncate" title={f.path}>{f.path?.replace('/app/uploads/', '') || '—'}</span>
+                    <span className="text-sm font-bold text-[#1565c0]">{(f.size_bytes/1024/1024).toFixed(2)} МБ</span>
+                  </div>
+                ))}
+                {(!storageStats?.biggest_files || storageStats.biggest_files.length === 0) && (
+                  <p className="px-5 py-6 text-sm text-[#727783] text-center">Нет файлов</p>
+                )}
+              </div>
+
+              {/* Cleanup info */}
+              {storageStats?.cleanup && (
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-5" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+                  <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Регламентные задачи</p>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-[#727783]">Disk check</span><span className="font-bold text-[#191c1e] dark:text-white">каждые {storageStats.cleanup.disk_check_interval_minutes} мин</span></div>
+                    <div className="flex justify-between"><span className="text-[#727783]">LTV пересчёт</span><span className="font-bold text-[#191c1e] dark:text-white">{storageStats.cleanup.ltv_recompute_cron}</span></div>
+                    <div className="flex justify-between"><span className="text-[#727783]">Архивация аудита</span><span className="font-bold text-[#191c1e] dark:text-white">{storageStats.cleanup.audit_archive_cron}</span></div>
+                    <div className="flex justify-between"><span className="text-[#727783]">Daily digest</span><span className="font-bold text-[#191c1e] dark:text-white">{storageStats.cleanup.daily_digest_cron}</span></div>
+                    {storageStats.cleanup.last_disk_check && (
+                      <div className="flex justify-between pt-2 border-t border-[#f2f4f6]">
+                        <span className="text-[#727783]">Последний снапшот диска</span>
+                        <span className="font-bold text-[#191c1e] dark:text-white">
+                          {storageStats.cleanup.last_disk_check.disk_percent}% • {storageStats.cleanup.last_disk_check.saved_at ? new Date(storageStats.cleanup.last_disk_check.saved_at*1000).toLocaleString('ru-RU') : '—'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ─── Tab Alerts: live alerts с фильтром severity ──────────────────────── */}
+      {activeTab === 'alerts' && (
+        <div className="space-y-3">
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Алерты</p>
+            <div className="flex gap-2 items-center">
+              {['all','critical','warn','info'].map(sev => (
+                <button key={sev}
+                  onClick={() => { setAlertsSeverity(sev); loadAlerts(sev) }}
+                  className={"text-xs px-2.5 py-1.5 rounded-xl font-semibold transition " + (alertsSeverity === sev ? 'bg-[#1565c0] text-white' : 'bg-[#f2f4f6] text-[#424752] hover:bg-[#eceef0]')}>
+                  {sev === 'all' ? 'Все' : sev === 'critical' ? '🔴 Crit' : sev === 'warn' ? '🟡 Warn' : '🔵 Info'}
+                </button>
+              ))}
+              <button onClick={() => loadAlerts(alertsSeverity)} disabled={alertsLoading}
+                className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+                style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
+                <span className={`material-symbols-outlined text-sm ${alertsLoading ? 'animate-spin' : ''}`}>refresh</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Severity counters */}
+          {alertsList?.by_severity && (
+            <div className="grid grid-cols-3 gap-3">
+              <StatCard icon="error" iconBg="bg-red-100" iconColor="#ba1a1a" title="Critical"
+                value={alertsList.by_severity.critical ?? 0} sub="требует внимания" />
+              <StatCard icon="warning" iconBg="bg-orange-100" iconColor="#c2410c" title="Warn"
+                value={alertsList.by_severity.warn ?? 0} sub="предупреждения" />
+              <StatCard icon="info" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Info"
+                value={alertsList.by_severity.info ?? 0} sub="события" />
+            </div>
+          )}
+
+          {alertsLoading && !alertsList ? (
+            <div className="flex justify-center py-8"><div className="w-6 h-6 border-2 border-[#1565c0] border-t-transparent rounded-full animate-spin" /></div>
+          ) : (
+            <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+              {(alertsList?.alerts || []).length === 0 ? (
+                <p className="px-5 py-8 text-sm text-[#727783] text-center">Нет алертов</p>
+              ) : (alertsList.alerts).map((a, i, arr) => {
+                const sevColors = {
+                  critical: {bg:'bg-red-50', text:'text-[#ba1a1a]', dot:'#ba1a1a', label:'CRIT'},
+                  warn: {bg:'bg-orange-50', text:'text-[#c2410c]', dot:'#c2410c', label:'WARN'},
+                  info: {bg:'bg-[#dae5ff]', text:'text-[#1565c0]', dot:'#1565c0', label:'INFO'},
+                }
+                const c = sevColors[a.severity] || sevColors.info
+                return (
+                  <div key={a.id || i} className={`px-5 py-3 ${i < arr.length-1 ? 'border-b border-[#f2f4f6] dark:border-gray-700' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${c.bg} ${c.text} flex-shrink-0`}>{c.label}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[#191c1e] dark:text-white font-mono truncate">{a.action}</p>
+                        {a.comment && <p className="text-xs text-[#727783] mt-0.5 truncate">{a.comment}</p>}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-[11px] text-[#727783]">
+                          {a.actor && <span>👤 {a.actor}</span>}
+                          {a.ip && <span className="font-mono">{a.ip}</span>}
+                          {a.country && <span>{a.country}</span>}
+                          {a.city && <span>{a.city}</span>}
+                          {a.source && <span className="opacity-60">[{a.source}]</span>}
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-[#727783] flex-shrink-0 whitespace-nowrap">
+                        {a.at ? new Date(a.at).toLocaleString('ru-RU', {hour:'2-digit', minute:'2-digit', day:'2-digit', month:'2-digit'}) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'system' && <>
 
@@ -3547,6 +4058,43 @@ function MonitoringSection({ token }) {
           ))}
         </div>
       </div>
+
+      {/* Performance графики (CPU/RAM/Disk за 24ч из health snapshots) */}
+      {perfHistory?.series && perfHistory.series.length > 0 && (
+        <div>
+          <p className="text-xs font-bold text-[#727783] uppercase tracking-widest mb-3">Производительность за 24 часа</p>
+          <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 space-y-4" style={{boxShadow:'0 4px 20px rgba(25,28,30,0.06)'}}>
+            {[
+              {key:'cpu', label:'CPU', color:'#1565c0'},
+              {key:'ram', label:'RAM', color:'#c2410c'},
+              {key:'disk', label:'Диск', color:'#166534'},
+            ].map(metric => {
+              const points = perfHistory.series.map(s => s[metric.key]).filter(v => v != null)
+              const max = Math.max(...points, 100)
+              return (
+                <div key={metric.key}>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-xs font-semibold text-[#727783]">{metric.label}</span>
+                    <span className="text-xs font-bold" style={{color: metric.color}}>
+                      сейчас {points[points.length-1] ?? '—'}% • макс {Math.max(...points, 0)}%
+                    </span>
+                  </div>
+                  <div className="flex items-end gap-px h-12">
+                    {perfHistory.series.map((s, i) => {
+                      const v = s[metric.key]
+                      const pct = v != null ? Math.min(100, Math.round((v / max) * 100)) : 0
+                      return (
+                        <div key={i} className="flex-1 rounded-t-sm transition-all" style={{height: `${Math.max(pct, 1)}%`, background: metric.color, opacity: v != null ? 0.85 : 0.2}} />
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+            <p className="text-[10px] text-[#727783] text-center">Снапшоты каждые 5 минут (всего {perfHistory.series.length} точек)</p>
+          </div>
+        </div>
+      )}
       </>}
     </div>
   )

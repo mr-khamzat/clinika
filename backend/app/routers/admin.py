@@ -223,6 +223,15 @@ async def create_tenant(
             primary_color=data.primary_color,
             sidebar_color=data.sidebar_color,
         )
+        # Уведомление админу платформы — graceful (исключения проглатываются)
+        try:
+            from app.services import alert_service
+            await alert_service.notify_tenant_created(
+                name=data.name, slug=data.slug, plan=data.plan,
+                actor=getattr(_, "full_name", None) or getattr(_, "username", None),
+            )
+        except Exception:
+            pass
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -622,6 +631,16 @@ async def reset_tenant_admin_password(
     new_password = "".join(secrets.choice(alphabet) for _ in range(12))
     admin.password_hash = hash_password(new_password)
     await db.commit()
+
+    # Уведомление админу платформы — graceful (никогда не падаем)
+    try:
+        from app.services import alert_service
+        actor_name = getattr(_, "full_name", None) or getattr(_, "username", None)
+        await alert_service.notify_password_reset(
+            tenant_name=t.name, username=admin.username, actor=actor_name,
+        )
+    except Exception:
+        pass
 
     return {
         "username": admin.username,
@@ -1707,6 +1726,15 @@ async def block_franchise(
         comment=f"Ручная блокировка франшизы «{f.name}»",
     )
     await db.commit()
+    # Уведомление админу — graceful
+    try:
+        from app.services import alert_service
+        await alert_service.notify_franchise_blocked(
+            name=f.name, blocked=True, reason=f.block_reason,
+            actor=current.full_name or current.username,
+        )
+    except Exception:
+        pass
     return {
         "ok": True,
         "is_blocked": True,
@@ -1738,6 +1766,15 @@ async def unblock_franchise(
         comment=f"Разблокировка франшизы «{f.name}»",
     )
     await db.commit()
+    # Уведомление админу — graceful
+    try:
+        from app.services import alert_service
+        await alert_service.notify_franchise_blocked(
+            name=f.name, blocked=False,
+            actor=current.full_name or current.username,
+        )
+    except Exception:
+        pass
     return {"ok": True, "is_blocked": False}
 
 

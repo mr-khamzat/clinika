@@ -386,6 +386,34 @@ async def inventory_alerts_job():
         logging.getLogger('scheduler').error(f'inventory_alerts: {e}')
 
 
+async def disk_check_job():
+    """APScheduler: контроль свободного места (раз в час).
+
+    Если used% > DISK_ALERT_THRESHOLD (default 80) — шлём админу с топ-3
+    директорий через du -sh. Дедуп — на стороне notify_admin (1% гранулярность).
+    """
+    import logging
+    try:
+        from app.jobs.disk_check_job import run_disk_check
+        sent = await run_disk_check()
+        if sent:
+            logging.getLogger('scheduler').info('disk_check: alert sent')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'disk_check: {e}')
+
+
+async def daily_digest_job():
+    """APScheduler: ежедневная сводка по сети ARC в 09:00 МСК (= 06:00 UTC)."""
+    import logging
+    try:
+        from app.jobs.daily_digest_job import run_daily_digest
+        sent = await run_daily_digest()
+        if sent:
+            logging.getLogger('scheduler').info('daily_digest: digest sent')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'daily_digest: {e}')
+
+
 async def geoip_update_job():
     """APScheduler: еженедельное обновление гео-IP базы (понедельник 03:00)."""
     import asyncio as _aio
@@ -613,39 +641,93 @@ async def referral_reminder_author_job():
 
 
 async def health_watchdog_job():
-    """APScheduler: каждые 5 мин дёргаем /health сами себя.
+    """APScheduler: каждые 5 мин дёргаем /health/full сами себя.
 
-    После 5 фейлов подряд — шлём Telegram-алерт админу. После восстановления —
-    отдельное «✅ Сервер восстановился». Состояние храним прямо в атрибутах
-    функции (fail_count, alert_sent), чтобы не плодить глобалы.
+    Логика двухуровневая:
+      1) Если сам endpoint не отвечает (TCP-fail / 5xx / timeout) — копим
+         fail_count, после 5 подряд шлём legacy «СЕРВЕР НЕ ОТВЕЧАЕТ».
+      2) Если endpoint отвечает 200, но один из подсистем (db/redis/scheduler)
+         в статусе fail/degraded — шлём admin-уведомление с детализацией.
+         Дедуп по подписи провалившихся подсистем — повтор только при
+         смене состояния. После восстановления шлём recovery.
+
+    Состояние храним в атрибутах функции (fail_count, alert_sent,
+    last_failed_set), чтобы не плодить глобалы.
     """
     import httpx as _httpx
+    from app.services import alert_service
     from app.services.alert_service import send_alert_health, send_alert_recovery
 
     state = health_watchdog_job  # храним состояние в самой функции
     if not hasattr(state, "fail_count"):
         state.fail_count = 0
         state.alert_sent = False
+        state.last_failed_set: frozenset[str] = frozenset()
 
-    ok = False
+    # ── 1. Достаём /health/full с детализацией подсистем ──
+    transport_ok = False
+    payload: dict | None = None
+    status_code: int | None = None
     try:
-        async with _httpx.AsyncClient(timeout=5) as client:
-            r = await client.get("http://localhost:8000/health")
-            ok = (r.status_code == 200)
+        async with _httpx.AsyncClient(timeout=10) as client:
+            r = await client.get("http://localhost:8000/health/full")
+            status_code = r.status_code
+            transport_ok = (r.status_code == 200)
+            try:
+                payload = r.json()
+            except Exception:
+                payload = None
     except Exception:
-        ok = False
+        transport_ok = False
 
-    if ok:
-        if state.alert_sent:
-            await send_alert_recovery()
-        state.fail_count = 0
-        state.alert_sent = False
+    # ── 2. Транспортный fail (endpoint лежит / 5xx) ──
+    if not transport_ok:
+        state.fail_count += 1
+        if state.fail_count >= 5 and not state.alert_sent:
+            await send_alert_health(state.fail_count)
+            state.alert_sent = True
         return
 
-    state.fail_count += 1
-    if state.fail_count >= 5 and not state.alert_sent:
-        await send_alert_health(state.fail_count)
-        state.alert_sent = True
+    # endpoint отвечает — сбрасываем legacy-счётчик
+    if state.alert_sent:
+        await send_alert_recovery()
+    state.fail_count = 0
+    state.alert_sent = False
+
+    # ── 3. Проверяем подсистемы внутри payload ──
+    failed: list[str] = []
+    if isinstance(payload, dict):
+        for key in ("db", "redis", "scheduler", "disk"):
+            sub = payload.get(key)
+            if isinstance(sub, dict) and sub.get("status") == "fail":
+                failed.append(key)
+
+    failed_set = frozenset(failed)
+    # Уведомляем только если состояние сменилось (новый сбой / новая комбинация
+    # сбоев / переход в OK после сбоя). Это и есть «дедуп: одно уведомление
+    # на состояние, повтор если другая ошибка или recovered».
+    if failed_set != state.last_failed_set:
+        if failed:
+            text = alert_service.format_health_alert(
+                failed_checks=failed,
+                status_code=status_code,
+            )
+            await alert_service.notify_admin(
+                text,
+                dedup_key=f"health_full:{','.join(sorted(failed))}",
+                bypass_switch=True,
+            )
+        elif state.last_failed_set:
+            # Был сбой → теперь чисто
+            text = alert_service.format_health_recovery(
+                prev_failed=sorted(state.last_failed_set),
+            )
+            await alert_service.notify_admin(
+                text,
+                dedup_key=f"health_full_recovery:{','.join(sorted(state.last_failed_set))}",
+                bypass_switch=True,
+            )
+        state.last_failed_set = failed_set
 
 
 async def geoip_initial_download_if_missing():
@@ -714,9 +796,22 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(geoip_update_job, 'cron', day_of_week='mon', hour=3, minute=0, id='geoip_update', replace_existing=True)
     # LTV-аналитика: ежедневный пересчёт снапшотов в 04:00 UTC
     scheduler.add_job(run_ltv_job, 'cron', hour=4, minute=0, id='ltv_recompute', replace_existing=True)
-    # Мониторинг: watchdog /health → Telegram-алерт после 5 фейлов подряд
+    # Мониторинг: watchdog /health/full → Telegram-алерт админу
+    # (5 фейлов подряд транспорта = «сервер не отвечает», fail подсистем =
+    # отдельные уведомления с детализацией db/redis/scheduler/disk)
     scheduler.add_job(health_watchdog_job, 'interval', minutes=5, id='health_watchdog', replace_existing=True)
+    # Disk usage > 80% → Telegram админу (раз в час)
+    scheduler.add_job(disk_check_job, 'interval', minutes=60, id='disk_check', replace_existing=True)
+    # Ежедневная сводка по сети ARC в 09:00 МСК (06:00 UTC)
+    scheduler.add_job(daily_digest_job, 'cron', hour=6, minute=0, id='daily_digest', replace_existing=True)
     scheduler.start()
+    # Лог зарегистрированных job'ов — удобно дебажить что реально стартует
+    try:
+        _log = get_logger("scheduler")
+        for j in scheduler.get_jobs():
+            _log.info("scheduled_job", job_id=j.id, next_run=str(j.next_run_time))
+    except Exception:
+        pass
     # При первом запуске (если mmdb ещё нет) — скачать в фоне, чтобы не блокировать старт
     asyncio.create_task(geoip_initial_download_if_missing())
     yield
