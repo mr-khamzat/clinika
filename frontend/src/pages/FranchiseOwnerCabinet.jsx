@@ -64,6 +64,8 @@ const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMat
 // LTV-аналитика пациентов (модуль ltv_pro) и cross-clinic directory сотрудников
 const LtvAnalyticsSection        = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
 const CrossClinicDirectorySection = lazy(() => import('../sections/CrossClinicDirectorySection'))
+// Раздел «Клиники сети»: карточки + модалка редактирования (реквизиты + руководитель)
+const ClinicsNetworkSection      = lazy(() => import('../sections/ClinicsNetworkSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1726,7 +1728,31 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return <OverviewSection analytics={analytics} me={me} tenants={tenants} />
     }
     if (route === 'tenants') {
-      return <TenantsSection adminToken={adminToken} me={me} tenants={tenants} reload={reloadTenants} loading={tenantsLoading} />
+      // Новый раздел «Клиники сети»: карточки 5 клиник + модалка редактирования
+      // (реквизиты + руководитель). Старый TenantsSection с формой создания
+      // тенанта остаётся ниже, чтобы не потерять флоу onboarding-а.
+      return (
+        <div className="flex flex-col gap-6">
+          <Suspense fallback={<SectionLoader />}>
+            <ClinicsNetworkSection adminToken={adminToken} />
+          </Suspense>
+          <div
+            style={{
+              borderTop: '1px solid var(--line)',
+              paddingTop: 16,
+            }}
+          >
+            <div
+              className="font-bold uppercase mb-3"
+              style={{ fontSize: 10, color: 'var(--fg-3)', letterSpacing: '0.08em' }}
+            >Создание новых клиник</div>
+            <TenantsSection
+              adminToken={adminToken} me={me} tenants={tenants}
+              reload={reloadTenants} loading={tenantsLoading}
+            />
+          </div>
+        </div>
+      )
     }
     if (route === 'doctors') {
       return (
