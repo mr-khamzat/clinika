@@ -456,7 +456,7 @@ export default function Landing() {
           <FadeIn>
             <div className="ks-eyebrow">
               <span className="ks-eyebrow-dot" />
-              SaaS · работает в Чечне, Ингушетии, Дагестане
+              SaaS-платформа для медицинских сетей
             </div>
             <h1 className="ks-hero-title">
               Управляйте сетью клиник<br />
@@ -489,37 +489,43 @@ export default function Landing() {
             </div>
           </FadeIn>
 
-          {/* Hero side — стилизованный дашборд */}
+          {/* Hero side — премиум AI-визуал из дизайна Stitch klinikset.html */}
           <FadeIn delay={150} className="ks-hero-side">
-            <div className="ks-persona-card">
-              <div className="ks-persona-bg" aria-hidden />
-              <div className="ks-persona-tag"><span className="ks-tag-dot" />AI · работает 24/7</div>
-              <div className="ks-persona-mock">
-                <div className="ks-persona-mock-row">
-                  <div>
-                    <div className="ks-persona-mock-eyebrow">Дашборд сети</div>
-                    <div className="ks-persona-mock-title">12 клиник · апрель 2026</div>
-                  </div>
-                  <span className="ks-chip ks-chip-good">● live</span>
+            <div className="ks-ai-card">
+              <div className="ks-ai-card-bg" aria-hidden>
+                <div className="ks-ai-orb ks-ai-orb-1" />
+                <div className="ks-ai-orb ks-ai-orb-2" />
+                <div className="ks-ai-orb ks-ai-orb-3" />
+              </div>
+              <div className="ks-ai-card-content">
+                <div className="ks-ai-card-tag"><span className="ks-ai-card-tag-dot" />AI · работает 24/7</div>
+                <div className="ks-ai-card-emblem">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                    <defs>
+                      <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="oklch(0.85 0.12 240)" />
+                        <stop offset="100%" stopColor="oklch(0.55 0.16 200)" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="32" cy="32" r="28" fill="url(#aiGrad)" opacity="0.18" />
+                    <circle cx="32" cy="32" r="20" fill="url(#aiGrad)" opacity="0.32" />
+                    <circle cx="32" cy="32" r="12" fill="url(#aiGrad)" />
+                    <text x="32" y="38" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Golos Text, sans-serif" letterSpacing="-0.02em">AI</text>
+                  </svg>
                 </div>
-                <div className="ks-persona-kpi">
-                  {[
-                    ['Выручка', '14.8 М ₽', '+18%'],
-                    ['Приёмы', '12 408', '+12%'],
-                    ['NPS', '72', '+4'],
-                    ['Загрузка', '86%', '−2%'],
-                  ].map(([l, v, d]) => (
-                    <div key={l} className="ks-persona-kpi-cell">
-                      <div className="ks-persona-kpi-l">{l}</div>
-                      <div className="ks-persona-kpi-v">{v}</div>
-                      <div className={`ks-persona-kpi-d ${d.startsWith('−') ? 'is-down' : ''}`}>{d}</div>
-                    </div>
-                  ))}
+                <div className="ks-ai-card-name">
+                  <div className="ks-ai-card-line">AI-аналитик платформы</div>
+                  <div className="ks-ai-card-role">обучен на 1.2 млн приёмов · следит за каждой клиникой</div>
+                </div>
+                <div className="ks-ai-card-pulse">
+                  <span /><span /><span /><span />
                 </div>
               </div>
             </div>
             <div className="ks-persona-quote">
-              <strong>Каждую ночь анализирую загрузку всех клиник</strong> и подсвечиваю где теряется выручка — окна в расписании, простаивающие кабинеты, врачи с просадкой по NPS.
+              <strong>Каждую ночь анализирую загрузку всех клиник</strong> и подсвечиваю
+              где теряется выручка — окна в расписании, простаивающие кабинеты, врачи
+              с просадкой по NPS.
             </div>
           </FadeIn>
         </div>
@@ -1052,7 +1058,8 @@ function RolePreviewMock({ role }) {
 // ===== БЛОК: CSS (один <style> на всю страницу — токены из tokens.css) =====
 const LANDING_CSS = `
 *, *::before, *::after { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; font-family: var(--font-sans); color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; }
+html, body { margin: 0; padding: 0; font-family: "Golos Text", "Inter", "Manrope", -apple-system, system-ui, sans-serif; color: var(--fg); background: var(--bg); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+.ks-nav, .ks-hero, .ks-section, .ks-stats, .ks-footer, .ks-modal, .ks-feature, .ks-eyebrow, .ks-bento-card, .ks-bento-section, .ks-pricing, .ks-flow-step, .ks-price-card, .ks-roles, .ks-calls { font-family: "Golos Text", "Inter", system-ui, sans-serif; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 a { color: inherit; text-decoration: none; }
 
@@ -1261,6 +1268,114 @@ a { color: inherit; text-decoration: none; }
   box-shadow: var(--shadow-sm);
 }
 .ks-persona-quote strong { color: var(--fg); font-weight: 600; }
+
+/* === AI-card премиум визуал (взамен dashboard'а) === */
+.ks-ai-card {
+  position: relative;
+  border-radius: 24px;
+  overflow: hidden;
+  background: linear-gradient(180deg, oklch(0.98 0.01 240) 0%, oklch(0.94 0.02 240) 100%);
+  border: 1px solid var(--border);
+  box-shadow: 0 30px 80px oklch(0.40 0.10 240 / 0.18), 0 8px 24px oklch(0.40 0.10 240 / 0.10);
+  aspect-ratio: 4 / 5;
+  min-height: 520px;
+}
+.ks-ai-card-bg {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+}
+.ks-ai-orb {
+  position: absolute; border-radius: 50%;
+  filter: blur(60px); opacity: 0.7;
+  will-change: transform;
+}
+.ks-ai-orb-1 {
+  top: -80px; left: -80px; width: 360px; height: 360px;
+  background: radial-gradient(circle, oklch(0.78 0.16 200 / 0.85), transparent 70%);
+  animation: ks-ai-orb 16s ease-in-out infinite;
+}
+.ks-ai-orb-2 {
+  top: 30%; right: -100px; width: 320px; height: 320px;
+  background: radial-gradient(circle, oklch(0.72 0.18 285 / 0.65), transparent 70%);
+  animation: ks-ai-orb 20s ease-in-out infinite reverse;
+}
+.ks-ai-orb-3 {
+  bottom: -100px; left: 25%; width: 280px; height: 280px;
+  background: radial-gradient(circle, oklch(0.82 0.14 145 / 0.55), transparent 70%);
+  animation: ks-ai-orb 24s ease-in-out infinite;
+}
+@keyframes ks-ai-orb {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.1); }
+  66% { transform: translate(-30px, 40px) scale(0.92); }
+}
+.ks-ai-card-content {
+  position: relative; z-index: 1; height: 100%;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 24px;
+}
+.ks-ai-card-tag {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 999px;
+  background: oklch(0.18 0.02 255 / 0.78);
+  backdrop-filter: blur(20px);
+  color: #fff; font-size: 12.5px; font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.ks-ai-card-tag-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: oklch(0.78 0.18 145);
+  box-shadow: 0 0 10px oklch(0.78 0.18 145);
+  animation: ks-pulse 2s ease-in-out infinite;
+}
+.ks-ai-card-emblem {
+  align-self: center;
+  margin: 24px 0;
+  filter: drop-shadow(0 12px 30px oklch(0.55 0.16 240 / 0.40));
+  animation: ks-ai-float 6s ease-in-out infinite;
+}
+@keyframes ks-ai-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+.ks-ai-card-name {
+  background: oklch(1 0 0 / 0.92);
+  backdrop-filter: blur(14px);
+  border-radius: 14px;
+  padding: 14px 16px;
+  border: 1px solid oklch(1 0 0 / 0.4);
+  box-shadow: 0 8px 24px oklch(0.18 0.014 230 / 0.15);
+}
+.ks-ai-card-line {
+  font-size: 14.5px; font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+.ks-ai-card-role {
+  font-size: 12px; font-weight: 500;
+  color: var(--fg-2);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+.ks-ai-card-pulse {
+  position: absolute; top: 24px; right: 24px;
+  display: flex; gap: 4px; align-items: flex-end; height: 22px;
+}
+.ks-ai-card-pulse span {
+  width: 3px; background: oklch(0.55 0.16 240); border-radius: 999px;
+  animation: ks-bar 1.6s ease-in-out infinite;
+}
+.ks-ai-card-pulse span:nth-child(1) { height: 60%; animation-delay: 0s; }
+.ks-ai-card-pulse span:nth-child(2) { height: 100%; animation-delay: 0.15s; }
+.ks-ai-card-pulse span:nth-child(3) { height: 70%; animation-delay: 0.30s; }
+.ks-ai-card-pulse span:nth-child(4) { height: 90%; animation-delay: 0.45s; }
+@keyframes ks-bar {
+  0%, 100% { transform: scaleY(0.6); opacity: 0.6; }
+  50% { transform: scaleY(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-ai-orb, .ks-ai-card-emblem, .ks-ai-card-pulse span { animation: none; }
+}
 
 /* === STATS === */
 .ks-stats {
