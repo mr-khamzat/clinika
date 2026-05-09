@@ -48,7 +48,7 @@ const CrossClinicDirectorySection = lazy(() => import("../sections/CrossClinicDi
 // LTV-аналитика пациентов (модуль ltv_pro)
 const LtvAnalyticsSection = lazy(() => import("../sections/ltv/LtvAnalyticsSection"))
 import api from '../api'
-import HelpModal from '../components/HelpModal'
+// import HelpModal from '../components/HelpModal' // ушло на /wiki
 import { BrandLogo } from "../components/BrandLogo"
 import AdminSupportPanel from '../components/AdminSupportPanel'
 // W3: глобальный поиск Cmd+K и центр уведомлений
@@ -7306,7 +7306,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const [moreOpen, setMoreOpen]   = useState(false)
   // Единая тема (localStorage 'clinika-theme') — общий хук с другими кабинетами
   const { isDark: dark, toggle: toggleDark } = useTheme()
-  const [helpOpen, setHelpOpen]   = useState(false)
+  // const [helpOpen, setHelpOpen]   = useState(false) // ушло на /wiki
   const [branding, setBranding]   = useState(null)
 
   // ── Sidebar: expanded (≥1024px) → collapsed (641-1023px) → mobile (≤640px) ─
@@ -7585,8 +7585,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         padding: sidebarCollapsed ? '14px 8px' : '18px 12px',
         position: isMobile ? 'static' : 'sticky',
         top: 0,
-        height: isMobile ? '100vh' : '100vh',
+        height: '100dvh',
+        maxHeight: '100dvh',
         overflowY: 'auto',
+        overscrollBehavior: 'contain',
       }}
     >
       {/* ─── Бренд-марка ─── */}
@@ -7619,7 +7621,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       </div>
 
       {/* ─── Навигация по группам ─── */}
-      <nav className="flex-1" style={{ minHeight: 0 }}>
+      <nav className="flex-1" style={{ minHeight: 0, paddingBottom: 16, overflowY: "auto", overflowX: "hidden" }}>
         {navGroups.map(group => (
           <div key={group.key}>
             {!sidebarCollapsed && (
@@ -7704,6 +7706,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         style={{
           padding: sidebarCollapsed ? '10px 0 0' : '12px 4px 0',
           borderTop: '1px solid var(--border)',
+          flexShrink: 0,
+          background: 'var(--bg-1)',
         }}
       >
         <div
@@ -7740,7 +7744,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               </span>
             </button>
             <button
-              onClick={() => setHelpOpen(true)}
+              onClick={() => window.open("/wiki", "_blank", "noopener")}
               title="Справка"
               className="flex-1 grid place-items-center"
               style={{
@@ -7941,7 +7945,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
             {/* Справка (только desktop) */}
             <button
-              onClick={() => setHelpOpen(true)}
+              onClick={() => window.open("/wiki", "_blank", "noopener")}
               className="hidden sm:grid place-items-center flex-shrink-0"
               style={{
                 width: 40, height: 40, borderRadius: 10,
@@ -8177,7 +8181,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
         </div>
       )}
 
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} role="manager" />}
+      {/* HelpModal удалён — справка ведёт на /wiki */}
 
       {/* W3: глобальный поиск Cmd+K */}
       {/* <CommandPalette /> отключён до фикса useNavigate в renderer */}

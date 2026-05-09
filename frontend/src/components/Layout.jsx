@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
 import BottomNav from './BottomNav'
-import HelpModal from './HelpModal'
+// import HelpModal from './HelpModal' // ушло на /wiki
 import SupportChat from './SupportChat'
 import CallWidget from './CallWidget'
 // W3: глобальный поиск Cmd+K и центр уведомлений
@@ -161,7 +161,7 @@ export default function Layout() {
 
   return (
     <ThemeContext.Provider value={{ isDark, toggleTheme }}>
-      <HelpContext.Provider value={{ openHelp: () => setHelpOpen(true) }}>
+      <HelpContext.Provider value={{ openHelp: () => window.open("/wiki", "_blank", "noopener") }}>
         <div className="min-h-screen bg-[#f7f9fb] dark:bg-gray-900">
 
           {/* ─── Sticky header ─── */}
@@ -210,7 +210,7 @@ export default function Layout() {
                 <span className="material-symbols-outlined text-xl">{isDark ? 'light_mode' : 'dark_mode'}</span>
               </button>
               <button
-                onClick={() => setHelpOpen(true)}
+                onClick={() => window.open("/wiki", "_blank", "noopener")}
                 className="w-9 h-9 flex items-center justify-center text-[#727783] hover:text-[#191c1e] dark:hover:text-white hover:bg-[#eceef0] dark:hover:bg-gray-800 rounded-full transition"
                 title="Справка"
               >
@@ -232,7 +232,7 @@ export default function Layout() {
           </div>
           <BottomNav />
         </div>
-        {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+        {/* HelpModal удалён — справка ведёт на /wiki */}
         {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <CallWidget />}
         {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && <SupportChat />}
         {/* Хост Modal-диалога подтверждения для logout */}

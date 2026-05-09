@@ -56,7 +56,7 @@ export default function InventoryMovementsSection() {
   useEffect(() => {
     Promise.all([
       api({ method: 'GET', url: '/inventory/items?is_active=true&limit=500' }).then(r => r.data?.items || []),
-      api({ method: 'GET', url: '/clinics' }).then(r => r.data?.clinics || r.data || []),
+      api({ method: 'GET', url: '/clinics/' }).then(r => (Array.isArray(r.data?.clinics) ? r.data.clinics : Array.isArray(r.data) ? r.data : [])),
     ]).then(([its, cls]) => {
       setItems(its); setClinics(cls)
     }).catch(() => {})

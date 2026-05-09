@@ -40,8 +40,8 @@ export default function InventoryStocksSection() {
   }, [filterClinic, lowOnly, expiringDays, toast])
 
   useEffect(() => {
-    api({ method: 'GET', url: '/clinics' })
-      .then(r => setClinics(r.data?.clinics || r.data || []))
+    api({ method: 'GET', url: '/clinics/' })
+      .then(r => setClinics(Array.isArray(r.data?.clinics) ? r.data.clinics : Array.isArray(r.data) ? r.data : []))
       .catch(() => {})
   }, [])
   useEffect(() => { load() }, [load])
