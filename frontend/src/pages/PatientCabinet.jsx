@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import usePatientCallListener from '../hooks/usePatientCallListener'
+import IncomingCallModal from '../components/IncomingCallModal'
 // Дизайн-система: Card/Button/Chip/Tabs/EmptyState/Modal + хуки уведомлений
 import { Card, Button, Chip, Tabs, EmptyState, Modal, useToast, useConfirm } from '../design'
 // Единый хук переключения темы (общий с другими кабинетами)
@@ -2168,7 +2170,28 @@ export default function PatientCabinet() {
 
   const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
 
+  // ── Realtime listener для входящих видеоприёмов (Zoom-стиль) ───────────
+  // Хук читает session/patient токен из localStorage один раз при монтировании
+  // ЛК после загрузки данных (patient_phone уже есть → WS открывается).
+  const callToken = useMemo(() => {
+    try {
+      return localStorage.getItem(SESSION_KEY) || localStorage.getItem(TOKEN_KEY) || null
+    } catch { return null }
+  }, [data])
+  const { incomingCall, dismissCall } = usePatientCallListener({
+    phone: patient_phone,
+    token: callToken,
+    apiBase: API_BASE,
+  })
+
   return (
+    <>
+    <IncomingCallModal
+      call={incomingCall}
+      onDismiss={dismissCall}
+      apiBase={API_BASE}
+      token={callToken}
+    />
     <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
       <style>{`
         @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
@@ -2750,6 +2773,7 @@ export default function PatientCabinet() {
         </Suspense>
       )}
     </div>
+    </>
   )
 }
 

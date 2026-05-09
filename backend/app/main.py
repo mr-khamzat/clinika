@@ -37,6 +37,8 @@ from app.routers.tenant import router as tenant_router
 from app.routers.modules import router as modules_router
 from app.routers.geo import router as geo_router
 from app.routers.scheduling import router as scheduling_router
+# Итоги приёма (W?): заключение / файлы / внутриклинические направления / история пациента
+from app.routers.appointments import router as appointments_router
 from app.routers.ledger import router as ledger_router
 from app.routers.analytics import router as analytics_router
 from app.routers.audit import router as audit_router
@@ -91,6 +93,8 @@ from app.routers.telemedicine import (
     router as telemedicine_router,
     patient_router as telemedicine_patient_router,
 )
+# Patient notifications — realtime push в ЛК (входящие звонки Zoom-стиль)
+from app.routers.patient_notifications import router as patient_notifications_router
 # SMS-маркетинг модуль (1990₽/мес) — рассылки, реактивация спящих пациентов
 from app.routers.sms_marketing import router as sms_marketing_router
 # AI-ассистент пациенту через Gemini (2990₽/мес) — модуль ai_assistant (W6)
@@ -1116,6 +1120,8 @@ app.include_router(tenant_router)
 app.include_router(modules_router)
 app.include_router(geo_router)
 app.include_router(scheduling_router)
+# Итоги приёма (заключение/файлы/направления/история пациента)
+app.include_router(appointments_router)
 app.include_router(ledger_router)
 app.include_router(analytics_router)
 app.include_router(audit_router)
@@ -1162,6 +1168,8 @@ app.include_router(onboarding_router)
 # Telemedicine: REST врача + публичный portal + WS signaling
 app.include_router(telemedicine_router)
 app.include_router(telemedicine_patient_router)
+# Patient notifications WS — realtime входящие «звонки» в ЛК пациента
+app.include_router(patient_notifications_router)
 # SMS-маркетинг — модуль рассылок (W5)
 app.include_router(sms_marketing_router)
 # AI-ассистент пациенту через Gemini — модуль ai_assistant (W6)

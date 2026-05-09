@@ -8,8 +8,8 @@ const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const DEFAULT_SCHEDULE = Array.from({ length: 7 }, (_, i) => ({
   day_of_week: i,
   is_active: true, // Все 7 дней по умолчанию
-  start_time: '09:00',
-  end_time: '18:00',
+  start_time: '08:00',
+  end_time: '20:00',
 }))
 const EMPTY_FORM = {
   full_name: '',
@@ -303,8 +303,8 @@ function DoctorEditor({ token, clinics, initial, onClose, onSaved }) {
           setSchedule(r.data.map(d => ({
             day_of_week: d.day_of_week,
             is_active: !!d.is_active,
-            start_time: d.start_time || '09:00',
-            end_time: d.end_time || '18:00',
+            start_time: d.start_time || '08:00',
+            end_time: d.end_time || '20:00',
           })))
         }
       })

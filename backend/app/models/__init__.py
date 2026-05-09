@@ -18,6 +18,12 @@ from app.models.franchise_invoice import FranchiseInvoice, InvoiceStatus
 from app.models.call_rule import CallRule, CallScope
 from app.models.city import City
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
+# Итоги приёма: заключение врача, файлы, внутриклинические направления
+from app.models.appointment_outcome import (
+    AppointmentOutcome,
+    AppointmentAttachment,
+    InternalReferral,
+)
 from app.models.ledger import LedgerEntry
 from app.models.audit import AuditEntry
 from app.models.billing import Subscription, Invoice, Payment

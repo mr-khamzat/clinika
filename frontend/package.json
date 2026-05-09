@@ -24,6 +24,7 @@
     "react-router-dom": "^6.24.0",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
+    "xlsx": "^0.18.5",
     "zustand": "^4.5.2"
   },
   "devDependencies": {

@@ -434,6 +434,7 @@ class AppointmentMove(BaseModel):
     start_time: Optional[time] = None
     notes: Optional[str] = None
     patient_name: Optional[str] = None
+    priority: Optional[str] = None  # normal | high | urgent
 
 
 @router.patch("/appointments/{appointment_id}", dependencies=_FEAT)
@@ -485,6 +486,10 @@ async def move_appointment(
         appt.notes = data.notes
     if data.patient_name is not None:
         appt.patient_name = data.patient_name
+    if data.priority is not None:
+        if data.priority not in ('normal', 'high', 'urgent'):
+            raise HTTPException(400, 'Некорректный приоритет (normal|high|urgent)')
+        appt.priority = data.priority
 
     from datetime import datetime
     appt.updated_at = datetime.utcnow()
@@ -542,6 +547,25 @@ async def get_doctor_week(
         k = (a.appointment_date.isoformat(), a.start_time.strftime("%H:%M"))
         appts_by_key[k] = a
 
+    # ── Чипы «есть заключение» / «N направлений» — обогащаем слоты ──────────
+    # Подгружаем outcome+referrals одним запросом для всей недели
+    appt_ids = [a.id for a in appts]
+    has_outcome_set: set = set()
+    referrals_count: dict = {}
+    if appt_ids:
+        from app.models.appointment_outcome import AppointmentOutcome, InternalReferral
+        outcomes = (await db.execute(
+            select(AppointmentOutcome.appointment_id).where(AppointmentOutcome.appointment_id.in_(appt_ids))
+        )).scalars().all()
+        has_outcome_set = set(outcomes)
+        ref_rows = (await db.execute(
+            select(InternalReferral.source_appointment_id).where(
+                InternalReferral.source_appointment_id.in_(appt_ids)
+            )
+        )).scalars().all()
+        for rid in ref_rows:
+            referrals_count[rid] = referrals_count.get(rid, 0) + 1
+
     # Сборка дней
     days_out = []
     for i in range(7):
@@ -569,8 +593,10 @@ async def get_doctor_week(
                         "id": str(a.id),
                         "patient_name": a.patient_name,
                         "patient_phone": a.patient_phone,
-                        "status": a.status.value if hasattr(a.status, "value") else a.status,
+                        "status": a.status.value if hasattr(a.status, "value") else a.status, "priority": getattr(a, "priority", "normal"),
                         "notes": a.notes,
+                        "has_outcome": a.id in has_outcome_set,
+                        "referrals_count": int(referrals_count.get(a.id, 0)),
                     }
                 slots.append(slot)
                 current += step

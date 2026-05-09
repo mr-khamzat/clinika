@@ -12,11 +12,13 @@ import api from '../api'
 import { SLUG } from '../config'
 import AppointmentsCalendarSection from '../sections/AppointmentsCalendarSection'
 import AppointmentsStatsSection from '../sections/AppointmentsStatsSection'
-import { Tabs } from '../design'
+import { Tabs, Button } from '../design'
 import ManagerShell from './_ManagerShell'
+import AppointmentsReportModal from '../components/reports/AppointmentsReportModal'
 
 export default function ManagerAppointments() {
   const [view, setView] = useState('calendar')
+  const [reportOpen, setReportOpen] = useState(false)
   // Получаем токен динамически по slug текущего тенанта (а не хардкод 'arc'),
   // чтобы запись работала для любого тенанта (#23).
   const token =
@@ -32,20 +34,28 @@ export default function ManagerAppointments() {
       subtitle="Календарь приёмов и статистика"
       icon="event"
       topbarRight={
-        <Tabs
-          items={[{ id: 'calendar', label: 'Календарь' }, { id: 'stats', label: 'Статистика' }]}
-          value={view}
-          onChange={setView}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Tabs
+            items={[{ id: 'calendar', label: 'Календарь' }, { id: 'stats', label: 'Статистика' }]}
+            value={view}
+            onChange={setView}
+          />
+          <Button size="sm" variant="secondary" onClick={() => setReportOpen(true)}>
+            Выгрузить отчёт
+          </Button>
+        </div>
       }
     >
-      {/* ─── Mobile: переключатель прямо в контенте ─── */}
-      <div className="mb-4 sm:hidden">
+      {/* ─── Mobile: переключатель + кнопка отчёта прямо в контенте ─── */}
+      <div className="mb-4 sm:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Tabs
           items={[{ id: 'calendar', label: 'Календарь' }, { id: 'stats', label: 'Статистика' }]}
           value={view}
           onChange={setView}
         />
+        <Button size="sm" variant="secondary" onClick={() => setReportOpen(true)}>
+          Выгрузить отчёт
+        </Button>
       </div>
 
       <div
@@ -61,6 +71,9 @@ export default function ManagerAppointments() {
         {view === 'calendar' && <AppointmentsCalendarSection token={token} />}
         {view === 'stats' && <AppointmentsStatsSection token={token} />}
       </div>
+
+      {/* ─── Модалка выгрузки отчёта по приёмам ─── */}
+      <AppointmentsReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
     </ManagerShell>
   )
 }

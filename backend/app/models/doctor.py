@@ -99,6 +99,11 @@ class Appointment(Base):
         default=AppointmentStatus.PENDING, nullable=False, index=True
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Приоритет записи (для выделения в расписании): normal | high | urgent.
+    # Отображается жёлтой/оранжевой/красной подсветкой в WeekScheduleSection.
+    priority: Mapped[str] = mapped_column(
+        String(10), nullable=False, default='normal', server_default='normal'
+    )
     payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)  # acquiring/cash/transfer
     price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)

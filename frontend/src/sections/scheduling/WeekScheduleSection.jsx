@@ -26,16 +26,23 @@ import { Card, KpiRow, KpiCard, Button, Tabs, Chip, Modal, QuickActions, buildPa
 // Видео-комната телемед-приёма (lazy, чтобы не утяжелять основной bundle расписания)
 import { lazy, Suspense } from 'react'
 const TelemedRoomModal = lazy(() => import('../../components/telemed/TelemedRoomModal'))
+// Модалка карточки приёма (заключение / файлы / направления / история)
+import AppointmentDetailsModal from '../../components/scheduling/AppointmentDetailsModal'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+// Статусы записей: фон достаточно насыщенный чтобы цвет читался при беглом
+// взгляде на расписание; border слева 3px усиливает узнаваемость.
 const STATUS_INFO = {
-  pending:   { l: 'Ожидает',     bg: 'rgba(245,158,11,0.10)', c: '#b45309', dot: '#f59e0b', chip: 'warn'    },
-  confirmed: { l: 'Подтверждён', bg: 'rgba(0,151,167,0.12)',  c: '#0e7490', dot: '#0097a7', chip: 'accent'  },
-  completed: { l: 'Завершён',    bg: 'rgba(100,116,139,0.10)', c: '#475569', dot: '#94a3b8', chip: 'default' },
-  cancelled: { l: 'Отменён',     bg: 'rgba(244,63,94,0.08)',   c: '#9f1239', dot: '#f43f5e', chip: 'bad'     },
-  no_show:   { l: 'Не пришёл',   bg: 'rgba(245,158,11,0.08)',  c: '#92400e', dot: '#f59e0b', chip: 'warn'    },
+  pending:   { l: 'Ожидает',     bg: 'rgba(245,158,11,0.20)',  c: '#92400e', border: '#f59e0b', dot: '#f59e0b', chip: 'warn'    },
+  confirmed: { l: 'Подтверждён', bg: 'rgba(14,165,233,0.20)',  c: '#075985', border: '#0ea5e9', dot: '#0ea5e9', chip: 'accent'  },
+  completed: { l: 'Выполнено',   bg: 'rgba(34,197,94,0.20)',   c: '#14532d', border: '#22c55e', dot: '#22c55e', chip: 'good'    },
+  cancelled: { l: 'Отменён',     bg: 'rgba(244,63,94,0.18)',   c: '#9f1239', border: '#f43f5e', dot: '#f43f5e', chip: 'bad'     },
+  no_show:   { l: 'Не пришёл',   bg: 'rgba(168,85,247,0.20)',  c: '#581c87', border: '#a855f7', dot: '#a855f7', chip: 'default' },
 }
+// Приоритетная запись — золотая подсветка поверх любого статуса.
+const PRIORITY_HIGH_BG = 'linear-gradient(135deg, rgba(250,204,21,0.30) 0%, rgba(245,158,11,0.18) 100%)'
+const PRIORITY_HIGH_BORDER = '#eab308' 
 
 function ymd(d) {
   const y = d.getFullYear()
@@ -87,9 +94,10 @@ export default function WeekScheduleSection({
   const [activeDayIdx, setActiveDayIdx] = useState(() => (new Date().getDay() + 6) % 7)
 
   // Модалы
-  const [bookModal, setBookModal] = useState(null)   // { date, start_time }
-  const [apptModal, setApptModal] = useState(null)   // { appointment, date, start_time }
-  const [moveDrag, setMoveDrag] = useState(null)     // { appointment, fromKey }
+  const [bookModal, setBookModal] = useState(null)      // { date, start_time }
+  const [apptModal, setApptModal] = useState(null)      // { appointment, date, start_time } — старая модалка статуса/переноса (legacy)
+  const [detailsModal, setDetailsModal] = useState(null) // { appointment, date, start_time } — карточка приёма (заключение/файлы/направления/история)
+  const [moveDrag, setMoveDrag] = useState(null)        // { appointment, fromKey }
   const [error, setError] = useState('')
 
   // Подгрузка списка врачей (для mode=full)
@@ -257,7 +265,7 @@ export default function WeekScheduleSection({
           hours={hoursAxis}
           canEdit={canEdit}
           onPickEmpty={(date, time) => canEdit && setBookModal({ date, start_time: time })}
-          onPickAppt={(apt, date, time) => setApptModal({ appointment: apt, date, start_time: time })}
+          onPickAppt={(apt, date, time) => setDetailsModal({ appointment: apt, date, start_time: time })}
           moveDrag={moveDrag}
           setMoveDrag={canEdit ? setMoveDrag : () => {}}
           onDropMove={(toDate, toTime) => moveDrag && onMove(moveDrag.appointment.id, toDate, toTime)}
@@ -270,7 +278,7 @@ export default function WeekScheduleSection({
           setActiveDayIdx={setActiveDayIdx}
           canEdit={canEdit}
           onPickEmpty={(date, time) => canEdit && setBookModal({ date, start_time: time })}
-          onPickAppt={(apt, date, time) => setApptModal({ appointment: apt, date, start_time: time })}
+          onPickAppt={(apt, date, time) => setDetailsModal({ appointment: apt, date, start_time: time })}
         />
       )}
 
@@ -322,6 +330,13 @@ export default function WeekScheduleSection({
           onStatus={onStatus}
           onMove={onMove}
           weekStart={weekStart}
+        />
+      )}
+      {detailsModal && (
+        <AppointmentDetailsModal
+          ctx={detailsModal}
+          onClose={() => setDetailsModal(null)}
+          onChanged={() => reload()}
         />
       )}
     </div>
@@ -461,6 +476,9 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
               const st = a ? STATUS_INFO[a.status] || STATUS_INFO.pending : null
 
               if (a) {
+                const priority = a.priority || 'normal'
+                const isUrgent = priority === 'urgent'
+                const isHigh = priority === 'high'
                 return (
                   <div
                     key={`c-${d.date}-${h}`}
@@ -468,15 +486,43 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
                     onDragStart={() => canEdit && setMoveDrag({ appointment: a, fromKey: `${d.date}-${h}` })}
                     onDragEnd={() => setMoveDrag(null)}
                     onClick={() => onPickAppt(a, d.date, h)}
-                    className="cursor-pointer p-2 min-h-[58px] hover:brightness-95 transition active:scale-[0.98] flex flex-col"
-                    style={{ background: st.bg, color: st.c }}
-                    title={`${a.patient_name || a.patient_phone} · ${st.l}`}>
+                    className="cursor-pointer p-2 min-h-[58px] hover:brightness-95 transition active:scale-[0.98] flex flex-col relative overflow-hidden"
+                    style={{
+                      background: isUrgent
+                        ? 'linear-gradient(135deg, rgba(239,68,68,0.28) 0%, rgba(220,38,38,0.18) 100%)'
+                        : isHigh
+                          ? 'linear-gradient(135deg, rgba(250,204,21,0.30) 0%, rgba(245,158,11,0.18) 100%)'
+                          : st.bg,
+                      color: st.c,
+                      borderLeft: `3px solid ${isUrgent ? '#dc2626' : isHigh ? '#eab308' : (st.border || st.dot)}`,
+                      borderRadius: 10,
+                      margin: 2,
+                      boxShadow: (isHigh || isUrgent) ? '0 2px 8px rgba(234,179,8,0.25)' : 'none',
+                    }}
+                    title={`${a.patient_name || a.patient_phone} · ${st.l}${isHigh ? ' · ⭐ Приоритет' : ''}${isUrgent ? ' · ⚡ Срочно' : ''}`}>
+                    {(isHigh || isUrgent) && (
+                      <span style={{ position: 'absolute', top: 4, right: 6, fontSize: 11, lineHeight: 1 }}>
+                        {isUrgent ? '⚡' : '⭐'}
+                      </span>
+                    )}
                     <div className="text-[11px] font-mono tabular-nums opacity-80 leading-none">{slot.start_time}</div>
                     <div className="text-[12.5px] font-semibold leading-tight mt-0.5 truncate">
                       {a.patient_name || '—'}
                     </div>
-                    <span className="text-[10px] mt-auto self-start px-1.5 py-0.5 rounded font-bold uppercase"
-                      style={{ background: 'rgba(255,255,255,0.5)' }}>{st.l}</span>
+                    <div className="mt-auto flex items-center gap-1 flex-wrap">
+                      <span className="text-[10px] self-start px-1.5 py-0.5 rounded font-bold uppercase"
+                        style={{ background: 'rgba(255,255,255,0.55)' }}>{st.l}</span>
+                      {a.has_outcome && (
+                        <span title="Заключение оформлено"
+                          className="text-[10px] px-1.5 py-0.5 rounded font-bold"
+                          style={{ background: 'rgba(34,197,94,0.30)', color: '#14532d' }}>✓</span>
+                      )}
+                      {a.referrals_count > 0 && (
+                        <span title={`Направлений: ${a.referrals_count}`}
+                          className="text-[10px] px-1.5 py-0.5 rounded font-bold"
+                          style={{ background: 'rgba(14,165,233,0.30)', color: '#075985' }}>→ {a.referrals_count}</span>
+                      )}
+                    </div>
                   </div>
                 )
               }
@@ -486,12 +532,23 @@ function WeekGrid({ data, hours, canEdit, onPickEmpty, onPickAppt, moveDrag, set
                   onDragOver={canEdit && moveDrag ? (e) => e.preventDefault() : undefined}
                   onDrop={canEdit && moveDrag ? () => onDropMove(d.date, h) : undefined}
                   onClick={() => onPickEmpty(d.date, h)}
-                  className={`min-h-[58px] flex items-center justify-center transition ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
-                  style={{ background: 'var(--surface)' }}
-                  onMouseEnter={canEdit ? (e) => e.currentTarget.style.background = 'var(--accent-soft)' : undefined}
-                  onMouseLeave={canEdit ? (e) => e.currentTarget.style.background = 'var(--surface)' : undefined}>
-                  {canEdit && <span className="text-[11px] font-medium" style={{ color: 'var(--fg-3)' }}>+ слот</span>}
-                </div>
+                  className={`min-h-[58px] transition ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
+                  style={{
+                    background: 'rgba(16,185,129,0.05)',
+                    border: '1px dashed rgba(16,185,129,0.30)',
+                    borderRadius: 10,
+                    margin: 2,
+                  }}
+                  onMouseEnter={canEdit ? (e) => {
+                    e.currentTarget.style.background = 'rgba(16,185,129,0.14)'
+                    e.currentTarget.style.borderStyle = 'solid'
+                    e.currentTarget.style.borderColor = 'rgba(16,185,129,0.50)'
+                  } : undefined}
+                  onMouseLeave={canEdit ? (e) => {
+                    e.currentTarget.style.background = 'rgba(16,185,129,0.05)'
+                    e.currentTarget.style.borderStyle = 'dashed'
+                    e.currentTarget.style.borderColor = 'rgba(16,185,129,0.30)'
+                  } : undefined} />
               )
             })}
           </div>
@@ -565,6 +622,18 @@ function DayList({ data, hours, activeDayIdx, setActiveDayIdx, canEdit, onPickEm
                     <>
                       <div className="text-sm font-semibold leading-tight" style={{ color: st.c }}>{a.patient_name || '—'}</div>
                       <div className="text-xs opacity-70 mt-0.5" style={{ color: st.c }}>{a.patient_phone}</div>
+                      {(a.has_outcome || a.referrals_count > 0) && (
+                        <div className="flex items-center gap-1 mt-1 flex-wrap">
+                          {a.has_outcome && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold"
+                              style={{ background: 'rgba(34,197,94,0.18)', color: '#14532d' }}>✓ заключение</span>
+                          )}
+                          {a.referrals_count > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-bold"
+                              style={{ background: 'rgba(14,165,233,0.18)', color: '#075985' }}>→ {a.referrals_count} напр.</span>
+                          )}
+                        </div>
+                      )}
                     </>
                   ) : (
                     <div className="text-sm" style={{ color: 'var(--fg-3)' }}>Свободно</div>

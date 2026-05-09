@@ -287,6 +287,29 @@ async def create_session(
     except Exception as e:
         logger.warning("telemed: sms send failed sid=%s: %s", s.id, e)
 
+    # ── Realtime push в ЛК пациента (Zoom-стиль входящий звонок) ─────────
+    # Если пациент сейчас в PWA — модалка появится через 1 сек.
+    # Если нет — всё равно сработает SMS (выше) с join_url.
+    try:
+        doctor_name = None
+        if s.doctor_id:
+            d = (
+                await db.execute(select(Doctor).where(Doctor.id == s.doctor_id))
+            ).scalar_one_or_none()
+            if d:
+                doctor_name = d.full_name
+
+        from app.routers.patient_notifications import notify_patient
+        await notify_patient(phone, {
+            "type": "incoming_call",
+            "session_id": str(s.id),
+            "join_url": join_url,
+            "doctor_name": doctor_name,
+            "expires_at": expires_at.isoformat(),
+        })
+    except Exception as e:
+        logger.warning("telemed: notify_patient failed sid=%s: %s", s.id, e)
+
     return CreateSessionResponse(
         session_id=s.id,
         room_id=s.room_id,
@@ -446,6 +469,35 @@ async def end_session(
         logger.warning("telemed: publish end failed sid=%s: %s", s.id, e)
 
     return _session_to_dict(s)
+
+
+# ── REST: отмена входящего «звонка» (Zoom-стиль) ────────────────────────────
+
+
+@router.post(
+    "/sessions/{session_id}/cancel-incoming",
+    dependencies=[Depends(require_module("telemedicine"))],
+)
+async def cancel_incoming(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Отменить «звонок» в ЛК пациента (если пациент не отвечает > 60с).
+    Закрывает модалку IncomingCall у пациента, но саму TelemedicineSession
+    не трогает — врач может позвонить позже или закрыть её через /end.
+    """
+    s = await _get_session_for_user(db, session_id, current_user)
+    try:
+        from app.routers.patient_notifications import notify_patient
+        await notify_patient(s.patient_phone, {
+            "type": "call_cancelled",
+            "session_id": str(s.id),
+        })
+    except Exception as e:
+        logger.warning("telemed: cancel notify failed sid=%s: %s", s.id, e)
+    return {"ok": True, "session_id": str(s.id)}
 
 
 # ── REST: чат ───────────────────────────────────────────────────────────────

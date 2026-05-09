@@ -5,10 +5,10 @@
 import uuid
 import csv
 import io
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_cls
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import select, func, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,7 @@ from app.models.clinic import Clinic
 from app.models.referral import Referral, ReferralStatus
 from app.models.bonus import Bonus, BonusStatus
 from app.models.service import Service
+from app.models.doctor import Appointment, AppointmentStatus, Doctor
 from app.schemas.manager import (
     SummaryReport, AdminStats, ClinicFlowEntry,
 )
@@ -804,3 +805,148 @@ async def get_badge_counts(
     cancel_q = await db.execute(select(func.count(Referral.id)).where(Referral.status == ReferralStatus.CANCEL_REQUESTED))
     bonus_q = await db.execute(select(func.count(func.distinct(Bonus.admin_id))).where(Bonus.status == BonusStatus.PENDING))
     return {"cancel_requests": cancel_q.scalar() or 0, "pending_bonus_staff": bonus_q.scalar() or 0}
+
+
+# ---------------------------------------------------------------------------
+# GET /manager/reports/appointments — отчёт по приёмам (для PDF/Excel/CSV экспорта)
+# ---------------------------------------------------------------------------
+# Возвращает данные (НЕ файл!) — frontend сам формирует PDF/Excel/CSV.
+# Параметры: from_date, to_date (обязательно), doctor_id?, clinic_id?, status?
+# Лимит: 5000 записей, диапазон ≤ 6 месяцев.
+# ---------------------------------------------------------------------------
+
+@router.get("/reports/appointments", response_model=dict)
+async def get_appointments_report(
+    from_date: date_cls = Query(..., description="Начало периода, YYYY-MM-DD"),
+    to_date: date_cls = Query(..., description="Конец периода, YYYY-MM-DD"),
+    doctor_id: Optional[uuid.UUID] = Query(None, description="UUID врача"),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники"),
+    status: Optional[AppointmentStatus] = Query(None, description="Статус записи"),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Отчёт по приёмам за произвольный период.
+    Возвращает массив записей + KPI (агрегаты), фронт сам строит PDF/Excel.
+    """
+    # ── Валидация периода ────────────────────────────────────────────────
+    if to_date < from_date:
+        raise HTTPException(400, "to_date должен быть >= from_date")
+    if (to_date - from_date).days > 186:
+        raise HTTPException(400, "Период не может превышать 6 месяцев")
+
+    # ── Фильтр клиник по правам пользователя ─────────────────────────────
+    filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
+    if filter_ids == []:
+        # Нет доступа → пустой результат
+        return {
+            "appointments": [],
+            "total": 0,
+            "total_revenue": 0.0,
+            "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+            "kpi": {
+                "by_status": {}, "top_doctors": [], "avg_cheque": 0.0,
+                "total_revenue": 0.0, "total_count": 0,
+            },
+        }
+
+    # ── Сборка фильтров ──────────────────────────────────────────────────
+    filters = [
+        Appointment.appointment_date >= from_date,
+        Appointment.appointment_date <= to_date,
+    ]
+    if current_user.tenant_id is not None:
+        filters.append(Appointment.tenant_id == current_user.tenant_id)
+    if filter_ids is not None:
+        filters.append(Appointment.clinic_id.in_(filter_ids))
+    if doctor_id:
+        filters.append(Appointment.doctor_id == doctor_id)
+    if status:
+        filters.append(Appointment.status == status)
+
+    where = and_(*filters)
+
+    # ── Основной запрос: записи + врач + клиника (LEFT JOIN) ─────────────
+    q = (
+        select(
+            Appointment.id,
+            Appointment.appointment_date,
+            Appointment.start_time,
+            Appointment.end_time,
+            Appointment.patient_name,
+            Appointment.patient_phone,
+            Appointment.status,
+            Appointment.price,
+            Appointment.payment_method,
+            Appointment.notes,
+            Doctor.full_name.label("doctor_name"),
+            Doctor.specialty.label("doctor_specialty"),
+            Doctor.id.label("doctor_id"),
+            Clinic.name.label("clinic_name"),
+            Clinic.id.label("clinic_id"),
+        )
+        .join(Doctor, Doctor.id == Appointment.doctor_id, isouter=True)
+        .join(Clinic, Clinic.id == Appointment.clinic_id, isouter=True)
+        .where(where)
+        .order_by(Appointment.appointment_date, Appointment.start_time)
+        .limit(5000)
+    )
+    rows = (await db.execute(q)).all()
+
+    # ── Сериализация записей ─────────────────────────────────────────────
+    appointments = []
+    total_revenue = 0.0
+    by_status: dict[str, int] = {}
+    by_doctor: dict[str, dict] = {}
+
+    for r in rows:
+        price_val = float(r.price) if r.price is not None else 0.0
+        total_revenue += price_val
+        st = r.status.value if hasattr(r.status, "value") else str(r.status)
+        by_status[st] = by_status.get(st, 0) + 1
+        if r.doctor_id:
+            key = str(r.doctor_id)
+            d = by_doctor.setdefault(key, {
+                "doctor_id": key,
+                "doctor_name": r.doctor_name or "",
+                "specialty": r.doctor_specialty or "",
+                "count": 0,
+                "revenue": 0.0,
+            })
+            d["count"] += 1
+            d["revenue"] += price_val
+
+        appointments.append({
+            "id": str(r.id),
+            "date": r.appointment_date.isoformat(),
+            "time": r.start_time.strftime("%H:%M") if r.start_time else "",
+            "end_time": r.end_time.strftime("%H:%M") if r.end_time else "",
+            "doctor_name": r.doctor_name or "",
+            "doctor_specialty": r.doctor_specialty or "",
+            "clinic_name": r.clinic_name or "",
+            "patient_name": r.patient_name or "",
+            "patient_phone": r.patient_phone or "",
+            "status": st,
+            "price": price_val,
+            "payment_method": r.payment_method or "",
+            "notes": r.notes or "",
+        })
+
+    # ── KPI: топ-10 врачей ───────────────────────────────────────────────
+    top_doctors = sorted(by_doctor.values(), key=lambda d: d["count"], reverse=True)[:10]
+    total_count = len(appointments)
+    avg_cheque = (total_revenue / total_count) if total_count > 0 else 0.0
+
+    return {
+        "appointments": appointments,
+        "total": total_count,
+        "total_revenue": round(total_revenue, 2),
+        "period": {"from": from_date.isoformat(), "to": to_date.isoformat()},
+        "kpi": {
+            "by_status": by_status,
+            "top_doctors": top_doctors,
+            "avg_cheque": round(avg_cheque, 2),
+            "total_revenue": round(total_revenue, 2),
+            "total_count": total_count,
+        },
+    }
