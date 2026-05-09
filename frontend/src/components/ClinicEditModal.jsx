@@ -7,9 +7,10 @@
  * Содержит две вкладки:
  *   • «Реквизиты»     — name, address, phone + контракт (royalty_percent /
  *                        bonus_per_referral / contract_type)
- *   • «Руководитель»  — primary manager (full_name/username/phone) +
+ *   • «Руководитель»  — primary manager (full_name/username/phone/email) +
  *                        кнопка [🔑 Сгенерировать новый пароль] +
- *                        форма «Назначить руководителя» если manager-а нет
+ *                        форма «Назначить руководителя» если manager-а нет +
+ *                        чекбокс «📧 Отправить welcome-email» при создании
  *
  * КРИТИЧЕСКОЕ правило (см. backend/franchise_owner_clinics.py):
  *   Смена руководителя — это РЕДАКТИРОВАНИЕ User, не удаление-создание.
@@ -193,15 +194,18 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
     full_name: '',
     username: '',
     phone: '',
+    email: '',
   })
   const [createMgr, setCreateMgr] = useState({      // создание нового manager-а
     full_name: '',
     username: '',
     phone: '',
+    email: '',
     password: '',
+    send_welcome_email: true,
   })
   const [createMode, setCreateMode] = useState(false)
-  const [revealedPassword, setRevealedPassword] = useState(null)  // { username, password, warning }
+  const [revealedPassword, setRevealedPassword] = useState(null)  // { username, password, warning, email_sent, email_error, email_to }
 
   // ── Загрузка данных при открытии ─────────────────────────────────────────
   useEffect(() => {
@@ -228,6 +232,7 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
             full_name: d.manager.full_name || '',
             username: d.manager.username || '',
             phone: d.manager.phone || '',
+            email: d.manager.email || '',
           })
         }
       })
@@ -236,6 +241,21 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
       })
       .finally(() => setLoading(false))
   }, [open, tenantId])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Toast о результате email (общий хелпер для create/reset) ─────────────
+  const notifyEmailResult = ({ email_sent, email_error, email_to }) => {
+    if (email_sent) {
+      toast?.(`📧 Email отправлен на ${email_to}`, 'success')
+      return
+    }
+    if (email_error === 'SMTP not configured') {
+      toast?.('Email не отправлен (SMTP не настроен) — пароль показан выше', 'info')
+    } else if (email_error === 'no email' || email_error === 'no email provided') {
+      // молча: пароль показан, email не задан
+    } else if (email_error) {
+      toast?.(`Email не отправлен: ${email_error}`, 'warn')
+    }
+  }
 
   // ── Сохранить реквизиты + контракт ───────────────────────────────────────
   const saveDetails = async (e) => {
@@ -281,6 +301,8 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
         full_name: mgrForm.full_name.trim(),
         username: mgrForm.username.trim(),
         phone: mgrForm.phone.trim() || null,
+        // Пустая строка → бэкенд очистит email (None)
+        email: mgrForm.email.trim(),
       })
       // Перезагружаем актуальные данные
       const r = await api.get(`/franchise-owner/clinics/${tenantId}`)
@@ -303,16 +325,22 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
     }
     setSaving(true)
     try {
+      const emailValue = createMgr.email.trim()
       const r = await api.post(`/franchise-owner/clinics/${tenantId}/manager`, {
         full_name: createMgr.full_name.trim(),
         username: createMgr.username.trim(),
         phone: createMgr.phone.trim() || null,
+        email: emailValue || null,
         password: createMgr.password.trim() || null,
+        send_welcome_email: !!(emailValue && createMgr.send_welcome_email),
       })
       setRevealedPassword({
         username: r.data.username,
         password: r.data.password,
         warning: r.data.warning,
+        email_sent: r.data.email_sent,
+        email_error: r.data.email_error,
+        email_to: emailValue,
       })
       // Перезагружаем
       const r2 = await api.get(`/franchise-owner/clinics/${tenantId}`)
@@ -322,11 +350,17 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
           full_name: r2.data.manager.full_name || '',
           username: r2.data.manager.username || '',
           phone: r2.data.manager.phone || '',
+          email: r2.data.manager.email || '',
         })
       }
       setCreateMode(false)
-      setCreateMgr({ full_name: '', username: '', phone: '', password: '' })
+      setCreateMgr({ full_name: '', username: '', phone: '', email: '', password: '', send_welcome_email: true })
       toast?.('Руководитель назначен', 'success')
+      notifyEmailResult({
+        email_sent: r.data.email_sent,
+        email_error: r.data.email_error,
+        email_to: emailValue,
+      })
       onSaved?.()
     } catch (err) {
       toast?.('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
@@ -346,15 +380,42 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
       }
     )
     if (!ok) return
+
+    // Если у руководителя есть email — отдельный confirm про отправку
+    const managerEmail = (data?.manager?.email || '').trim()
+    let sendEmail = false
+    if (managerEmail) {
+      sendEmail = await confirm(
+        `Отправить новый пароль на email ${managerEmail}? Если откажетесь — пароль будет показан здесь как обычно.`,
+        {
+          title: '📧 Отправить email?',
+          okText: 'Отправить',
+          cancelText: 'Не отправлять',
+        }
+      )
+    }
+
     setSaving(true)
     try {
-      const r = await api.post(`/franchise-owner/clinics/${tenantId}/manager/reset-password`)
+      const r = await api.post(`/franchise-owner/clinics/${tenantId}/manager/reset-password`, {
+        send_email: !!sendEmail,
+      })
       setRevealedPassword({
         username: r.data.username,
         password: r.data.password,
         warning: r.data.warning,
+        email_sent: r.data.email_sent,
+        email_error: r.data.email_error,
+        email_to: r.data.email,
       })
       toast?.('Новый пароль сгенерирован', 'success')
+      if (sendEmail) {
+        notifyEmailResult({
+          email_sent: r.data.email_sent,
+          email_error: r.data.email_error,
+          email_to: r.data.email,
+        })
+      }
     } catch (err) {
       toast?.('Ошибка: ' + (err.response?.data?.detail || err.message), 'error')
     }
@@ -548,6 +609,13 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                           </div>
                           <div className="flex items-center justify-between py-1"
                                style={{ borderBottom: '1px solid var(--line)' }}>
+                            <span style={{ color: 'var(--fg-3)' }}>Email</span>
+                            <span className="font-medium truncate" style={{ color: 'var(--fg)', maxWidth: '60%' }}>
+                              {data.manager.email || '—'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between py-1"
+                               style={{ borderBottom: '1px solid var(--line)' }}>
                             <span style={{ color: 'var(--fg-3)' }}>user_id</span>
                             <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--fg-4)' }}>
                               {data.manager.user_id?.slice(0, 8)}…
@@ -599,15 +667,21 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                               required mono pattern="^[A-Za-z0-9_.\\-]+$"
                             />
                           </FormField>
-                          <div className="sm:col-span-2">
-                            <FormField label="Телефон">
-                              <FormInput
-                                value={mgrForm.phone}
-                                onChange={e => setMgrForm(f => ({ ...f, phone: e.target.value }))}
-                                placeholder="+7 ..."
-                              />
-                            </FormField>
-                          </div>
+                          <FormField label="Телефон">
+                            <FormInput
+                              value={mgrForm.phone}
+                              onChange={e => setMgrForm(f => ({ ...f, phone: e.target.value }))}
+                              placeholder="+7 ..."
+                            />
+                          </FormField>
+                          <FormField label="Email" hint="Используется для welcome-уведомлений и сброса пароля">
+                            <FormInput
+                              type="email"
+                              value={mgrForm.email}
+                              onChange={e => setMgrForm(f => ({ ...f, email: e.target.value }))}
+                              placeholder="manager@example.com"
+                            />
+                          </FormField>
                         </div>
                         <div className="flex items-center gap-2 justify-end">
                           <Button
@@ -621,6 +695,7 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                                 full_name: data.manager?.full_name || '',
                                 username: data.manager?.username || '',
                                 phone: data.manager?.phone || '',
+                                email: data.manager?.email || '',
                               })
                             }}
                           >Отмена</Button>
@@ -698,6 +773,14 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                           placeholder="+7 ..."
                         />
                       </FormField>
+                      <FormField label="Email" hint="На него уйдёт welcome-письмо с реквизитами входа">
+                        <FormInput
+                          type="email"
+                          value={createMgr.email}
+                          onChange={e => setCreateMgr(f => ({ ...f, email: e.target.value }))}
+                          placeholder="manager@example.com"
+                        />
+                      </FormField>
                       <FormField label="Пароль" hint="Оставьте пустым — сгенерируем автоматически">
                         <FormInput
                           value={createMgr.password}
@@ -706,6 +789,35 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                         />
                       </FormField>
                     </div>
+
+                    {/* Чекбокс welcome-email */}
+                    <label
+                      className="flex items-center gap-2 rounded-lg p-2 cursor-pointer"
+                      style={{
+                        background: createMgr.email.trim()
+                          ? 'var(--accent-soft)'
+                          : 'var(--bg-2)',
+                        opacity: createMgr.email.trim() ? 1 : 0.6,
+                        fontSize: 12,
+                        color: createMgr.email.trim() ? 'var(--accent)' : 'var(--fg-3)',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={!!createMgr.email.trim() && createMgr.send_welcome_email}
+                        disabled={!createMgr.email.trim()}
+                        onChange={e => setCreateMgr(f => ({ ...f, send_welcome_email: e.target.checked }))}
+                        style={{ accentColor: 'var(--accent)' }}
+                      />
+                      <span>📧 Отправить welcome-email на этот адрес</span>
+                      {!createMgr.email.trim() && (
+                        <span style={{ fontSize: 11, color: 'var(--fg-4)', marginLeft: 'auto' }}>
+                          (укажите email)
+                        </span>
+                      )}
+                    </label>
+
                     <div className="flex items-center gap-2 justify-end">
                       <Button
                         type="button"
@@ -713,7 +825,7 @@ export default function ClinicEditModal({ open, onClose, tenantId, onSaved }) {
                         variant="ghost"
                         onClick={() => {
                           setCreateMode(false)
-                          setCreateMgr({ full_name: '', username: '', phone: '', password: '' })
+                          setCreateMgr({ full_name: '', username: '', phone: '', email: '', password: '', send_welcome_email: true })
                         }}
                       >Отмена</Button>
                       <Button type="submit" size="sm" disabled={saving}>

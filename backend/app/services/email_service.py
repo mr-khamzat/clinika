@@ -13,6 +13,7 @@ import logging
 import asyncio
 from email.message import EmailMessage
 from email.utils import formataddr
+from pathlib import Path
 
 from app.config import settings
 
@@ -22,6 +23,11 @@ logger = logging.getLogger(__name__)
 def _smtp_configured() -> bool:
     """SMTP считается настроенным, если задан хост."""
     return bool((settings.smtp_host or "").strip())
+
+
+def is_smtp_configured() -> bool:
+    """Публичный алиас для проверок снаружи (роутеры/UI-ответы)."""
+    return _smtp_configured()
 
 
 async def send_email(
@@ -141,3 +147,138 @@ def schedule_email(*args, **kwargs) -> None:
             asyncio.run(send_email_background(*args, **kwargs))
         except Exception:
             logger.exception("[EMAIL] schedule_email failed")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# БЛОК: Welcome-email для руководителя клиники (создание/сброс пароля)
+# ─────────────────────────────────────────────────────────────────────────────
+# Шлёт красиво оформленное HTML-письмо с реквизитами входа, описанием платформы
+# и полезными ссылками. Шаблон рендерится через Jinja2 из
+#   backend/app/templates/welcome_manager.html
+#
+# При SMTP не настроенном — возвращает {sent: False, reason: "SMTP not configured"},
+# не падает, не логирует пароль.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Корень шаблонов (один на сервис)
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+
+_PUBLIC_DOMAIN = "https://клиниксеть.рф"
+_DEFAULT_CALLS_URL = f"{_PUBLIC_DOMAIN}/downloads/KliniknetCalls-Setup-1.0.23.exe"
+_DEFAULT_WIKI_URL = f"{_PUBLIC_DOMAIN}/wiki"
+_DEFAULT_SUPPORT_EMAIL = "support@клиниксеть.рф"
+_DEFAULT_SUPPORT_TG = "@support"
+_DEFAULT_SUPPORT_TG_URL = "https://t.me/clinikset_support"
+
+
+def _mask_email(addr: str | None) -> str:
+    """Маскируем email для логов (a***@d***.tld), пароль никогда не пишем."""
+    if not addr or "@" not in addr:
+        return "—"
+    name, _, domain = addr.partition("@")
+    name_m = (name[0] + "***") if name else "***"
+    if "." in domain:
+        head, _, tld = domain.rpartition(".")
+        head_m = (head[0] + "***") if head else "***"
+        domain_m = f"{head_m}.{tld}"
+    else:
+        domain_m = "***"
+    return f"{name_m}@{domain_m}"
+
+
+def _render_welcome_template(ctx: dict) -> str:
+    """Рендерим welcome_manager.html через Jinja2 c автоэкранированием."""
+    try:
+        from jinja2 import Environment, FileSystemLoader, select_autoescape
+    except ImportError:
+        logger.error("[EMAIL] jinja2 не установлен — шаблон не отрендерен")
+        # Минимальный plaintext-fallback (без чувствительных данных в логах)
+        return (
+            "<p>Здравствуйте, {full}!</p>"
+            "<p>Вы назначены руководителем клиники {tname}.</p>"
+            "<p>URL: <a href=\"{url}\">{url}</a><br>"
+            "Логин: {u}<br>Пароль: {p}</p>"
+        ).format(
+            full=ctx.get("full_name", ""),
+            tname=ctx.get("tenant_name", ""),
+            url=ctx.get("login_url", ""),
+            u=ctx.get("username", ""),
+            p=ctx.get("password", ""),
+        )
+    env = Environment(
+        loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    tpl = env.get_template("welcome_manager.html")
+    return tpl.render(**ctx)
+
+
+async def send_welcome_email_to_manager(
+    user,
+    tenant,
+    plaintext_password: str,
+    *,
+    subject_prefix: str | None = None,
+    role_doc_path: str = "/wiki/role-manager",
+) -> dict:
+    """Отправить welcome-email руководителю клиники.
+
+    Args:
+        user: User SQLAlchemy-модель (использует full_name, username, email)
+        tenant: Tenant SQLAlchemy-модель (использует name, slug)
+        plaintext_password: пароль в открытом виде (НЕ логируется)
+        subject_prefix: если задан — переопределяет начало темы письма
+                        (например, «Новый пароль» при сбросе)
+        role_doc_path: путь к статье в Wiki про роль (manager / franchise-owner)
+
+    Returns:
+        dict — {sent: bool, reason?: str}
+    """
+    target = (getattr(user, "email", None) or "").strip()
+    if not target:
+        return {"sent": False, "reason": "no email"}
+
+    if not is_smtp_configured():
+        # Маскируем email — пароль НИКОГДА в лог
+        logger.info(
+            "[WELCOME-EMAIL] SMTP не настроен — пропускаем отправку для %s",
+            _mask_email(target),
+        )
+        return {"sent": False, "reason": "SMTP not configured"}
+
+    slug = (getattr(tenant, "slug", "") or "").strip()
+    tenant_name = (getattr(tenant, "name", "") or "").strip() or slug
+
+    ctx = {
+        "full_name": (getattr(user, "full_name", "") or "").strip() or "руководитель",
+        "username": (getattr(user, "username", "") or "").strip(),
+        "password": plaintext_password,
+        "tenant_slug": slug,
+        "tenant_name": tenant_name,
+        "login_url": f"{_PUBLIC_DOMAIN}/{slug}/admin",
+        "wiki_url": _DEFAULT_WIKI_URL,
+        "role_doc_url": f"{_PUBLIC_DOMAIN}{role_doc_path}",
+        "calls_url": _DEFAULT_CALLS_URL,
+        "support_email": _DEFAULT_SUPPORT_EMAIL,
+        "support_telegram": _DEFAULT_SUPPORT_TG,
+        "support_telegram_url": _DEFAULT_SUPPORT_TG_URL,
+    }
+
+    if subject_prefix:
+        subject = f"{subject_prefix} · клиника {tenant_name}"
+    else:
+        subject = f"Добро пожаловать в КлиникСеть · клиника {tenant_name}"
+
+    try:
+        html = _render_welcome_template(ctx)
+    except Exception as e:
+        logger.warning("[WELCOME-EMAIL] Ошибка рендера шаблона: %s", e)
+        return {"sent": False, "reason": f"template error: {e}"}
+
+    ok = await send_email(target, subject, body_html=html)
+    # Лог НЕ содержит пароля
+    logger.info(
+        "[WELCOME-EMAIL] отправка %s -> %s: %s",
+        tenant_name, _mask_email(target), "OK" if ok else "FAIL",
+    )
+    return {"sent": bool(ok), "reason": None if ok else "smtp send failed"}

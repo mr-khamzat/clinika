@@ -5,12 +5,13 @@
 Раздел «Клиники сети» в FranchiseOwnerCabinet → клик на карточку →
 модалка редактирования клиники с табами:
    • «Реквизиты»     — name, address, phone, контракт (тип/ставки)
-   • «Руководитель»  — primary manager (full_name/username/phone) +
-                       сброс пароля + создание первого manager-а
+   • «Руководитель»  — primary manager (full_name/username/phone/email) +
+                       сброс пароля + создание первого manager-а +
+                       welcome-email с реквизитами входа
 
 КРИТИЧЕСКОЕ ПРАВИЛО:
   При смене руководителя НИКОГДА не удаляем старого User —
-  только редактируем (full_name/username/phone). user_id остаётся,
+  только редактируем (full_name/username/phone/email). user_id остаётся,
   все связи (appointments, referrals, audit_log, bonuses) сохраняются.
 
 Endpoints:
@@ -33,7 +34,7 @@ from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,6 +71,8 @@ class ManagerPatchIn(BaseModel):
     full_name: Optional[str] = Field(None, min_length=2, max_length=200)
     username: Optional[str] = Field(None, min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
     phone: Optional[str] = Field(None, max_length=30)
+    # Email — опциональный. Пустая строка очищает поле.
+    email: Optional[str] = Field(None, max_length=200)
 
 
 class ManagerCreateIn(BaseModel):
@@ -78,9 +81,35 @@ class ManagerCreateIn(BaseModel):
     username: str = Field(..., min_length=3, max_length=100, pattern=r"^[A-Za-z0-9_.\-]+$")
     phone: Optional[str] = Field(None, max_length=30)
     password: Optional[str] = Field(None, min_length=6, max_length=128)
+    # Email — опциональный
+    email: Optional[str] = Field(None, max_length=200)
+    # Слать ли welcome-email при создании (если email задан и SMTP настроен)
+    send_welcome_email: bool = True
+
+
+class ResetPasswordIn(BaseModel):
+    """Body для reset-password — позволяет включить отправку email."""
+    send_email: bool = False
 
 
 # ─── Хелперы ────────────────────────────────────────────────────────────────
+
+# Простая валидация email — pydantic.EmailStr избегаем чтобы не требовать
+# email-validator у всего сервиса. Проверка достаточная для UX-фильтра.
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def _normalize_email(raw: Optional[str]) -> Optional[str]:
+    """None / пустая → None. Иначе trim + проверка регуляркой → 422 если кривое."""
+    if raw is None:
+        return None
+    v = raw.strip()
+    if not v:
+        return None
+    if not _EMAIL_RE.match(v):
+        raise HTTPException(status_code=422, detail="Некорректный email")
+    return v
+
 
 def _gen_password(length: int = 12) -> str:
     """Сгенерировать alphanumeric-пароль (без неоднозначных символов)."""
@@ -153,6 +182,7 @@ def _serialize_manager(u: Optional[User]) -> Optional[dict]:
         "full_name": u.full_name,
         "username": u.username,
         "phone": u.phone_number,
+        "email": u.email,
         "is_active": u.is_active,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     }
@@ -329,7 +359,7 @@ async def update_clinic_manager(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Обновить ДАННЫЕ существующего primary manager-а (full_name/username/phone).
+    Обновить ДАННЫЕ существующего primary manager-а (full_name/username/phone/email).
     КРИТИЧЕСКИ важно: User НЕ удаляется, user_id сохраняется,
     все связи (appointments/referrals/bonuses/audit_log) остаются целыми.
     Также не меняется User.tenant_id — manager остаётся в своём тенанте.
@@ -348,6 +378,7 @@ async def update_clinic_manager(
         "full_name": manager.full_name,
         "username": manager.username,
         "phone": manager.phone_number,
+        "email": manager.email,
     }
 
     if body.username is not None and body.username != manager.username:
@@ -365,10 +396,15 @@ async def update_clinic_manager(
     if body.phone is not None:
         manager.phone_number = body.phone.strip() or None
 
+    # Email — пустая строка трактуется как «очистить»
+    if body.email is not None:
+        manager.email = _normalize_email(body.email)
+
     after = {
         "full_name": manager.full_name,
         "username": manager.username,
         "phone": manager.phone_number,
+        "email": manager.email,
     }
 
     await audit_service.write_safe(
@@ -397,8 +433,13 @@ async def create_clinic_manager(
     Создать ПЕРВОГО руководителя для клиники без manager-а.
     Если у клиники уже есть активный manager — возвращаем 409.
     Возвращает временный пароль (показывается один раз).
+
+    Доп.: если задан body.email и body.send_welcome_email=True — пробуем
+    выслать welcome-email с реквизитами входа. SMTP не настроен → email_sent=False
+    (кабинет покажет пароль как обычно).
     """
     from app.services import audit_service
+    from app.services.email_service import send_welcome_email_to_manager, is_smtp_configured
 
     t = await _get_tenant_in_my_franchise(db, user, tenant_id)
     existing = await _get_primary_manager(db, t.id)
@@ -414,12 +455,14 @@ async def create_clinic_manager(
         raise HTTPException(status_code=409, detail="Этот логин уже занят")
 
     plain_password = (body.password or "").strip() or _gen_password(12)
+    email_norm = _normalize_email(body.email)
 
     manager = User(
         tenant_id=t.id,
         full_name=body.full_name.strip(),
         username=body.username,
         phone_number=(body.phone or "").strip() or None,
+        email=email_norm,
         password_hash=hash_password(plain_password),
         role=UserRole.MANAGER,
         is_active=True,
@@ -436,6 +479,7 @@ async def create_clinic_manager(
             "full_name": manager.full_name,
             "username": manager.username,
             "phone": manager.phone_number,
+            "email": manager.email,
         },
         request=request,
         comment=f"Назначен первый руководитель клиники «{t.name}» из кабинета franchise_owner",
@@ -443,10 +487,30 @@ async def create_clinic_manager(
     await db.commit()
     await db.refresh(manager)
 
+    # ─── Welcome-email (после commit, чтобы у user был стабильный id) ───────
+    email_sent = False
+    email_error: Optional[str] = None
+    if email_norm and body.send_welcome_email:
+        if not is_smtp_configured():
+            email_error = "SMTP not configured"
+        else:
+            try:
+                res = await send_welcome_email_to_manager(manager, t, plain_password)
+                email_sent = bool(res.get("sent"))
+                if not email_sent:
+                    email_error = res.get("reason") or "send failed"
+            except Exception as e:
+                # email не должен валить создание manager-а
+                email_error = f"send failed: {e}"
+    elif not email_norm and body.send_welcome_email:
+        email_error = "no email provided"
+
     return {
         **(_serialize_manager(manager) or {}),
         "password": plain_password,                          # plaintext — показывается ровно один раз
         "warning": "Сохраните пароль сейчас — он больше не будет показан",
+        "email_sent": email_sent,
+        "email_error": email_error,
     }
 
 
@@ -456,13 +520,21 @@ async def reset_manager_password(
     request: Request,
     user: User = Depends(require_franchise_owner),
     db: AsyncSession = Depends(get_db),
+    body: Optional[ResetPasswordIn] = None,
 ):
     """
     Сгенерировать новый пароль (12 символов alphanumeric) для существующего manager-а.
     User НЕ удаляется и НЕ пересоздаётся — обновляется только password_hash.
     Возвращает plaintext-пароль (показывается ровно один раз).
+
+    body.send_email=True — пробуем выслать email с новым паролем
+    (subject «Новый пароль для клиники {name}»). Если email у user нет
+    или SMTP не настроен — возвращаем email_sent=false + email_error.
     """
     from app.services import audit_service
+    from app.services.email_service import send_welcome_email_to_manager, is_smtp_configured
+
+    send_email_flag = bool(body.send_email) if body else False
 
     t = await _get_tenant_in_my_franchise(db, user, tenant_id)
     manager = await _get_primary_manager(db, t.id)
@@ -481,10 +553,33 @@ async def reset_manager_password(
         comment=f"Сброс пароля руководителя клиники «{t.name}» (user_id сохранён)",
     )
     await db.commit()
+    await db.refresh(manager)
+
+    email_sent = False
+    email_error: Optional[str] = None
+    if send_email_flag:
+        if not (manager.email or "").strip():
+            email_error = "no email"
+        elif not is_smtp_configured():
+            email_error = "SMTP not configured"
+        else:
+            try:
+                res = await send_welcome_email_to_manager(
+                    manager, t, new_password,
+                    subject_prefix="Новый пароль для входа",
+                )
+                email_sent = bool(res.get("sent"))
+                if not email_sent:
+                    email_error = res.get("reason") or "send failed"
+            except Exception as e:
+                email_error = f"send failed: {e}"
 
     return {
         "user_id": str(manager.id),
         "username": manager.username,
+        "email": manager.email,
         "password": new_password,                            # plaintext — показывается один раз
         "warning": "Сохраните пароль сейчас — он больше не будет показан",
+        "email_sent": email_sent,
+        "email_error": email_error,
     }
