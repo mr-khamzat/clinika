@@ -7,7 +7,7 @@ import { useToast, useConfirm } from '../design'
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const DEFAULT_SCHEDULE = Array.from({ length: 7 }, (_, i) => ({
   day_of_week: i,
-  is_active: i < 5, // Пн-Пт по умолчанию
+  is_active: true, // Все 7 дней по умолчанию
   start_time: '09:00',
   end_time: '18:00',
 }))

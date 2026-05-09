@@ -9,7 +9,7 @@ const DAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 function defaultSchedule() {
   return Array.from({ length: 7 }, (_, i) => ({
     day_of_week: i,
-    is_active: i < 5, // Mon-Fri active by default
+    is_active: true, // All 7 days active by default
     open_time: '09:00',
     close_time: '18:00',
   }))
