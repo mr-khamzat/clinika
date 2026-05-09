@@ -54,16 +54,54 @@ function formatBytes(n) {
   return `${(n / 1024 / 1024).toFixed(2)} МБ`
 }
 
+const STATUSES = [
+  { id: 'pending',   label: 'Ожидает',     bg: '#fef3c7', fg: '#92400e' },
+  { id: 'confirmed', label: 'Подтверждён', bg: '#dbeafe', fg: '#075985' },
+  { id: 'completed', label: 'Выполнено',   bg: '#dcfce7', fg: '#14532d' },
+  { id: 'cancelled', label: 'Отменён',     bg: '#fee2e2', fg: '#9f1239' },
+  { id: 'no_show',   label: 'Не пришёл',   bg: '#f3e8ff', fg: '#581c87' },
+]
+const PRIORITIES = [
+  { id: 'normal',  label: 'Обычный',         icon: '',  bg: 'var(--bg-2)',                                  fg: 'var(--fg-2)' },
+  { id: 'high',    label: 'Приоритетный',    icon: '⭐', bg: 'rgba(250,204,21,0.30)',                        fg: '#854d0e' },
+  { id: 'urgent',  label: 'Срочный',         icon: '⚡', bg: 'rgba(239,68,68,0.28)',                         fg: '#9f1239' },
+]
+
 export default function AppointmentDetailsModal({ ctx, onClose, onChanged }) {
   // ctx = { appointment, date, start_time }
   const appt = ctx?.appointment || {}
   const apptId = appt.id
   const [tab, setTab] = useState('outcome')
+  const [localStatus, setLocalStatus] = useState(appt.status || 'pending')
+  const [localPriority, setLocalPriority] = useState(appt.priority || 'normal')
+  const [busy, setBusy] = useState(null)
 
   if (!apptId) return null
 
+  async function changeStatus(s) {
+    if (busy || s === localStatus) return
+    setBusy('status')
+    try {
+      await api.patch("/appointments/" + apptId + "/status", { status: s })
+      setLocalStatus(s)
+      if (onChanged) onChanged()
+    } catch (e) { window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message)) }
+    finally { setBusy(null) }
+  }
+
+  async function changePriority(p) {
+    if (busy || p === localPriority) return
+    setBusy('priority')
+    try {
+      await api.patch("/appointments/" + apptId, { priority: p })
+      setLocalPriority(p)
+      if (onChanged) onChanged()
+    } catch (e) { window.alert('Ошибка: ' + (e?.response?.data?.detail || e.message)) }
+    finally { setBusy(null) }
+  }
+
   // Шапка
-  const statusInfo = STATUS_CHIP[appt.status] || STATUS_CHIP.pending
+  const statusInfo = STATUS_CHIP[localStatus] || STATUS_CHIP.pending
 
   return (
     <Modal
@@ -96,6 +134,34 @@ export default function AppointmentDetailsModal({ ctx, onClose, onChanged }) {
           value={tab}
           onChange={setTab}
         />
+      </div>
+
+      {/* Toggle статуса и приоритета — всегда виден на всех вкладках */}
+      <div className="mb-3 flex flex-col gap-2" style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 12, padding: 10 }}>
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-[11px] uppercase font-bold tracking-wide" style={{ color: 'var(--fg-3)', minWidth: 70 }}>Статус</span>
+          {STATUSES.map(s => (
+            <button key={s.id} onClick={() => changeStatus(s.id)} disabled={busy==='status'}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition"
+              style={localStatus === s.id
+                ? { background: s.bg, color: s.fg, border: "1px solid " + s.fg + "55" }
+                : { background: 'var(--surface)', color: 'var(--fg-2)', border: '1px solid var(--border)', opacity: busy ? 0.5 : 1 }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-[11px] uppercase font-bold tracking-wide" style={{ color: 'var(--fg-3)', minWidth: 70 }}>Приоритет</span>
+          {PRIORITIES.map(p => (
+            <button key={p.id} onClick={() => changePriority(p.id)} disabled={busy==='priority'}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition flex items-center gap-1"
+              style={localPriority === p.id
+                ? { background: p.bg, color: p.fg, border: '1px solid currentColor' }
+                : { background: 'var(--surface)', color: 'var(--fg-2)', border: '1px solid var(--border)', opacity: busy ? 0.5 : 1 }}>
+              {p.icon && <span>{p.icon}</span>}{p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === 'outcome'     && <OutcomeTab     apptId={apptId} onChanged={onChanged} />}
