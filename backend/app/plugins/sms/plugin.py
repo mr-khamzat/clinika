@@ -67,7 +67,7 @@ class SMSPlugin(BasePlugin):
                 if data.get("error_code"):
                     logger.error(f"[SMS] SMSC ошибка: {data}")
                     return False
-                logger.info(f"[SMS] SMSC отправлено → {mask_phone(phone)}, id={data.get("id")}")
+                logger.info(f"[SMS] SMSC отправлено → {mask_phone(phone)}, id={data.get('id')}")
                 return True
         except Exception as e:
             logger.error(f"[SMS] SMSC исключение: {e}")
