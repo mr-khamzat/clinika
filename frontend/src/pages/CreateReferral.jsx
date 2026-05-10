@@ -75,6 +75,26 @@ export default function CreateReferral() {
   })
   const [loading, setLoading] = useState(false)
   const [templates, setTemplates] = useState(loadTemplates)
+  // Глава 4 — серверные шаблоны (CRUD через /manager/referral-templates)
+  const [serverTemplates, setServerTemplates] = useState([])
+  useEffect(() => {
+    api.get('/manager/referral-templates').then(r => {
+      setServerTemplates(Array.isArray(r.data) ? r.data : [])
+    }).catch(() => setServerTemplates([]))
+  }, [])
+  const applyServerTemplate = async (tpl) => {
+    try {
+      const r = await api.post(`/manager/referral-templates/${tpl.id}/use`)
+      const payload = r.data?.payload || {}
+      setForm(f => ({
+        ...f,
+        notes:     payload.notes || f.notes,
+        service_id: payload.service_id || f.service_id,
+      }))
+      // Если в payload указан to_clinic_id — переключаем клинику
+      if (payload.to_clinic_id) handleToClinicChange(payload.to_clinic_id)
+    } catch {}
+  }
   const [misPatient, setMisPatient] = useState(null)
   const [misLinked, setMisLinked] = useState(false)
   const [misChecking, setMisChecking] = useState(false)
@@ -251,6 +271,23 @@ export default function CreateReferral() {
 
       <div className="px-4 pt-4 space-y-3">
 
+        {/* Глава 4 — серверные шаблоны (общие на тенант / клинику) */}
+        {serverTemplates.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {serverTemplates.map(tpl => (
+              <button key={tpl.id} type="button" onClick={() => applyServerTemplate(tpl)}
+                title={tpl.description || tpl.name}
+                className="flex items-center gap-1 rounded-full px-3 py-1.5 flex-shrink-0 text-xs font-semibold"
+                style={{ background: 'oklch(0.95 0.04 250)', color: 'oklch(0.40 0.16 250)' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>dynamic_form</span>
+                {tpl.name}
+                {tpl.usage_count > 0 && (
+                  <span style={{ fontSize: 9, opacity: 0.7 }}>· {tpl.usage_count}×</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         {/* Шаблоны */}
         {templates.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>

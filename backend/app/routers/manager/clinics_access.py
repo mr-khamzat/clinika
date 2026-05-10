@@ -79,8 +79,29 @@ async def get_user_clinic_ids(
                 select(Clinic.id).where(Clinic.tenant_id == user.tenant_id)
             )).all()
             return [r[0] for r in rows]
-        # Manager привязан к клинике → только эта клиника
-        return [user.clinic_id]
+        # Manager: базовый список = [user.clinic_id], плюс расширения из manager_clinic_access (Глава 4)
+        base = [user.clinic_id] if user.clinic_id is not None else []
+        try:
+            from app.models.manager_clinic_access import ManagerClinicAccess
+            extra_rows = (await db.execute(
+                select(ManagerClinicAccess.clinic_id)
+                .where(ManagerClinicAccess.user_id == user.id)
+            )).all()
+            extra = [r[0] for r in extra_rows]
+            merged = list({*base, *extra})
+            if merged:
+                if user.tenant_id is not None:
+                    rows = (await db.execute(
+                        select(Clinic.id).where(
+                            Clinic.id.in_(merged),
+                            Clinic.tenant_id == user.tenant_id,
+                        )
+                    )).all()
+                    return [r[0] for r in rows]
+                return merged
+        except Exception:
+            pass
+        return base or ([user.clinic_id] if user.clinic_id else [])
 
     # Остальные роли (reg/nurse/doctor/etc) — только своя клиника
     if user.clinic_id is not None:

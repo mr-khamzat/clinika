@@ -18,6 +18,7 @@ class AppointmentStatus(str, enum.Enum):
     CANCELLED = "cancelled"  # Отменена
     COMPLETED = "completed"  # Визит состоялся
     NO_SHOW   = "no_show"    # Пациент не пришёл
+    IN_PROGRESS = "in_progress"  # Глава 4: пациент на приёме (Kanban)
 
 
 class Doctor(Base):

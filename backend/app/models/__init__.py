@@ -163,3 +163,7 @@ from app.models.tenant_api_key import TenantApiKey
 
 # Self-service onboarding (Глава 2)
 from app.models.signup_request import SignupRequest
+
+# Глава 4 — Manager productivity (Kanban / templates / multi-clinic)
+from app.models.referral_template import ReferralTemplate
+from app.models.manager_clinic_access import ManagerClinicAccess

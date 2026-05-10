@@ -44,6 +44,13 @@ import ManagerInvoices from './pages/ManagerInvoices'
 // svcfin01: финансовая модель платформы — 3 таба (Платформе/Сети/Сотрудникам)
 import ManagerFinance from './pages/ManagerFinance'
 import ManagerAppointments from './pages/ManagerAppointments'
+// Глава 4 — Manager productivity (lazy load)
+// (reused lazy from top import)
+const ManagerKanban         = lazy(() => import('./pages/ManagerKanban'))
+const ManagerDoctorLoadPage = lazy(() => import('./pages/ManagerDoctorLoadPage'))
+const ManagerTemplatesPage  = lazy(() => import('./pages/ManagerTemplatesPage'))
+const ManagerMultiClinic    = lazy(() => import('./pages/ManagerMultiClinic'))
+const ManagerForecast       = lazy(() => import('./pages/ManagerForecast'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -256,6 +263,12 @@ function MiniApp() {
               <Route path="manager/invoices" element={<ManagerInvoices />} />
               <Route path="manager/finance" element={<ManagerFinance />} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
+              {/* Глава 4 — Manager productivity */}
+              <Route path="manager/kanban"       element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerKanban /></Suspense>} />
+              <Route path="manager/doctor-load"  element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerDoctorLoadPage /></Suspense>} />
+              <Route path="manager/templates"    element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerTemplatesPage /></Suspense>} />
+              <Route path="manager/multi-clinic" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerMultiClinic /></Suspense>} />
+              <Route path="manager/forecast"     element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerForecast /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}

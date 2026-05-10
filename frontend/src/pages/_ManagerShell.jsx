@@ -15,8 +15,9 @@
  * и drawer «Ещё» — единые на все экраны.
  * ========================================
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import api from '../api'
 import { Page, Chip } from '../design'
 // W3: глобальный поиск Cmd+K и центр уведомлений
 import CommandPalette from '../components/CommandPalette'
@@ -37,6 +38,12 @@ export const MGR_NAV = [
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },
   { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments' },
+  // Глава 4 — Manager productivity
+  { key:'kanban',       label:'Kanban-расписание', icon:'view_kanban',  path:'/manager/kanban' },
+  { key:'doctor-load',  label:'Загрузка врачей',    icon:'timeline',     path:'/manager/doctor-load' },
+  { key:'templates',    label:'Шаблоны направлений', icon:'dynamic_form', path:'/manager/templates' },
+  { key:'multi-clinic', label:'Все клиники',         icon:'domain',       path:'/manager/multi-clinic', requiresMultiClinic: true },
+  { key:'forecast',     label:'Прогноз расходов',    icon:'trending_up',  path:'/manager/forecast' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)
@@ -53,6 +60,19 @@ export default function ManagerShell({
 }) {
   const nav = useNavigate()
   const [moreOpen, setMoreOpen] = useState(false)
+  // Глава 4: скрываем пункт «Все клиники» если у юзера ≤1 клиники
+  const [accessibleClinicsCount, setAccessibleClinicsCount] = useState(null)
+  useEffect(() => {
+    let alive = true
+    api.get('/manager/clinics-accessible')
+      .then(r => { if (alive) setAccessibleClinicsCount(Array.isArray(r.data) ? r.data.length : 0) })
+      .catch(() => { if (alive) setAccessibleClinicsCount(0) })
+    return () => { alive = false }
+  }, [])
+  const visibleMoreItems = moreItems.filter(it => {
+    if (it.requiresMultiClinic) return (accessibleClinicsCount ?? 0) > 1
+    return true
+  })
 
   return (
     <Page>
@@ -215,7 +235,7 @@ export default function ManagerShell({
               Разделы
             </div>
             <div className="grid grid-cols-3 gap-3 px-4 pb-6">
-              {moreItems.map(item => (
+              {visibleMoreItems.map(item => (
                 <button
                   key={item.key}
                   onClick={() => { nav(item.path); setMoreOpen(false) }}
