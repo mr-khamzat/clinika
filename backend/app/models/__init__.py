@@ -160,3 +160,6 @@ from app.models.module_health import ModuleHealthCheck, ModuleHealthStatus
 
 # API-ключи тенанта для внешних интеграций (CRM/BI)
 from app.models.tenant_api_key import TenantApiKey
+
+# Self-service onboarding (Глава 2)
+from app.models.signup_request import SignupRequest

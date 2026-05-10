@@ -70,6 +70,8 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const ConsentForm = lazy(() => import('./pages/ConsentForm'))
 // Self-service сброс пароля по токену из email
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+// Self-service регистрация франшизы (Глава 2) — публичный wizard
+const SignupWizard = lazy(() => import('./pages/SignupWizard'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -325,6 +327,16 @@ function AppRouter() {
   // Этап 6 ROADMAP: отдельный лендинг для будущих франчайзи.
   if (path === '/franchise' || path === '/franchise/') {
     return <Franchise />
+  }
+
+  // ─── Self-service регистрация франшизы (/signup) — без auth ───
+  // Глава 2 ROADMAP: публичный мастер регистрации.
+  if (path === '/signup' || path === '/signup/') {
+    return (
+      <Suspense fallback={<div style={{ background: 'linear-gradient(180deg,#f8fafc,#ecfeff)', minHeight: '100vh' }} />}>
+        <SignupWizard />
+      </Suspense>
+    )
   }
 
   // ─── Self-service password reset (без auth) ───

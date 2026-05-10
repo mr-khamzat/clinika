@@ -418,7 +418,7 @@ export default function Landing() {
           </div>
           <div className="ks-nav-actions">
             <button onClick={() => setShowLogin(true)} className="ks-nav-link ks-nav-link-strong">Войти</button>
-            <button onClick={() => setShowContact(true)} className="ks-nav-cta">Создать клинику</button>
+            <a href="/signup" className="ks-nav-cta">Начать бесплатно</a>
           </div>
           <button className="ks-nav-burger" onClick={() => setMenuOpen(m => !m)} aria-label="Меню">
             {menuOpen ? ICONS.close : ICONS.menu}
@@ -880,9 +880,9 @@ export default function Landing() {
           <h2>Начать бесплатно — 14 дней</h2>
           <p>Без банковской карты. Создадим тенант, импортируем услуги, запустим за 1 день. Покажем дашборд сети и проведём по кабинетам.</p>
           <div className="ks-cta-actions">
-            <button onClick={() => setShowContact(true)} className="ks-btn-cta-primary">
+            <a href="/signup" className="ks-btn-cta-primary">
               Начать бесплатно {ICONS.arrow}
-            </button>
+            </a>
             <button onClick={() => setShowLogin(true)} className="ks-btn-cta-secondary">
               Уже клиент — войти
             </button>

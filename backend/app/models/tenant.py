@@ -43,6 +43,18 @@ class Tenant(Base):
     royalty_percent:    Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True, default=0)
     # Идентификаторы клиник в МИС Renovatio для opross МИС в auto_confirm. NULL — МИС не настроен для тенанта.
     mis_clinic_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    # ── Self-service onboarding (Глава 2) ─────────────────────────────────────
+    # trial_ends_at     — момент окончания триал-периода (NULL = триала нет).
+    # onboarded_at      — момент успешного завершения wizard'а.
+    # onboarding_source — каким путём создан тенант:
+    #     self_service — публичный /signup wizard
+    #     manual       — super_admin вручную
+    #     imported     — миграция / импорт
+    trial_ends_at:     Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarded_at:      Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_source: Mapped[str | None]      = mapped_column(String(50), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     license: Mapped["TenantLicense | None"] = relationship(

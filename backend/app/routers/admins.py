@@ -17,12 +17,13 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
     from app.models.tenant import Tenant as TenantModel
     from app.config import settings
     tenant_slug = None
+    tenant_obj = None
     if current_user.tenant_id:
 
         from sqlalchemy import select as _sel
         t_r = await db.execute(_sel(TenantModel).where(TenantModel.id == current_user.tenant_id))
-        t_obj = t_r.scalar_one_or_none()
-        tenant_slug = t_obj.slug if t_obj else None
+        tenant_obj = t_r.scalar_one_or_none()
+        tenant_slug = tenant_obj.slug if tenant_obj else None
 
     role = current_user.role.value
     superadmin_uname = getattr(settings, "superadmin_username", "khamzat")
@@ -42,6 +43,27 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
         data["redirect_url"] = f"/{tenant_slug}/"
     else:
         data["redirect_url"] = "/arc/"
+
+    # ── Trial status (Глава 2: Self-service onboarding) ─────────────────
+    # Возвращаем активному пользователю состояние триала его тенанта,
+    # чтобы фронт мог рисовать TrialBanner (expiring_soon/expired) без
+    # дополнительных запросов. См. services/onboarding_service.trial_status_for.
+    try:
+        from app.services.onboarding_service import trial_status_for
+        # План — из активной подписки (если есть).
+        plan = None
+        if current_user.tenant_id:
+            from app.models.billing import Subscription as _Sub
+            from sqlalchemy import select as _sel2
+            sub_r = await db.execute(_sel2(_Sub).where(_Sub.tenant_id == current_user.tenant_id))
+            sub = sub_r.scalars().first()
+            if sub:
+                plan = sub.plan
+        data["trial_status"] = trial_status_for(tenant_obj, plan=plan)
+    except Exception:
+        # Не критично — старые клиенты не используют поле.
+        data["trial_status"] = {"plan": None, "status": "none", "days_left": None, "trial_ends_at": None}
+
     return data
 
 
