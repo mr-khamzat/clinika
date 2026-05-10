@@ -52,6 +52,7 @@ const AdsSection                = lazy(() => import('../sections/AdsSection'))
 const WikiSection               = lazy(() => import('../sections/WikiSection'))
 const ContactsSection           = lazy(() => import('../sections/ContactsSection'))
 const WebhooksSection           = lazy(() => import('../sections/WebhooksSection'))
+const ApiKeysSection            = lazy(() => import('../sections/ApiKeysSection'))
 const ModulesCatalogSection     = lazy(() => import('../sections/ModulesCatalogSection'))
 const MarketplaceSection        = lazy(() => import('../sections/MarketplaceSection'))
 const BrandingSection           = lazy(() => import('../sections/BrandingSection'))
@@ -137,6 +138,7 @@ const NAV_GROUPS = [
       { id: 'monitoring', label: 'Мониторинг модулей',  icon: 'monitor_heart'       },
       { id: 'roles',      label: 'Роли и права',        icon: 'admin_panel_settings'},
       { id: 'webhooks',   label: 'Webhooks',            icon: 'webhook'             },
+      { id: 'api_keys',   label: 'API-ключи',           icon: 'vpn_key'             },
       { id: 'knowledge',  label: 'База AI',             icon: 'library_books'       },
       { id: 'settings',   label: 'Настройки',           icon: 'settings'            },
     ],
@@ -174,6 +176,7 @@ const PAGE_TITLES = {
   monitoring: { title: 'Мониторинг модулей',subtitle: 'Состояние платных модулей: ok / degraded / error / idle' },
   roles:      { title: 'Роли и права',     subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   webhooks:   { title: 'Webhooks',         subtitle: 'Интеграции и исходящие события' },
+  api_keys:   { title: 'API-ключи',        subtitle: 'Внешний доступ для CRM, BI и собственных интеграций' },
   knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
   settings:   { title: 'Настройки',        subtitle: 'Брендинг, домен, MIS-интеграция' },
 }
@@ -2079,6 +2082,13 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <WebhooksSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'api_keys') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <ApiKeysSection token={adminToken} />
         </Suspense>
       )
     }

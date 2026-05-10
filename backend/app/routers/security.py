@@ -354,10 +354,11 @@ async def block_ip(
     )
     await db.commit()
 
-    # Инвалидируем кеш middleware
+    # Инвалидируем кеш middleware через app.state (избегаем циклического импорта).
     try:
-        from app.main import block_ip_middleware  # type: ignore
-        block_ip_middleware.invalidate()
+        mw = getattr(request.app.state, "block_ip_mw", None)
+        if mw is not None:
+            mw.invalidate()
     except Exception:
         pass
 

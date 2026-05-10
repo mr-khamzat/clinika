@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api'
+import MarketplaceAdminEditor from './MarketplaceAdminEditor'
 
 /**
  * ============================================================================
@@ -79,6 +80,8 @@ function AdminCatalog({ token }) {
   const [tenantId, setTenantId] = useState('')
   const [tenantSubs, setTenantSubs] = useState({})
   const [busyKey, setBusyKey]   = useState(null) // ключ модуля при операции trial/disable
+  // marketplace01: открытый редактор витрины (key модуля или null)
+  const [editMarket, setEditMarket] = useState(null)
 
   // Загрузка каталога модулей платформы
   const load = useCallback(async () => {
@@ -340,6 +343,11 @@ function AdminCatalog({ token }) {
                             <div className="text-xs text-gray-400">{Number(m.price_annual).toLocaleString('ru')} ₽/год</div>
                           )}
                         </div>
+                        <button onClick={() => setEditMarket(m.key)}
+                          title="Витрина: скриншоты, фичи, badge"
+                          className="p-2 rounded-xl bg-gray-50 hover:bg-purple-50 text-gray-500 hover:text-purple-600 dark:bg-gray-700 dark:hover:bg-purple-900/30 transition">
+                          <span className="material-symbols-outlined text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>storefront</span>
+                        </button>
                         <button onClick={() => openEdit(m)}
                           title="Редактировать цену"
                           className="p-2 rounded-xl bg-gray-50 hover:bg-blue-50 text-gray-500 hover:text-blue-600 dark:bg-gray-700 dark:hover:bg-blue-900/30 transition">
@@ -430,6 +438,13 @@ function AdminCatalog({ token }) {
             )
           })}
         </div>
+      )}
+    {editMarket && (
+        <MarketplaceAdminEditor
+          moduleKey={editMarket}
+          onClose={() => setEditMarket(null)}
+          onSaved={load}
+        />
       )}
     </div>
   )

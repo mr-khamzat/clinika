@@ -15,9 +15,12 @@
  * Все строки — на русском, иконки Material Symbols.
  * ========================================
  */
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback, lazy, Suspense } from 'react'
 import api from '../api'
 import { Tabs, Chip, Card, Button, EmptyState } from '../design'
+
+// Tenant impersonation — вкладка с историей сессий «Войти как» (только super_admin)
+const ImpersonationsTab = lazy(() => import('./ImpersonationsTab'))
 
 // ── Флаг страны через Emoji (regional indicator symbols) ────────────────────
 function flagFromCountry(code) {
@@ -240,6 +243,7 @@ export default function AuditLogSection({ token }) {
             { id: 'feed',   label: 'Лента' },
             { id: 'tenants', label: 'По тенантам' },
             { id: 'violations', label: 'Нарушения регионов' },
+            { id: 'impersonations', label: 'Impersonations' },
             { id: 'search', label: 'Поиск' },
           ]}
         />
@@ -248,6 +252,11 @@ export default function AuditLogSection({ token }) {
       {tab === 'feed'    && <FeedTab token={token} />}
       {tab === 'tenants' && <TenantsGeoTab token={token} />}
       {tab === 'violations' && <RegionViolationsTab token={token} />}
+      {tab === 'impersonations' && (
+        <Suspense fallback={<div style={{ padding: 32, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
+          <ImpersonationsTab />
+        </Suspense>
+      )}
       {tab === 'search'  && <SearchTab token={token} />}
     </div>
   )

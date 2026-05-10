@@ -110,6 +110,12 @@ async def write(
     Записать событие в аудит-журнал.
     db.flush() вызывается внутри — commit делает вызывающий код.
     Если request не передан — пытаемся достать из contextvar (middleware кладёт).
+
+    Impersonation: если активна сессия imp=true (см. core/request_ctx.current_impersonator),
+    то actor_id переопределяется на реального super_admin, а в after добавляется
+    блок "impersonation" с impersonator_id/name + acting_as_id/name + reason.
+    Это критично для compliance: мы хотим знать «кто именно из super_admin'ов
+    сделал это под видом tenant-юзера». См. RFC 8693 act claim.
     """
     if request is None:
         try:
@@ -118,6 +124,38 @@ async def write(
         except Exception:
             request = None
     ip = _ip(request)
+
+    # ── Impersonation override ─────────────────────────────────────────────
+    # Не применяем к самим событиям impersonation.* (там actor уже правильный)
+    imp_meta: dict | None = None
+    if not (action or "").startswith("impersonation."):
+        try:
+            from app.core.request_ctx import current_impersonator
+            imp_meta = current_impersonator.get()
+        except Exception:
+            imp_meta = None
+    if imp_meta:
+        # actor_id → реальный super_admin (а не target user)
+        target_actor_id = actor_id
+        target_actor_name = actor_name
+        actor_id = imp_meta.get("actor_id")
+        actor_name = imp_meta.get("actor_name") or actor_name
+        # Сохраняем в after полный контекст impersonation для расследований
+        imp_block = {
+            "impersonator_id":   str(imp_meta.get("actor_id")) if imp_meta.get("actor_id") else None,
+            "impersonator_name": imp_meta.get("actor_name"),
+            "acting_as_id":      str(target_actor_id) if target_actor_id else (
+                str(imp_meta.get("target_id")) if imp_meta.get("target_id") else None
+            ),
+            "acting_as_name":    target_actor_name or imp_meta.get("target_name"),
+            "reason":            imp_meta.get("reason"),
+        }
+        if isinstance(after, dict):
+            after = {**after, "impersonation": imp_block}
+        elif after is None:
+            after = {"impersonation": imp_block}
+        else:
+            after = {"value": str(after), "impersonation": imp_block}
 
     # Гео-IP: graceful degradation — любая ошибка / отсутствие mmdb -> None.
     geo: dict | None = None

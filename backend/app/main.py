@@ -65,6 +65,7 @@ from app.routers.tenant_api_keys import router as tenant_api_keys_router
 from app.routers.public_api_v1 import router as public_api_v1_router
 from app.routers.ads import router as ads_router
 from app.routers.commercial import router as commercial_router
+from app.routers.marketplace import router as marketplace_router
 from app.routers.ai import router as ai_router
 from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
@@ -88,6 +89,7 @@ from app.routers.ltv import router as ltv_router
 from app.routers.clinic_payments import router as clinic_payments_router
 from app.routers.fiscal_receipts import router as fiscal_receipts_router
 from app.routers.admin_logs import router as admin_logs_router
+# Tenant impersonation (RFC 8693 OAuth 2 Token Exchange) — для super_admin
 from app.routers.impersonation import router as impersonation_router
 # Глобальный поиск Cmd+K и центр уведомлений (W3 UX-улучшения)
 from app.routers.search import router as search_router
@@ -114,6 +116,8 @@ from app.routers.call_recording import router as call_recording_router
 from app.routers.inventory import router as inventory_router
 # Module Monitoring System — health-status платных модулей per-tenant
 from app.routers.module_monitoring import router as module_monitoring_router
+# Журнал безопасности — единый dashboard алертов для super_admin
+from app.routers.security import router as security_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -958,6 +962,10 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
     scheduler.add_job(module_expiry_job, 'interval', hours=1, id='module_expiry', replace_existing=True)
+    # Marketplace: pre-expiry alert (за 3 дня) + post-expire alert (час)
+    from app.jobs.marketplace_jobs import trial_expiring_soon_job, trial_expired_alert_job
+    scheduler.add_job(trial_expiring_soon_job, 'interval', hours=6, id='mp_trial_expiring', replace_existing=True)
+    scheduler.add_job(trial_expired_alert_job, 'interval', hours=1, id='mp_trial_expired', replace_existing=True)
     scheduler.add_job(franchise_invoice_job, 'cron', hour=2, minute=0, id='franchise_invoice', replace_existing=True)
     scheduler.add_job(send_heartbeat, 'interval', hours=1, id='heartbeat', replace_existing=True)
     scheduler.add_job(process_webhook_queue_job, 'interval', minutes=1, id='webhook_queue', replace_existing=True)
@@ -991,6 +999,13 @@ async def lifespan(app: FastAPI):
     # Module Monitoring System — каждые 30 мин проверяем все active tenants
     scheduler.add_job(module_health_check_job, 'interval', minutes=30, id='module_health_check', replace_existing=True)
     scheduler.add_job(integration_retest_job, 'interval', minutes=60, id='integration_retest', replace_existing=True)
+    # Журнал безопасности: каждые 5 минут сканируем audit_log на brute-force,
+    # шлём Telegram-алерты, агрегируем permission.denied.
+    from app.services.security_service import security_threat_scan_job
+    scheduler.add_job(
+        security_threat_scan_job, 'interval', minutes=5,
+        id='security_threat_scan', replace_existing=True,
+    )
     # Daily digest по модулям всех тенантов админу платформы (09:00 МСК = 06:00 UTC)
     scheduler.add_job(module_daily_digest_job, 'cron', hour=6, minute=0, id='module_daily_digest', replace_existing=True)
     scheduler.start()
@@ -1303,6 +1318,20 @@ async def custom_redoc_html(_: _UserDocs = Depends(_require_super_admin_docs)):
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
 app.add_middleware(DomainRouterMiddleware)
 
+# ─── Журнал безопасности: блокировка IP по ручному списку super_admin'а ─
+# Middleware кеширует список заблокированных IP на 30 секунд. Кеш инвалидируется
+# роутером /admin/security/block-ip через app.state.block_ip_mw.invalidate().
+# Создаём singleton через @app.middleware('http'), чтобы роутер мог инвалидировать
+# его кеш (через app.state). Через add_middleware был бы создан внутренний
+# инстанс, недоступный для invalidate.
+from app.core.block_ip_middleware import BlockIpMiddleware as _BlockIpMW
+block_ip_middleware = _BlockIpMW(app)
+app.state.block_ip_mw = block_ip_middleware
+
+@app.middleware("http")
+async def _block_ip_dispatch(request: Request, call_next):
+    return await block_ip_middleware.dispatch(request, call_next)
+
 # ─── Request ContextVar — кладём request в contextvar чтобы audit_service нашёл по fallback
 @app.middleware("http")
 async def request_ctx_middleware(request: Request, call_next):
@@ -1437,6 +1466,7 @@ app.include_router(tenant_api_keys_router)
 app.include_router(public_api_v1_router)
 app.include_router(ads_router)
 app.include_router(commercial_router)
+app.include_router(marketplace_router)
 app.include_router(ai_router)
 app.include_router(ai_platform_router)
 app.include_router(recruiter_router)
@@ -1458,6 +1488,7 @@ app.include_router(clinic_payments_router)
 app.include_router(fiscal_receipts_router)
 # Live tail логов backend для super_admin (debug инструмент)
 app.include_router(admin_logs_router)
+# Tenant impersonation — POST /admin/impersonate + /stop + GET /active + /history
 app.include_router(impersonation_router)
 # W3: глобальный поиск /search (Cmd+K) + центр уведомлений
 app.include_router(search_router)
@@ -1480,6 +1511,8 @@ app.include_router(call_recording_router)
 app.include_router(inventory_router)
 # Module Monitoring System — health-state платных модулей (cron + UI)
 app.include_router(module_monitoring_router)
+# Журнал безопасности — единый dashboard алертов для super_admin
+app.include_router(security_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

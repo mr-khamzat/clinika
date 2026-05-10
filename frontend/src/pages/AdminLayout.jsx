@@ -33,6 +33,11 @@ const WeekScheduleSection = lazy(() => import('../sections/scheduling/WeekSchedu
 const PermissionsMatrixSection = lazy(() => import('../sections/PermissionsMatrixSection'))
 // W4 — Аудит-лог как отдельная секция с Tabs «Лента» / «Поиск» + экспорт CSV.
 const AuditLogSection = lazy(() => import("../sections/AuditLogSection"))
+// Tenant impersonation — глобальный баннер (RFC 8693) + модалка подтверждения
+import ImpersonationBanner from '../components/ImpersonationBanner'
+import ImpersonateModal from '../components/ImpersonateModal'
+// Список юзеров платформы с кнопкой «Войти как» — только super_admin
+const SuperAdminUsersSection = lazy(() => import('../sections/SuperAdminUsersSection'))
 // W5 — Программа лояльности (тиры/правила/история/обмен баллов)
 const LoyaltySection = lazy(() => import("../sections/loyalty/LoyaltySection"))
 // W5 — Запись звонков + Whisper транскрипция (модуль call_recording)
@@ -49,6 +54,8 @@ const PlatformModulesSection = lazy(() => import("../sections/PlatformModulesSec
 const CrossClinicDirectorySection = lazy(() => import("../sections/CrossClinicDirectorySection"))
 // LTV-аналитика пациентов (модуль ltv_pro)
 const LtvAnalyticsSection = lazy(() => import("../sections/ltv/LtvAnalyticsSection"))
+// Журнал безопасности — единый dashboard алертов (super_admin)
+const SecuritySection = lazy(() => import("../sections/SecuritySection"))
 import api from '../api'
 // import HelpModal from '../components/HelpModal' // ушло на /wiki
 import { BrandLogo } from "../components/BrandLogo"
@@ -135,6 +142,7 @@ function SectionLoader() {
 const NAV = [
   { key: 'home',           label: 'Обзор',        icon: 'dashboard' },
   { key: 'super_admin',    label: 'Тенанты',      icon: 'corporate_fare' },
+  { key: 'sa_users',       label: 'Пользователи', icon: 'manage_accounts' },
   { key: 'franchises',     label: 'Франшизы',     icon: 'store' },
   { key: 'billing',        label: 'Биллинг',      icon: 'receipt_long' },
   { key: 'billing_ledger', label: 'Фин. реестр',  icon: 'account_balance_wallet' },
@@ -143,6 +151,7 @@ const NAV = [
   { key: 'ai_knowledge',   label: 'База знаний AI', icon: 'library_books' },
   { key: 'ai_assistant',   label: 'AI-ассистент пациенту', icon: 'smart_toy' },
   { key: 'audit',          label: 'Аудит',        icon: 'manage_search' },
+  { key: 'security',       label: 'Безопасность', icon: 'shield' },
   { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
@@ -190,9 +199,11 @@ const NAV_GROUP_TITLES = {
 const NAV_GROUP_OF = {
   home:               'PLATFORM',
   super_admin:        'PLATFORM',
+  sa_users:           'PLATFORM',
   franchises:         'PLATFORM',
   modules_catalog:    'PLATFORM',
   roles:              'PLATFORM',
+  security:           'PLATFORM',
 
   billing:            'FINANCE',
   billing_ledger:     'FINANCE',
@@ -239,6 +250,7 @@ const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETI
 const PAGE_TITLES = {
   home:               { title: 'Главная',              subtitle: 'Сводка по платформе и состояние системы' },
   super_admin:        { title: 'Тенанты',              subtitle: 'Управление клиниками-тенантами платформы' },
+  sa_users:           { title: 'Пользователи',         subtitle: 'Все юзеры платформы · «👁 Войти как» для impersonation' },
   franchises:         { title: 'Франшизы',             subtitle: 'Сети клиник и владельцы франшиз' },
   billing:            { title: 'Биллинг',              subtitle: 'Подписки тенантов, начисления и выплаты' },
   billing_ledger:     { title: 'Финансовый реестр',    subtitle: 'Полная книга проводок по платформе' },
@@ -247,6 +259,7 @@ const PAGE_TITLES = {
   ai_knowledge:       { title: 'База знаний AI',       subtitle: 'FAQ-ответы для AI-чата пациентов' },
   ai_assistant:       { title: 'AI-ассистент пациенту', subtitle: 'Диалоги пациентов с Gemini-ассистентом + эскалация к менеджеру' },
   audit:              { title: 'Аудит',                subtitle: 'Журнал действий пользователей платформы' },
+  security:           { title: 'Безопасность',         subtitle: 'Журнал атак, brute-force, нарушений и активные блокировки IP' },
   monitoring:         { title: 'Мониторинг',           subtitle: 'Состояние сервисов и API в реальном времени' },
   ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
   webhooks:           { title: 'Вебхуки',              subtitle: 'Платформенные интеграции и события' },
@@ -8059,6 +8072,10 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   ])
 
   const visibleNav = NAV.filter(item => {
+    // Журнал безопасности — только для super_admin платформы.
+    if (item.key === 'security' && !isSuperAdmin) return false
+    // Список юзеров платформы + Войти как — только super_admin без слага.
+    if (item.key === 'sa_users' && (!isSuperAdmin || SLUG)) return false
     if (SLUG) {
       if (item.key === 'super_admin') return false
       const m = activeModules
@@ -8100,6 +8117,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       // Inline-компонент <AuditSection> сохранён ниже как fallback / источник
       // helpers (flagFromCountry, formatGeoLocation), но рендерится новый.
       case "audit": return <Suspense fallback={<SectionLoader />}><AuditLogSection token={adminToken} /></Suspense>
+      // Журнал безопасности — только для super_admin (на бэке защита, в UI доступ через nav)
+      case "security": return <Suspense fallback={<SectionLoader />}><SecuritySection token={adminToken} /></Suspense>
       case 'billing':        return <BillingSection token={adminToken} />
       case 'billing_ledger': return <Suspense fallback={<SectionLoader />}><BillingLedgerSection token={adminToken} /></Suspense>
       case 'monitoring':     return <MonitoringSection token={adminToken} />
@@ -8127,6 +8146,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'ai_knowledge':   return <Suspense fallback={<SectionLoader />}><AIKnowledgeSection token={adminToken} /></Suspense>
       case 'ai_assistant':   return <Suspense fallback={<SectionLoader />}><AiAssistantSection token={adminToken} /></Suspense>
       case 'super_admin':    return <Suspense fallback={<SectionLoader />}><PlatformSection token={adminToken} /></Suspense>
+      case 'sa_users':       return <Suspense fallback={<SectionLoader />}><SuperAdminUsersSection /></Suspense>
       case 'franchises':     return <Suspense fallback={<SectionLoader />}><FranchisesSection token={adminToken} /></Suspense>
       case 'branding':       return <Suspense fallback={<SectionLoader />}><BrandingSection token={adminToken} /></Suspense>
       case 'cms':            return <Suspense fallback={<SectionLoader />}><CMSPagesSection token={adminToken} /></Suspense>
@@ -8406,6 +8426,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
   return (
     <DSPage>
+      {/* Глобальная красная плашка impersonation (видна только когда imp=true в JWT) */}
+      <ImpersonationBanner />
       <div
         className="min-h-screen ks-app"
         style={{
