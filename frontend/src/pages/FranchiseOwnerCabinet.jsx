@@ -74,6 +74,8 @@ const LoyaltySection             = lazy(() => import('../sections/loyalty/Loyalt
 const InventorySection           = lazy(() => import('../sections/inventory/InventorySection'))
 // Module Monitoring System — health-state платных модулей тенанта
 const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
+// Глава 3 ROADMAP — Премиум-аналитика франшизы
+const FranchiseAnalyticsSection = lazy(() => import('../sections/FranchiseAnalyticsSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ const NAV_GROUPS = [
     title: 'Управление',
     items: [
       { id: 'analytics', label: 'Аналитика',   icon: 'bar_chart'             },
+      { id: 'franchise_analytics', label: 'Аналитика франшизы', icon: 'insights' },
       { id: 'ltv',       label: 'LTV пациентов', icon: 'insights'             },
       { id: 'apt_stats', label: 'Записи',      icon: 'query_stats'           },
       { id: 'royalty',   label: 'Биллинг',     icon: 'account_balance_wallet'},
@@ -157,6 +160,7 @@ const PAGE_TITLES = {
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
   reviews:    { title: 'Отзывы',           subtitle: 'Модерация публичных отзывов' },
   analytics:  { title: 'Аналитика',        subtitle: 'Drill-down по клиникам, врачам, услугам' },
+  franchise_analytics: { title: 'Аналитика франшизы', subtitle: 'KPI, когорты, bulk-тарифы и рекомендации (премиум)' },
   apt_stats:  { title: 'Записи',           subtitle: 'Статистика приёмов и расписаний' },
   royalty:    { title: 'Биллинг',          subtitle: 'Роялти, выплаты, межклиничные акты' },
   platform:   { title: 'Счета платформы',  subtitle: 'Тарифы, начисления и счета от КлиникСеть' },
@@ -2121,6 +2125,13 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       )
     }
     // svcfin01: «Биллинг сети» — финансовая модель платформы
+    if (route === 'franchise_analytics') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <FranchiseAnalyticsSection />
+        </Suspense>
+      )
+    }
     if (route === 'network_billing') {
       return <NetworkBillingSection />
     }
