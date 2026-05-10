@@ -34,37 +34,130 @@ class ShortCodeRequest(BaseModel):
 router = APIRouter(prefix="/referrals", tags=["referrals"])
 
 
+# ── Rate-limit для /confirm-by-code (фикс #9) ────────────────────────────
+# Пространство short_code — 90000 значений, угадать брутфорсом легко без
+# защиты. HMAC-вариант потребовал бы миграции схемы и доставки токена
+# админу, который сканирует код вручную — слишком инвазивно для уже
+# работающего флоу. Простая защита: ограничиваем 5 попыток в минуту с
+# одного IP/пользователя через fastapi-limiter (уже есть в проекте).
+def _confirm_code_limiter():
+    try:
+        from fastapi_limiter.depends import RateLimiter
+        return [Depends(RateLimiter(times=5, seconds=60))]
+    except Exception:
+        return []
+
+
+_CONFIRM_CODE_DEPS = _confirm_code_limiter()
+
+
+def _patient_full_name(p: dict) -> str:
+    return " ".join(filter(None, [
+        p.get("last_name"),
+        p.get("first_name"),
+        p.get("third_name"),
+    ])).strip()
+
+
+def _patient_to_match(p: dict, match_type: str, input_phone: str | None = None) -> dict:
+    from app.utils.phone import normalize_phone as _nphone
+    mis_mobile = (p.get("mobile") or "").strip()
+    mis_digits = _nphone(mis_mobile) if mis_mobile else ""
+    in_digits = _nphone(input_phone) if input_phone else ""
+    phone_mismatch = bool(in_digits) and bool(mis_digits) and (in_digits != mis_digits)
+    g = p.get("gender")
+    return {
+        "match_type": match_type,
+        "mis_patient_id": p.get("patient_id") or p.get("id"),
+        "mis_number": p.get("number"),
+        "name": _patient_full_name(p) or p.get("full_name", ""),
+        "birth_date": p.get("birth_date"),
+        "age": p.get("age"),
+        "mobile": mis_mobile,
+        "phone_mismatch": phone_mismatch,
+        "gender": ("М" if g == 1 or g == "М" else "Ж" if g == 2 or g == "Ж" else None),
+        "has_account": bool(p.get("has_account")),
+    }
+
+
 @router.get("/verify-patient")
 async def verify_patient(
-    phone: str,
+    phone: str | None = None,
+    full_name: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Поиск пациента в МИС Renovatio по телефону и/или ФИО.
+
+    Возвращает список совпадений: каждое с match_type (phone/name) и phone_mismatch
+    если найден по ФИО, но в МИС записан другой телефон. Дубликаты по patient_id убираются.
     """
-    Проверить наличие пациента в МИС Renovatio по номеру телефона.
-    Возвращает данные пациента если найден, иначе found=false.
-    """
-    from app.services.mis_client import find_patient_by_phone
+    from app.services.mis_client import find_patient_by_phone, _post as _mis_post
+
+    if not phone and not full_name:
+        return {"matches": [], "error": "Укажите телефон или ФИО"}
+
+    matches: list[dict] = []
+    seen_ids: set = set()
+
+    # 1) Поиск по телефону
+    if phone:
+        try:
+            p = await find_patient_by_phone(phone)
+            if p:
+                pid = p.get("patient_id") or p.get("id")
+                if pid not in seen_ids:
+                    seen_ids.add(pid)
+                    matches.append(_patient_to_match(p, "phone", input_phone=phone))
+        except Exception:
+            return {"matches": [], "error": "МИС недоступна"}
+
+    # 2) Поиск по ФИО (Renovatio getPatient принимает last/first/third name)
+    if full_name and full_name.strip():
+        parts = full_name.strip().split()
+        kwargs = {}
+        if len(parts) >= 1: kwargs["last_name"] = parts[0]
+        if len(parts) >= 2: kwargs["first_name"] = parts[1]
+        if len(parts) >= 3: kwargs["third_name"] = parts[2]
+        try:
+            r = await _mis_post("getPatient", **kwargs)
+            if r.get("error") == 0 and r.get("data"):
+                data = r["data"]
+                items = data if isinstance(data, list) else [data]
+                for p in items:
+                    pid = p.get("patient_id") or p.get("id")
+                    if pid in seen_ids: continue
+                    seen_ids.add(pid)
+                    matches.append(_patient_to_match(p, "name", input_phone=phone))
+                    if len(matches) >= 8:
+                        break
+        except Exception:
+            pass
+
+    return {"matches": matches}
+
+
+class CreatePatientInMisRequest(BaseModel):
+    phone: str
+    full_name: str = ""
+
+
+@router.post("/mis-add-patient")
+async def mis_add_patient(
+    body: CreatePatientInMisRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Создать нового пациента в МИС (addPatient). Возвращает patient_id."""
+    from app.services.mis_client import add_patient
+    if not body.phone:
+        raise HTTPException(status_code=400, detail="Укажите телефон")
     try:
-        patient = await find_patient_by_phone(phone)
+        new = await add_patient(body.phone, full_name=body.full_name)
     except Exception:
-        return {"found": False, "error": "МИС недоступна"}
-
-    if not patient:
-        return {"found": False}
-
-    return {
-        "found": True,
-        "mis_patient_id": patient.get("patient_id"),
-        "mis_number": patient.get("number"),
-        "name": " ".join(filter(None, [
-            patient.get("last_name"),
-            patient.get("first_name"),
-            patient.get("third_name"),
-        ])).strip(),
-        "birth_date": patient.get("birth_date"),
-        "gender": "М" if patient.get("gender") == 1 else "Ж" if patient.get("gender") == 2 else None,
-    }
+        raise HTTPException(status_code=502, detail="МИС недоступна")
+    if not new or not new.get("patient_id"):
+        raise HTTPException(status_code=502, detail="МИС не вернул ID — пациент не создан")
+    return {"mis_patient_id": int(new["patient_id"])}
 
 
 @router.post("/", response_model=ReferralResponse, dependencies=[Depends(enforce_region_lock)])
@@ -87,6 +180,15 @@ async def create_new_referral(
         _tenant_slug = _tenant.slug if _tenant else None
     _base_url = request.headers.get("origin") or request.headers.get("referer", "").rstrip("/").rsplit("/", 2)[0] or None
 
+    # Validation по типу направления
+    _rtype = (data.referral_type or "service").lower()
+    if _rtype == "service" and not data.service_id:
+        raise HTTPException(status_code=400, detail="Для типа 'service' нужен service_id")
+    if _rtype == "doctor" and not data.target_doctor_id:
+        raise HTTPException(status_code=400, detail="Для типа 'doctor' нужен target_doctor_id")
+    if _rtype == "lab" and not (data.lab_tests and data.lab_tests.strip()):
+        raise HTTPException(status_code=400, detail="Для типа 'lab' укажите список анализов")
+
     referral = await create_referral(
         db=db,
         from_clinic_id=from_clinic_id,
@@ -102,6 +204,9 @@ async def create_new_referral(
         tenant_id=current_user.tenant_id,
         tenant_slug=_tenant_slug,
         base_url=_base_url,
+        referral_type=_rtype,
+        target_doctor_id=data.target_doctor_id,
+        lab_tests=data.lab_tests,
     )
     await _log(db, current_user, "Создано направление", "referral", referral.id)
     if current_user.tenant_id:
@@ -110,7 +215,11 @@ async def create_new_referral(
     await db.commit()
     return await _enrich_referral(referral, db)
 
-@router.post("/confirm-by-code", response_model=ReferralResponse, dependencies=[Depends(enforce_region_lock)])
+@router.post(
+    "/confirm-by-code",
+    response_model=ReferralResponse,
+    dependencies=[Depends(enforce_region_lock), *_CONFIRM_CODE_DEPS],
+)
 async def confirm_by_short_code(
     data: ShortCodeRequest,
     current_user: User = Depends(get_current_user),
@@ -308,7 +417,14 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
         if referral.from_clinic_id else None
     )
     to_clinic = (await db.execute(select(Clinic).where(Clinic.id == referral.to_clinic_id))).scalar_one_or_none()
-    service = (await db.execute(select(Service).where(Service.id == referral.service_id))).scalar_one_or_none()
+    service = (await db.execute(select(Service).where(Service.id == referral.service_id))).scalar_one_or_none() if referral.service_id else None
+    # Целевой врач (для type=doctor)
+    target_doctor_name = None
+    if getattr(referral, "target_doctor_id", None):
+        from app.models.doctor import Doctor as _Doctor
+        td = (await db.execute(select(_Doctor).where(_Doctor.id == referral.target_doctor_id))).scalar_one_or_none()
+        if td:
+            target_doctor_name = td.full_name
     # Берём только основной бонус сотрудника (REGULAR) — комиссионный не показываем
     bonus_result = await db.execute(
         select(Bonus).where(
@@ -342,6 +458,10 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
         expires_at=referral.expires_at,
         confirmed_at=referral.confirmed_at,
         cancelled_at=referral.cancelled_at,
+        referral_type=getattr(referral, "referral_type", "service") or "service",
+        target_doctor_id=getattr(referral, "target_doctor_id", None),
+        target_doctor_name=target_doctor_name,
+        lab_tests=getattr(referral, "lab_tests", None),
         from_clinic_name=from_clinic.name if from_clinic else None,
         to_clinic_name=to_clinic.name if to_clinic else None,
         service_name=service.name if service else None,

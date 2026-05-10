@@ -27,6 +27,9 @@ async def list_clinics(
     q = select(Clinic).order_by(Clinic.name)
     if current_user.tenant_id is not None:
         q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    # Manager со clinic_id видит только свою клинику; топ-руководитель сети — все
+    if current_user.clinic_id is not None:
+        q = q.where(Clinic.id == current_user.clinic_id)
     # Управляющий клиники видит только свою клинику
     if current_user.clinic_id is not None:
         q = q.where(Clinic.id == current_user.clinic_id)
@@ -44,6 +47,9 @@ async def update_clinic(
     q = select(Clinic).where(Clinic.id == clinic_id)
     if current_user.tenant_id is not None:
         q = q.where(Clinic.tenant_id == current_user.tenant_id)
+    # Manager со clinic_id видит только свою клинику; топ-руководитель сети — все
+    if current_user.clinic_id is not None:
+        q = q.where(Clinic.id == current_user.clinic_id)
     result = await db.execute(q)
     clinic = result.scalar_one_or_none()
     if not clinic:

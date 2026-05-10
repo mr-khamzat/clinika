@@ -33,7 +33,7 @@ export default function InventoryStocksSection() {
       setStocks(res.data?.stocks || [])
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Не удалось загрузить остатки'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setLoading(false)
     }
@@ -221,11 +221,11 @@ function InventoryCountWizard({ open, onClose, clinics, onDone }) {
           comment: comment || null,
         },
       })
-      toast?.({ kind: 'success', text: 'Инвентаризация сохранена' })
+      toast?.('Инвентаризация сохранена', 'success')
       onDone?.()
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка сохранения'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setSubmitting(false)
     }

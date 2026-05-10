@@ -210,34 +210,73 @@ async def list_all_partner_doctors(
     return out
 
 
+_STAFF_ROLES_LIST = (
+    UserRole.DOCTOR, UserRole.REG, UserRole.NURSE,
+    UserRole.MANAGER, UserRole.RECRUITER,
+    UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR,
+    
+)
+_ROLE_LABELS = {
+    "doctor":              ("Врач",                "doctor"),
+    "reg":                 ("Регистратор",         "reg"),
+    "nurse":               ("Медсестра",           "nurse"),
+    "manager":             ("Руководитель",        "manager"),
+    "recruiter":           ("Рекрутер",            "recruiter"),
+    "partner_doctor":      ("Партнёр-врач",        "partner"),
+    "visiting_doctor":     ("Приезжий врач",       "visiting"),
+}
+
+
 @router.get("/all-external-doctors")
 async def list_all_external_doctors(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    """Приезжие врачи тенанта."""
-    all_doctors = (await db.execute(
-        select(User).where(
-            User.tenant_id == current_user.tenant_id,
-            User.role == UserRole.VISITING_DOCTOR,
-        ).order_by(User.created_at.desc())
-    )).scalars().all()
+    """Все сотрудники в скоупе менеджера.
+
+    Если у менеджера задан clinic_id — он видит только сотрудников своей клиники
+    (по User.clinic_id ИЛИ через DoctorClinicAccess для visiting/partner).
+    Если clinic_id is None (топ-руководитель сети / franchise) — видит всех.
+    """
+    q = select(User).where(
+        User.tenant_id == current_user.tenant_id,
+        User.role.in_(_STAFF_ROLES_LIST),
+    )
+    if current_user.clinic_id:
+        # Подзапрос: у каких visiting/partner-докторов есть доступ к моей клинике
+        from sqlalchemy import or_
+        acc_subq = select(DoctorClinicAccess.doctor_id).where(
+            DoctorClinicAccess.clinic_id == current_user.clinic_id
+        )
+        q = q.where(or_(
+            User.clinic_id == current_user.clinic_id,
+            User.id.in_(acc_subq),
+        ))
+    all_users = (await db.execute(q.order_by(User.created_at.desc()))).scalars().all()
 
     out = []
-    for doc in all_doctors:
+    for doc in all_users:
         recruiter_name = None
         if doc.recruiter_id:
             recruiter = await db.get(User, doc.recruiter_id)
             recruiter_name = recruiter.full_name if recruiter else "—"
 
-        acc_res = await db.execute(
-            select(DoctorClinicAccess, Clinic)
-            .join(Clinic, DoctorClinicAccess.clinic_id == Clinic.id)
-            .where(DoctorClinicAccess.doctor_id == doc.id)
-        )
-        clinic_list = [{"id": str(c.id), "name": c.name} for _, c in acc_res.all()]
+        # Клиники: для visiting/partner — через DoctorClinicAccess; для остальных — основная clinic_id
+        clinic_list = []
+        if doc.role in (UserRole.VISITING_DOCTOR, UserRole.PARTNER_DOCTOR):
+            acc_res = await db.execute(
+                select(DoctorClinicAccess, Clinic)
+                .join(Clinic, DoctorClinicAccess.clinic_id == Clinic.id)
+                .where(DoctorClinicAccess.doctor_id == doc.id)
+            )
+            clinic_list = [{"id": str(c.id), "name": c.name} for _, c in acc_res.all()]
+        elif doc.clinic_id:
+            cl = await db.get(Clinic, doc.clinic_id)
+            if cl:
+                clinic_list = [{"id": str(cl.id), "name": cl.name}]
 
-        doc_type, type_label = "visiting", "Приезжий"
+        role_str = doc.role.value if hasattr(doc.role, "value") else str(doc.role)
+        type_label, doc_type = _ROLE_LABELS.get(role_str, (role_str, role_str))
 
         out.append({
             "id":             str(doc.id),
@@ -250,6 +289,7 @@ async def list_all_external_doctors(
             "is_active":      doc.is_active,
             "created_at":     doc.created_at.isoformat(),
             "clinics":        clinic_list,
+            "role":           role_str,
             "type":           doc_type,
             "type_label":     type_label,
             "recruiter_name": recruiter_name,

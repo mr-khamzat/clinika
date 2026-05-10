@@ -20,7 +20,7 @@ from app.models.commercial import CommercialModule
 
 async def seed_ltv_module():
     """Создаёт запись модуля ltv_pro, если её ещё нет."""
-    db_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@postgres:5432/clinika")
+    db_url = os.environ.get("DATABASE_URL", "postgresql+asyncpg://clinika:clinika_pass@clinika-db:5432/clinika")
     engine = create_async_engine(db_url)
     Session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 

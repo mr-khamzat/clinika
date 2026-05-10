@@ -44,7 +44,8 @@ if (typeof document !== 'undefined' && SLUG) {
     const urlT = new URLSearchParams(window.location.search).get('t')
     const urlS = new URLSearchParams(window.location.search).get('s')
     const lsS = (() => { try { return localStorage.getItem('clinika_patient_session') } catch { return null } })()
-    if (urlS) params.set('s', urlS)
+    // urlS=='present' — маркер, реальный токен в localStorage; берём его, не URL-маркер.
+    if (urlS && urlS !== 'present') params.set('s', urlS)
     else if (lsS) params.set('s', lsS)
     else if (urlT) params.set('t', urlT)
     const link = document.createElement('link')
@@ -273,12 +274,53 @@ const AD_THEMES = [
   { bg: 'linear-gradient(135deg,#7c1900,#ff6a00)', glow: 'rgba(255,106,0,.4)'  },
 ]
 function AdBanner({ ads, idx, setIdx }) {
+  // Регистрируем impression при показе нового ad — с idempotency-key,
+  // чтобы reload или re-render не создавал дубликаты в БД.
+  useEffect(() => {
+    const ad = ads && ads[idx]
+    if (!ad) return
+    // Per-session-uniq key: ad.id + dayKey + случайная сессионная соль
+    const sessKey = (() => {
+      try {
+        let k = sessionStorage.getItem('clinika_ad_sess')
+        if (!k) {
+          k = (crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '_' + Math.random().toString(36).slice(2)))
+          sessionStorage.setItem('clinika_ad_sess', k)
+        }
+        return k
+      } catch { return 'anon' }
+    })()
+    const dayKey = new Date().toISOString().slice(0, 10)
+    const idem = `imp:${ad.id}:${dayKey}:${sessKey}`
+    // Защита от двойной отправки внутри одного mount
+    try {
+      const sent = sessionStorage.getItem('clinika_ad_imp_' + ad.id + '_' + dayKey)
+      if (sent) return
+      sessionStorage.setItem('clinika_ad_imp_' + ad.id + '_' + dayKey, '1')
+    } catch {}
+    axios.post(API + '/ads/' + ad.id + '/event', {
+      event_type: 'impression',
+      idempotency_key: idem,
+    }).catch(() => {})
+  }, [ads, idx])
+
   if (!ads || ads.length === 0) return null
   const ad = ads[idx]
   const th = AD_THEMES[idx % AD_THEMES.length]
+  const onAdClick = () => {
+    if (ad.link) window.open(ad.link, '_blank')
+    const dayKey = new Date().toISOString().slice(0, 10)
+    const sessKey = (() => { try { return sessionStorage.getItem('clinika_ad_sess') || 'anon' } catch { return 'anon' } })()
+    // Click обычно идемпотентен, но всё равно ставим уникальный per-click ключ
+    const idem = `clk:${ad.id}:${dayKey}:${sessKey}:${Date.now()}`
+    axios.post(API + '/ads/' + ad.id + '/event', {
+      event_type: 'click',
+      idempotency_key: idem,
+    }).catch(() => {})
+  }
   return (
     <div key={idx}
-      onClick={() => { if(ad.link) window.open(ad.link,'_blank'); axios.post(API+'/ads/'+ad.id+'/event',{event_type:'click'}).catch(()=>{}) }}
+      onClick={onAdClick}
       className="rounded-2xl p-4 relative overflow-hidden cursor-pointer"
       style={{ background: th.bg, boxShadow: `0 4px 24px ${th.glow}` }}>
       <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
@@ -1902,6 +1944,217 @@ function HealthHub({ sessionToken, phone }) {
   )
 }
 
+// ===== БЛОК: PrivacyTab — вкладка «Я» (152-ФЗ ст. 14, 21) =====
+// Право пациента на доступ к своим ПД (экспорт) и на удаление данных (анонимизация).
+// Кнопки:
+//   1) «Скачать мои данные» — window.open экспорта (JSON) от бэкенда.
+//   2) «Удалить мои данные» — модалка с тройным подтверждением → DELETE /patient/forget-personal-data.
+function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
+  const [step, setStep] = useState(0) // 0 = закрыто, 1 = warning, 2 = type confirm, 3 = final, 4 = working
+  const [confirmText, setConfirmText] = useState('')
+  const [err, setErr] = useState('')
+  const REQUIRED = 'УДАЛИТЬ'
+
+  const handleDownload = () => {
+    if (!sessionToken) return
+    const url = `${API}/patient/export-personal-data?t=${encodeURIComponent(sessionToken)}`
+    // Браузер сам скачает по Content-Disposition: attachment
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const handleForget = async () => {
+    setStep(4); setErr('')
+    try {
+      await axios.delete(`${API}/patient/forget-personal-data`, { params: { t: sessionToken } })
+      // localStorage чистим + редирект на лендинг
+      try { localStorage.removeItem(SESSION_KEY) } catch {}
+      try { localStorage.removeItem(TOKEN_KEY) } catch {}
+      try { localStorage.removeItem(REF_KEY) } catch {}
+      if (typeof onLogout === 'function') onLogout()
+      // Редирект на лендинг тенанта
+      try { window.location.href = `/${SLUG || ''}` } catch { window.location.href = '/' }
+    } catch (e) {
+      setErr(e?.response?.data?.detail || e?.message || 'Ошибка удаления')
+      setStep(2)
+    }
+  }
+
+  return (
+    <div className="space-y-4 tab-enter" data-testid="privacy-tab-152fz">
+      {/* Шапка профиля */}
+      <div className="rounded-3xl p-5" style={{ background: 'linear-gradient(135deg,#0A2342 0%,#1565C0 100%)', color: '#fff' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: 'rgba(255,255,255,.15)' }}>
+            <span className="material-symbols-outlined text-white text-2xl">person</span>
+          </div>
+          <div className="min-w-0">
+            <p className="font-bold text-lg leading-tight truncate">{patientName || 'Пациент'}</p>
+            <p className="text-blue-200 text-sm">{phone || '—'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Блок 152-ФЗ */}
+      <div className="rounded-3xl p-5" style={{ background: '#fff', border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>policy</span>
+          <h2 className="font-bold text-gray-800">Мои права (152-ФЗ)</h2>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          В соответствии со ст. 14 и ст. 21 Федерального закона №152-ФЗ
+          «О персональных данных» вы имеете право получить копию своих
+          персональных данных и потребовать их удаления.
+        </p>
+
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={handleDownload}
+            data-testid="btn-export-152fz"
+            className="w-full h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 transition active:opacity-80"
+            style={{ background: '#E0F7FA', color: '#00838F' }}
+          >
+            <span className="material-symbols-outlined text-lg">download</span>
+            Скачать мои данные
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setStep(1); setConfirmText(''); setErr('') }}
+            data-testid="btn-forget-152fz"
+            className="w-full h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 transition active:opacity-80"
+            style={{ background: '#FFEBEE', color: '#B71C1C' }}
+          >
+            <span className="material-symbols-outlined text-lg">delete_forever</span>
+            Удалить мои данные
+          </button>
+        </div>
+
+        <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+          «Скачать» — JSON-файл со всеми вашими данными в нашей системе:
+          профиль, согласия, направления, записи, чаты, документы.
+          «Удалить» — анонимизация: имя, телефон, дата рождения обнуляются
+          необратимо. Медицинская карта в МИС остаётся (внешняя система).
+        </p>
+      </div>
+
+      {/* Кнопка выхода */}
+      {typeof onLogout === 'function' && (
+        <button
+          type="button"
+          onClick={onLogout}
+          className="w-full h-12 rounded-2xl font-semibold flex items-center justify-center gap-2"
+          style={{ background: '#fff', color: '#374151', border: '1px solid rgba(0,0,0,.08)' }}
+        >
+          <span className="material-symbols-outlined text-lg">logout</span>
+          Выйти из аккаунта
+        </button>
+      )}
+
+      {/* Модалка удаления — три шага */}
+      {step > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          style={{ background: 'rgba(0,0,0,.55)' }}
+          onClick={() => { if (step !== 4) setStep(0) }}
+        >
+          <div
+            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5"
+            onClick={e => e.stopPropagation()}
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 20px)' }}
+          >
+            {step === 1 && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>warning</span>
+                  <h3 className="text-lg font-bold text-gray-900">Удаление данных — шаг 1 из 3</h3>
+                </div>
+                <p className="text-sm text-gray-700 leading-relaxed mb-3">
+                  Внимание! Эта операция <b>необратима</b>. Будут анонимизированы:
+                </p>
+                <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1 mb-3">
+                  <li>имя, телефон, e-mail, дата рождения</li>
+                  <li>история согласий получит запись «forgotten»</li>
+                  <li>все ваши сессии будут отозваны</li>
+                </ul>
+                <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                  Медицинская карта в МИС остаётся (это внешняя система клиники).
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setStep(0)} className="flex-1 h-11 rounded-xl font-semibold" style={{ background: '#F3F4F6', color: '#111827' }}>Отмена</button>
+                  <button onClick={() => setStep(2)} className="flex-1 h-11 rounded-xl font-semibold" style={{ background: '#B71C1C', color: '#fff' }}>Продолжить</button>
+                </div>
+              </>
+            )}
+            {step === 2 && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>edit</span>
+                  <h3 className="text-lg font-bold text-gray-900">Подтверждение — шаг 2 из 3</h3>
+                </div>
+                <p className="text-sm text-gray-700 mb-3">
+                  Чтобы продолжить, введите слово <code className="px-1 py-0.5 rounded bg-gray-100 font-mono text-red-700">{REQUIRED}</code> в поле ниже:
+                </p>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={e => setConfirmText(e.target.value)}
+                  placeholder={REQUIRED}
+                  data-testid="input-confirm-delete"
+                  className="w-full h-11 px-3 rounded-xl text-sm focus:outline-none focus:ring-2"
+                  style={{ background: '#F9FAFB', border: '1.5px solid rgba(0,0,0,.08)' }}
+                />
+                {err && <p className="text-xs text-red-600 mt-2">{err}</p>}
+                <div className="flex gap-2 mt-4">
+                  <button onClick={() => setStep(0)} className="flex-1 h-11 rounded-xl font-semibold" style={{ background: '#F3F4F6', color: '#111827' }}>Отмена</button>
+                  <button
+                    onClick={() => setStep(3)}
+                    disabled={confirmText.trim() !== REQUIRED}
+                    className="flex-1 h-11 rounded-xl font-semibold disabled:opacity-40"
+                    style={{ background: '#B71C1C', color: '#fff' }}
+                  >
+                    Далее
+                  </button>
+                </div>
+              </>
+            )}
+            {step === 3 && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>delete_forever</span>
+                  <h3 className="text-lg font-bold text-gray-900">Финальное подтверждение — 3 из 3</h3>
+                </div>
+                <p className="text-sm text-gray-700 mb-4">
+                  Нажимая «Удалить», вы подтверждаете, что понимаете
+                  необратимые последствия. После выполнения вы будете
+                  перенаправлены на главную страницу.
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setStep(0)} className="flex-1 h-11 rounded-xl font-semibold" style={{ background: '#F3F4F6', color: '#111827' }}>Отмена</button>
+                  <button
+                    onClick={handleForget}
+                    data-testid="btn-final-delete"
+                    className="flex-1 h-11 rounded-xl font-semibold"
+                    style={{ background: '#B71C1C', color: '#fff' }}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </>
+            )}
+            {step === 4 && (
+              <div className="py-6 text-center">
+                <div className="w-10 h-10 mx-auto border-2 border-red-700 border-t-transparent rounded-full animate-spin mb-3" />
+                <p className="text-sm text-gray-700">Удаление данных…</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function PatientCabinet() {
@@ -1929,6 +2182,22 @@ export default function PatientCabinet() {
   const [familyOpen, setFamilyOpen] = useState(false)
   const [familyList, setFamilyList] = useState([])
   const [activeProfilePhone, setActiveProfilePhone] = useState(null) // телефон активного профиля
+
+  // ── Realtime listener для входящих видеоприёмов (вынесено вверх — хуки до early return) ──
+  // patient_phone берётся ниже из data; пока data=null хук получит phone=undefined и WS не откроет.
+  const callToken = useMemo(() => {
+    try {
+      return localStorage.getItem(SESSION_KEY) || localStorage.getItem(TOKEN_KEY) || null
+    } catch { return null }
+  }, [data])
+  const _callPhone = data
+    ? (data?.type === 'appointment' ? data.patient_phone : data?.patient_phone)
+    : null
+  const { incomingCall, dismissCall } = usePatientCallListener({
+    phone: _callPhone,
+    token: callToken,
+    apiBase: API_BASE,
+  })
 
   useEffect(() => {
     registerSW()
@@ -1961,8 +2230,20 @@ export default function PatientCabinet() {
     const urlSession = new URLSearchParams(urlSearch).get('s')
 
     // Загрузка рекламы — независимо от способа входа
-    const loadAds = () => axios.get(`${API}/ads/active`, { params: { slug: SLUG, ad_type: 'banner' } })
-      .then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    const loadAds = () => {
+      const params = { slug: SLUG, ad_type: 'banner' }
+      try {
+        const sess = localStorage.getItem(SESSION_KEY)
+        if (sess) params.session_token = sess
+      } catch {}
+      // Если data уже загружена — добавим phone
+      try {
+        const ph = (data?.patient_phone) || null
+        if (ph) params.phone = ph
+      } catch {}
+      return axios.get(`${API}/ads/active`, { params })
+        .then(r => setBannerAds(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    }
 
     // 1) Авто-вход по URL с patient_token (QR-сценарий): /{slug}/p/{id}?t={token}
     if (urlMatch && urlToken) {
@@ -1974,13 +2255,16 @@ export default function PatientCabinet() {
       return
     }
 
-    // 2) Авто-вход по session_token из URL (опционально)
-    if (urlSession) {
+    // 2) Авто-вход по session_token из URL (опционально, legacy-сценарий).
+    // Маркер "?s=present" — это уже залогиненный пациент после ensureSession,
+    // токен реально лежит в localStorage. Не интерпретируем как session_token.
+    if (urlSession && urlSession !== 'present') {
       localStorage.setItem(SESSION_KEY, urlSession)
       restoreFromSession(urlSession); loadAds(); return
     }
 
-    // 3) Автологин по сохранённой long-lived session (PWA-ярлык, повторный заход)
+    // 3) Автологин по сохранённой long-lived session (PWA-ярлык, повторный заход).
+    // Сюда же попадает случай urlSession === 'present' — реальный токен из localStorage.
     const session = localStorage.getItem(SESSION_KEY)
     if (session) {
       restoreFromSession(session); loadAds(); return
@@ -1997,9 +2281,11 @@ export default function PatientCabinet() {
   }, [])
 
   const ensureSession = async (token) => {
+    // ВАЖНО: в URL храним только маркер «s=present», сам session_token — только в localStorage.
+    // Это убирает токен из window.location, истории браузера, рефереров и логов сервера.
     if (localStorage.getItem(SESSION_KEY)) {
       updateManifestStartUrl(localStorage.getItem(SESSION_KEY))
-      try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(localStorage.getItem(SESSION_KEY))}`) } catch {}
+      try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
       return
     }
     try {
@@ -2008,7 +2294,7 @@ export default function PatientCabinet() {
       if (s) {
         localStorage.setItem(SESSION_KEY, s)
         updateManifestStartUrl(s)
-        try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(s)}`) } catch {}
+        try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
       }
     } catch {}
   }
@@ -2044,7 +2330,7 @@ export default function PatientCabinet() {
         localStorage.setItem(REF_KEY, r.data.referral_id)
       }
       updateManifestStartUrl(sessionToken)
-      try { window.history.replaceState(null, '', `/${SLUG}/p?s=${encodeURIComponent(sessionToken)}`) } catch {}
+      try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
     } catch (e) {
       if (e.response?.status === 401) {
         localStorage.removeItem(SESSION_KEY)
@@ -2166,23 +2452,10 @@ export default function PatientCabinet() {
         { key: 'health',       icon: 'health_and_safety',   label: 'Здоровье'   },
         { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
         { key: 'support',      icon: 'chat_bubble',         label: 'Чат'        },
+        { key: 'me',           icon: 'account_circle',      label: 'Я'          },
       ]
 
   const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
-
-  // ── Realtime listener для входящих видеоприёмов (Zoom-стиль) ───────────
-  // Хук читает session/patient токен из localStorage один раз при монтировании
-  // ЛК после загрузки данных (patient_phone уже есть → WS открывается).
-  const callToken = useMemo(() => {
-    try {
-      return localStorage.getItem(SESSION_KEY) || localStorage.getItem(TOKEN_KEY) || null
-    } catch { return null }
-  }, [data])
-  const { incomingCall, dismissCall } = usePatientCallListener({
-    phone: patient_phone,
-    token: callToken,
-    apiBase: API_BASE,
-  })
 
   return (
     <>
@@ -2721,6 +2994,16 @@ export default function PatientCabinet() {
             </Suspense>
           </div>
         )}
+
+        {/* ── ME — профиль и права 152-ФЗ (экспорт/удаление ПД) ── */}
+        {tab === 'me' && !data?.type && (
+          <PrivacyTab
+            sessionToken={localStorage.getItem(SESSION_KEY)}
+            phone={patient_phone}
+            patientName={patient_name}
+            onLogout={handleLogout}
+          />
+        )}
       </div>
 
       {/* ── Bottom Navigation ── */}
@@ -2778,9 +3061,106 @@ export default function PatientCabinet() {
 }
 
 // ── Семейный аккаунт: модалка ────────────────────────────────────────────────
+
+// ── Подсказки членов семьи из МИС Renovatio (по parent_id) ──
+function MisFamilySuggestions({ ownerPhone, onAdd }) {
+  const [items, setItems] = useState([])
+  const [loaded, setLoaded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [info, setInfo] = useState('')
+  const [adding, setAdding] = useState(null)
+
+  const load = async () => {
+    setBusy(true); setInfo('')
+    try {
+      const session = localStorage.getItem('clinika_patient_session')
+      if (!session) { setInfo('Войдите по коду в кабинет, чтобы тянуть из МИС'); setBusy(false); return }
+      const r = await axios.get(`${API}/patient/family/mis-suggestions`, { params: { t: session } })
+      setItems(Array.isArray(r.data?.suggestions) ? r.data.suggestions : [])
+      if (r.data?.info) setInfo(r.data.info)
+      setLoaded(true)
+    } catch (e) {
+      setInfo('Не удалось загрузить из МИС')
+    }
+    setBusy(false)
+  }
+
+  const addOne = async (s) => {
+    setAdding(s.mis_patient_id)
+    try {
+      const session = localStorage.getItem('clinika_patient_session')
+      await axios.post(`${API}/patient/family/add`,
+        { phone: s.phone, name: s.name, relation: s.relation_guess },
+        { params: { t: session } }
+      )
+      onAdd && onAdd()
+      // Помечаем как добавленный
+      setItems(prev => prev.map(x => x.mis_patient_id === s.mis_patient_id ? { ...x, already_added: true } : x))
+    } catch (e) {
+      // 409 — уже добавлен
+      if (e.response?.status === 409) {
+        setItems(prev => prev.map(x => x.mis_patient_id === s.mis_patient_id ? { ...x, already_added: true } : x))
+      }
+    }
+    setAdding(null)
+  }
+
+  if (!loaded && !busy) {
+    return (
+      <Button variant="secondary" onClick={load} className="w-full mb-2"
+        style={{ background:'#EFF6FF', color:'#1D4ED8', borderColor:'#BFDBFE' }}>
+        🔍 Найти семью в МИС автоматически
+      </Button>
+    )
+  }
+  if (busy) return <div className="text-xs text-gray-500 text-center py-2">Ищем в МИС…</div>
+  if (!items.length) {
+    return (
+      <div className="rounded-xl p-3 mb-3 text-center" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
+        <p className="text-xs text-gray-500">{info || 'В МИС связанных пациентов не найдено'}</p>
+        <button onClick={() => { setLoaded(false); setItems([]) }} className="text-[11px] text-blue-600 mt-1">Скрыть</button>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-2xl p-3 space-y-2 mb-3" style={{ background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-sky-700">Найдено в МИС: {items.length}</p>
+        <button onClick={() => { setLoaded(false); setItems([]) }} className="text-[11px] text-sky-600">Скрыть</button>
+      </div>
+      {items.map(s => (
+        <div key={s.mis_patient_id} className="rounded-xl p-2.5 flex items-center gap-2" style={{ background:'#fff', border:'1px solid #E0F2FE' }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+            style={{ background:'linear-gradient(135deg,#0EA5E9,#0369A1)' }}>
+            {(s.name || '?').slice(0,2).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-gray-800 truncate">{s.name || s.phone}</p>
+            <p className="text-[11px] text-gray-500">
+              {s.relation_guess && <span className="font-semibold text-sky-700">{s.relation_guess}</span>}
+              {s.relation_guess && ' · '}
+              {s.phone}{s.age ? ` · ${s.age}` : ''}
+            </p>
+          </div>
+          {s.already_added ? (
+            <span className="text-[11px] font-semibold text-emerald-600 px-2">✓ В списке</span>
+          ) : (
+            <button onClick={() => addOne(s)} disabled={adding === s.mis_patient_id}
+              className="text-[11px] font-bold h-7 px-3 rounded-lg text-white"
+              style={{ background:'linear-gradient(135deg,#0EA5E9,#0369A1)' }}>
+              {adding === s.mis_patient_id ? '...' : '+ Добавить'}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwitch }) {
   // Замена window.confirm на Modal
   const { confirm, ConfirmHost } = useConfirm()
+  const { toast } = useToast()
   const [phone, setPhone] = useState('+7')
   const [name, setName] = useState('')
   const [relation, setRelation] = useState('')
@@ -2820,9 +3200,22 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
     if (!(await confirm('Удалить из списка?', { danger: true, okText: 'Удалить' }))) return
     try {
       const session = localStorage.getItem('clinika_patient_session')
-      await axios.delete(`${API}/patient/family/${id}`, { params: { t: session } })
+      const r = await axios.delete(`${API}/patient/family/${id}`, { params: { t: session } })
+      if (r.status === 200) {
+        toast && toast('Удалено', 'success')
+      }
       onChanged && onChanged()
-    } catch {}
+    } catch (e) {
+      const status = e.response?.status
+      const detail = e.response?.data?.detail
+      if (status === 404) {
+        if (toast) toast('Эту запись добавил другой пользователь — попросите его удалить со своей стороны', 'warn', 6000)
+      } else if (status === 401) {
+        if (toast) toast('Сессия истекла, перезайдите', 'warn')
+      } else {
+        if (toast) toast(detail || 'Не удалось удалить', 'error')
+      }
+    }
   }
 
   async function doSwitch() {
@@ -2873,6 +3266,9 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
           </div>
         )}
 
+        {/* Подсказка из МИС — пациенты, связанные через parent_id */}
+        <MisFamilySuggestions ownerPhone={ownerPhone} onAdd={onChanged} />
+
         {/* Add form */}
         {showAdd ? (
           <div className="rounded-2xl p-3 space-y-2 mb-3" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
@@ -2891,7 +3287,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
           </div>
         ) : (
           <Button variant="secondary" onClick={() => setShowAdd(true)} className="w-full mb-3">
-            + Добавить члена семьи
+            + Добавить вручную
           </Button>
         )}
 

@@ -42,7 +42,7 @@ async def seed_sms_marketing_module() -> None:
     """Создаёт или обновляет запись модуля sms_marketing."""
     db_url = os.environ.get(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@postgres:5432/clinika",
+        "postgresql+asyncpg://clinika:clinika_pass@clinika-db:5432/clinika",
     )
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)

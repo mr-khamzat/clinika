@@ -44,6 +44,8 @@ async def list_service_categories(
     # Tenant isolation: super_admin (tenant_id is None) видит всё
     if current_user.tenant_id is not None:
         filters.append(Service.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        filters.append(Service.clinic_id == current_user.clinic_id)
     if clinic_id:
         filters.append(Service.clinic_id == clinic_id)
     result = await db.execute(
@@ -75,6 +77,8 @@ async def list_services(
     # Tenant isolation
     if current_user.tenant_id is not None:
         filters.append(Service.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        filters.append(Service.clinic_id == current_user.clinic_id)
     if clinic_id: filters.append(Service.clinic_id == clinic_id)
     if category is not None:
         filters.append(Service.category.is_(None) if category == "Без категории" else Service.category == category)
@@ -209,6 +213,8 @@ async def set_category_bonus(
     # Tenant isolation: bulk-update только в рамках своего тенанта
     if current_user.tenant_id is not None:
         filters.append(Service.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        filters.append(Service.clinic_id == current_user.clinic_id)
     if body.clinic_id: filters.append(Service.clinic_id == body.clinic_id)
     await db.execute(sa_update(Service).where(and_(*filters)).values(bonus_amount=body.bonus_amount))
     await db.commit()

@@ -138,10 +138,48 @@ function EmptyState({ icon, text }) {
   )
 }
 
+
+// ── Timeline item (Уровень 1: автоматическая хронология) ───────────────────
+function TimelineItem({ it }) {
+  const colors = {
+    referral:    { bg: '#E0F2FE', fg: '#0369A1' },
+    appointment: { bg: '#DCFCE7', fg: '#166534' },
+    mis_visit:   { bg: '#EDE9FE', fg: '#6D28D9' },
+  }
+  const c = colors[it.type] || { bg: '#F3F4F6', fg: '#6B7280' }
+  const dateStr = it.date ? formatDate(it.date) : '—'
+  return (
+    <div className="bg-white rounded-2xl p-3 flex items-start gap-3"
+         style={{ border: '1px solid rgba(0,0,0,.06)' }}>
+      <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+           style={{ background: c.bg }}>
+        <span className="material-symbols-outlined" style={{ color: c.fg, fontVariationSettings: "'FILL' 1" }}>
+          {it.icon || 'event_note'}
+        </span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                style={{ background: c.bg, color: c.fg }}>{it.category}</span>
+          <span className="text-[11px] text-gray-400">{dateStr}</span>
+        </div>
+        <div className="text-[14px] font-semibold text-gray-800 mt-1 truncate">{it.title || '—'}</div>
+        {it.subtitle && <div className="text-[12px] text-gray-500 mt-0.5 line-clamp-2">{it.subtitle}</div>}
+        {it.price > 0 && (
+          <div className="text-[11px] text-gray-400 mt-1">
+            {it.price.toLocaleString('ru')} ₽{it.payment_method ? ` · ${it.payment_method}` : ''}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
   const [diagnoses, setDiagnoses] = useState([])
   const [allergies, setAllergies] = useState([])
   const [vaccinations, setVaccinations] = useState([])
+  const [timeline, setTimeline] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -154,14 +192,16 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
     setError(null)
     try {
       const cfg = { params: { session_token: sessionToken, t: sessionToken } }
-      const [d, a, v] = await Promise.all([
+      const [d, a, v, tl] = await Promise.all([
         axios.get(`${apiBase}/patient/medcard/diagnoses`, cfg).catch(() => ({ data: [] })),
         axios.get(`${apiBase}/patient/medcard/allergies`, cfg).catch(() => ({ data: [] })),
         axios.get(`${apiBase}/patient/medcard/vaccinations`, cfg).catch(() => ({ data: [] })),
+        axios.get(`${apiBase}/patient/medcard/timeline`, cfg).catch(() => ({ data: { items: [] } })),
       ])
       setDiagnoses(Array.isArray(d.data) ? d.data : [])
       setAllergies(Array.isArray(a.data) ? a.data : [])
       setVaccinations(Array.isArray(v.data) ? v.data : [])
+      setTimeline(Array.isArray(tl.data?.items) ? tl.data.items : [])
     } catch (e) {
       setError('Не удалось загрузить медкарту')
     } finally {
@@ -195,7 +235,7 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
     )
   }
 
-  const total = diagnoses.length + allergies.length + vaccinations.length
+  const total = diagnoses.length + allergies.length + vaccinations.length + timeline.length
   if (total === 0) {
     return (
       <div className="bg-white rounded-3xl p-8 text-center"
@@ -212,6 +252,21 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
 
   return (
     <div className="space-y-3">
+      {/* Уровень 1: автоматическая хронология приёмов */}
+      {timeline.length > 0 && (
+        <Section icon="history" title="Хронология" count={timeline.length} color="#0EA5E9">
+          <div className="space-y-2">
+            {timeline.slice(0, 50).map((it, i) => (
+              <TimelineItem key={`${it.type}-${i}`} it={it} />
+            ))}
+            {timeline.length > 50 && (
+              <div className="text-center text-[12px] text-gray-400 py-2">
+                Показано 50 из {timeline.length}
+              </div>
+            )}
+          </div>
+        </Section>
+      )}
       <Section icon="local_hospital" title="Диагнозы" count={diagnoses.length} color="#EF4444">
         {diagnoses.length === 0
           ? <EmptyState icon="medical_information" text="Диагнозов нет" />

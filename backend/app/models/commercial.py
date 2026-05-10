@@ -45,6 +45,20 @@ class CommercialModule(Base):
     sort_order:    Mapped[int]       = mapped_column(Integer, default=0, nullable=False)
     # Схема конфига — описывает доп. поля (для UI-формы)
     config_schema: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # ── Marketplace fields (marketplace01) ────────────────────────────────────
+    # Массив URL картинок (карусель в карточке)
+    screenshots:        Mapped[list | None]    = mapped_column(JSONB, nullable=True, default=list)
+    # Массив строк-фич («Видеозвонки», «Е-рецепты»...)
+    features_list:      Mapped[list | None]    = mapped_column(JSONB, nullable=True, default=list)
+    # Дней триала по умолчанию при подключении из marketplace
+    default_trial_days: Mapped[int]            = mapped_column(Integer, default=14, nullable=False)
+    # Badge «Популярно» в каталоге
+    popular:            Mapped[bool]           = mapped_column(Boolean, default=False, nullable=False)
+    # easy / medium / hard
+    setup_complexity:   Mapped[str]            = mapped_column(String(16), default="easy", nullable=False)
+    # «от X ₽/мес» если основная цена 0
+    monthly_price_demo: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+
     created_at:    Mapped[datetime]  = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at:    Mapped[datetime]  = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

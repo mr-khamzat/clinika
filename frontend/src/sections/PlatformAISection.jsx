@@ -17,9 +17,12 @@ const escapeHtml = (s) =>
 
 const SANITIZE_CONFIG = {
   ALLOWED_TAGS: ['h2', 'h3', 'b', 'br', 'p', 'em', 'i', 'strong', 'ul', 'li'],
-  ALLOWED_ATTR: ['style'],
+  // Markdown от LLM не должен содержать style="..." — это вектор CSS injection.
+  // Атрибуты не нужны: рендер сам подставляет style в renderMarkdown через белый
+  // список тегов, а DOMPurify эти inline-style удалит.
+  ALLOWED_ATTR: [],
   // Запрещаем javascript:/data: в любых url'ах.
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+  ALLOWED_URI_REGEXP: /^(?:https?|mailto):/,
 }
 
 // ── Утилиты ──────────────────────────────────────────────────────────────────

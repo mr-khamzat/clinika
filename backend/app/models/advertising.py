@@ -85,6 +85,32 @@ class Ad(Base):
     clicks_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     conversions_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Бюджет (в рублях). Авто-пауза при достижении spent_total >= budget_total.
+    budget_total: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    spent_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0")
+
+    # Frequency capping: max показов одному ip_hash в день/час
+    freq_per_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    freq_per_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Health-checker: автопауза если N дней без показов
+    last_impression_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    auto_pause_idle_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
+
+    # A/B-тесты: variant связан с parent_ad_id
+    parent_ad_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    ab_variant: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    ab_winner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Targeting: фильтры аудитории (gender, age_min, age_max, city, ltv_min, ltv_max, has_appointments)
+    audience: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    # Conversion attribution
+    revenue_attributed: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0")
+    attribution_window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
+
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -124,6 +150,12 @@ class AdEvent(Base):
 
     # SHA-256(ip + date) — для дедупликации без хранения PII
     ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    # Для conversion: связанный referral и его выручка (из service.price)
+    referral_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    revenue: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)

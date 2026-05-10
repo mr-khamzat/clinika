@@ -52,12 +52,12 @@ async def list_discounts(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    # Только скидки своего тенанта
-    result = await db.execute(
-        select(Discount)
-        .where(Discount.tenant_id == current_user.tenant_id)
-        .order_by(Discount.created_at.desc())
-    )
+    # Только скидки своего тенанта (manager со clinic_id — только своей клиники)
+    _q = select(Discount).where(Discount.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id:
+        from sqlalchemy import or_ as _or_d
+        _q = _q.where(_or_d(Discount.clinic_id == current_user.clinic_id, Discount.clinic_id.is_(None)))
+    result = await db.execute(_q.order_by(Discount.created_at.desc()))
     out = []
     for d in result.scalars().all():
         service_name = None

@@ -146,8 +146,23 @@ async def vitals_summary(
             "delta_week": delta,
         }
 
+    # Список включённых источников синхронизации (модули apple/google)
+    available_sources = []
+    if session.tenant_id:
+        from app.models.commercial import TenantModuleSubscription
+        active_keys = (await db.execute(
+            select(TenantModuleSubscription.module_key).where(
+                TenantModuleSubscription.tenant_id == session.tenant_id,
+                TenantModuleSubscription.status.in_(["active", "trial"]),
+            )
+        )).scalars().all()
+        if "health_apple" in active_keys:
+            available_sources.append("apple")
+        if "health_google" in active_keys:
+            available_sources.append("google")
+
     await db.commit()
-    return {"latest": out}
+    return {"latest": out, "available_sources": available_sources}
 
 
 @router.get("/series")
@@ -203,7 +218,7 @@ async def vitals_add(
             value_num=body.value,
             value_extra=body.extra,
             unit=body.unit,
-            measured_at=body.measured_at or datetime.utcnow(),
+            measured_at=(body.measured_at.replace(tzinfo=None) if (body.measured_at and body.measured_at.tzinfo) else (body.measured_at or datetime.utcnow())),
             source="manual",
             device_info=(request.headers.get("user-agent", "")[:200] if request else None),
             note=body.note,
@@ -232,7 +247,13 @@ async def vitals_sync_apple_health(
     который POST-ит сэмплы пачкой.
     """
     session = await _session_or_401(db, x_patient_session, session_token, t)
-    items = [s.model_dump() for s in (body.samples or [])]
+    items = []
+    for _s in (body.samples or []):
+        d = _s.model_dump()
+        # Strip timezone — PG TIMESTAMP WITHOUT TIME ZONE не принимает aware datetime
+        if d.get("measured_at") and getattr(d["measured_at"], "tzinfo", None):
+            d["measured_at"] = d["measured_at"].replace(tzinfo=None)
+        items.append(d)
     res = await svc.bulk_import(
         db,
         tenant_id=session.tenant_id,

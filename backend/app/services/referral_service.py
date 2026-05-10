@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from app.models.referral import Referral, ReferralStatus
 from app.models.bonus import Bonus, BonusType
 from app.models.service import Service
@@ -16,7 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 async def _generate_short_code(db: AsyncSession) -> int:
-    """Случайный 5-значный код, уникальный в таблице."""
+    """Случайный 5-значный код, уникальный в таблице.
+
+    Фикс #8 (audit Фаза 1): даже если SELECT не нашёл коллизию, между ним и
+    INSERT может вклиниться другая транзакция и захватить тот же код. Защищаемся:
+    1) Сначала SELECT — отсекает 99% случаев на пустом пространстве кодов.
+    2) При commit/flush, если всё-таки получили IntegrityError на short_code —
+       вызывающий код в create_referral поймает её, сгенерирует новый код и
+       обновит referral.short_code. Здесь же мы лишь стараемся быстро дать
+       свободный код.
+    """
     for _ in range(100):
         code = random.randint(10000, 99999)
         existing = await db.execute(select(Referral).where(Referral.short_code == code))
@@ -29,7 +39,7 @@ async def create_referral(
     db: AsyncSession,
     from_clinic_id: uuid.UUID,
     to_clinic_id: uuid.UUID,
-    service_id: uuid.UUID,
+    service_id: uuid.UUID | None,
     patient_phone: str,
     created_by_admin_id: uuid.UUID,
     notes: str | None = None,
@@ -40,7 +50,20 @@ async def create_referral(
     tenant_id: uuid.UUID | None = None,
     tenant_slug: str | None = None,
     base_url: str | None = None,
+    referral_type: str = "service",
+    target_doctor_id: uuid.UUID | None = None,
+    lab_tests: str | None = None,
 ) -> Referral:
+    # Если указан target_doctor — берём его mis_id для МИС-записи и тип=doctor
+    if target_doctor_id and referral_type == "service":
+        referral_type = "doctor"
+    if referral_type == "doctor" and target_doctor_id and not mis_doctor_id:
+        from sqlalchemy import select as _sel_doc
+        from app.models.doctor import Doctor as _DocM
+        _td = (await db.execute(_sel_doc(_DocM).where(_DocM.id == target_doctor_id))).scalar_one_or_none()
+        if _td and getattr(_td, "mis_id", None):
+            mis_doctor_id = _td.mis_id
+
     referral = Referral(
         from_clinic_id=from_clinic_id,
         to_clinic_id=to_clinic_id,
@@ -53,12 +76,18 @@ async def create_referral(
         notes=notes,
         appointment_at=appointment_at,
         tenant_id=tenant_id,
+        referral_type=referral_type,
+        target_doctor_id=target_doctor_id,
+        lab_tests=lab_tests,
     )
     db.add(referral)
     await db.flush()
     # QR для администратора (подтверждение по скану)
     referral.qr_code = generate_qr_image_base64(str(referral.id))
-    # Короткий 5-значный код для пациентов без QR-сканера
+    # ── Короткий 5-значный код: фикс #8 ───────────────────────────────────
+    # Если параллельно создаётся два направления и оба угадали один код,
+    # commit упадёт с IntegrityError на UNIQUE(short_code). Делаем до 5
+    # повторов: каждый раз rollback partial → новая попытка.
     referral.short_code = await _generate_short_code(db)
     # QR для пациента (ссылка на личный кабинет)
     token = make_patient_token(str(referral.id), referral.patient_phone)
@@ -69,7 +98,22 @@ async def create_referral(
     else:
         patient_url = f"{_origin}/p/{referral.id}?t={token}"
     referral.patient_qr_code = generate_url_qr_base64(patient_url)
-    await db.commit()
+    _commit_attempts = 0
+    while True:
+        try:
+            await db.commit()
+            break
+        except IntegrityError as ie:
+            await db.rollback()
+            _commit_attempts += 1
+            if _commit_attempts >= 5:
+                raise
+            # Перечитываем referral, ставим новый short_code и пробуем снова.
+            r2 = (await db.execute(select(Referral).where(Referral.id == referral.id))).scalar_one_or_none()
+            if not r2:
+                raise ie
+            referral = r2
+            referral.short_code = await _generate_short_code(db)
     await db.refresh(referral)
 
     # Создаём запись в МИС (fire-and-forget, не прерывает создание направления)
@@ -111,10 +155,14 @@ async def create_referral(
     return referral
 
 
-async def _get_setting(db: AsyncSession, key: str, default: str = "") -> str:
-    result = await db.execute(select(SystemSettings).where(SystemSettings.key == key))
-    row = result.scalar_one_or_none()
-    return row.value if row else default
+# ── Per-tenant settings helper ─────────────────────────────────────────────
+# Фикс #5: глобальные настройки commission_*/platform_fee_floor разваливают
+# изоляцию тенантов. Все вызовы внутри _apply_confirmation/_finalize_bonus
+# теперь читают через app.services.settings_service.get_setting с tenant_id.
+async def _get_setting(db: AsyncSession, key: str, default: str = "", tenant_id=None) -> str:
+    """Совместимый враппер: при tenant_id берёт из tenant-scoped настроек."""
+    from app.services.settings_service import get_setting
+    return await get_setting(db, key, default, tenant_id=tenant_id)
 
 
 async def _apply_confirmation(
@@ -122,10 +170,34 @@ async def _apply_confirmation(
     referral: Referral,
     confirmed_by_admin_id: uuid.UUID | None,
 ) -> Referral:
-    """Общая логика: проверка статуса, подтверждение, начисление бонуса."""
+    """Общая логика: проверка статуса, подтверждение, начисление бонуса.
+
+    Фикс #1 (audit Фаза 1) — race condition двойного бонуса:
+    Берём referral под FOR UPDATE и перечитываем статус из БД. Если уже
+    CONFIRMED — выходим как успех (idempotent), без повторных начислений.
+    """
+    # ── PG advisory_xact_lock: гарантия сериализации даже под asyncio.gather ──
+    # FOR UPDATE сам по себе блокирует строку, но в asyncpg/SQLAlchemy при
+    # concurrent двух регистраторов одновременно lock может не сериализовать.
+    # Advisory lock — PostgreSQL-level mutex, освобождается при COMMIT/ROLLBACK.
+    from sqlalchemy import text as _text_lock
+    await db.execute(
+        _text_lock("SELECT pg_advisory_xact_lock(hashtext(:rid))"),
+        {"rid": str(referral.id)}
+    )
+    # ── FOR UPDATE: блокируем строку до конца транзакции ─────────────────
+    locked_q = await db.execute(
+        select(Referral).where(Referral.id == referral.id).with_for_update()
+    )
+    locked = locked_q.scalar_one_or_none()
+    if locked is None:
+        raise ValueError("Направление не найдено")
+    referral = locked
+
+    # Идемпотентный выход — если уже подтверждено, просто возвращаем referral.
     if referral.status == ReferralStatus.CONFIRMED:
-        raise ValueError("Направление уже подтверждено")
-    if referral.status == ReferralStatus.EXPIRED or referral.expires_at < datetime.utcnow():
+        return referral
+    if referral.status == ReferralStatus.EXPIRED or (referral.expires_at and referral.expires_at < datetime.utcnow()):
         referral.status = ReferralStatus.EXPIRED
         await db.commit()
         raise ValueError("Направление истекло")
@@ -136,28 +208,138 @@ async def _apply_confirmation(
     referral.confirmed_at = datetime.utcnow()
     referral.confirmed_by_admin_id = confirmed_by_admin_id
 
-    # Бонус за услугу.
-    # Финансовая модель (svcfin01): приоритет — service.referral_payout (новое поле,
-    # «сумма видимая создающему направление»). Fallback на bonus_amount для совместимости.
-    svc_result = await db.execute(select(Service).where(Service.id == referral.service_id))
-    service = svc_result.scalar_one_or_none()
+    # Делегируем расчёт + запись Bonus/RecruiterBonus/ICI/BillingLedger
+    # в общий helper _finalize_bonus_and_ledger.
+    await _finalize_bonus_and_ledger(db, referral, confirmed_by_admin_id=confirmed_by_admin_id)
 
-    # Эффективная сумма выплаты партнёру / клинике-источнику.
+    await db.commit()
+    await db.refresh(referral)
+
+    # ── МИС-синхронизация при подтверждении (fire-and-forget) ──
+    try:
+        from app.services.mis_client import (
+            _post as _mis_post2,
+            find_patient_by_phone as _mis_find2,
+            add_patient as _mis_add,
+        )
+        from app.services.settings_service import get_setting as _get_s2
+        _api_url2 = await _get_s2(db, "mis_api_url", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
+        _api_key2 = await _get_s2(db, "mis_api_key", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
+
+        if not referral.mis_patient_id and referral.patient_phone:
+            try:
+                _pt = await _mis_find2(referral.patient_phone, api_url=_api_url2, api_key=_api_key2)
+                if _pt:
+                    referral.mis_patient_id = _pt.get("patient_id") or _pt.get("id")
+                else:
+                    _new = await _mis_add(
+                        referral.patient_phone,
+                        full_name=referral.patient_name or "",
+                        api_url=_api_url2,
+                        api_key=_api_key2,
+                    )
+                    if _new and _new.get("patient_id"):
+                        referral.mis_patient_id = int(_new["patient_id"])
+                        logger.info("МИС: создан пациент %s для referral=%s", referral.mis_patient_id, referral.id)
+                if referral.mis_patient_id:
+                    await db.commit()
+            except Exception:
+                logger.exception("МИС auto-onboard не удался для referral_id=%s", referral.id)
+
+        if referral.mis_appointment_id:
+            await _mis_post2("confirmAppointment",
+                api_url=_api_url2, api_key=_api_key2,
+                appointment_id=referral.mis_appointment_id,
+            )
+    except Exception:
+        logger.exception("Не удалось подтвердить запись в МИС для referral_id=%s mis_appointment_id=%s", referral.id, referral.mis_appointment_id)
+
+    return referral
+
+
+# ── Общий helper расчёта и записи финансов (фикс #6) ───────────────────────
+# Используется и в _apply_confirmation (ручное подтверждение по QR/short-code),
+# и в auto_confirm._confirm (автоматическое подтверждение по МИС). Делает:
+#   1. Подсчёт payout_amount/bonus_total с учётом referral_type=service|doctor.
+#   2. Создание Bonus(REGULAR) + опционально Bonus(COMMISSION).
+#   3. Запись Ledger BONUS_ACCRUED.
+#   4. Создание RecruiterBonus при наличии рекрутера.
+#   5. Авто-создание InterClinicInvoice для cross-clinic направлений.
+#   6. Запись platform_fee в BillingLedger (для франшизного биллинга).
+async def _finalize_bonus_and_ledger(
+    db: AsyncSession,
+    referral: Referral,
+    *,
+    confirmed_by_admin_id: uuid.UUID | None,
+) -> None:
+    """Все денежные эффекты подтверждения направления — в одном месте."""
+    from decimal import Decimal as _D
+
+    # Сервис (если type=service)
+    svc_result = await db.execute(select(Service).where(Service.id == referral.service_id)) if referral.service_id else None
+    service = svc_result.scalar_one_or_none() if svc_result else None
+
     payout_amount = 0.0
-    if service is not None:
+    bonus_total = 0.0    # полный пирог (для doctor-flow и каскада)
+    use_cascade = False  # каскадная модель (платформа удерживает floor)
+
+    rtype = (getattr(referral, "referral_type", None) or "service").lower()
+    if rtype == "doctor" and getattr(referral, "target_doctor_id", None):
+        from app.models.doctor import Doctor as _DocM
+        td = (await db.execute(select(_DocM).where(_DocM.id == referral.target_doctor_id))).scalar_one_or_none()
+        if td and (td.referral_bonus_type or "none") != "none":
+            if td.referral_bonus_type == "fixed" and td.referral_bonus_amount:
+                bonus_total = float(td.referral_bonus_amount)
+            elif td.referral_bonus_type == "percent" and td.referral_bonus_percent and td.visit_price:
+                bonus_total = float(td.visit_price) * float(td.referral_bonus_percent) / 100.0
+        if bonus_total > 0:
+            try:
+                # Фикс #5: per-tenant settings.
+                fee_floor_str = await _get_setting(db, "platform_fee_floor", "100", tenant_id=referral.tenant_id)
+                fee_floor = float(fee_floor_str) if fee_floor_str else 100.0
+            except Exception:
+                fee_floor = 100.0
+            intermediate = max(bonus_total - fee_floor, 0.0)
+            payout_amount = intermediate
+            use_cascade = True
+    elif service is not None:
+        # Фикс #7: единая логика выбора суммы для service-направления —
+        # та же, что в ручном confirm: referral_payout с fallback на bonus_amount.
         if service.referral_payout is not None:
             payout_amount = float(service.referral_payout)
         else:
             payout_amount = float(service.bonus_amount or 0)
 
-    if service and payout_amount > 0:
+    if (service or use_cascade) and payout_amount > 0:
         full_amount = payout_amount
+
+        # Каскад: автор привлечён рекрутом — вычитаем долю рекрутера из бонуса автора.
+        cascade_recruiter_cut = 0.0
+        if use_cascade:
+            try:
+                from app.models.user import User as _UserM
+                _author = (await db.execute(
+                    select(_UserM).where(_UserM.id == referral.created_by_admin_id)
+                )).scalar_one_or_none()
+                if _author and _author.recruiter_id:
+                    _recr = (await db.execute(
+                        select(_UserM).where(_UserM.id == _author.recruiter_id)
+                    )).scalar_one_or_none()
+                    if _recr and _recr.bonus_percent:
+                        cascade_recruiter_cut = round(
+                            full_amount * float(_recr.bonus_percent) / 100.0, 2
+                        )
+            except Exception:
+                cascade_recruiter_cut = 0.0
+            full_amount = max(full_amount - cascade_recruiter_cut, 0.0)
+
         applied_commission = False
 
-        commission_enabled = (await _get_setting(db, "commission_enabled", "false")) == "true"
+        # Фикс #5: per-tenant settings.
+        commission_enabled = (await _get_setting(db, "commission_enabled", "false", tenant_id=referral.tenant_id)) == "true"
         if commission_enabled:
-            rate = float(await _get_setting(db, "commission_rate", "10"))
-            receiver_id_str = await _get_setting(db, "commission_receiver_id", "")
+            rate = float(await _get_setting(db, "commission_rate", "10", tenant_id=referral.tenant_id))
+            receiver_id_str = await _get_setting(db, "commission_receiver_id", "", tenant_id=referral.tenant_id)
             if receiver_id_str:
                 try:
                     receiver_uuid = uuid.UUID(receiver_id_str)
@@ -168,12 +350,14 @@ async def _apply_confirmation(
                         referral_id=referral.id,
                         bonus_type=BonusType.REGULAR,
                         amount=admin_amount,
+                        tenant_id=referral.tenant_id,
                     ))
                     db.add(Bonus(
                         admin_id=receiver_uuid,
                         referral_id=referral.id,
                         bonus_type=BonusType.COMMISSION,
                         amount=commission_amount,
+                        tenant_id=referral.tenant_id,
                     ))
                     applied_commission = True
                 except Exception:
@@ -185,6 +369,7 @@ async def _apply_confirmation(
                 referral_id=referral.id,
                 bonus_type=BonusType.REGULAR,
                 amount=full_amount,
+                tenant_id=referral.tenant_id,
             ))
 
     # Записываем начисление в финансовый реестр
@@ -192,8 +377,7 @@ async def _apply_confirmation(
     try:
         from app.services.ledger_service import add_entry, OpType
         bonuses_result = await db.execute(
-            __import__('sqlalchemy', fromlist=['select']).select(Bonus)
-            .where(Bonus.referral_id == referral.id)
+            select(Bonus).where(Bonus.referral_id == referral.id)
         )
         new_bonuses = bonuses_result.scalars().all()
         for b in new_bonuses:
@@ -223,7 +407,6 @@ async def _apply_confirmation(
             )
             recruiter = recruiter_result.scalar_one_or_none()
             if recruiter and recruiter.bonus_percent:
-                # Базовый бонус автора направления
                 author_bonus_result = await db.execute(
                     select(Bonus).where(
                         Bonus.referral_id == referral.id,
@@ -234,7 +417,10 @@ async def _apply_confirmation(
                 author_bonus = author_bonus_result.scalar_one_or_none()
                 if author_bonus:
                     rec_percent = float(recruiter.bonus_percent)
-                    rec_amount = round(float(author_bonus.amount) * rec_percent / 100, 2)
+                    if use_cascade and cascade_recruiter_cut > 0:
+                        rec_amount = cascade_recruiter_cut
+                    else:
+                        rec_amount = round(float(author_bonus.amount) * rec_percent / 100, 2)
                     if rec_amount > 0:
                         rec_bonus = RecruiterBonus(
                             tenant_id=referral.tenant_id,
@@ -250,10 +436,7 @@ async def _apply_confirmation(
     except Exception:
         logger.exception("Не удалось начислить бонус рекрутеру для referral_id=%s author_id=%s", referral.id, referral.created_by_admin_id)
 
-    # Автоматически создаём межклиничный счёт при начислении бонуса.
-    # Финансовая модель (svcfin01): сумма счёта = service.referral_payout (то, что
-    # видит создающий направление — клиника-источник получит эту сумму). Fallback
-    # на bonus_amount для совместимости со старыми услугами.
+    # Авто-создание межклиничного счёта при cross-clinic.
     is_cross_clinic = (
         service
         and payout_amount > 0
@@ -280,7 +463,6 @@ async def _apply_confirmation(
                 service_name=service.name if hasattr(service, 'name') else None,
                 created_by_id=referral.created_by_admin_id,
             )
-            # Аудит: создание межклиничного счёта.
             try:
                 from app.services import audit_service
                 await audit_service.write_safe(
@@ -303,18 +485,12 @@ async def _apply_confirmation(
         logger.exception("Не удалось создать межклиничный счёт для referral_id=%s from=%s to=%s", referral.id, referral.from_clinic_id, referral.to_clinic_id)
 
     # ── Накопление platform_fee для франшизного биллинга ──────────────────
-    # Записываем «комиссию платформы» в BillingLedger (entry_type=platform_fee_per_bonus).
-    # Эту сумму потом соберёт franchise_billing_job → FranchiseInvoice.
-    # Логика расчёта: max(price - referral_payout, Franchise.platform_fee_per_bonus).
     try:
-        if service and payout_amount > 0:
-            from app.services.franchise_billing_service import record_platform_fee_for_bonus
+        if (service or use_cascade) and payout_amount > 0:
             from app.models.franchise import Franchise
             from app.models.tenant import Tenant
             from app.models.billing_ledger import BillingLedger
-            from decimal import Decimal as _D
 
-            # Берём бонус автора направления как «опорный объект» для записи fee.
             author_bonus_q = await db.execute(
                 select(Bonus).where(
                     Bonus.referral_id == referral.id,
@@ -333,13 +509,27 @@ async def _apply_confirmation(
                     if fr:
                         franchise_fee = _D(str(fr.platform_fee_per_bonus or 0))
 
-                # Эффективная комиссия платформы:
-                # max(price - referral_payout, franchise_fee).
-                spread = _D("0")
-                if service.price is not None:
-                    spread = _D(str(service.price)) - _D(str(payout_amount))
-                effective_fee = max(spread, franchise_fee)
+                # Фикс #11: max(spread, franchise_fee, 0) — защита от отрицательного значения.
+                if use_cascade and bonus_total > 0:
+                    try:
+                        from app.models.recruiter_bonus import RecruiterBonus as _RB
+                        rb = (await db.execute(
+                            select(_RB).where(_RB.referral_id == referral.id)
+                        )).scalar_one_or_none()
+                        rcut = float(rb.amount) if rb else 0.0
+                    except Exception:
+                        rcut = 0.0
+                    spread = _D(str(bonus_total - payout_amount - rcut))
+                    effective_fee = max(spread, franchise_fee, _D("0"))
+                else:
+                    spread = _D("0")
+                    if service and service.price is not None:
+                        spread = _D(str(service.price)) - _D(str(payout_amount))
+                    effective_fee = max(spread, franchise_fee, _D("0"))
+
                 if effective_fee > 0:
+                    _service_id_str = str(service.id) if service else None
+                    _service_price = float(service.price) if (service and service.price is not None) else None
                     entry = BillingLedger(
                         tenant_id=referral.tenant_id,
                         clinic_id=referral.from_clinic_id,
@@ -351,39 +541,23 @@ async def _apply_confirmation(
                         reference_id=anchor_bonus.id,
                         description=(
                             f"Комиссия платформы за направление #{str(referral.id)[:8]} "
-                            f"(price={service.price}, payout={payout_amount})"
+                            + (f"(тип=doctor, bonus_total={bonus_total})" if use_cascade
+                               else f"(price={_service_price}, payout={payout_amount})")
                         ),
                         meta={
                             "referral_id": str(referral.id),
-                            "service_id": str(service.id),
-                            "price": float(service.price) if service.price is not None else None,
+                            "service_id": _service_id_str,
+                            "price": _service_price,
                             "referral_payout": payout_amount,
                             "franchise_fee_floor": float(franchise_fee),
+                            "cascade": bool(use_cascade),
+                            "bonus_total": float(bonus_total) if use_cascade else None,
                         },
                     )
                     db.add(entry)
                     await db.flush()
     except Exception:
         logger.exception("Не удалось записать platform_fee_per_bonus для referral_id=%s", referral.id)
-
-    await db.commit()
-    await db.refresh(referral)
-
-    # Подтверждаем запись в МИС (fire-and-forget)
-    try:
-        if referral.mis_appointment_id:
-            from app.services.mis_client import _post as _mis_post2
-            from app.services.settings_service import get_setting as _get_s2
-            _api_url2 = await _get_s2(db, "mis_api_url", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
-            _api_key2 = await _get_s2(db, "mis_api_key", "", tenant_id=referral.tenant_id) if referral.tenant_id else ""
-            await _mis_post2("confirmAppointment",
-                api_url=_api_url2, api_key=_api_key2,
-                appointment_id=referral.mis_appointment_id,
-            )
-    except Exception:
-        logger.exception("Не удалось подтвердить запись в МИС для referral_id=%s mis_appointment_id=%s", referral.id, referral.mis_appointment_id)
-
-    return referral
 
 
 async def confirm_referral(

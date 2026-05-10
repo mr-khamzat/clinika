@@ -27,18 +27,27 @@ export default defineConfig({
       ]
     }
   },
+  // Удаляем console.* и debugger из production-сборки (Фаза 5).
+  // esbuild drop срабатывает на стадии минификации.
+  esbuild: {
+    drop: ['console', 'debugger'],
+  },
   build: {
-    // sourcemap: true оставлено для отладки prod-крашей W4 компонентов
-    sourcemap: true,
+    sourcemap: false,
+    target: 'es2020',  // современные браузеры — меньше polyfills
+    cssCodeSplit: true,
+    minify: 'esbuild',
+    chunkSizeWarningLimit: 1500,
     rollupOptions: {
       output: {
         // Explicit-list manualChunks — безопаснее чем id-based:
         // Rollup сам резолвит граф зависимостей и не разрывает React ecosystem.
         // (id-based с `id.includes('/react/')` ломал порядок инициализации:
         // createContext оказывался в vendor-other до загрузки vendor-react.)
+        // jspdf/xlsx/html5-qrcode НЕ в manualChunks — Rollup сам выделит их
+        // в отдельные dynamic chunks, потому что импорт в коде стал async.
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-pdf-qr': ['jspdf', 'jspdf-autotable', 'jsqr', 'html5-qrcode'],
           'vendor-markdown': ['react-markdown', 'remark-gfm', 'rehype-raw'],
           'vendor-misc': ['axios', 'zustand', 'dompurify'],
         },

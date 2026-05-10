@@ -117,6 +117,46 @@ async def find_patient_by_phone(phone: str, api_url: str = "", api_key: str = ""
     return None
 
 
+async def add_patient(
+    phone: str,
+    full_name: str = "",
+    api_url: str = "",
+    api_key: str = "",
+) -> dict | None:
+    """Создать пациента в МИС Renovatio. Возвращает dict с patient_id или None.
+
+    full_name парсится: первое слово -> last_name, второе -> first_name, третье -> third_name.
+    Если данные неполные, передаём только то что есть. mobile обязателен.
+    """
+    from app.utils.phone import normalize_phone
+    digits = normalize_phone(phone)
+    if not digits:
+        return None
+    parts = (full_name or "").strip().split()
+    last_name  = parts[0] if len(parts) >= 1 else ""
+    first_name = parts[1] if len(parts) >= 2 else ""
+    third_name = parts[2] if len(parts) >= 3 else ""
+    payload: dict = {"mobile": "+" + digits}
+    if last_name:  payload["last_name"]  = last_name
+    if first_name: payload["first_name"] = first_name
+    if third_name: payload["third_name"] = third_name
+    try:
+        result = await _post("addPatient", api_url=api_url, api_key=api_key,
+                             ssl_verify=settings.mis_ssl_verify, **payload)
+    except Exception:
+        log.exception("addPatient failed for phone=%s", phone)
+        return None
+    if result.get("error") == 0 and result.get("data"):
+        data = result["data"]
+        # Renovatio может вернуть patient_id как число или dict
+        if isinstance(data, dict):
+            return data
+        if isinstance(data, (int, str)):
+            return {"patient_id": int(data)}
+    log.warning("addPatient: МИС вернула ошибку: %s", result)
+    return None
+
+
 async def get_appointments(clinic_id: int, date_from: str, date_to: str, api_url: str = "", api_key: str = "") -> list[dict]:
     result = await _post(
         "getAppointments", api_url=api_url, api_key=api_key,

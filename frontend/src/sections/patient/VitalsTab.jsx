@@ -11,7 +11,7 @@ import axios from 'axios'
 import { API_BASE, BASE_PATH } from '../../config'
 import { useToast } from '../../design'
 
-const API = `${API_BASE}${BASE_PATH}`
+const API = `${API_BASE}`
 
 // Список метрик: подпись, иконка Material Symbols, единица, форматтер.
 const METRICS = {
@@ -78,7 +78,7 @@ function KpiCard({ metricKey, data }) {
   return (
     <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex flex-col gap-1 min-w-0">
       <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-        <span className="material-symbols-rounded text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
+        <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
         <span className="truncate">{meta.label}</span>
       </div>
       <div className="text-xl font-bold text-gray-900 leading-tight">
@@ -118,7 +118,7 @@ function MetricChartCard({ metricKey, sessionToken }) {
   return (
     <div className="snap-start shrink-0 w-64 bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
       <div className="flex items-center gap-1 mb-1">
-        <span className="material-symbols-rounded text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
+        <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
         <span className="text-sm font-medium text-gray-700">{meta.label}</span>
       </div>
       <div className="text-lg font-semibold text-gray-900">
@@ -244,6 +244,7 @@ export default function VitalsTab({ token, sessionToken, phone }) {
   // Замена alert на Toast
   const { toast } = useToast()
   const [summary, setSummary] = useState({})
+  const [availableSources, setAvailableSources] = useState([])
   const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null)
@@ -259,6 +260,7 @@ export default function VitalsTab({ token, sessionToken, phone }) {
         params: { session_token: sessionToken },
       })
       setSummary(r.data?.latest || {})
+      setAvailableSources(Array.isArray(r.data?.available_sources) ? r.data.available_sources : [])
     } catch (e) {
       // тихо — таб виден всем, даже без данных
     } finally {
@@ -315,14 +317,21 @@ export default function VitalsTab({ token, sessionToken, phone }) {
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-2 mb-4">
-        {KPI_ORDER.map(k => <KpiCard key={k} metricKey={k} data={summary[k]} />)}
+        {(() => {
+          // Базовый набор + любые дополнительные метрики где у пациента есть данные
+          const extraKeys = Object.keys(summary).filter(k =>
+            !KPI_ORDER.includes(k) && k !== 'blood_pressure_dia' && summary[k]?.value != null
+          )
+          const allKeys = [...KPI_ORDER, ...extraKeys]
+          return allKeys.map(k => <KpiCard key={k} metricKey={k} data={summary[k]} />)
+        })()}
       </div>
 
-      {/* Apple Health */}
-      {isIOS && (
+      {/* Apple Health — только если модуль health_apple активен у тенанта */}
+      {availableSources.includes('apple') && isIOS && (
         <div className="bg-white rounded-2xl p-3 mb-4 shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 mb-2">
-            <span className="material-symbols-rounded" style={{ color: '#FF3B30' }}>favorite</span>
+            <span className="material-symbols-outlined" style={{ color: '#FF3B30' }}>favorite</span>
             <span className="text-sm font-semibold text-gray-800">Apple Health</span>
           </div>
           <p className="text-xs text-gray-500 mb-2">
@@ -356,7 +365,7 @@ export default function VitalsTab({ token, sessionToken, phone }) {
         className="fixed bottom-20 right-4 z-30 rounded-full shadow-lg px-4 py-3 flex items-center gap-1 text-white font-medium text-sm"
         style={{ background: '#0097A7' }}
       >
-        <span className="material-symbols-rounded text-base">add</span>
+        <span className="material-symbols-outlined text-base">add</span>
         Добавить
       </button>
 
@@ -365,7 +374,7 @@ export default function VitalsTab({ token, sessionToken, phone }) {
       )}
       {!loading && Object.keys(summary).length === 0 && (
         <div className="text-center py-8">
-          <span className="material-symbols-rounded text-5xl text-gray-300">monitor_heart</span>
+          <span className="material-symbols-outlined text-5xl text-gray-300">monitor_heart</span>
           <p className="text-sm text-gray-500 mt-2">Пока нет записей</p>
           <p className="text-xs text-gray-400 mt-1">Добавьте показатели вручную или через Apple Health</p>
         </div>

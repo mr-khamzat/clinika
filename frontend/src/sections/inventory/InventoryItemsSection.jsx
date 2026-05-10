@@ -60,7 +60,7 @@ export default function InventoryItemsSection() {
       setItems(res.data?.items || [])
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Не удалось загрузить'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setLoading(false)
     }
@@ -102,16 +102,16 @@ export default function InventoryItemsSection() {
       }
       if (editing) {
         await api({ method: 'PATCH', url: `/inventory/items/${editing.id}`, data: payload })
-        toast?.({ kind: 'success', text: 'Позиция обновлена' })
+        toast?.('Позиция обновлена', 'success')
       } else {
         await api({ method: 'POST', url: '/inventory/items', data: payload })
-        toast?.({ kind: 'success', text: 'Позиция создана' })
+        toast?.('Позиция создана', 'success')
       }
       setModalOpen(false)
       load()
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка сохранения'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     }
   }
 
@@ -119,11 +119,11 @@ export default function InventoryItemsSection() {
     if (!confirm(`Архивировать позицию «${item.name}»?`)) return
     try {
       await api({ method: 'DELETE', url: `/inventory/items/${item.id}` })
-      toast?.({ kind: 'success', text: 'Архивировано' })
+      toast?.('Архивировано', 'success')
       load()
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка удаления'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     }
   }
 
@@ -143,7 +143,7 @@ export default function InventoryItemsSection() {
       load()
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка импорта'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     }
   }
 

@@ -251,12 +251,13 @@ def _format_referral(ref: Referral, include_qr: bool = True) -> dict:
     }
 
 
-@router.get("/{referral_id}", dependencies=_view_deps)
+@router.get("/{referral_id:uuid}", dependencies=_view_deps)
 async def get_patient_referral(
-    referral_id: str,
+    referral_id: uuid.UUID,
     t: str = Query(..., description="Patient JWT token"),
     db: AsyncSession = Depends(get_db),
 ):
+    referral_id = str(referral_id)  # legacy code ниже ожидает str
     # Проверяем тип токена — appointment или referral
     try:
         from app.core.security import decode_patient_token as _decode
@@ -871,6 +872,116 @@ async def family_list(
     ]
 
 
+@router.get("/family/mis-suggestions")
+async def family_mis_suggestions(
+    t: str = Query(..., description="patient_session_token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Подтянуть потенциальных членов семьи из МИС Renovatio.
+
+    Логика:
+    1. По телефону текущего пациента получаем его карточку в МИС → patient_id, parent_id, last_name
+    2. Если есть parent_id — запрашиваем родителя (getPatient by id)
+    3. По last_name ищем всех однофамильцев — фильтруем тех, у кого parent_id == self.id (дети)
+       или parent_id == self.parent_id (братья/сёстры, исключая self).
+    4. Возвращаем уже-существующих в нашем family list — пометкой already_added=true
+    """
+    from app.models.patient_family import PatientFamilyMember
+    from app.services.mis_client import _post as _mis_post, find_patient_by_phone as _mis_find
+    from app.services.settings_service import get_setting as _get_s
+
+    session = await _session_or_401(db, t)
+    owner_phone = normalize_phone(session.phone)
+    tenant_id = session.tenant_id
+
+    # Список уже добавленных, чтобы пометить already_added=true
+    existing = (await db.execute(
+        select(PatientFamilyMember).where(PatientFamilyMember.owner_phone == owner_phone)
+    )).scalars().all()
+    existing_phones = {normalize_phone(m.member_phone) for m in existing}
+
+    suggestions: list[dict] = []
+    try:
+        _api_url = await _get_s(db, "mis_api_url", "", tenant_id=tenant_id) if tenant_id else ""
+        _api_key = await _get_s(db, "mis_api_key", "", tenant_id=tenant_id) if tenant_id else ""
+
+        self_p = await _mis_find(session.phone, api_url=_api_url, api_key=_api_key)
+        if not self_p:
+            return {"suggestions": [], "info": "В МИС не найден ваш профиль"}
+
+        self_id = self_p.get("patient_id") or self_p.get("id")
+        self_parent_id = self_p.get("parent_id")
+        self_last = (self_p.get("last_name") or "").strip()
+
+        seen_ids = {self_id}
+
+        def _normalize_mis_mobile(m: str | None) -> str:
+            if not m: return ""
+            digits = "".join(ch for ch in m if ch.isdigit())
+            return digits
+
+        def _add_candidate(p: dict, relation: str):
+            pid = p.get("patient_id") or p.get("id")
+            if not pid or pid in seen_ids:
+                return
+            seen_ids.add(pid)
+            mobile = p.get("mobile") or ""
+            mobile_digits = _normalize_mis_mobile(mobile)
+            if not mobile_digits:
+                return
+            # Не предлагать самого себя
+            if mobile_digits.lstrip("78") == owner_phone.lstrip("78"):
+                return
+            full_name = " ".join(filter(None, [
+                p.get("last_name"), p.get("first_name"), p.get("third_name"),
+            ])).strip()
+            suggestions.append({
+                "mis_patient_id": pid,
+                "name": full_name or p.get("full_name", ""),
+                "phone": mobile,
+                "relation_guess": relation,
+                "birth_date": p.get("birth_date"),
+                "age": p.get("age"),
+                "already_added": (mobile_digits in existing_phones
+                                  or ("+" + mobile_digits) in existing_phones),
+            })
+
+        # 1) Родитель
+        if self_parent_id:
+            try:
+                r = await _mis_post("getPatient", api_url=_api_url, api_key=_api_key, id=self_parent_id)
+                if r.get("error") == 0 and r.get("data"):
+                    d = r["data"]
+                    if isinstance(d, list): d = d[0] if d else None
+                    if d:
+                        _add_candidate(d, "родитель")
+            except Exception:
+                pass
+
+        # 2) Однофамильцы — дети/братья/сёстры
+        if self_last:
+            try:
+                r = await _mis_post("getPatient", api_url=_api_url, api_key=_api_key, last_name=self_last)
+                if r.get("error") == 0 and r.get("data"):
+                    items = r["data"] if isinstance(r["data"], list) else [r["data"]]
+                    for d in items[:50]:
+                        if not isinstance(d, dict): continue
+                        ppid = d.get("parent_id")
+                        # Дети self
+                        if ppid == self_id:
+                            _add_candidate(d, "ребёнок")
+                        # Братья/сёстры (общий родитель)
+                        elif self_parent_id and ppid == self_parent_id:
+                            _add_candidate(d, "брат/сестра")
+            except Exception:
+                pass
+
+    except Exception:
+        return {"suggestions": [], "info": "МИС недоступна"}
+
+    return {"suggestions": suggestions, "found_self": True}
+
+
 @router.post("/family/add")
 async def family_add(
     body: FamilyAddBody,
@@ -982,3 +1093,409 @@ async def session_switch(
     _, new_session = await _create_session(db, target_n, proof_tenant, device_info=device)
     await db.commit()
     return {"session_token": new_session}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 152-ФЗ ст. 14, 21 — Право пациента на доступ к своим ПД и удаление
+# ─────────────────────────────────────────────────────────────────────────────
+import json as _json
+import io as _io
+
+
+def _serialize_obj(o):
+    """Универсальный JSON-serializer для UUID/datetime/date/time/Decimal/Enum."""
+    from datetime import datetime as _dt2, date as _dt_date, time as _dt_time
+    from decimal import Decimal as _Dec
+    import enum as _enum
+
+    if o is None:
+        return None
+    if isinstance(o, (str, int, float, bool)):
+        return o
+    if isinstance(o, uuid.UUID):
+        return str(o)
+    if isinstance(o, (_dt2, _dt_date, _dt_time)):
+        return o.isoformat()
+    if isinstance(o, _Dec):
+        return float(o)
+    if isinstance(o, _enum.Enum):
+        return o.value if hasattr(o, "value") else str(o)
+    if isinstance(o, (list, tuple, set)):
+        return [_serialize_obj(x) for x in o]
+    if isinstance(o, dict):
+        return {str(k): _serialize_obj(v) for k, v in o.items()}
+    # SQLAlchemy ORM-объекты с __table__: вытащим колонки
+    try:
+        cols = o.__table__.columns.keys()  # type: ignore[attr-defined]
+        return {c: _serialize_obj(getattr(o, c, None)) for c in cols}
+    except Exception:
+        return str(o)
+
+
+@router.get("/export-personal-data")
+async def export_personal_data(
+    request: Request,
+    t: str = Query(..., description="patient_session_token"),
+    format: str = Query("json", description="json | pdf"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    152-ФЗ ст. 14 — Право субъекта ПД на доступ к своим данным.
+
+    Собирает ВСЕ данные пациента в одну структуру:
+      - PatientAccount (профиль)
+      - ConsentRecord (история согласий, если связан User)
+      - Referral (направления по patient_phone)
+      - Appointment (записи к врачу)
+      - PatientFamilyMember (семья, owner_phone)
+      - AiConversation + AiMessage (диалоги с AI)
+      - PatientDocument (метаданные, без файлов)
+      - PatientChat + PatientChatMessage (чаты с операторами)
+      - RecruiterBonus (если пациент = пользователь и фигурирует как recruiter/doctor)
+
+    Поддерживает format=json (по умолчанию) и format=pdf (через reportlab,
+    fallback на JSON если reportlab не установлен).
+    """
+    from fastapi.responses import StreamingResponse, JSONResponse
+    from sqlalchemy import select as _sel
+    from app.models.patient_account import PatientAccount
+    from app.models.consent import ConsentRecord
+    from app.models.user import User
+    from app.models.doctor import Appointment as _Apt
+    from app.models.patient_family import PatientFamilyMember
+    from app.models.ai_assistant import AiConversation, AiMessage
+    from app.models.patient_document import PatientDocument
+    from app.models.patient_chat import PatientChat, PatientChatMessage
+    from app.models.recruiter_bonus import RecruiterBonus
+    from app.services import audit_service
+
+    session = await _session_or_401(db, t)
+    phone_n = normalize_phone(session.phone)
+
+    # ── Профиль PatientAccount ────────────────────────────────────────────────
+    pa = (await db.execute(
+        _sel(PatientAccount).where(PatientAccount.phone == phone_n)
+    )).scalar_one_or_none()
+    profile = _serialize_obj(pa) if pa else {"phone": phone_n}
+
+    # ── Согласия (consent_records) — через User, если связан по phone ─────────
+    consents: list[dict] = []
+    user_id_for_audit: uuid.UUID | None = None
+    try:
+        u = (await db.execute(
+            _sel(User).where(User.phone_number == phone_n)
+        )).scalar_one_or_none()
+        if u:
+            user_id_for_audit = u.id
+            cons = (await db.execute(
+                _sel(ConsentRecord)
+                .where(ConsentRecord.user_id == u.id)
+                .order_by(ConsentRecord.created_at.desc())
+            )).scalars().all()
+            consents = [_serialize_obj(c) for c in cons]
+    except Exception:
+        consents = []
+
+    # ── Направления ───────────────────────────────────────────────────────────
+    refs = (await db.execute(
+        _sel(Referral).where(Referral.patient_phone == phone_n).order_by(Referral.created_at.desc())
+    )).scalars().all()
+    referrals_data = [_serialize_obj(r) for r in refs]
+
+    # ── Записи к врачу ────────────────────────────────────────────────────────
+    apts = (await db.execute(
+        _sel(_Apt).where(_Apt.patient_phone == phone_n).order_by(_Apt.appointment_date.desc())
+    )).scalars().all()
+    appointments_data = [_serialize_obj(a) for a in apts]
+
+    # ── Семья ─────────────────────────────────────────────────────────────────
+    family = (await db.execute(
+        _sel(PatientFamilyMember).where(PatientFamilyMember.owner_phone == phone_n)
+    )).scalars().all()
+    family_data = [_serialize_obj(f) for f in family]
+
+    # ── Диалоги с AI ──────────────────────────────────────────────────────────
+    convs = (await db.execute(
+        _sel(AiConversation).where(AiConversation.patient_phone == phone_n).order_by(AiConversation.created_at.desc())
+    )).scalars().all()
+    ai_dialogs: list[dict] = []
+    for cv in convs:
+        msgs = (await db.execute(
+            _sel(AiMessage).where(AiMessage.conversation_id == cv.id).order_by(AiMessage.created_at)
+        )).scalars().all()
+        ai_dialogs.append({
+            "conversation": _serialize_obj(cv),
+            "messages": [_serialize_obj(m) for m in msgs],
+        })
+
+    # ── Документы ─────────────────────────────────────────────────────────────
+    docs = (await db.execute(
+        _sel(PatientDocument).where(PatientDocument.patient_phone == phone_n).order_by(PatientDocument.created_at.desc())
+    )).scalars().all()
+    documents_data = []
+    for d in docs:
+        item = _serialize_obj(d)
+        # Ссылка на скачивание (фактический эндпоинт может отличаться — даём guidance)
+        item["download_hint"] = f"/patient/documents/{d.id}/download?t=<session>"
+        documents_data.append(item)
+
+    # ── Чаты с операторами ────────────────────────────────────────────────────
+    chats = (await db.execute(
+        _sel(PatientChat).where(PatientChat.patient_phone == phone_n).order_by(PatientChat.created_at.desc())
+    )).scalars().all()
+    chats_data: list[dict] = []
+    for ch in chats:
+        cmsgs = (await db.execute(
+            _sel(PatientChatMessage).where(PatientChatMessage.chat_id == ch.id).order_by(PatientChatMessage.created_at)
+        )).scalars().all()
+        chats_data.append({
+            "chat": _serialize_obj(ch),
+            "messages": [_serialize_obj(m) for m in cmsgs],
+        })
+
+    # ── Бонусы рекрутёра (если пациент = пользователь, может фигурировать) ────
+    recruiter_bonuses_data: list[dict] = []
+    try:
+        if user_id_for_audit is not None:
+            rb = (await db.execute(
+                _sel(RecruiterBonus).where(
+                    or_(
+                        RecruiterBonus.recruiter_id == user_id_for_audit,
+                        RecruiterBonus.doctor_id == user_id_for_audit,
+                    )
+                ).order_by(RecruiterBonus.created_at.desc())
+            )).scalars().all()
+            recruiter_bonuses_data = [_serialize_obj(b) for b in rb]
+    except Exception:
+        recruiter_bonuses_data = []
+
+    payload = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "legal_basis": "152-ФЗ ст. 14 — Право субъекта ПД на доступ к своим данным",
+        "patient_phone": phone_n,
+        "profile": profile,
+        "consents": consents,
+        "referrals": referrals_data,
+        "appointments": appointments_data,
+        "family": family_data,
+        "ai_conversations": ai_dialogs,
+        "documents": documents_data,
+        "operator_chats": chats_data,
+        "recruiter_bonuses": recruiter_bonuses_data,
+    }
+
+    # ── Audit log ─────────────────────────────────────────────────────────────
+    try:
+        await audit_service.write(
+            db,
+            action="patient.data_exported",
+            actor_id=user_id_for_audit,
+            actor_name=phone_n,
+            entity_type="patient_data",
+            entity_id=(pa.id if pa else None),
+            comment=f"152-FZ Art.14 export, format={format}",
+            request=request,
+            tenant_id=session.tenant_id,
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+    body_bytes = _json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    fname_base = f"clinika-personal-data-{phone_n}-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+
+    if format.lower() == "pdf":
+        try:
+            from reportlab.lib.pagesizes import A4  # type: ignore
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle  # type: ignore
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak  # type: ignore
+            from reportlab.lib import colors  # type: ignore
+            from reportlab.pdfbase import pdfmetrics  # type: ignore
+            from reportlab.pdfbase.ttfonts import TTFont  # type: ignore
+
+            buf = _io.BytesIO()
+            doc = SimpleDocTemplate(buf, pagesize=A4, title="Личные данные пациента")
+            styles = getSampleStyleSheet()
+            # Попытка зарегистрировать кириллический шрифт (DejaVu)
+            try:
+                pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+                base_font = "DejaVu"
+            except Exception:
+                base_font = "Helvetica"
+            styles["Normal"].fontName = base_font
+            styles["Title"].fontName = base_font
+            styles["Heading1"].fontName = base_font
+
+            story = []
+            story.append(Paragraph("Экспорт персональных данных пациента", styles["Title"]))
+            story.append(Paragraph(payload["legal_basis"], styles["Normal"]))
+            story.append(Paragraph(f"Дата выгрузки: {payload['exported_at']}", styles["Normal"]))
+            story.append(Paragraph(f"Телефон: {phone_n}", styles["Normal"]))
+            story.append(Spacer(1, 12))
+
+            sections = [
+                ("Профиль", [profile] if profile else []),
+                ("Согласия (152-ФЗ)", consents),
+                ("Направления", referrals_data),
+                ("Записи к врачу", appointments_data),
+                ("Семья", family_data),
+                ("Диалоги с AI (свёрнуто)", [{"id": d["conversation"].get("id"), "messages_count": len(d["messages"])} for d in ai_dialogs]),
+                ("Документы", documents_data),
+                ("Чаты с операторами (свёрнуто)", [{"id": c["chat"].get("id"), "messages_count": len(c["messages"])} for c in chats_data]),
+                ("Бонусы рекрутёра", recruiter_bonuses_data),
+            ]
+            for title, rows in sections:
+                story.append(Paragraph(title, styles["Heading1"]))
+                if not rows:
+                    story.append(Paragraph("— нет данных —", styles["Normal"]))
+                    story.append(Spacer(1, 8))
+                    continue
+                # Берём union ключей
+                keys = sorted({k for r in rows for k in (r or {}).keys()})
+                table_data = [keys] + [[str(r.get(k, ""))[:80] for k in keys] for r in rows[:50]]
+                tbl = Table(table_data, repeatRows=1)
+                tbl.setStyle(TableStyle([
+                    ("FONT", (0, 0), (-1, -1), base_font, 7),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ]))
+                story.append(tbl)
+                story.append(Spacer(1, 12))
+
+            doc.build(story)
+            buf.seek(0)
+            return StreamingResponse(
+                buf,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{fname_base}.pdf"'},
+            )
+        except ImportError:
+            # reportlab не установлен — fallback на JSON
+            pass
+        except Exception:
+            pass
+
+    # JSON-ответ (default + fallback)
+    return StreamingResponse(
+        _io.BytesIO(body_bytes),
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fname_base}.json"'},
+    )
+
+
+@router.delete("/forget-personal-data")
+async def forget_personal_data(
+    request: Request,
+    t: str = Query(..., description="patient_session_token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    152-ФЗ ст. 21 — Право на удаление персональных данных.
+
+    Анонимизирует данные пациента: PatientAccount.name/birth_date → null,
+    phone → "anon_<hash>". Связанный User (если есть) тоже анонимизируется.
+    Все сессии отзываются, в audit_log пишется patient.data_forgotten,
+    в consent_records — событие "forgotten".
+
+    Медкарта в МИС НЕ затрагивается (внешняя система).
+    """
+    import hashlib
+    from sqlalchemy import update as _upd
+    from app.models.patient_account import PatientAccount
+    from app.models.patient_session import PatientSession
+    from app.models.consent import ConsentRecord
+    from app.models.user import User
+    from app.services import audit_service
+
+    session = await _session_or_401(db, t)
+    phone_n = normalize_phone(session.phone)
+    anon_id = hashlib.sha256(f"{phone_n}-{session.id}".encode()).hexdigest()[:12]
+    anon_phone = f"anon_{anon_id}"
+
+    # ── PatientAccount ────────────────────────────────────────────────────────
+    pa = (await db.execute(
+        select(PatientAccount).where(PatientAccount.phone == phone_n)
+    )).scalar_one_or_none()
+    pa_id = pa.id if pa else None
+    if pa:
+        await db.execute(
+            _upd(PatientAccount)
+            .where(PatientAccount.id == pa.id)
+            .values(
+                phone=anon_phone,
+                name=None,
+                email=None,
+                birth_date=None,
+                is_active=False,
+                password_hash=None,
+            )
+        )
+
+    # ── User (если связан) ────────────────────────────────────────────────────
+    user_id_for_audit: uuid.UUID | None = None
+    try:
+        u = (await db.execute(
+            select(User).where(User.phone_number == phone_n)
+        )).scalar_one_or_none()
+        if u:
+            user_id_for_audit = u.id
+            await db.execute(
+                _upd(User)
+                .where(User.id == u.id)
+                .values(
+                    full_name=f"Anonymized_{anon_id}",
+                    phone_number=None,
+                    telegram_id=None,
+                    date_of_birth=None,
+                    consent_given=False,
+                    is_active=False,
+                )
+            )
+            db.add(ConsentRecord(
+                user_id=u.id,
+                event="forgotten",
+                ip=(request.headers.get("x-real-ip")
+                    or (request.headers.get("x-forwarded-for", "").split(",")[0].strip() or None)
+                    or (request.client.host if request.client else None)),
+                user_agent=request.headers.get("user-agent"),
+                policy_version="1.0",
+                note="152-ФЗ ст. 21 — patient self-service erase",
+            ))
+    except Exception:
+        pass
+
+    # ── Все сессии этого телефона — revoked ───────────────────────────────────
+    try:
+        await db.execute(
+            _upd(PatientSession)
+            .where(PatientSession.phone == phone_n)
+            .values(revoked=True)
+        )
+    except Exception:
+        pass
+
+    # ── Audit log ─────────────────────────────────────────────────────────────
+    try:
+        await audit_service.write(
+            db,
+            action="patient.data_forgotten",
+            actor_id=user_id_for_audit,
+            actor_name=phone_n,
+            entity_type="patient_data",
+            entity_id=pa_id,
+            before={"phone": phone_n},
+            after={"phone": anon_phone},
+            comment="152-FZ Art.21 erase",
+            request=request,
+            tenant_id=session.tenant_id,
+        )
+    except Exception:
+        pass
+
+    await db.commit()
+    return {
+        "ok": True,
+        "message": "Данные анонимизированы согласно 152-ФЗ ст. 21. Все сессии отозваны.",
+        "anon_id": anon_id,
+    }

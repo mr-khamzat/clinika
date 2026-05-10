@@ -131,17 +131,13 @@ class SubscribeDoctorRequest(BaseModel):
 @router.post("/push/subscribe-doctor")
 async def subscribe_doctor_push(
     body: SubscribeDoctorRequest,
+    current_user: User = Depends(__import__("app.core.deps", fromlist=["get_current_user"]).get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     import uuid as _uuid
-    from app.core.deps import get_current_user as _gcu
-    from fastapi import Request
-    # Direct token check
-    from app.core.security import decode_token
-    from app.models.user import User as _User
-    from sqlalchemy import select as _select
-    # We use a simpler approach: just store endpoint with no user_id validation
-    # Doctor calls this after login with their JWT
+    # Phase 0 fix: только врач/администратор могут подписаться на push врача
+    if current_user.role.value not in ("doctor", "manager", "reg", "nurse", "super_admin", "franchise_owner"):
+        raise HTTPException(403, "Forbidden")
     existing = (await db.execute(
         text("SELECT id FROM push_subscriptions WHERE endpoint = :ep"),
         {"ep": body.endpoint}

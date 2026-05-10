@@ -114,6 +114,37 @@ async def update_module(
     return _mod_out(m)
 
 
+
+
+# ── Marketplace fields (marketplace01) ────────────────────────────────────────
+
+class ModuleMarketplaceUpdate(BaseModel):
+    screenshots:        Optional[list[str]] = None
+    features_list:      Optional[list[str]] = None
+    default_trial_days: Optional[int]       = Field(None, ge=1, le=365)
+    popular:            Optional[bool]      = None
+    setup_complexity:   Optional[str]       = Field(None, pattern="^(easy|medium|hard)$")
+    monthly_price_demo: Optional[float]     = Field(None, ge=0)
+
+
+@router.patch("/modules/{key}/marketplace", dependencies=[_sa])
+async def update_module_marketplace(
+    key: str,
+    body: ModuleMarketplaceUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Редактирование marketplace-полей модуля (super_admin)."""
+    m = await _get_module(db, key)
+    if body.screenshots is not None:        m.screenshots        = body.screenshots
+    if body.features_list is not None:      m.features_list      = body.features_list
+    if body.default_trial_days is not None: m.default_trial_days = body.default_trial_days
+    if body.popular is not None:            m.popular            = body.popular
+    if body.setup_complexity is not None:   m.setup_complexity   = body.setup_complexity
+    if body.monthly_price_demo is not None: m.monthly_price_demo = Decimal(str(body.monthly_price_demo))
+    m.updated_at = datetime.utcnow()
+    await db.commit()
+    return _mod_out(m)
+
 # ── Интеграции тенанта ────────────────────────────────────────────────────────
 
 @router.get("/tenants/{tenant_id}/integrations", dependencies=[_sa])
@@ -417,6 +448,13 @@ def _mod_out(m: CommercialModule) -> dict:
         "is_active":         m.is_active,
         "sort_order":        m.sort_order,
         "config_schema":     m.config_schema,
+        # marketplace01: поля витрины
+        "screenshots":       (getattr(m, "screenshots", None) or []),
+        "features_list":     (getattr(m, "features_list", None) or []),
+        "default_trial_days": getattr(m, "default_trial_days", 14) or 14,
+        "popular":           bool(getattr(m, "popular", False)),
+        "setup_complexity":  getattr(m, "setup_complexity", "easy") or "easy",
+        "monthly_price_demo": float(m.monthly_price_demo) if getattr(m, "monthly_price_demo", None) is not None else None,
     }
 
 

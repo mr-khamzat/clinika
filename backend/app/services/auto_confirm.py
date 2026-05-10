@@ -98,21 +98,27 @@ async def run_auto_confirm() -> int:
 
 
 async def _process_tenant_confirmations(db, tenant, done: list[dict]) -> int:
-    """Подтверждение направлений конкретного тенанта по списку выполненных МИС-визитов."""
+    """Подтверждение направлений конкретного тенанта по списку выполненных МИС-визитов.
+
+    Фикс #6/#7 (audit Фаза 1): раньше _confirm не писал Ledger/ICI/BillingLedger/
+    RecruiterBonus, и вдобавок использовал service.bonus_amount, тогда как ручной
+    confirm применяет service.referral_payout. Это давало рассогласование сумм
+    и недостающие финансовые записи. Теперь обе ветки используют общий
+    referral_service._finalize_bonus_and_ledger.
+    """
     from app.models.referral import Referral, ReferralStatus
-    from app.models.service import Service
-    from app.models.settings import SystemSettings
-    from app.models.bonus import Bonus, BonusType
     from sqlalchemy import select
+    from app.services.referral_service import _finalize_bonus_and_ledger
 
     confirmed_count = 0
     if True:
-        # Открытые направления только этого тенанта
+        # Открытые направления только этого тенанта.
+        # FOR UPDATE SKIP LOCKED — параллельные jobs не подтверждают одно и то же.
         result = await db.execute(
             select(Referral).where(
                 Referral.status == ReferralStatus.CREATED,
                 Referral.tenant_id == tenant.id,
-            )
+            ).with_for_update(skip_locked=True)
         )
         open_referrals: list[Referral] = list(result.scalars().all())
 
@@ -128,15 +134,6 @@ async def _process_tenant_confirmations(db, tenant, done: list[dict]) -> int:
             phone_norm = _normalize_phone(ref.patient_phone)
             by_phone.setdefault(phone_norm, []).append(ref)
 
-        # Настройки комиссии (читаем один раз)
-        def _get_setting_sync(rows: dict, key: str, default: str = "") -> str:
-            return rows.get(key, default)
-
-        settings_rows = {}
-        settings_result = await db.execute(select(SystemSettings))
-        for row in settings_result.scalars().all():
-            settings_rows[row.key] = row.value
-
         async def _confirm(referral: Referral):
             nonlocal confirmed_count
             if referral.status != ReferralStatus.CREATED:
@@ -145,44 +142,13 @@ async def _process_tenant_confirmations(db, tenant, done: list[dict]) -> int:
             referral.confirmed_at = datetime.utcnow()
             # confirmed_by_admin_id = None (авто)
 
-            svc_result = await db.execute(select(Service).where(Service.id == referral.service_id))
-            service = svc_result.scalar_one_or_none()
-
-            if service and service.bonus_amount > 0:
-                full_amount = float(service.bonus_amount)
-                applied_commission = False
-                commission_enabled = _get_setting_sync(settings_rows, "commission_enabled") == "true"
-                if commission_enabled:
-                    rate = float(_get_setting_sync(settings_rows, "commission_rate", "10"))
-                    receiver_id_str = _get_setting_sync(settings_rows, "commission_receiver_id", "")
-                    if receiver_id_str:
-                        try:
-                            import uuid
-                            receiver_uuid = uuid.UUID(receiver_id_str)
-                            commission_amount = round(full_amount * rate / 100, 2)
-                            admin_amount = full_amount - commission_amount  # без повторного округления
-                            db.add(Bonus(
-                                admin_id=referral.created_by_admin_id,
-                                referral_id=referral.id,
-                                bonus_type=BonusType.REGULAR,
-                                amount=admin_amount,
-                            ))
-                            db.add(Bonus(
-                                admin_id=receiver_uuid,
-                                referral_id=referral.id,
-                                bonus_type=BonusType.COMMISSION,
-                                amount=commission_amount,
-                            ))
-                            applied_commission = True
-                        except Exception:
-                            logger.exception("Не удалось применить комиссию (auto-confirm) для referral_id=%s receiver_id=%s", referral.id, receiver_id_str)
-                if not applied_commission:
-                    db.add(Bonus(
-                        admin_id=referral.created_by_admin_id,
-                        referral_id=referral.id,
-                        bonus_type=BonusType.REGULAR,
-                        amount=full_amount,
-                    ))
+            # Делегируем все денежные эффекты shared helper'у — он умеет
+            # service.referral_payout, doctor-каскад, Ledger, RecruiterBonus,
+            # ICI и BillingLedger platform_fee. Per-tenant settings — внутри.
+            try:
+                await _finalize_bonus_and_ledger(db, referral, confirmed_by_admin_id=None)
+            except Exception:
+                logger.exception("auto_confirm: _finalize_bonus_and_ledger failed referral_id=%s", referral.id)
 
             confirmed_count += 1
             logger.info(f"Авто-подтверждение направления {referral.id} (пациент {mask_name(referral.patient_name)} {mask_phone(referral.patient_phone)})")

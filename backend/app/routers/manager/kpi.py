@@ -46,6 +46,8 @@ async def list_kpi(
     # Tenant isolation: видим только своих сотрудников
     if current_user.tenant_id is not None:
         admins_filters.append(User.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        admins_filters.append(User.clinic_id == current_user.clinic_id)
     # Per-clinic scope: lika видит KPI только сотрудников своей клиники.
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -73,6 +75,12 @@ async def list_kpi(
     actual_filters = [Referral.created_at >= month_start, Referral.created_at <= month_end]
     if current_user.tenant_id is not None:
         actual_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_kpi
+        actual_filters.append(_or_kpi(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Ограничиваем выборку фактических направлений только сотрудниками
     # из scope-клиник (если admins был отфильтрован по clinic_id).
     if filter_ids is not None:

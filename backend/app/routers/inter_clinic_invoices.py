@@ -408,7 +408,15 @@ from fastapi.responses import FileResponse
 
 @router.get("/stamps/{filename}")
 async def get_stamp(filename: str, current_user: User = Depends(_require_manager)):
-    path = f"{STAMP_DIR}/{filename}"
+    # Phase 0: защита от path traversal — только базовое имя без слэшей и .. 
+    import re as _re
+    if not _re.match(r"^[A-Za-z0-9_\-\.]+$", filename) or ".." in filename:
+        raise HTTPException(400, "Неверное имя файла")
+    safe_name = os.path.basename(filename)
+    path = os.path.realpath(os.path.join(STAMP_DIR, safe_name))
+    # Финальная защита: убедиться что path внутри STAMP_DIR
+    if not path.startswith(os.path.realpath(STAMP_DIR) + os.sep):
+        raise HTTPException(400, "Path traversal")
     if not os.path.exists(path):
         raise HTTPException(404, "Печать не найдена")
     return FileResponse(path)

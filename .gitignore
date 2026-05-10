@@ -47,3 +47,11 @@ frontend/public/downloads/latest-mac.yml
 frontend/public/downloads/*.dmg
 frontend/public/downloads/*.AppImage
 frontend/public/downloads/*.deb
+# Backup files
+*.bak.*
+*.bak
+/tmp/
+
+# Phase backups
+**/main.py.bak.*
+**/*.bak.phase*

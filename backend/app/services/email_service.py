@@ -282,3 +282,94 @@ async def send_welcome_email_to_manager(
         tenant_name, _mask_email(target), "OK" if ok else "FAIL",
     )
     return {"sent": bool(ok), "reason": None if ok else "smtp send failed"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# БЛОК: Self-service password reset (forgot-password)
+# ─────────────────────────────────────────────────────────────────────────────
+# Шлёт письмо со ссылкой на /reset-password?token=...
+# Если SMTP не настроен — пишет в лог [FORGOT-PWD-DEV] полную ссылку,
+# чтобы тестить локально без SMTP.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def send_password_reset(
+    email: str,
+    raw_token: str,
+    *,
+    base_url: str = "https://клиниксеть.рф",
+    tenant_slug: str | None = None,
+    full_name: str = "",
+) -> bool:
+    """Отправить письмо со ссылкой на сброс пароля.
+
+    Args:
+        email: адрес получателя
+        raw_token: одноразовый токен (НЕ хранится в БД, только хэш)
+        base_url: базовый домен ссылки (без trailing /)
+        tenant_slug: если задан, ссылка будет вида {base_url}/{slug}/reset-password
+        full_name: для приветствия в письме (опционально)
+
+    Returns:
+        True — письмо отправлено по SMTP, False — SMTP не настроен или ошибка.
+        В обоих случаях в /auth/forgot-password всё равно возвращается 200.
+    """
+    target = (email or "").strip()
+    if not target:
+        return False
+
+    base = (base_url or "").rstrip("/")
+    if tenant_slug:
+        link = f"{base}/{tenant_slug}/reset-password?token={raw_token}"
+    else:
+        link = f"{base}/reset-password?token={raw_token}"
+
+    # Dev-режим: SMTP не настроен → пишем raw-токен и ссылку в stdout.
+    # ВАЖНО: пометка [FORGOT-PWD-DEV] помогает грепать в `docker logs`.
+    if not is_smtp_configured():
+        logger.info(
+            "[FORGOT-PWD-DEV] SMTP не настроен. email=%s reset_link=%s token=%s",
+            _mask_email(target), link, raw_token,
+        )
+        return False
+
+    name = (full_name or "").strip() or "пользователь"
+    subject = "Сброс пароля · КлиникСеть"
+    html = f"""
+    <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;
+                max-width:560px;margin:0 auto;padding:24px;color:#191c1e">
+      <h2 style="color:#1565c0;margin-bottom:16px">Сброс пароля</h2>
+      <p>Здравствуйте, {name}!</p>
+      <p>Мы получили запрос на сброс пароля для вашей учётной записи в
+         <b>КлиникСеть</b>. Чтобы установить новый пароль, нажмите на
+         кнопку ниже:</p>
+      <p style="margin:28px 0">
+        <a href="{link}"
+           style="background:#1565c0;color:#fff;padding:12px 24px;
+                  text-decoration:none;border-radius:8px;font-weight:600;
+                  display:inline-block">
+          Установить новый пароль
+        </a>
+      </p>
+      <p style="color:#727783;font-size:13px">
+        Или скопируйте ссылку в браузер:<br>
+        <a href="{link}" style="color:#1565c0;word-break:break-all">{link}</a>
+      </p>
+      <p style="color:#727783;font-size:13px;margin-top:24px">
+        Ссылка действительна <b>1 час</b>. Если вы не запрашивали сброс пароля —
+        просто проигнорируйте это письмо, ваш пароль не изменится.
+      </p>
+      <hr style="border:none;border-top:1px solid #eceef0;margin:24px 0">
+      <p style="color:#c2c6d4;font-size:11px">
+        © КлиникСеть. Это автоматическое письмо, отвечать на него не нужно.
+      </p>
+    </div>
+    """.strip()
+
+    ok = await send_email(target, subject, body_html=html)
+    logger.info(
+        "[FORGOT-PWD] отправка %s: %s",
+        _mask_email(target), "OK" if ok else "FAIL",
+    )
+    return bool(ok)
+

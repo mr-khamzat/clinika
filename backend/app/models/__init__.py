@@ -28,6 +28,7 @@ from app.models.ledger import LedgerEntry
 from app.models.audit import AuditEntry
 from app.models.billing import Subscription, Invoice, Payment
 from app.models.refresh_token import RefreshToken
+from app.models.password_reset import PasswordResetToken
 from app.models.consent import ConsentRecord
 # Старая plugin_*-система удалена (заменена commercial_modules) — см. миграцию delete_legacy_plugins
 from app.models.presence import UserPresence, CallPermission, NotificationSetting, CallLog, PresenceStatus
@@ -153,3 +154,9 @@ from app.models.inventory import (
     InventoryCategory,
     InventoryMovementType,
 )
+
+# Module Monitoring System — health-state каждого платного модуля per-tenant
+from app.models.module_health import ModuleHealthCheck, ModuleHealthStatus
+
+# API-ключи тенанта для внешних интеграций (CRM/BI)
+from app.models.tenant_api_key import TenantApiKey

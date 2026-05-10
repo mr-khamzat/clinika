@@ -49,6 +49,34 @@ class AuditAction:
     PARTNER_UPDATED   = "partner.updated"
     PARTNER_DELETED   = "partner.deleted"
 
+    # ── Журнал безопасности (Security Journal, 2026-05-10) ──────────────
+    # Аутентификация
+    AUTH_LOGIN                  = "auth.login"
+    AUTH_LOGIN_FAILED           = "auth.login_failed"
+    AUTH_BRUTE_FORCE_DETECTED   = "auth.brute_force_detected"
+    AUTH_LOGOUT                 = "auth.logout"
+
+    # Пароли / коды
+    PASSWORD_RESET_REQUESTED    = "password.reset.requested"
+    PASSWORD_RESET_SUCCESS      = "password.reset.success"
+    SHORT_CODE_FAILED           = "short_code.failed"
+    SHORT_CODE_BRUTE_FORCE_DETECTED = "short_code.brute_force_detected"
+
+    # Подмена / импернация
+    IMPERSONATION_STARTED       = "impersonation.started"
+    IMPERSONATION_STOPPED       = "impersonation.stopped"
+
+    # Защита ресурсов
+    PERMISSION_DENIED           = "permission.denied"
+    WEBHOOK_SIGNATURE_INVALID   = "webhook.signature_invalid"
+
+    # Секреты
+    SECRETS_ROTATED             = "secrets.rotated"
+
+    # IP-блокировки (ручные)
+    IP_BLOCKED                  = "ip.blocked"
+    IP_UNBLOCKED                = "ip.unblocked"
+
 
 def _ip(request: Request | None) -> str | None:
     if request is None:

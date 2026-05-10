@@ -47,7 +47,7 @@ export default function InventoryMovementsSection() {
       setMoves(res.data?.movements || [])
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка загрузки'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setLoading(false)
     }
@@ -251,11 +251,11 @@ function ActionModal({ kind, onClose, items, clinics, onDone }) {
         }
       }
       await api({ method: 'POST', url, data: body })
-      toast?.({ kind: 'success', text: 'Операция выполнена' })
+      toast?.('Операция выполнена', 'success')
       onDone?.()
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setSubmitting(false)
     }

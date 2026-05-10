@@ -20,10 +20,12 @@ import Dashboard from './pages/Dashboard'
 import CreateReferral from './pages/CreateReferral'
 // PartnerCreateReferral удалён в Этапе 3 ROADMAP — partner_doctor больше не имеет отдельной страницы.
 import QRScreen from './pages/QRScreen'
-import ScanScreen from './pages/ScanScreen'
+// ScanScreen — lazy. Тянет за собой html5-qrcode (~250KB), нужен только при сканировании QR.
+const ScanScreen = lazy(() => import('./pages/ScanScreen'))
 import History from './pages/History'
 import Bonuses from './pages/Bonuses'
-import Landing from './pages/Landing'
+// Landing — lazy. Большая страница лендинга платформы (не нужна авторизованным пользователям).
+const Landing = lazy(() => import('./pages/Landing'))
 import Franchise from './pages/Franchise'
 import ProfileSetup from './pages/ProfileSetup'
 import InviteRegister from './pages/InviteRegister'
@@ -46,7 +48,9 @@ import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
 import { PLATFORM_MODE } from './config'
-import PatientCabinet from './pages/PatientCabinet'
+// PatientCabinet — lazy. Один из самых тяжёлых модулей (3000+ строк, AI-виджет, секции пациента).
+// Грузим только при заходе на /{slug}/p — для остальных кабинетов экономим bundle.
+const PatientCabinet = lazy(() => import('./pages/PatientCabinet'))
 import OnlineBooking from './pages/OnlineBooking'
 import ClinicPage from './pages/ClinicPage'
 // DesignPreview (v1) удалён — используем только DesignPreview2 (актуальный)
@@ -64,6 +68,8 @@ const PatientTelemedRoom = lazy(() => import('./pages/PatientTelemedRoom'))
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'))
 const TermsOfService = lazy(() => import('./pages/TermsOfService'))
 const ConsentForm = lazy(() => import('./pages/ConsentForm'))
+// Self-service сброс пароля по токену из email
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 import { API_BASE, BASE_PATH, SLUG } from './config'
 import { waitForTelegramSDK, initTgApp } from './lib/tg'
 import { loadTheme } from "./utils/ThemeLoader"
@@ -169,7 +175,11 @@ function MiniApp() {
   }
 
   // ─── Auth-гейт: нет user → стартовая страница с единым входом ───
-  if (!user) return <Landing />
+  if (!user) return (
+    <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+      <Landing />
+    </Suspense>
+  )
 
   // ─── ProfileSetup только для новых сотрудников клиники (без аккаунта) ───
   if (user && !user.clinic_id && user.telegram_id && !user.username) {
@@ -189,7 +199,7 @@ function MiniApp() {
         <Route path="/" element={<Layout />}>
 
           {/* ─── Общие маршруты (все роли) ─── */}
-          <Route index element={<Dashboard />} />
+          <Route index element={<RootRedirect />} />
           <Route path="history" element={<History />} />
           <Route path="bonuses" element={<Bonuses />} />
           <Route path="qr/:id" element={<QRScreen />} />
@@ -216,7 +226,14 @@ function MiniApp() {
           {user?.role !== 'visiting_doctor' && user?.role !== 'partner_doctor' && (
             <>
               <Route path="create" element={<CreateReferral />} />
-              <Route path="scan" element={<ScanScreen />} />
+              <Route
+                path="scan"
+                element={
+                  <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
+                    <ScanScreen />
+                  </Suspense>
+                }
+              />
             </>
           )}
 
@@ -250,6 +267,35 @@ function MiniApp() {
 // ─── Корневой компонент — определяет точку входа ───
 // Внутренний диспетчер: возвращает нужный кабинет/лендинг по URL.
 // Обёрнут в ToastProvider (см. ниже) — тосты доступны во всех ветках.
+
+// ── Редирект с /{slug}/ в правильный кабинет по роли ──────────────────────────
+// /arc/ для super_admin → /admin, для manager → /{slug}/manager,
+// для doctor/reg/nurse/recruiter/franchise_owner/visiting/partner → /{slug}/admin,
+// для patient → /{slug}/p. Legacy Dashboard больше не показываем.
+function RootRedirect() {
+  const { user } = useAuthStore()
+  if (!user) return (
+    <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+      <Landing />
+    </Suspense>
+  )
+  if (user.role === 'super_admin') {
+    window.location.replace('/admin')
+    return null
+  }
+  if (user.role === 'manager') {
+    window.location.replace('/' + SLUG + '/manager')
+    return null
+  }
+  if (user.role === 'patient') {
+    window.location.replace('/' + SLUG + '/p')
+    return null
+  }
+  // Все остальные роли — кабинетный URL /{slug}/admin
+  window.location.replace('/' + SLUG + '/admin')
+  return null
+}
+
 function AppRouter() {
   const path = window.location.pathname
 
@@ -279,6 +325,17 @@ function AppRouter() {
   // Этап 6 ROADMAP: отдельный лендинг для будущих франчайзи.
   if (path === '/franchise' || path === '/franchise/') {
     return <Franchise />
+  }
+
+  // ─── Self-service password reset (без auth) ───
+  // /reset-password?token=... (root) или /<slug>/reset-password?token=...
+  if (path === '/reset-password' || path === '/reset-password/' ||
+      (SLUG && (path === '/' + SLUG + '/reset-password' || path === '/' + SLUG + '/reset-password/'))) {
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <ResetPassword />
+      </Suspense>
+    )
   }
 
   // ─── Legal (152-ФЗ) — публичные страницы без auth ───
@@ -315,7 +372,11 @@ function AppRouter() {
       window.location.replace('/' + slug + '/p')
       return null
     }
-    return <Landing />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <Landing />
+      </Suspense>
+    )
   }
 
   // Глобальная платформа khamzat: /admin (без тенантного слага).
@@ -370,7 +431,11 @@ function AppRouter() {
 
   // Личный кабинет пациента — публичный
   if (SLUG && (path.startsWith('/' + SLUG + '/p/') || path === '/' + SLUG + '/p')) {
-    return <PatientCabinet />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <PatientCabinet />
+      </Suspense>
+    )
   }
 
   // Регистрация по инвайту

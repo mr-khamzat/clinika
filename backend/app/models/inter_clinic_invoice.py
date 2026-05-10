@@ -69,4 +69,14 @@ class InterClinicInvoice(Base):
     __table_args__ = (
         Index("ix_ici_issuer_tenant", "issuer_tenant_id", "status"),
         Index("ix_ici_recipient_tenant", "recipient_tenant_id", "status"),
+        # Фикс #3 (audit Фаза 1): один авто-счёт на одно направление.
+        # Партиальный UNIQUE — только когда referral_id указан (manual/royalty
+        # счета без referral_id могут существовать в произвольном кол-ве).
+        # Сама миграция bonusunique01 создаёт этот индекс в БД.
+        Index(
+            "uq_ici_referral_id",
+            "referral_id",
+            unique=True,
+            postgresql_where="referral_id IS NOT NULL",
+        ),
     )

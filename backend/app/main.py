@@ -17,7 +17,7 @@ if _SENTRY_DSN:
         release=os.environ.get("APP_VERSION"),
     )
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException
 from app.core.logging import setup_logging, get_logger
 from app.core.prometheus import router as prometheus_router, metrics_middleware
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +30,7 @@ from app.database import engine, Base, AsyncSessionLocal
 from sqlalchemy import text
 import asyncio
 from app.routers import auth, referrals, bonuses, clinics, admins, integrations
+from app.routers.password_reset import router as password_reset_router, cleanup_expired_password_reset_tokens
 from app.routers.manager import router as manager_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.tenant import router as tenant_router
@@ -59,6 +60,9 @@ from app.routers.ai_knowledge import router as ai_knowledge_router
 from app.routers.portal import router as portal_router
 from app.routers.push import router as push_router
 from app.routers.webhooks import router as webhooks_router
+# API-ключи тенанта + публичный API v1 (CRM / BI интеграции)
+from app.routers.tenant_api_keys import router as tenant_api_keys_router
+from app.routers.public_api_v1 import router as public_api_v1_router
 from app.routers.ads import router as ads_router
 from app.routers.commercial import router as commercial_router
 from app.routers.ai import router as ai_router
@@ -84,6 +88,7 @@ from app.routers.ltv import router as ltv_router
 from app.routers.clinic_payments import router as clinic_payments_router
 from app.routers.fiscal_receipts import router as fiscal_receipts_router
 from app.routers.admin_logs import router as admin_logs_router
+from app.routers.impersonation import router as impersonation_router
 # Глобальный поиск Cmd+K и центр уведомлений (W3 UX-улучшения)
 from app.routers.search import router as search_router
 from app.routers.notifications import router as notifications_router
@@ -107,6 +112,8 @@ from app.routers.ai_assistant import (
 from app.routers.call_recording import router as call_recording_router
 # Inventory модуль (1990₽/мес) — учёт материалов, остатков и движений (W7)
 from app.routers.inventory import router as inventory_router
+# Module Monitoring System — health-status платных модулей per-tenant
+from app.routers.module_monitoring import router as module_monitoring_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -370,6 +377,50 @@ async def transcription_dispatch_job():
         logging.getLogger('scheduler').error(f'transcription: {e}')
 
 
+async def ads_attribution_job():
+    """Ежедневная привязка конверсий рекламы по кликам пациентов."""
+    try:
+        from app.database import async_session
+        from app.jobs.ads_attribution_job import run_attribution
+        async with async_session() as db:
+            stats = await run_attribution(db)
+            logging.getLogger('scheduler').info(f'ads_attribution: {stats}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'ads_attribution: {e}')
+
+
+async def ads_health_pause_job():
+    """Авто-пауза мёртвой рекламы (idle > N дней или бюджет потрачен)."""
+    try:
+        from app.database import async_session
+        from app.models.advertising import Ad, AdStatus
+        from sqlalchemy import select
+        from datetime import datetime, timedelta
+        async with async_session() as db:
+            rows = (await db.execute(
+                select(Ad).where(Ad.status == AdStatus.ACTIVE)
+            )).scalars().all()
+            paused = 0
+            for ad in rows:
+                idle_days = ad.auto_pause_idle_days or 7
+                is_idle = False
+                if ad.last_impression_at:
+                    if (datetime.utcnow() - ad.last_impression_at).days >= idle_days:
+                        is_idle = True
+                elif ad.created_at and (datetime.utcnow() - ad.created_at).days >= idle_days:
+                    is_idle = True
+                budget_done = (ad.budget_total and ad.spent_total
+                               and float(ad.spent_total) >= float(ad.budget_total))
+                if is_idle or budget_done:
+                    ad.status = AdStatus.PAUSED
+                    paused += 1
+            if paused:
+                await db.commit()
+                logging.getLogger('scheduler').info(f'ads_health_pause: paused {paused} ads')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'ads_health_pause: {e}')
+
+
 async def inventory_alerts_job():
     """APScheduler: ежедневный сканер inventory-алертов (cron 09:00).
 
@@ -384,6 +435,105 @@ async def inventory_alerts_job():
             logging.getLogger('scheduler').info(f'inventory_alerts: notified {n} tenants')
     except Exception as e:
         logging.getLogger('scheduler').error(f'inventory_alerts: {e}')
+
+
+async def module_health_check_job():
+    """APScheduler: каждые 30 мин обходим все active tenants, проверяем модули.
+
+    Использует `module_health_service.run_health_checks_all_tenants` —
+    адаптеры на каждый платный модуль (telemedicine, ads, inventory, ...).
+    При переходе ok→error/degraded — Telegram-алерт админу (дедуп 1 час).
+    """
+    import logging
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.module_health_service import run_health_checks_all_tenants
+        async with AsyncSessionLocal() as db:
+            stats = await run_health_checks_all_tenants(db)
+            logging.getLogger('scheduler').info(f'module_health: {stats}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'module_health: {e}')
+
+
+async def module_daily_digest_job():
+    """09:00 МСК: сводка по модулям всех тенантов в Telegram админу.
+
+    Эмодзи-таблица: ✅ ok / ⚠️ degraded / ❌ error / 💤 idle / ❔ unknown.
+    Только агрегаты — детали смотреть в /admin/modules/health/all.
+    """
+    import logging
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services import alert_service
+        from app.services.module_health_service import (
+            get_modules_health_all_tenants,
+        )
+        from app.models.module_health import ModuleHealthStatus
+        async with AsyncSessionLocal() as db:
+            rows = await get_modules_health_all_tenants(db)
+        # Считаем суммарно по платформе + по проблемным тенантам
+        totals = {"ok": 0, "degraded": 0, "error": 0, "idle": 0, "unknown": 0}
+        problem_lines = []
+        for r in rows:
+            t_err = t_deg = 0
+            for m in r["modules"]:
+                st = (m.get("health") or {}).get("status") or "unknown"
+                totals[st] = totals.get(st, 0) + 1
+                if st == ModuleHealthStatus.ERROR.value:
+                    t_err += 1
+                elif st == ModuleHealthStatus.DEGRADED.value:
+                    t_deg += 1
+            if t_err or t_deg:
+                problem_lines.append(
+                    f"  • <b>{r['tenant_name']}</b>: ❌{t_err} ⚠️{t_deg}"
+                )
+        head = "📊 <b>Дайджест модулей за сутки</b>"
+        line = (f"\n✅ {totals['ok']}  ⚠️ {totals['degraded']}  "
+                f"❌ {totals['error']}  💤 {totals['idle']}  "
+                f"❔ {totals['unknown']}")
+        body = head + line
+        if problem_lines:
+            body += "\n\n<b>Проблемные тенанты:</b>\n" + "\n".join(
+                problem_lines[:15])
+        await alert_service.notify_admin(body, dedup_key="module_daily_digest")
+        logging.getLogger('scheduler').info(f'module_daily_digest: {totals}')
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'module_daily_digest: {e}')
+
+async def integration_retest_job():
+    """Каждый час перетестирует активные TenantIntegration (МИС и др.).
+    Чтобы health-check mis_sync не помечал degraded из-за устаревшего last_tested_at."""
+    try:
+        from app.database import AsyncSessionLocal
+        from app.models.commercial import TenantIntegration
+        from app.routers.commercial import _do_test
+        from datetime import datetime as _dt
+        from sqlalchemy import select as _sel
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(
+                _sel(TenantIntegration).where(TenantIntegration.is_active == True)
+            )).scalars().all()
+            ok_n = err_n = 0
+            for obj in rows:
+                try:
+                    status, error = await _do_test(obj)
+                    obj.last_tested_at = _dt.utcnow()
+                    obj.test_status = status
+                    obj.test_error = error
+                    obj.updated_at = _dt.utcnow()
+                    if status == 'ok': ok_n += 1
+                    else: err_n += 1
+                except Exception as _e:
+                    obj.last_tested_at = _dt.utcnow()
+                    obj.test_status = 'error'
+                    obj.test_error = str(_e)[:200]
+                    err_n += 1
+            await db.commit()
+            log.info(f'integration_retest: ok={ok_n} err={err_n} total={len(rows)}')
+    except Exception as e:
+        log.error(f'integration_retest: {e}')
+
+
 
 
 async def disk_check_job():
@@ -749,6 +899,37 @@ log = get_logger("clinika")
 async def lifespan(app: FastAPI):
     setup_logging(json_logs=True)
     log.info("clinika_starting", version="1.0.0")
+
+    # ── Phase 0: fail-fast при дефолтных секретах ──
+    # Phase 0 audit нашёл: SECRET_KEY=clinika-super-secret-key-change-in-production-2024 (default)
+    # Если в проде остались дефолты — отказываемся стартовать.
+    _danger_markers = ("change-in-production", "change-me", "clinika-super-secret",
+                       "clinika-qr-hmac-secret-key", "clinika-support-bot-secret")
+    _checks = [
+        ("SECRET_KEY", settings.secret_key),
+        ("QR_SECRET", getattr(settings, "qr_secret", "")),
+        ("WEBHOOK_API_KEY", getattr(settings, "webhook_api_key", "")),
+    ]
+    _fatal = []
+    for _name, _val in _checks:
+        if not _val:
+            _fatal.append(f"{_name} is empty")
+            continue
+        for _m in _danger_markers:
+            if _m in str(_val).lower():
+                _fatal.append(f"{_name} contains insecure default marker '{_m}'")
+                break
+    if _fatal:
+        # В dev-режиме (DEBUG=true) — warning. В prod — отказ старта.
+        _is_prod = (str(getattr(settings, "environment", "production")).lower() != "development")
+        if _is_prod:
+            for _msg in _fatal:
+                log.error("startup_secret_check_failed", error=_msg)
+            raise RuntimeError("REFUSE TO START with insecure default secrets: " + "; ".join(_fatal))
+        else:
+            for _msg in _fatal:
+                log.warning("startup_secret_warning", message=_msg)
+
     # Инициализация rate limiter (Redis)
     # Инициализация Redis-клиента для метрик (независимо от rate limiter)
     try:
@@ -789,6 +970,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(transcription_dispatch_job, 'interval', minutes=2, id='transcription_dispatch', replace_existing=True)
     # Inventory-алерты (low_stock + expiring + expired) — ежедневно в 09:00 UTC
     scheduler.add_job(inventory_alerts_job, 'cron', hour=9, minute=0, id='inventory_alerts', replace_existing=True)
+    scheduler.add_job(ads_attribution_job, 'cron', hour=4, minute=30, id='ads_attribution', replace_existing=True)
+    scheduler.add_job(ads_health_pause_job, 'cron', hour=4, minute=0, id='ads_health_pause', replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
@@ -804,6 +987,12 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(disk_check_job, 'interval', minutes=60, id='disk_check', replace_existing=True)
     # Ежедневная сводка по сети ARC в 09:00 МСК (06:00 UTC)
     scheduler.add_job(daily_digest_job, 'cron', hour=6, minute=0, id='daily_digest', replace_existing=True)
+    scheduler.add_job(cleanup_expired_password_reset_tokens, 'interval', hours=1, id='password_reset_cleanup', replace_existing=True)
+    # Module Monitoring System — каждые 30 мин проверяем все active tenants
+    scheduler.add_job(module_health_check_job, 'interval', minutes=30, id='module_health_check', replace_existing=True)
+    scheduler.add_job(integration_retest_job, 'interval', minutes=60, id='integration_retest', replace_existing=True)
+    # Daily digest по модулям всех тенантов админу платформы (09:00 МСК = 06:00 UTC)
+    scheduler.add_job(module_daily_digest_job, 'cron', hour=6, minute=0, id='module_daily_digest', replace_existing=True)
     scheduler.start()
     # Лог зарегистрированных job'ов — удобно дебажить что реально стартует
     try:
@@ -818,16 +1007,25 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown(wait=False)
 
 async def daily_invoices_job():
-    """Ежедневная генерация счетов для активных подписок (00:00)."""
+    """Ежедневная генерация счетов для активных подписок (00:00).
+
+    Фикс #10 (audit Фаза 1): импорт ``SubscriptionStatus`` не существует —
+    в backend/app/models/billing.py определён ``SubStatus``. Раньше job
+    падала на ImportError при первом же запуске.
+    Дополнительно: ``logger`` в этом модуле не определён глобально —
+    используем локальный logging.getLogger.
+    """
+    import logging as _lg
+    _logger = _lg.getLogger("daily_invoices")
     try:
         from app.database import AsyncSessionLocal
         from app.services.billing_service import generate_invoice
-        from app.models.billing import Subscription, SubscriptionStatus, Invoice
+        from app.models.billing import Subscription, SubStatus, Invoice
         from sqlalchemy import select
         from datetime import date
         async with AsyncSessionLocal() as db:
             subs = await db.execute(
-                select(Subscription).where(Subscription.status == SubscriptionStatus.ACTIVE)
+                select(Subscription).where(Subscription.status == SubStatus.ACTIVE)
             )
             active_subs = subs.scalars().all()
             generated = 0
@@ -846,11 +1044,11 @@ async def daily_invoices_job():
                         await generate_invoice(db, sub.id)
                         generated += 1
                 except Exception as e:
-                    logger.error(f'daily_invoices: sub {sub.id}: {e}')
+                    _logger.error(f'daily_invoices: sub {sub.id}: {e}')
             await db.commit()
-            logger.info(f'daily_invoices: сгенерировано {generated} счетов из {len(active_subs)} активных подписок')
+            _logger.info(f'daily_invoices: сгенерировано {generated} счетов из {len(active_subs)} активных подписок')
     except Exception as e:
-        logger.error(f'daily_invoices_job: {e}')
+        _logger.error(f'daily_invoices_job: {e}')
 
 
 async def archive_audit_job():
@@ -1084,22 +1282,22 @@ app.add_middleware(
 # ─── Custom Swagger UI / Redoc — независимо от tenant slug ──────────────────
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
 
-@app.get("/docs", include_in_schema=False)
-async def custom_swagger_ui_html():
-    """Swagger UI: openapi.json подгружается с относительного URL,
-    что корректно работает за любым slug-prefix nginx."""
-    return get_swagger_ui_html(
-        openapi_url="openapi.json",
-        title="Клиника API — Swagger UI",
-    )
+# Phase 0: /docs и /redoc только для super_admin
+from app.core.deps import get_current_user as _gcu_docs
+from app.models.user import User as _UserDocs, UserRole as _UR
 
+async def _require_super_admin_docs(user: _UserDocs = Depends(_gcu_docs)):
+    if user.role != _UR.SUPER_ADMIN:
+        raise HTTPException(404)
+    return user
+
+@app.get("/docs", include_in_schema=False)
+async def custom_swagger_ui_html(_: _UserDocs = Depends(_require_super_admin_docs)):
+    return get_swagger_ui_html(openapi_url="openapi.json", title="Клиника API — Swagger UI")
 
 @app.get("/redoc", include_in_schema=False)
-async def custom_redoc_html():
-    return get_redoc_html(
-        openapi_url="openapi.json",
-        title="Клиника API — ReDoc",
-    )
+async def custom_redoc_html(_: _UserDocs = Depends(_require_super_admin_docs)):
+    return get_redoc_html(openapi_url="openapi.json", title="Клиника API — ReDoc")
 
 
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
@@ -1194,6 +1392,7 @@ async def prometheus_middleware(request: Request, call_next):
 
 app.include_router(domain_router)  # /.well-known/clinika-domain/*
 app.include_router(auth.router)
+app.include_router(password_reset_router)
 app.include_router(referrals.router)
 app.include_router(bonuses.router)
 app.include_router(clinics.router)
@@ -1234,6 +1433,8 @@ app.include_router(presence_router)
 app.include_router(calls_router)
 app.include_router(push_router)
 app.include_router(webhooks_router)
+app.include_router(tenant_api_keys_router)
+app.include_router(public_api_v1_router)
 app.include_router(ads_router)
 app.include_router(commercial_router)
 app.include_router(ai_router)
@@ -1257,6 +1458,7 @@ app.include_router(clinic_payments_router)
 app.include_router(fiscal_receipts_router)
 # Live tail логов backend для super_admin (debug инструмент)
 app.include_router(admin_logs_router)
+app.include_router(impersonation_router)
 # W3: глобальный поиск /search (Cmd+K) + центр уведомлений
 app.include_router(search_router)
 app.include_router(notifications_router)
@@ -1276,6 +1478,8 @@ app.include_router(ai_assistant_admin_router)
 app.include_router(call_recording_router)
 # Inventory — учёт материалов, остатков и движений (W7)
 app.include_router(inventory_router)
+# Module Monitoring System — health-state платных модулей (cron + UI)
+app.include_router(module_monitoring_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

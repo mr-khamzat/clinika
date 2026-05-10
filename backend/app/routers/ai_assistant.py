@@ -252,16 +252,33 @@ async def _create_support_chat_message(
 # ────────────────────── Публичные эндпоинты пациента ──────────────────────
 
 
+
+
+# ── Patient session validation (Phase 0 security) ─────────────────────────────
+async def _patient_session_or_401(t: str, db: AsyncSession):
+    """Проверить patient session token. Возвращает PatientSession или 401."""
+    from app.routers.patient import _restore_session as _rs
+    sess = await _rs(db, t)
+    if not sess:
+        raise HTTPException(401, "Session invalid or expired")
+    return sess
+
+
 @router.post("/patient-portal/ai/conversations")
 async def start_conversation(
     body: StartConversationBody,
+    t: str = Query(..., description="patient session token"),
     db: AsyncSession = Depends(get_db),
 ):
     """Создать или вернуть существующую активную беседу для пациента."""
+    sess = await _patient_session_or_401(t, db)
     tenant = await _tenant_by_slug(db, body.tenant_slug.strip())
     await _ensure_module_active(db, tenant.id)
 
     phone = normalize_phone(body.patient_phone)
+    # Безопасность: phone в body должен совпадать с phone в session
+    if normalize_phone(sess.phone) != phone:
+        raise HTTPException(403, "Phone mismatch with session")
 
     # Существующий active-диалог?
     existing = (
@@ -295,12 +312,18 @@ async def start_conversation(
 async def send_message(
     conv_id: uuid.UUID,
     body: SendMessageBody,
+    t: str = Query(..., description="patient session token"),
     db: AsyncSession = Depends(get_db),
 ):
     """Отправить сообщение пациента, получить ответ AI."""
+    sess = await _patient_session_or_401(t, db)
     conv = (
         await db.execute(select(AiConversation).where(AiConversation.id == conv_id))
     ).scalar_one_or_none()
+    # Безопасность: conv.patient_phone должен совпадать с session
+    from app.utils.phone import normalize_phone as _np
+    if conv and _np(conv.patient_phone) != _np(sess.phone):
+        raise HTTPException(403, "Conversation belongs to other patient")
     if not conv:
         raise HTTPException(404, "Диалог не найден")
     if conv.tenant_id is None:
@@ -383,6 +406,7 @@ async def list_messages_public(
     db: AsyncSession = Depends(get_db),
 ):
     """История сообщений (для рендера чата на /p/)."""
+    sess = await _patient_session_or_401(t, db)
     conv = (
         await db.execute(select(AiConversation).where(AiConversation.id == conv_id))
     ).scalar_one_or_none()
@@ -412,6 +436,7 @@ async def escalate_public(
     db: AsyncSession = Depends(get_db),
 ):
     """Пациент вручную просит перевести на менеджера."""
+    sess = await _patient_session_or_401(t, db)
     conv = (
         await db.execute(select(AiConversation).where(AiConversation.id == conv_id))
     ).scalar_one_or_none()

@@ -5,7 +5,7 @@ Super Admin API — управление платформой.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, func, text, literal_column
 from pydantic import BaseModel, Field
 from typing import Optional
 import uuid
@@ -1214,14 +1214,15 @@ async def platform_analytics(
     sub_dynamics = []
     try:
         # количество созданных подписок по дням
+        day_expr = func.date_trunc(literal_column("'day'"), Subscription.created_at)
         dyn_q = (
             select(
-                func.date_trunc('day', Subscription.created_at).label("day"),
+                day_expr.label("day"),
                 func.count(Subscription.id).label("count"),
             )
             .where(Subscription.created_at >= since)
-            .group_by(func.date_trunc('day', Subscription.created_at))
-            .order_by(func.date_trunc('day', Subscription.created_at))
+            .group_by(day_expr)
+            .order_by(day_expr)
         )
         rows = (await db.execute(dyn_q)).fetchall()
         sub_dynamics = [

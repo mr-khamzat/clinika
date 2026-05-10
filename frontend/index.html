@@ -39,9 +39,9 @@
     }
   }
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- Golos Text — self-hosted (раньше тянулся с fonts.googleapis.com — медленно/блокируется в РФ) -->
+  <link rel="preload" href="/fonts/golos/golos-text.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/fonts/golos/golos-text.css" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/favicon.svg" />
@@ -51,8 +51,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="КлиникСеть" />
-  <!-- Preload иконочного шрифта (3MB) — стартуем параллельно с JS/CSS -->
-  <link rel="preload" href="/assets/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin="anonymous">
+  <!-- Material Symbols (3.3 MB) НЕ preload — иначе блокирует первый рендер.
+       CSS @font-face с font-display: swap покажет UI без иконок, шрифт догрузится в фоне. -->
   <!-- Telegram Web App SDK подключается динамически только в PatientCabinet (/p/) — см. lib/tg.js loadTelegramSDK() -->
 </head>
 <body>

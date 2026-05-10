@@ -189,8 +189,35 @@ async def password_login(data: PasswordLoginData, request: Request, db: AsyncSes
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
+        # ── Журнал безопасности: фиксируем неудачную попытку ────────────
+        # Никаких подсказок «такого пользователя нет» — пишем единый action
+        # auth.login_failed. Сам username сохраняем в actor_name для top-5
+        # атакованных. IP/UA подтянет audit_service из request.
+        try:
+            from app.services import security_service
+            await security_service.log_login_failed(
+                db,
+                username=data.username,
+                reason=("user_not_found" if not user else "invalid_password"),
+                request=request,
+            )
+            await db.commit()
+        except Exception as e:
+            logger.warning(f"login_failed audit failed: {e}")
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
     if not user.is_active:
+        # Тоже security-событие — попытка входа в заблокированный аккаунт.
+        try:
+            from app.services import security_service
+            await security_service.log_login_failed(
+                db,
+                username=data.username,
+                reason="account_disabled",
+                request=request,
+            )
+            await db.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
 
     return await _issue_tokens(user, request, db)

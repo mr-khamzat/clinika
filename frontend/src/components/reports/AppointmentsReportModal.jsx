@@ -14,9 +14,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import api from '../../api'
 import { Modal, Button, KpiRow, KpiCard, useToast } from '../../design'
-import { generateAppointmentsPDF } from './appointmentsReportPdf'
-import { generateAppointmentsExcel } from './appointmentsReportExcel'
-import { generateAppointmentsCSV } from './appointmentsReportCsv'
+// Тяжёлые генераторы (jspdf ~870KB, xlsx ~330KB) грузим динамически в момент клика «Скачать».
+// Это убирает их из основного бандла — pdf-qr вообще не попадает в index.js.
 
 // ───── Хелперы дат ─────
 function isoDate(d) {
@@ -129,10 +128,13 @@ export default function AppointmentsReportModal({ open, onClose }) {
           : 'Все клиники',
       }
       if (format === 'pdf') {
+        const { generateAppointmentsPDF } = await import('./appointmentsReportPdf')
         await generateAppointmentsPDF(data, meta)
       } else if (format === 'xlsx') {
+        const { generateAppointmentsExcel } = await import('./appointmentsReportExcel')
         await generateAppointmentsExcel(data, meta)
       } else {
+        const { generateAppointmentsCSV } = await import('./appointmentsReportCsv')
         generateAppointmentsCSV(data, meta)
       }
       toast.success ? toast.success('Файл сохранён') : null

@@ -10,7 +10,7 @@ class UserUpdate(BaseModel):
     full_name: str | None = None
     phone_number: str | None = None
     date_of_birth: str | None = None
-    clinic_id: UUID | None = None
+    # clinic_id убран — privilege escalation через PATCH /admins/me. Manager меняет через /admins/{id}/assign-clinic.
 
 class UserResponse(BaseModel):
     id: UUID
@@ -21,7 +21,7 @@ class UserResponse(BaseModel):
     category: str | None
     date_of_birth: str | None
     role: UserRole
-    clinic_id: UUID | None
+    specialization: str | None = None
     is_active: bool
     created_at: datetime
     is_superadmin: bool = False

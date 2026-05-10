@@ -42,7 +42,7 @@ class CompleteVisitBody(BaseModel):
     short_code: int | None = None     # 4-значный код
 
 
-@router.post("/admin/settings", status_code=201)
+@router.post("/admin/settings", status_code=201, dependencies=[_admin])
 async def create_visiting_settings(
     body: VisitingSettingsCreate,
     current_user: User = Depends(get_current_user),
@@ -84,7 +84,7 @@ async def create_visiting_settings(
     return {"id": str(settings.id), "created": True}
 
 
-@router.get("/admin/settings")
+@router.get("/admin/settings", dependencies=[_admin])
 async def list_visiting_settings(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -228,7 +228,7 @@ async def get_my_income(
     }
 
 
-@router.post("/admin/complete-visit")
+@router.post("/admin/complete-visit", dependencies=[_admin])
 async def complete_visit(
     body: CompleteVisitBody,
     current_user: User = Depends(get_current_user),
@@ -401,7 +401,7 @@ class UpdateDoctorBody(BaseModel):
     new_password: Optional[str] = None
 
 
-@router.post("/admin/book-appointment", status_code=201)
+@router.post("/admin/book-appointment", status_code=201, dependencies=[_admin])
 async def book_visiting_appointment(
     body: BookAppointmentBody,
     request: Request,
@@ -509,7 +509,7 @@ async def book_visiting_appointment(
     }
 
 
-@router.get("/admin/appointments/{doctor_user_id}")
+@router.get("/admin/appointments/{doctor_user_id}", dependencies=[_admin])
 async def get_visiting_doctor_appointments(
     doctor_user_id: uuid.UUID,
     date_from: Optional[date] = None,
@@ -594,7 +594,7 @@ async def get_visiting_doctor_appointments(
     }
 
 
-@router.patch("/admin/update-doctor/{doctor_user_id}")
+@router.patch("/admin/update-doctor/{doctor_user_id}", dependencies=[_admin])
 async def update_visiting_doctor(
     doctor_user_id: uuid.UUID,
     body: UpdateDoctorBody,
@@ -652,7 +652,7 @@ async def update_visiting_doctor(
     return {"updated": True}
 
 
-@router.get("/admin/all-appointments")
+@router.get("/admin/all-appointments", dependencies=[_admin])
 async def get_all_visiting_appointments(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
@@ -745,7 +745,7 @@ class AppointmentEditBody(BaseModel):
     payment_method: Optional[str] = None  # acquiring / cash / transfer
 
 
-@router.patch("/admin/appointments/{apt_id}/edit")
+@router.patch("/admin/appointments/{apt_id}/edit", dependencies=[_admin])
 async def edit_appointment(
     apt_id: uuid.UUID,
     body: AppointmentEditBody,
@@ -794,7 +794,7 @@ async def edit_appointment(
     return {"updated": True, "id": str(apt.id)}
 
 
-@router.delete("/admin/appointments/{apt_id}")
+@router.delete("/admin/appointments/{apt_id}", dependencies=[_admin])
 async def delete_appointment(
     apt_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -812,7 +812,7 @@ async def delete_appointment(
     return {"deleted": True}
 
 
-@router.patch("/admin/suspend-doctor/{doctor_user_id}")
+@router.patch("/admin/suspend-doctor/{doctor_user_id}", dependencies=[_admin])
 async def suspend_visiting_doctor(
     doctor_user_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
@@ -827,7 +827,7 @@ async def suspend_visiting_doctor(
     return {"suspended": True, "id": str(doctor_user_id)}
 
 
-@router.patch("/admin/resume-doctor/{doctor_user_id}")
+@router.patch("/admin/resume-doctor/{doctor_user_id}", dependencies=[_admin])
 async def resume_visiting_doctor(
     doctor_user_id: uuid.UUID,
     current_user: User = Depends(get_current_user),

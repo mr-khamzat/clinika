@@ -5,7 +5,7 @@ from app.models.referral import ReferralStatus
 
 class ReferralCreate(BaseModel):
     to_clinic_id: UUID
-    service_id: UUID
+    service_id: UUID | None = None  # обязателен для type=service
     patient_phone: str
     patient_name: str | None = None
     mis_patient_id: int | None = None
@@ -13,6 +13,9 @@ class ReferralCreate(BaseModel):
     notes: str | None = None
     from_clinic_id: UUID | None = None  # только для менеджера
     appointment_at: datetime | None = None
+    referral_type: str = "service"  # service | doctor | lab
+    target_doctor_id: UUID | None = None  # для type=doctor
+    lab_tests: str | None = None  # для type=lab — список анализов
 
 class CancelRequestBody(BaseModel):
     reason: str
@@ -21,7 +24,11 @@ class ReferralResponse(BaseModel):
     id: UUID
     from_clinic_id: UUID | None = None
     to_clinic_id: UUID
-    service_id: UUID
+    service_id: UUID | None = None
+    referral_type: str = "service"
+    target_doctor_id: UUID | None = None
+    target_doctor_name: str | None = None
+    lab_tests: str | None = None
     patient_phone: str
     patient_name: str | None = None
     mis_patient_id: int | None = None

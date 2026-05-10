@@ -98,6 +98,18 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
 
-      - name: Run pytest
+      - name: Run pytest (unit)
         working-directory: backend
         run: pytest -v -m "not integration" --tb=short
+
+      - name: Create test database (integration)
+        env:
+          PGPASSWORD: test
+        run: |
+          psql -h localhost -U test -d test -c "CREATE DATABASE clinika_test;" || true
+
+      - name: Run pytest (integration)
+        working-directory: backend
+        env:
+          CLINIKA_TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/clinika_test
+        run: pytest -v -m integration --tb=short

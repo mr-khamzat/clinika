@@ -211,6 +211,8 @@ async def list_managers(
     q = select(User).where(User.role == UserRole.MANAGER, User.is_active == True)
     if current_user.tenant_id is not None:
         q = q.where(User.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        q = q.where(User.clinic_id == current_user.clinic_id)
     result = await db.execute(q)
     return [{"id": str(u.id), "full_name": u.full_name, "username": u.username} for u in result.scalars().all()]
 
@@ -310,7 +312,7 @@ async def create_staff_universal(
     # ── Уникальность email (если указан) ──
     if body.email:
         existing_email = await db.execute(select(User).where(User.email == body.email))
-        if existing_email.scalar_one_or_none():
+        if existing_email.scalars().first():
             raise HTTPException(status_code=409, detail="Email уже используется")
 
     # ── Лимит пользователей по тарифу ──

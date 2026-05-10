@@ -10,6 +10,16 @@ services:
     image: postgres:16-alpine
     container_name: clinika-db
     restart: always
+    # pg_stat_statements: shared_preload_libraries требует рестарт PG.
+    # track=all — включая запросы внутри функций/триггеров.
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - pg_stat_statements.max=10000
     environment:
       POSTGRES_DB: clinika
       POSTGRES_USER: clinika
@@ -71,6 +81,12 @@ services:
         condition: service_started
       clinika-docker-proxy:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     logging: *default-logging
     networks:
       - clinika-net
@@ -87,6 +103,12 @@ services:
     restart: always
     ports:
       - "127.0.0.1:8901:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:80/ >/dev/null 2>&1 || curl -fsS http://localhost:80/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     logging: *default-logging
     networks:
       - clinika-net
@@ -98,6 +120,14 @@ services:
     env_file: .env
     depends_on:
       - clinika-backend
+    # Бот запущен как PID 1 (python bot.py). pgrep отсутствует в slim-образе,
+    # поэтому проверяем что PID 1 — python через /proc.
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q '^python' /proc/1/comm || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     logging: *default-logging
     networks:
       - clinika-net

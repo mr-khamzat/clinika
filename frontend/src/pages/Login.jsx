@@ -2,6 +2,7 @@ import { SLUG } from '../config'
 import { useState } from 'react'
 import useAuthStore from '../store/auth'
 import { loginPassword, getMe } from '../api'
+import ForgotPasswordDialog from '../components/ForgotPasswordDialog'
 
 export default function Login() {
   const { setToken, setUser } = useAuthStore()
@@ -10,6 +11,7 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [forgotOpen, setForgotOpen] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -23,11 +25,20 @@ export default function Login() {
       const res = await loginPassword(username.trim(), password.trim())
       const token = res.data.access_token
       const redirectUrl = res.data?.redirect_url   // backend подсказывает куда идти по роли
+      const realSlug = res.data?.tenant_slug || SLUG  // куда пользователь принадлежит на самом деле
       setToken(token)
+      // Сохраняем токен под slug текущего URL И под slug тенанта пользователя
+      // (на случай, если юзер залогинился по чужому slug — после редиректа токен найдётся)
       localStorage.setItem('clinika_token_' + SLUG, token)
+      if (realSlug && realSlug !== SLUG) {
+        localStorage.setItem('clinika_token_' + realSlug, token)
+      }
       // Сохраняем refresh-токен для auto-refresh при 401
       if (res.data?.refresh_token) {
         localStorage.setItem('clinika_refresh_token_' + SLUG, res.data.refresh_token)
+        if (realSlug && realSlug !== SLUG) {
+          localStorage.setItem('clinika_refresh_token_' + realSlug, res.data.refresh_token)
+        }
       }
       const me = await getMe()
       setUser(me.data)
@@ -137,12 +148,21 @@ export default function Login() {
               >
                 {loading ? 'Вход...' : 'Войти'}
               </button>
-              <p className="mt-6 text-center text-sm text-[#727783]">
+              <button
+                type="button"
+                onClick={() => setForgotOpen(true)}
+                className="mt-5 w-full text-center text-sm font-medium text-[#1565c0] hover:underline"
+              >
+                Забыли пароль?
+              </button>
+              <p className="mt-3 text-center text-sm text-[#727783]">
                 Нет доступа? Обратитесь к администратору
               </p>
             </div>
           </form>
         </section>
+
+        <ForgotPasswordDialog open={forgotOpen} onClose={() => setForgotOpen(false)} />
 
         {/* Footer */}
         <footer className="mt-8 flex items-center gap-3">

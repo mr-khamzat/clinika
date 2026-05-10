@@ -142,6 +142,12 @@ async def init_payment(
         )
     except LookupError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        # Эквайринг не сконфигурирован (нет ключей в .env / БД)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Эквайринг не настроен: {e}",
+        )
     except NotImplementedError as e:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -181,6 +187,11 @@ async def refund_payment(
         return await refund_clinic_payment(db, payment_id=payment_id, amount=amount)
     except LookupError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Возврат не выполнен — {e}",
+        )
     except NotImplementedError as e:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -197,8 +208,13 @@ async def payment_webhook(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Приём webhook'а от шлюза. Без auth — подпись проверяется через verify_webhook
-    конкретного адаптера. Если адаптер пока заглушка — 501.
+    Приём webhook'а от шлюза. Без auth — подлинность проверяется через
+    verify_webhook конкретного адаптера (для ЮKassa — IP allowlist).
+
+    Маршрут поиска платежа:
+      1) metadata.internal_payment_id — наш ClinicPayment.id (передаётся при init);
+      2) metadata.invoice_id           — Invoice (подписки платформы);
+      3) gateway_payment_id            — fallback по ID платежа шлюза.
     """
     if gateway not in list_gateways():
         raise HTTPException(status_code=404, detail=f"Шлюз '{gateway}' неизвестен")
@@ -206,9 +222,9 @@ async def payment_webhook(
     body = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
 
-    # Webhook не привязан к конкретной клинике в URL — берём первый активный конфиг
-    # этого шлюза (для верификации подписи). На реальной интеграции — добавить
-    # маршрутизацию через {clinic_id} в URL или metadata.
+    # Берём первый активный конфиг (для адаптеров, которым он нужен). Если
+    # конфига нет — адаптер обязан использовать ENV и сам бросить RuntimeError,
+    # если ENV пуст. Для ЮKassa verify_webhook не требует ни того, ни другого.
     cfg = (await db.execute(
         select(PaymentGatewayConfig).where(
             PaymentGatewayConfig.gateway == gateway,
@@ -216,28 +232,40 @@ async def payment_webhook(
         ).limit(1)
     )).scalar_one_or_none()
 
-    if cfg is None:
-        raise HTTPException(status_code=400, detail="Не найден активный конфиг шлюза")
-
-    adapter = get_gateway(gateway, cfg)
+    adapter = get_gateway(gateway, cfg)  # cfg может быть None — адаптер должен это пережить
     try:
         parsed = await adapter.verify_webhook(headers, body)
     except NotImplementedError as e:
         raise HTTPException(status_code=status.HTTP_501_NOT_IMPLEMENTED, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
     if parsed is None:
-        raise HTTPException(status_code=400, detail="Невалидная подпись webhook")
+        # Подпись битая или IP не из allowlist
+        raise HTTPException(status_code=403, detail="Webhook не прошёл проверку подлинности")
 
-    # Ожидаемый контракт parsed: {payment_id, status, paid_at?, raw}
+    # Контракт parsed: {payment_id, status, paid_at?, raw, event?}
     gateway_payment_id = parsed.get("payment_id")
     new_status = parsed.get("status")
+    raw = parsed.get("raw") or {}
 
-    # Найти ClinicPayment по gateway_payment_id
-    payment = (await db.execute(
-        select(ClinicPayment).where(ClinicPayment.gateway_payment_id == gateway_payment_id)
-    )).scalar_one_or_none()
-    if payment is None:
-        raise HTTPException(status_code=404, detail="Платёж не найден в БД")
+    # 1) Попытка найти по metadata (для платежей через init_clinic_payment).
+    metadata = (raw.get("object") or {}).get("metadata") or {}
+    internal_id = metadata.get("internal_payment_id")
+    invoice_id_meta = metadata.get("invoice_id")
+
+    payment: ClinicPayment | None = None
+    if internal_id:
+        try:
+            payment = await db.get(ClinicPayment, uuid.UUID(str(internal_id)))
+        except (ValueError, TypeError):
+            payment = None
+
+    # 2) Fallback по gateway_payment_id (если init проставил его)
+    if payment is None and gateway_payment_id:
+        payment = (await db.execute(
+            select(ClinicPayment).where(ClinicPayment.gateway_payment_id == gateway_payment_id)
+        )).scalar_one_or_none()
 
     paid_at = parsed.get("paid_at")
     if isinstance(paid_at, str):
@@ -246,13 +274,54 @@ async def payment_webhook(
         except ValueError:
             paid_at = None
 
-    await update_clinic_payment_status(
-        db,
-        payment_id=payment.id,
-        status=new_status or payment.status,
-        paid_at=paid_at,
-        raw=parsed.get("raw"),
-    )
+    if payment is not None:
+        await update_clinic_payment_status(
+            db,
+            payment_id=payment.id,
+            status=new_status or payment.status,
+            paid_at=paid_at,
+            raw=raw,
+        )
+
+    # 3) Ветка для подписки платформы (Invoice → record_payment).
+    # Если webhook пришёл по Invoice (metadata.invoice_id), регистрируем платёж в billing.
+    if invoice_id_meta and (new_status == "succeeded"):
+        try:
+            from decimal import Decimal as _D
+
+            from app.models.billing import Invoice
+            from app.services import billing_service
+
+            inv_uuid = uuid.UUID(str(invoice_id_meta))
+            invoice = await db.get(Invoice, inv_uuid)
+            if invoice is not None and invoice.status != "paid":
+                yk_amount = ((raw.get("object") or {}).get("amount") or {}).get("value")
+                amount_dec = _D(str(yk_amount)) if yk_amount else _D(str(invoice.amount))
+                await billing_service.record_payment(
+                    db,
+                    inv_uuid,
+                    amount=amount_dec,
+                    method="yookassa",
+                    transaction_id=gateway_payment_id,
+                    gateway=gateway,
+                    meta={"webhook_event": parsed.get("event")},
+                )
+                await db.commit()
+        except Exception as e:  # noqa: BLE001 — логируем, но всегда отдаём 200
+            import logging
+            logging.getLogger("clinic_payments").exception(
+                "webhook → record_payment(invoice_id=%s) failed: %s", invoice_id_meta, e
+            )
+
+    if payment is None and not invoice_id_meta:
+        # Платёж/счёт не найден ни по одному ключу — отдаём 200 чтобы шлюз не ретраил,
+        # но логируем для отладки. Возвращать 404 нежелательно — шлюз начнёт спамить.
+        import logging
+        logging.getLogger("clinic_payments").warning(
+            "webhook gateway=%s: платёж не найден ни по metadata ни по %s",
+            gateway, gateway_payment_id,
+        )
+
     return {"ok": True}
 
 

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import ForgotPasswordDialog from '../components/ForgotPasswordDialog'
 
 export default function AdminLogin() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [forgotOpen, setForgotOpen] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -105,7 +107,15 @@ export default function AdminLogin() {
           >
             {loading ? 'Вход...' : 'Войти'}
           </button>
+          <button
+            type="button"
+            onClick={() => setForgotOpen(true)}
+            className="text-sm text-primary hover:underline mt-1"
+          >
+            Забыли пароль?
+          </button>
         </form>
+        <ForgotPasswordDialog open={forgotOpen} onClose={() => setForgotOpen(false)} />
       </div>
     </div>
   )

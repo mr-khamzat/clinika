@@ -78,16 +78,163 @@ function ProgressBar({ value, max, colorClass }) {
 }
 
 // Modal OUTSIDE AdsSection to prevent re-mount on every render (fixes input focus loss)
-function Modal({ title, onClose, children }) {
+function Modal({ title, onClose, children, wide = false }) {
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full ${wide ? 'max-w-5xl' : 'max-w-xl'} max-h-[94vh] overflow-y-auto`} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
           <h3 className="text-lg font-bold text-gray-900 dark:text-white">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition text-xl leading-none">✕</button>
         </div>
         <div className="p-6">{children}</div>
       </div>
+    </div>
+  )
+}
+
+// ── Live-превью баннера (рендерится прямо в форме, обновляется в realtime) ──
+function LivePreview({ form }) {
+  const theme = COLOR_THEMES.find(t => t.id === (form.color_theme || '')) || COLOR_THEMES[0]
+  const ctaStyles = {
+    primary: { bg: 'rgba(255,255,255,0.95)', color: '#0e7490' },
+    outline: { bg: 'transparent', color: '#fff', border: '1.5px solid rgba(255,255,255,0.7)' },
+    ghost:   { bg: 'rgba(255,255,255,0.18)', color: '#fff' },
+  }
+  const ctaSty = ctaStyles[form.cta_style] || ctaStyles.primary
+  return (
+    <div className="sticky top-[80px]">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5">
+        <span className="material-symbols-outlined text-sm">visibility</span>
+        Live-превью
+      </div>
+      <div className="bg-gray-900 rounded-[34px] p-3 shadow-2xl border-4 border-gray-700 mx-auto" style={{ width: 280 }}>
+        <div className="flex justify-between items-center px-2 mb-2 text-white/40 text-[9px]">
+          <span>9:41</span>
+          <div className="flex gap-1 items-center"><span>●●●</span><span>WiFi</span><span>🔋</span></div>
+        </div>
+        <div className="bg-white rounded-[20px] overflow-hidden">
+          <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full bg-cyan-100 flex items-center justify-center text-[10px] font-bold text-cyan-600">К</div>
+            <div>
+              <div className="text-[11px] font-semibold text-gray-800">Личный кабинет</div>
+              <div className="text-[9px] text-gray-400">Клиника</div>
+            </div>
+          </div>
+          <div className="p-2.5">
+            <div className="rounded-xl overflow-hidden relative" style={{ background: theme.grad, boxShadow: '0 4px 14px rgba(0,0,0,0.10)' }}>
+              {form.image_data ? (
+                <img
+                  src={'data:' + (form.image_mime || 'image/png') + ';base64,' + form.image_data}
+                  alt="preview"
+                  style={{ height: Math.min(Number(form.banner_height) || 96, 120), width: '100%', objectFit: 'cover', display: 'block' }} />
+              ) : (
+                <div style={{ height: Math.min(Number(form.banner_height) || 96, 120) }} />
+              )}
+              <div className="px-3 py-2.5 text-white">
+                <div className="text-[11px] font-bold leading-tight" style={{ textShadow: '0 1px 2px rgba(0,0,0,.3)' }}>
+                  {form.title || 'Заголовок объявления'}
+                </div>
+                {form.body && (
+                  <div className="text-[9px] mt-1 text-white/85 leading-snug" style={{ textShadow: '0 1px 1px rgba(0,0,0,.25)' }}>
+                    {form.body.slice(0, 90)}{form.body.length > 90 ? '…' : ''}
+                  </div>
+                )}
+                {form.cta_text && (
+                  <div className="mt-2">
+                    <span className="inline-block text-[10px] font-bold px-3 py-1 rounded-full"
+                      style={{ background: ctaSty.bg, color: ctaSty.color, border: ctaSty.border || 'none' }}>
+                      {form.cta_text} →
+                    </span>
+                  </div>
+                )}
+              </div>
+              <span className="absolute top-1.5 right-1.5 text-white/70 text-[8px] bg-black/30 px-1 rounded">РЕКЛАМА</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 text-[10px] text-gray-500 text-center">
+        Обновляется в реальном времени
+      </div>
+    </div>
+  )
+}
+
+// ── Счётчик символов с подсказками ──
+function CharCount({ text, hint }) {
+  const len = (text || '').length
+  let color = 'text-gray-400'
+  let label = 'идеально'
+  if (len === 0) { color = 'text-gray-400'; label = '' }
+  else if (len < hint.ideal_min) { color = 'text-amber-500'; label = `коротко (идеально ${hint.ideal_min}-${hint.ideal_max})` }
+  else if (len <= hint.ideal_max) { color = 'text-emerald-600'; label = '✓ идеальная длина' }
+  else if (len <= hint.hard) { color = 'text-amber-500'; label = `длинновато (идеально ${hint.ideal_min}-${hint.ideal_max})` }
+  else { color = 'text-red-500'; label = 'слишком длинно' }
+  return (
+    <div className={`text-[10px] mt-1 flex justify-between items-center ${color}`}>
+      <span>{label}</span>
+      <span>{len} / {hint.hard}</span>
+    </div>
+  )
+}
+
+// ── Эмодзи-пикер ──
+function EmojiPicker({ onPick }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative inline-block">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="text-base px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition border border-gray-300 dark:border-gray-600 leading-none"
+        title="Вставить эмодзи">
+        😊
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-40 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-2 w-[260px] grid grid-cols-9 gap-0.5">
+            {EMOJI_LIBRARY.map((e, i) => (
+              <button type="button" key={i} onClick={() => { onPick(e); setOpen(false) }}
+                className="text-xl hover:bg-gray-100 dark:hover:bg-gray-700 rounded p-1 transition">
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── WYSIWYG mini-toolbar (применяет inline-форматирование к textarea) ──
+function FormatToolbar({ value, onChange, textareaRef }) {
+  const wrap = (before, after = before) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const sel = value.slice(start, end) || 'текст'
+    const newVal = value.slice(0, start) + before + sel + after + value.slice(end)
+    onChange(newVal)
+    setTimeout(() => {
+      ta.focus()
+      ta.selectionStart = start + before.length
+      ta.selectionEnd = start + before.length + sel.length
+    }, 0)
+  }
+  return (
+    <div className="inline-flex gap-1 ml-2 align-middle">
+      <button type="button" onClick={() => wrap('**')} title="Жирный"
+        className="px-2 py-0.5 rounded text-[11px] font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+        B
+      </button>
+      <button type="button" onClick={() => wrap('_')} title="Курсив"
+        className="px-2 py-0.5 rounded text-[11px] italic border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+        i
+      </button>
+      <button type="button" onClick={() => wrap('• ', '')} title="Маркер списка"
+        className="px-2 py-0.5 rounded text-[11px] border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+        •
+      </button>
     </div>
   )
 }
@@ -103,7 +250,31 @@ const EMPTY_FORM = {
   price: '0', impressions_limit: '', clicks_limit: '',
   sort_order: '0', color_theme: '',
   schedule_hours_start: '', schedule_hours_end: '', schedule_days: [],
+  // Pro (adspro01)
+  budget_total: '', freq_per_day: '', freq_per_hour: '',
+  auto_pause_idle_days: '7', attribution_window_days: '7',
+  audience: { gender: '', age_min: '', age_max: '', city: '', ltv_min: '' },
+  cta_text: '', cta_style: 'primary',
+  is_template: false,
 }
+
+// CTA presets — частые в медицинских объявлениях
+const CTA_PRESETS = [
+  '', 'Записаться', 'Подробнее', 'Получить скидку', 'Узнать цену',
+  'Записаться онлайн', 'Заказать звонок', 'Бесплатная консультация',
+  'Акция действует', 'Связаться',
+]
+
+// Популярные эмодзи для медицинских клиник
+const EMOJI_LIBRARY = [
+  '🩺','💉','🏥','💊','🦷','👶','🧬','🦴','❤️','🩸','🫀','🫁','🧠',
+  '🎁','⏰','🔥','✨','⚡','💎','🌟','🏆','✅','📞','📅','💯','🎯',
+  '👨‍⚕️','👩‍⚕️','💆','🤰','👁','👃','👄','🦵','🦶',
+]
+
+// Лимиты для подсказок длины
+const TITLE_HINT = { ideal_min: 30, ideal_max: 50, hard: 200 }
+const BODY_HINT  = { ideal_min: 60, ideal_max: 120, hard: 300 }
 
 function BannerPreview({ ad, onClose }) {
   const theme = COLOR_THEMES.find(t => t.id === (ad.color_theme || '')) || COLOR_THEMES[0]
@@ -276,10 +447,76 @@ function StatsModal({ ad, token, onClose }) {
   )
 }
 
+
+// ── AI-генерация заголовков/описаний (Anthropic Claude через backend /ads/ai-generate) ──
+function AiSuggestButton({ kind, form, set }) {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [variants, setVariants] = useState([])
+  const [err, setErr] = useState('')
+
+  const ctx = (form.title || form.audience?.city || form.body || 'медицинская клиника').slice(0, 200)
+
+  const gen = async () => {
+    setBusy(true); setErr('')
+    try {
+      const tk = localStorage.getItem('clinika_token_' + (window.location.pathname.split('/')[1] || ''))
+      const r = await fetch(API + '/ads/ai-generate', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: ctx, kind, count: 5 }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setErr(d.detail || 'Ошибка генерации')
+      } else {
+        const d = await r.json()
+        setVariants(d.variants || [])
+        setOpen(true)
+      }
+    } catch (e) { setErr('Сетевая ошибка') }
+    setBusy(false)
+  }
+
+  return (
+    <>
+      <button type="button" onClick={gen} disabled={busy}
+        className="text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/30 hover:bg-violet-100 dark:hover:bg-violet-900/50 px-2 py-0.5 rounded-md border border-violet-200 dark:border-violet-700 disabled:opacity-50 inline-flex items-center gap-1">
+        <span className="material-symbols-outlined text-xs" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+        {busy ? '…' : 'AI'}
+      </button>
+      {err && <div className="text-[10px] text-red-500 mt-1">{err}</div>}
+      {open && variants.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 z-[700] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="font-bold text-gray-900 dark:text-white">AI-варианты {kind === 'title' ? 'заголовка' : 'описания'}</div>
+              <div className="text-xs text-gray-500 mt-1">Выберите один — он подставится в поле</div>
+            </div>
+            <div className="p-3 space-y-2">
+              {variants.map((v, i) => (
+                <button type="button" key={i}
+                  onClick={() => { set(kind, v); setOpen(false) }}
+                  className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition text-sm text-gray-800 dark:text-gray-200">
+                  {v}
+                </button>
+              ))}
+            </div>
+            <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <button type="button" onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700">Закрыть</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }) {
   const fileInputRef = useRef(null)
   const days = daysBetween(form.start_date, form.end_date)
   const [showSchedule, setShowSchedule] = useState(false)
+  const bodyRef = useRef(null)
 
   const toggleDay = (idx) => {
     const curr = form.schedule_days || []
@@ -288,18 +525,56 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
   }
 
   return (
-    <div className="space-y-4">
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
+      <div className="space-y-4 min-w-0">
       {err && <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm px-4 py-3 rounded-xl border border-red-200 dark:border-red-700">{err}</div>}
 
       <div>
-        <label className={labelCls}>Заголовок *</label>
-        <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="Акция: скидка 20% на МРТ" className={inputCls} />
+        <div className="flex items-center justify-between mb-1">
+          <label className={labelCls}>Заголовок *</label>
+          <div className="flex items-center gap-2">
+            <EmojiPicker onPick={(e) => set('title', form.title + e)} />
+            <AiSuggestButton kind="title" form={form} set={set} />
+          </div>
+        </div>
+        <input value={form.title} onChange={e => set('title', e.target.value)} placeholder="🎁 Скидка 20% на МРТ — только до конца недели" className={inputCls} />
+        <CharCount text={form.title} hint={TITLE_HINT} />
       </div>
 
       <div>
-        <label className={labelCls}>Текст объявления</label>
-        <textarea value={form.body} onChange={e => set('body', e.target.value)} placeholder="Подробное описание..." rows={3}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center">
+            <label className={labelCls}>Текст объявления</label>
+            <FormatToolbar value={form.body} onChange={(v) => set('body', v)} textareaRef={bodyRef} />
+          </div>
+          <AiSuggestButton kind="body" form={form} set={set} />
+        </div>
+        <textarea ref={bodyRef} value={form.body} onChange={e => set('body', e.target.value)} placeholder="Что предлагаете? Используйте B/I для выделения, • для маркеров." rows={3}
           className={inputCls + ' resize-y'} />
+        <CharCount text={form.body} hint={BODY_HINT} />
+      </div>
+
+      {/* CTA-кнопка */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Текст CTA-кнопки</label>
+          <select value={form.cta_text}
+            onChange={e => set('cta_text', e.target.value)}
+            className={inputCls}>
+            {CTA_PRESETS.map(c => <option key={c} value={c}>{c || '— без кнопки —'}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Стиль CTA</label>
+          <select value={form.cta_style}
+            onChange={e => set('cta_style', e.target.value)}
+            disabled={!form.cta_text}
+            className={inputCls}>
+            <option value="primary">Заметная (primary)</option>
+            <option value="outline">Контурная (outline)</option>
+            <option value="ghost">Полупрозрачная (ghost)</option>
+          </select>
+        </div>
       </div>
 
       <div>
@@ -437,6 +712,73 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
         </div>
       </div>
 
+      {/* ───────── PRO: Бюджет, Frequency capping, Авто-пауза ───────── */}
+      <div className="border-l-4 border-cyan-400 bg-cyan-50/40 dark:bg-cyan-900/10 rounded-r-xl px-3 py-3">
+        <div className="text-xs font-semibold text-cyan-700 dark:text-cyan-400 mb-2 flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-base">workspace_premium</span>
+          Pro-настройки (опц.)
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Бюджет, ₽ (auto-pause)</label>
+            <input type="number" value={form.budget_total} onChange={e => set('budget_total', e.target.value)} placeholder="Без лимита" className={inputCls} />
+            <div className="text-[10px] text-gray-500 mt-1">Авто-пауза при достижении</div>
+          </div>
+          <div>
+            <label className={labelCls}>Окно атрибуции, дн.</label>
+            <input type="number" value={form.attribution_window_days} onChange={e => set('attribution_window_days', e.target.value)} placeholder="7" className={inputCls} />
+            <div className="text-[10px] text-gray-500 mt-1">Засчитывать конверсии за N дней после клика</div>
+          </div>
+          <div>
+            <label className={labelCls}>Не чаще, /день одному</label>
+            <input type="number" value={form.freq_per_day} onChange={e => set('freq_per_day', e.target.value)} placeholder="Без лимита" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Не чаще, /час одному</label>
+            <input type="number" value={form.freq_per_hour} onChange={e => set('freq_per_hour', e.target.value)} placeholder="Без лимита" className={inputCls} />
+          </div>
+          <div className="col-span-2">
+            <label className={labelCls}>Авто-пауза если простой N дней</label>
+            <input type="number" value={form.auto_pause_idle_days} onChange={e => set('auto_pause_idle_days', e.target.value)} placeholder="7" className={inputCls} />
+          </div>
+        </div>
+      </div>
+
+      {/* ───────── PRO: Таргетинг по аудитории ───────── */}
+      <div className="border-l-4 border-violet-400 bg-violet-50/40 dark:bg-violet-900/10 rounded-r-xl px-3 py-3">
+        <div className="text-xs font-semibold text-violet-700 dark:text-violet-400 mb-2 flex items-center gap-1.5">
+          <span className="material-symbols-outlined text-base">groups</span>
+          Таргетинг (показывать только тем, кто подходит)
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelCls}>Пол</label>
+            <select value={form.audience.gender} onChange={e => set('audience', { ...form.audience, gender: e.target.value })} className={inputCls}>
+              <option value="">— любой —</option>
+              <option value="M">Мужской</option>
+              <option value="F">Женский</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Город</label>
+            <input type="text" value={form.audience.city} onChange={e => set('audience', { ...form.audience, city: e.target.value })} placeholder="любой" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Возраст от</label>
+            <input type="number" value={form.audience.age_min} onChange={e => set('audience', { ...form.audience, age_min: e.target.value })} placeholder="—" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Возраст до</label>
+            <input type="number" value={form.audience.age_max} onChange={e => set('audience', { ...form.audience, age_max: e.target.value })} placeholder="—" className={inputCls} />
+          </div>
+          <div className="col-span-2">
+            <label className={labelCls}>LTV пациента не менее, ₽</label>
+            <input type="number" value={form.audience.ltv_min} onChange={e => set('audience', { ...form.audience, ltv_min: e.target.value })} placeholder="0 = всем" className={inputCls} />
+            <div className="text-[10px] text-gray-500 mt-1">Только для пациентов с накопленной выручкой</div>
+          </div>
+        </div>
+      </div>
+
       <div className="border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden">
         <button type="button" onClick={() => setShowSchedule(s => !s)}
           className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
@@ -488,6 +830,18 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
           {saving ? (isEdit ? 'Сохранение...' : 'Создание...') : (isEdit ? 'Сохранить' : 'Создать объявление')}
         </button>
       </div>
+
+      {/* Чекбокс «сохранить как шаблон» */}
+      <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+        <input type="checkbox" checked={!!form.is_template}
+          onChange={e => set('is_template', e.target.checked)}
+          className="w-4 h-4 accent-cyan-600" />
+        <span>Сохранить как шаблон (не идёт в показы, можно использовать как основу для будущих)</span>
+      </label>
+      </div>
+      <div className="hidden md:block">
+        <LivePreview form={form} />
+      </div>
     </div>
   )
 }
@@ -497,6 +851,9 @@ export default function AdsSection({ token }) {
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [healthIssues, setHealthIssues] = useState(null) // { issues: [...] }
+  const [healthBusy, setHealthBusy] = useState(false)
+  const [bulkSel, setBulkSel] = useState(new Set())  // bulk-выбор по id
   const [editAd, setEditAd] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -540,6 +897,19 @@ export default function AdsSection({ token }) {
       price: String(ad.price ?? 0),
       impressions_limit: ad.impressions_limit ? String(ad.impressions_limit) : '',
       clicks_limit: ad.clicks_limit ? String(ad.clicks_limit) : '',
+      budget_total: ad.budget_total != null ? String(ad.budget_total) : '',
+      freq_per_day: ad.freq_per_day ? String(ad.freq_per_day) : '',
+      freq_per_hour: ad.freq_per_hour ? String(ad.freq_per_hour) : '',
+      auto_pause_idle_days: String(ad.auto_pause_idle_days ?? 7),
+      attribution_window_days: String(ad.attribution_window_days ?? 7),
+      audience: ad.audience ? {
+        gender: ad.audience.gender || '', age_min: ad.audience.age_min || '',
+        age_max: ad.audience.age_max || '', city: ad.audience.city || '',
+        ltv_min: ad.audience.ltv_min || ''
+      } : { gender: '', age_min: '', age_max: '', city: '', ltv_min: '' },
+      cta_text: ad.cta_text || '',
+      cta_style: ad.cta_style || 'primary',
+      is_template: !!ad.is_template,
       sort_order: String(ad.sort_order ?? 0),
       color_theme: ad.color_theme || '',
       schedule_days: schedule.days || [],
@@ -566,20 +936,39 @@ export default function AdsSection({ token }) {
     return { days, hours }
   }
 
-  const buildPayload = () => ({
-    title: form.title.trim(), body: form.body.trim() || null,
-    image_data: form.image_data || null, image_mime: form.image_mime || null,
-    banner_height: Number(form.banner_height) || 96,
-    interval_seconds: Number(form.interval_seconds) || 5,
-    link: form.link.trim() || null, ad_type: form.ad_type,
-    pricing_model: form.pricing_model, start_date: form.start_date, end_date: form.end_date,
-    price: Number(form.price) || 0,
-    impressions_limit: form.impressions_limit ? Number(form.impressions_limit) : null,
-    clicks_limit: form.clicks_limit ? Number(form.clicks_limit) : null,
-    sort_order: Number(form.sort_order) || 0,
-    color_theme: form.color_theme || null,
-    schedule: buildSchedule(),
-  })
+  const buildPayload = () => {
+    // Очищаем audience от пустых ключей
+    const aud = {}
+    Object.entries(form.audience || {}).forEach(([k, v]) => {
+      if (v !== '' && v !== null && v !== undefined) {
+        aud[k] = (k === 'age_min' || k === 'age_max' || k === 'ltv_min' || k === 'ltv_max') ? Number(v) : v
+      }
+    })
+    return {
+      title: form.title.trim(), body: form.body.trim() || null,
+      image_data: form.image_data || null, image_mime: form.image_mime || null,
+      banner_height: Number(form.banner_height) || 96,
+      interval_seconds: Number(form.interval_seconds) || 5,
+      link: form.link.trim() || null, ad_type: form.ad_type,
+      pricing_model: form.pricing_model, start_date: form.start_date, end_date: form.end_date,
+      price: Number(form.price) || 0,
+      impressions_limit: form.impressions_limit ? Number(form.impressions_limit) : null,
+      clicks_limit: form.clicks_limit ? Number(form.clicks_limit) : null,
+      sort_order: Number(form.sort_order) || 0,
+      color_theme: form.color_theme || null,
+      schedule: buildSchedule(),
+      // Pro
+      budget_total: form.budget_total ? Number(form.budget_total) : null,
+      freq_per_day: form.freq_per_day ? Number(form.freq_per_day) : null,
+      freq_per_hour: form.freq_per_hour ? Number(form.freq_per_hour) : null,
+      auto_pause_idle_days: form.auto_pause_idle_days ? Number(form.auto_pause_idle_days) : 7,
+      attribution_window_days: form.attribution_window_days ? Number(form.attribution_window_days) : 7,
+      audience: Object.keys(aud).length > 0 ? aud : null,
+      cta_text: form.cta_text || null,
+      cta_style: form.cta_style || 'primary',
+      is_template: !!form.is_template,
+    }
+  }
 
   const save = async () => {
     if (!validate()) return
@@ -612,6 +1001,71 @@ export default function AdsSection({ token }) {
     setUpdatingStatus(null)
   }
 
+  const createAbVariant = async (ad) => {
+    if (!confirm('Создать A/B-вариант на основе этого объявления?')) return
+    try {
+      // Берём существующее ad как basis, отправляем как создание variant'а
+      const payload = {
+        title: ad.title + ' (вариант)',
+        body: ad.body || '',
+        link: ad.link || '',
+        ad_type: ad.ad_type || 'banner',
+        pricing_model: ad.pricing_model || 'flat',
+        start_date: ad.start_date,
+        end_date: ad.end_date,
+        price: ad.price,
+        impressions_limit: ad.impressions_limit,
+        clicks_limit: ad.clicks_limit,
+        budget_total: ad.budget_total,
+        freq_per_day: ad.freq_per_day,
+        freq_per_hour: ad.freq_per_hour,
+        auto_pause_idle_days: ad.auto_pause_idle_days,
+        attribution_window_days: ad.attribution_window_days,
+        audience: ad.audience,
+        image_data: ad.image_data,
+        image_mime: ad.image_mime,
+        banner_height: ad.banner_height,
+        color_theme: ad.color_theme,
+      }
+      const parentId = ad.parent_ad_id || ad.id
+      const r = await apiFetch(token, `/ads/${parentId}/variant`, { method: 'POST', body: JSON.stringify(payload) })
+      if (r.ok) { const d = await r.json(); alert(`Создан вариант ${d.variant?.ab_variant || ''} — отредактируйте и запустите`); load() }
+      else { const d = await r.json(); alert(d.detail || 'Ошибка создания варианта') }
+    } catch { alert('Сетевая ошибка') }
+  }
+
+  const declareWinner = async (ad) => {
+    const parentId = ad.parent_ad_id || ad.id
+    if (!confirm('Объявить победителя A/B по CTR? Остальные варианты встанут на паузу.')) return
+    const r = await apiFetch(token, `/ads/${parentId}/declare-winner`, { method: 'POST' })
+    if (r.ok) {
+      const d = await r.json()
+      alert(`Победитель: вариант ${d.winner_variant} с CTR ${d.winner_ctr}%`)
+      load()
+    } else {
+      const d = await r.json()
+      alert(d.detail || 'Не удалось')
+    }
+  }
+
+  const [templates, setTemplates] = useState([])
+  const [showTemplates, setShowTemplates] = useState(false)
+  const loadTemplates = async () => {
+    try {
+      const r = await apiFetch(token, '/ads/templates')
+      if (r.ok) setTemplates(await r.json())
+    } catch {}
+  }
+  const useTemplate = async (tplId) => {
+    const r = await apiFetch(token, `/ads/${tplId}/use-template`, { method: 'POST' })
+    if (r.ok) {
+      setShowTemplates(false)
+      const newAd = await r.json()
+      openEdit(newAd)  // сразу открываем редактор для финального ввода
+      load()
+    }
+  }
+
   const duplicate = async (ad) => {
     try {
       const r = await apiFetch(token, `/ads/${ad.id}/duplicate`, { method: 'POST' })
@@ -632,6 +1086,27 @@ export default function AdsSection({ token }) {
       await apiFetch(token, '/ads/reorder', { method: 'PATCH', body: JSON.stringify(reordered.map((a, i) => ({ id: a.id, sort_order: i }))) })
     } catch {}
   }
+
+  const runHealthCheck = async () => {
+    setHealthBusy(true)
+    try {
+      const r = await apiFetch(token, '/ads/health-check')
+      if (r.ok) setHealthIssues(await r.json())
+    } catch {}
+    setHealthBusy(false)
+  }
+  const autoPauseDead = async () => {
+    if (!confirm('Поставить на паузу всю мёртвую рекламу?')) return
+    const r = await apiFetch(token, '/ads/health-check/auto-pause', { method: 'POST' })
+    if (r.ok) { const d = await r.json(); alert(`Поставлено на паузу: ${d.paused}`); load(); setHealthIssues(null) }
+  }
+  const bulkAction = async (action) => {
+    if (bulkSel.size === 0) return
+    if (action === 'delete' && !confirm(`Удалить ${bulkSel.size} объявлений?`)) return
+    const r = await apiFetch(token, '/ads/bulk', { method: 'POST', body: JSON.stringify({ ids: [...bulkSel], action }) })
+    if (r.ok) { setBulkSel(new Set()); load() }
+  }
+  const toggleSel = (id) => setBulkSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   const exportCSV = () => {
     const headers = ['ID', 'Заголовок', 'Статус', 'Тип', 'Показы', 'Клики', 'Конверсии', 'CTR%', 'Начало', 'Конец', 'Цена']
@@ -662,6 +1137,15 @@ export default function AdsSection({ token }) {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление баннерами карусели для пациентов</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => { loadTemplates(); setShowTemplates(true) }}
+            className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-semibold hover:bg-purple-100 transition">
+            <span className="material-symbols-outlined text-sm">bookmark</span>Из шаблона
+          </button>
+          <button onClick={runHealthCheck} disabled={healthBusy}
+            className="flex items-center gap-1.5 px-3 py-2 border border-amber-300 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-semibold hover:bg-amber-100 transition">
+            <span className="material-symbols-outlined text-sm">monitor_heart</span>
+            {healthBusy ? '…' : 'Проверка'}
+          </button>
           <button onClick={exportCSV}
             className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-xl text-xs font-semibold hover:bg-gray-50 dark:hover:bg-gray-700 transition">
             <span className="material-symbols-outlined text-sm">download</span>CSV
@@ -673,6 +1157,52 @@ export default function AdsSection({ token }) {
           </button>
         </div>
       </div>
+
+      {/* Health-check результаты */}
+      {healthIssues && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-2">
+              <span className="material-symbols-outlined">monitor_heart</span>
+              Проверка здоровья: найдено проблем — {healthIssues.total}
+            </div>
+            <div className="flex gap-2">
+              {healthIssues.total > 0 && (
+                <button onClick={autoPauseDead} className="text-xs px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold">
+                  Авто-пауза всех
+                </button>
+              )}
+              <button onClick={() => setHealthIssues(null)} className="text-xs px-3 py-1.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg">
+                Скрыть
+              </button>
+            </div>
+          </div>
+          {healthIssues.total === 0 ? (
+            <div className="text-sm text-amber-700 dark:text-amber-300">Всё в порядке — мёртвой рекламы нет.</div>
+          ) : (
+            <ul className="space-y-1">
+              {healthIssues.issues.map((it, i) => (
+                <li key={i} className="text-sm text-amber-900 dark:text-amber-200">
+                  <b>{it.title}</b> — <span className="text-amber-700 dark:text-amber-400">{it.details}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Bulk-actions bar (показывается если что-то выбрано) */}
+      {bulkSel.size > 0 && (
+        <div className="sticky top-0 z-10 bg-cyan-600 text-white rounded-xl px-4 py-2 mb-4 flex items-center justify-between shadow-lg">
+          <div className="text-sm font-semibold">Выбрано: {bulkSel.size}</div>
+          <div className="flex gap-2">
+            <button onClick={() => bulkAction('activate')} className="text-xs px-3 py-1.5 bg-white text-cyan-700 hover:bg-cyan-50 rounded-lg font-semibold">▶ Запустить</button>
+            <button onClick={() => bulkAction('pause')} className="text-xs px-3 py-1.5 bg-white text-cyan-700 hover:bg-cyan-50 rounded-lg font-semibold">⏸ Пауза</button>
+            <button onClick={() => bulkAction('delete')} className="text-xs px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold">✕ Удалить</button>
+            <button onClick={() => setBulkSel(new Set())} className="text-xs px-3 py-1.5 bg-cyan-700 hover:bg-cyan-800 rounded-lg">Сбросить</button>
+          </div>
+        </div>
+      )}
 
       <div className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-2xl p-4 mb-6">
         <div className="flex items-center gap-2 mb-3">
@@ -738,6 +1268,14 @@ export default function AdsSection({ token }) {
                 className={`bg-white dark:bg-gray-800 rounded-2xl border transition cursor-grab active:cursor-grabbing select-none ${dragOver === ad.id ? 'border-cyan-400 shadow-lg ring-2 ring-cyan-300 dark:ring-cyan-700' : isOpen ? 'border-cyan-500 dark:border-cyan-600 shadow-md' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'} ${dragId === ad.id ? 'opacity-50' : ''}`}>
                 <div className="p-4">
                   <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={bulkSel.has(ad.id)}
+                      onChange={() => toggleSel(ad.id)}
+                      onClick={e => e.stopPropagation()}
+                      className="mt-1 w-4 h-4 accent-cyan-600 cursor-pointer flex-shrink-0"
+                      title="Выбрать для массовой операции"
+                    />
                     <span className="material-symbols-outlined text-lg text-gray-300 dark:text-gray-600 mt-0.5 flex-shrink-0">drag_indicator</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -746,11 +1284,36 @@ export default function AdsSection({ token }) {
                         {ad.status === 'paused' && (ad.impressions_limit || ad.clicks_limit) && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700">⏸ Авто-пауза</span>
                         )}
+                        {ad.ab_variant && (
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ad.ab_winner ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-300' : 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border border-violet-300'}`}>
+                            {ad.ab_winner ? '🏆 ' : '🅰🅱 '}Вариант {ad.ab_variant}
+                          </span>
+                        )}
+                        {ad.audience && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 border border-violet-200" title={JSON.stringify(ad.audience)}>
+                            🎯 Таргет
+                          </span>
+                        )}
+                        {ad.budget_total != null && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${ad.spent_total >= ad.budget_total ? 'bg-red-50 dark:bg-red-900/30 text-red-600' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 border border-emerald-200'}`}>
+                            💰 {(ad.spent_total||0).toLocaleString('ru')} / {ad.budget_total.toLocaleString('ru')}₽
+                          </span>
+                        )}
+                        {ad.roi != null && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${ad.roi >= 0 ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400'}`}>
+                            ROI {ad.roi > 0 ? '+' : ''}{ad.roi}%
+                          </span>
+                        )}
                         <span className="text-xs text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/30 px-2 py-0.5 rounded-full">⏱ {ad.interval_seconds || 5}с</span>
                         {ad.color_theme && (
                           <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: (COLOR_THEMES.find(t=>t.id===ad.color_theme)||COLOR_THEMES[0]).grad }} />
                         )}
                         {ad.schedule && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">📅 Расписание</span>}
+                        {(ad.freq_per_day || ad.freq_per_hour) && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400" title={`Частота: ${ad.freq_per_hour||'∞'}/час, ${ad.freq_per_day||'∞'}/день`}>
+                            🚦 Cap
+                          </span>
+                        )}
                         {ad.status === 'active' && daysLeft >= 0 && (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${daysLeft <= 3 ? 'text-red-500 bg-red-50 dark:bg-red-900/30' : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700'}`}>
                             {daysLeft === 0 ? 'Последний день' : `${daysLeft} дн.`}
@@ -778,6 +1341,10 @@ export default function AdsSection({ token }) {
                       <button onClick={() => duplicate(ad)} title="Дублировать"
                         className="p-1.5 rounded-lg text-gray-400 hover:text-green-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                         <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>content_copy</span>
+                      </button>
+                      <button onClick={() => createAbVariant(ad)} title="Создать A/B-вариант"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                        <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>science</span>
                       </button>
                       <button onClick={() => openEdit(ad)}
                         className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition">✏️</button>
@@ -858,14 +1425,42 @@ export default function AdsSection({ token }) {
         </div>
       )}
 
+      {/* Модалка выбора шаблона */}
+      {showTemplates && (
+        <Modal title="Выбрать шаблон" onClose={() => setShowTemplates(false)}>
+          {templates.length === 0 ? (
+            <div className="py-10 text-center text-gray-400">
+              <span className="material-symbols-outlined text-5xl block mb-2">bookmark_add</span>
+              <div>Шаблонов ещё нет.</div>
+              <div className="text-xs mt-1">Сохраните любое объявление как шаблон в форме создания.</div>
+            </div>
+          ) : (
+            <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {templates.map(t => (
+                <li key={t.id}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 hover:border-cyan-400 dark:hover:border-cyan-500 cursor-pointer transition"
+                    onClick={() => useTemplate(t.id)}>
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <div className="font-semibold text-gray-900 dark:text-white text-sm flex-1 min-w-0 truncate">{t.title}</div>
+                    {t.cta_text && <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-50 text-cyan-700">CTA: {t.cta_text}</span>}
+                    {t.audience && <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-50 text-violet-700">🎯 Таргет</span>}
+                  </div>
+                  {t.body && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{t.body}</div>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Modal>
+      )}
+
       {showCreate && (
-        <Modal title="Новое объявление" onClose={() => setShowCreate(false)}>
+        <Modal title="Новое объявление" onClose={() => setShowCreate(false)} wide>
           <AdForm form={form} set={set} err={err} saving={saving} onSave={save} onCancel={() => setShowCreate(false)} isEdit={false} onOpenCrop={src => setCropCtx({ ...src, target: 'create' })} />
         </Modal>
       )}
 
       {editAd && (
-        <Modal title="Редактировать объявление" onClose={() => setEditAd(null)}>
+        <Modal title="Редактировать объявление" onClose={() => setEditAd(null)} wide>
           <AdForm form={form} set={set} err={err} saving={saving} onSave={saveEdit} onCancel={() => setEditAd(null)} isEdit={true} onOpenCrop={src => setCropCtx({ ...src, target: 'edit' })} />
         </Modal>
       )}

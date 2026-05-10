@@ -340,7 +340,7 @@ async def update_recruiter_contacts(
     if body.email is not None and body.email != rec.email:
         dup = (await db.execute(
             select(User).where(User.email == body.email, User.id != rec.id)
-        )).scalar_one_or_none()
+        )).scalars().first()
         if dup:
             raise HTTPException(status_code=409, detail="Email уже занят другим пользователем")
         rec.email = body.email or None

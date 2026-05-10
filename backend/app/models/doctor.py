@@ -3,6 +3,7 @@
 Этап 5 SaaS-трансформации.
 """
 import uuid
+from decimal import Decimal
 from datetime import datetime, date, time
 from sqlalchemy import String, Boolean, Integer, ForeignKey, Date, Time, Text, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,6 +41,14 @@ class Doctor(Base):
     created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow, nullable=False)
     mis_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True)
+
+    # ── Бонус за направление К ЭТОМУ ВРАЧУ (получает АВТОР направления, не сам врач)
+    # bonusv2_01: на выбор управляющего — фиксированная сумма ИЛИ процент от visit_price.
+    # Полный пирог (включает franchise_fee). Распределение каскадом в _apply_confirmation.
+    referral_bonus_type: Mapped[str] = mapped_column(String(16), nullable=False, default="none", server_default="none")
+    referral_bonus_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    referral_bonus_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    visit_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     clinic: Mapped["Clinic"] = relationship("Clinic")
     schedules: Mapped[list["DoctorSchedule"]] = relationship(

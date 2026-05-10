@@ -220,3 +220,96 @@ def partner_doctor_factory():
 def referral_factory():
     from tests.factories import ReferralFactory
     return ReferralFactory
+# ─── Integration через локальный clinika_test (CI-friendly) ──────────────────
+# Если testcontainers недоступны (Phase 0 — пакет не установлен), мы
+# опционально соединяемся с реально работающим Postgres-контейнером
+# clinika-db, используя отдельную БД ``clinika_test``. Если коннект не удался —
+# тесты, запросившие фикстуру ``pg_test_session``, будут скипнуты.
+
+_PG_TEST_URL_DEFAULT = "postgresql+asyncpg://clinika:clinika_pass@clinika-db:5432/clinika_test"
+
+
+@pytest_asyncio.fixture
+async def pg_test_engine():
+    """Async engine на отдельную тестовую БД (per-test чтобы не ломать event loops).
+
+    Использует ``CLINIKA_TEST_DATABASE_URL`` если задан, иначе локальный
+    clinika-db/clinika_test. Создаёт схему через ``Base.metadata.create_all``
+    (Alembic-миграции не запускаем — тесты проверяют логику, не схему).
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from app.database import Base
+    import app.models  # noqa: F401  — чтобы все модели зарегистрировались
+
+    url = os.environ.get("CLINIKA_TEST_DATABASE_URL", _PG_TEST_URL_DEFAULT)
+
+    # NullPool: не держим коннект между тестами — каждый тест получает свежий engine.
+    from sqlalchemy.pool import NullPool
+    engine = create_async_engine(url, echo=False, poolclass=NullPool)
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
+        await engine.dispose()
+        pytest.skip(f"PG тестовая БД недоступна: {exc}")
+
+    yield engine
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def pg_test_session(pg_test_engine):
+    """Чистая сессия для интеграционных тестов: TRUNCATE мусора в начале."""
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from sqlalchemy import text as _text
+
+    SessionLocal = async_sessionmaker(pg_test_engine, class_=AsyncSession, expire_on_commit=False)
+
+    # Одна большая TRUNCATE через CASCADE — снимает все FK сразу.
+    # Перечисляем явно те таблицы, которые ТОЧНО есть в наших тестах.
+    async with SessionLocal() as cleaner:
+        try:
+            await cleaner.execute(_text(
+                "TRUNCATE TABLE "
+                "billing_ledger, ledger_entries, recruiter_bonuses, bonuses, "
+                "inter_clinic_invoices, referrals, doctors, services, "
+                "users, clinics, system_settings, franchises, tenants "
+                "RESTART IDENTITY CASCADE"
+            ))
+            await cleaner.commit()
+        except Exception:
+            # Какая-то таблица отсутствует — игнорируем, тесты сами обработают.
+            await cleaner.rollback()
+
+    async with SessionLocal() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def integration_client(pg_test_session):
+    """HTTP-клиент с переопределённой зависимостью get_db → pg_test_session."""
+    from app.main import app
+    from app.database import get_db
+
+    async def override_get_db():
+        yield pg_test_session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    import app.core.token_blacklist as _tbl
+    _orig_redis = _tbl._redis_client
+    _mock_redis = AsyncMock()
+    _mock_redis.setex = AsyncMock()
+    _mock_redis.exists = AsyncMock(return_value=0)
+    _tbl._redis_client = _mock_redis
+
+    from httpx import AsyncClient, ASGITransport
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+    _tbl._redis_client = _orig_redis

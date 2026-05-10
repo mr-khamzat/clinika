@@ -1,10 +1,6 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# ─── Build ARGs для Vite ──────────────────────────────────────────────────────
-# Vite собирает import.meta.env.* во время `npm run build`, поэтому DSN
-# должен быть доступен как ENV в этапе билда. Передаются через
-# docker compose build --build-arg VITE_SENTRY_DSN=...
 ARG VITE_SENTRY_DSN=""
 ARG VITE_SENTRY_ENVIRONMENT="production"
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
@@ -14,6 +10,16 @@ COPY package.json ./
 RUN npm install
 COPY . .
 RUN npm run build
+
+# Pre-gzip ассеты для nginx gzip_static — отдаются без CPU-расходов
+# Покрываем .js, .css, .woff2, .json, .svg, .html
+RUN apk add --no-cache gzip && \
+    find /app/dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.woff2' -o -name '*.svg' -o -name '*.json' -o -name '*.html' -o -name '*.map' \) -size +512c \
+      -exec sh -c 'gzip -kf9 "$1"' _ {} \; && \
+    echo "=== pre-gzipped files ===" && \
+    find /app/dist -name '*.gz' | head -20 && \
+    echo "=== sizes ===" && \
+    du -sh /app/dist /app/dist/assets 2>/dev/null
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html

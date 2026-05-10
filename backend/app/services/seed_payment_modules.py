@@ -54,7 +54,7 @@ async def seed_payment_modules() -> None:
     # Берём URL из env и приводим к asyncpg-драйверу (как в app/database.py)
     db_url = os.environ.get(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@postgres:5432/clinika",
+        "postgresql+asyncpg://clinika:clinika_pass@clinika-db:5432/clinika",
     )
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)

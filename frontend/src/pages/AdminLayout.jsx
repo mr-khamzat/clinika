@@ -43,6 +43,8 @@ const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection")
 const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSection"))
 // W7 — Inventory: учёт расходных материалов и оборудования (модуль inventory)
 const InventorySection = lazy(() => import("../sections/inventory/InventorySection"))
+// Module Monitoring System — health-state платных модулей по всем тенантам (heatmap)
+const PlatformModulesSection = lazy(() => import("../sections/PlatformModulesSection"))
 // Cross-clinic directory: справочник сотрудников всех клиник тенанта
 const CrossClinicDirectorySection = lazy(() => import("../sections/CrossClinicDirectorySection"))
 // LTV-аналитика пациентов (модуль ltv_pro)
@@ -145,6 +147,7 @@ const NAV = [
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
   { key: 'modules_catalog', label: 'Каталог модулей', icon: 'storefront' },
+  { key: 'platform_modules', label: 'Модули по тенантам', icon: 'apps' },
   { key: 'roles',           label: 'Роли и права', icon: 'admin_panel_settings' },
   { key: 'reviews', label: 'Отзывы', icon: 'rate_review' },
   { key: 'contacts', label: 'Обращения', icon: 'mail' },
@@ -219,6 +222,7 @@ const NAV_GROUP_OF = {
 
   webhooks:           'SYSTEM',
   // plugins удалён — старая plugin_*-система выпилена
+  platform_modules:   'PLATFORM',
   mis_sync:           'SYSTEM',
   calls_cfg:          'SYSTEM',
   settings:           'SYSTEM',
@@ -247,6 +251,7 @@ const PAGE_TITLES = {
   ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
   webhooks:           { title: 'Вебхуки',              subtitle: 'Платформенные интеграции и события' },
   modules_catalog:    { title: 'Каталог модулей',      subtitle: 'Подключаемые тарифные модули платформы' },
+  platform_modules:   { title: 'Модули по тенантам',    subtitle: 'Heatmap состояния платных модулей всех тенантов' },
   roles:              { title: 'Роли и права',         subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   reviews:            { title: 'Отзывы',               subtitle: 'Модерация публичных отзывов' },
   contacts:           { title: 'Обращения',            subtitle: 'Входящие сообщения от посетителей лендингов' },
@@ -679,18 +684,22 @@ function HomeDashboard({ token, onNavigate }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // AbortController защищает от race condition при быстром переходе на другой раздел.
+    let cancelled = false
     Promise.allSettled([
       apiFetch("get", "/admin/metrics", token),
       apiFetch("get", "/admin/billing/ledger?days=30", token),
       apiFetch("get", "/monitoring/health", token),
       apiFetch("get", "/monitoring/metrics?window=5", token),
     ]).then(([mR, lR, hR, aR]) => {
+      if (cancelled) return
       if (mR.status === "fulfilled") setMetrics(mR.value.data)
       if (lR.status === "fulfilled") setLedger(lR.value.data)
       if (hR.status === "fulfilled") setHealth(hR.value.data)
       if (aR.status === "fulfilled") setApiMetrics(aR.value.data)
       setLoading(false)
     })
+    return () => { cancelled = true }
   }, [token])
 
   const fmt = (n) => n != null ? Number(n).toLocaleString("ru-RU") : "—"
@@ -6287,7 +6296,19 @@ function SchedulingSection({ token }) {
   const [actionErr, setActionErr] = useState('')
 
   // Форма врача
-  const EMPTY_DOC = { clinic_id: '', full_name: '', specialty: '', bio: '', slot_duration: 30 }
+  // Сборка payload для /doctors с числовой нормализацией bonusv2_01-полей
+  const _docPayload = (f) => ({
+    clinic_id: f.clinic_id, full_name: f.full_name, specialty: f.specialty,
+    bio: f.bio, slot_duration: parseInt(f.slot_duration) || 30,
+    referral_bonus_type: f.referral_bonus_type || 'none',
+    referral_bonus_amount: f.referral_bonus_amount ? Number(f.referral_bonus_amount) : null,
+    referral_bonus_percent: f.referral_bonus_percent ? Number(f.referral_bonus_percent) : null,
+    visit_price: f.visit_price ? Number(f.visit_price) : null,
+  })
+  const EMPTY_DOC = {
+    clinic_id: '', full_name: '', specialty: '', bio: '', slot_duration: 30,
+    referral_bonus_type: 'none', referral_bonus_amount: '', referral_bonus_percent: '', visit_price: '',
+  }
   const [docForm, setDocForm] = useState(EMPTY_DOC)
 
   // Форма записи
@@ -6387,9 +6408,9 @@ function SchedulingSection({ token }) {
     setActionErr('')
     try {
       if (doctorModal === 'new') {
-        await apiFetch('post', '/doctors', token, { ...docForm, slot_duration: parseInt(docForm.slot_duration) })
+        await apiFetch('post', '/doctors', token, _docPayload(docForm))
       } else {
-        await apiFetch('patch', `/doctors/${doctorModal.id}`, token, { ...docForm, slot_duration: parseInt(docForm.slot_duration) })
+        await apiFetch('patch', `/doctors/${doctorModal.id}`, token, _docPayload(docForm))
       }
       setDoctorModal(null)
       loadBase()
@@ -6519,7 +6540,13 @@ function SchedulingSection({ token }) {
                     Расписание
                   </button>
                   <button
-                    onClick={() => { setDocForm({ clinic_id: doc.clinic_id, full_name: doc.full_name, specialty: doc.specialty || '', bio: doc.bio || '', slot_duration: doc.slot_duration }); setDoctorModal(doc) }}
+                    onClick={() => { setDocForm({
+                      clinic_id: doc.clinic_id, full_name: doc.full_name, specialty: doc.specialty || '', bio: doc.bio || '', slot_duration: doc.slot_duration,
+                      referral_bonus_type: doc.referral_bonus_type || 'none',
+                      referral_bonus_amount: doc.referral_bonus_amount != null ? String(doc.referral_bonus_amount) : '',
+                      referral_bonus_percent: doc.referral_bonus_percent != null ? String(doc.referral_bonus_percent) : '',
+                      visit_price: doc.visit_price != null ? String(doc.visit_price) : '',
+                    }); setDoctorModal(doc) }}
                     className="p-1.5 text-gray-400 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                     <span className="material-symbols-outlined text-sm">edit</span>
                   </button>
@@ -6655,6 +6682,59 @@ function SchedulingSection({ token }) {
               <textarea placeholder="О враче (необязательно)" value={docForm.bio}
                 onChange={e => setDocForm(f => ({ ...f, bio: e.target.value }))} rows={3}
                 className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white resize-none" />
+
+              {/* Бонус за направление к этому врачу (получает АВТОР направления) */}
+              <div className="border border-cyan-200 dark:border-cyan-800 bg-cyan-50/40 dark:bg-cyan-900/10 rounded-xl px-3 py-3">
+                <div className="text-xs font-semibold text-cyan-800 dark:text-cyan-300 mb-2">
+                  💰 Бонус за направление к врачу (полная сумма, включает 100₽ платформы)
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-2">
+                  {[
+                    { v:'none',    label:'Без бонуса' },
+                    { v:'fixed',   label:'Фикс ₽' },
+                    { v:'percent', label:'% от приёма' },
+                  ].map(t => {
+                    const on = (docForm.referral_bonus_type || 'none') === t.v
+                    return (
+                      <button type="button" key={t.v}
+                        onClick={() => setDocForm(f => ({ ...f, referral_bonus_type: t.v }))}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-semibold border transition ${on ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-cyan-400'}`}>
+                        {t.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {docForm.referral_bonus_type === 'fixed' && (
+                  <input type="number" placeholder="например 300" value={docForm.referral_bonus_amount}
+                    onChange={e => setDocForm(f => ({ ...f, referral_bonus_amount: e.target.value }))}
+                    className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+                )}
+                {docForm.referral_bonus_type === 'percent' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input type="number" placeholder="Цена приёма ₽" value={docForm.visit_price}
+                        onChange={e => setDocForm(f => ({ ...f, visit_price: e.target.value }))}
+                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div>
+                      <input type="number" placeholder="% за направление" value={docForm.referral_bonus_percent}
+                        onChange={e => setDocForm(f => ({ ...f, referral_bonus_percent: e.target.value }))}
+                        className="w-full border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:text-white" />
+                    </div>
+                  </div>
+                )}
+                {(docForm.referral_bonus_type === 'fixed' && docForm.referral_bonus_amount > 0) && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                    Автор направления получит ≈ {Math.max(Number(docForm.referral_bonus_amount) - 100, 0)}₽ (платформа удержит 100₽)
+                  </div>
+                )}
+                {(docForm.referral_bonus_type === 'percent' && docForm.visit_price && docForm.referral_bonus_percent) && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                    Полный бонус ≈ {Math.round(Number(docForm.visit_price) * Number(docForm.referral_bonus_percent) / 100)}₽,
+                    автор направления получит ≈ {Math.max(Math.round(Number(docForm.visit_price) * Number(docForm.referral_bonus_percent) / 100) - 100, 0)}₽
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={saveDoctor}
@@ -8059,6 +8139,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'telemedicine':       return <Suspense fallback={<SectionLoader />}><TelemedicineSection token={adminToken} /></Suspense>
       case 'sms_marketing':      return <Suspense fallback={<SectionLoader />}><SmsMarketingSection token={adminToken} /></Suspense>
       case 'inventory':          return <Suspense fallback={<SectionLoader />}><InventorySection token={adminToken} /></Suspense>
+      case 'platform_modules':   return <Suspense fallback={<SectionLoader />}><PlatformModulesSection token={adminToken} /></Suspense>
       default:               return null
     }
   }

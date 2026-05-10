@@ -813,7 +813,7 @@ async def get_business_now(
     try:
         r = await db.execute(text("""
             SELECT COUNT(*) FROM telemedicine_sessions
-            WHERE status IN ('active', 'in_call', 'started')
+            WHERE status = 'active'
               AND (ended_at IS NULL OR ended_at > NOW() - INTERVAL '5 minutes')
         """))
         telemed_active = r.scalar() or 0

@@ -53,6 +53,7 @@ const WikiSection               = lazy(() => import('../sections/WikiSection'))
 const ContactsSection           = lazy(() => import('../sections/ContactsSection'))
 const WebhooksSection           = lazy(() => import('../sections/WebhooksSection'))
 const ModulesCatalogSection     = lazy(() => import('../sections/ModulesCatalogSection'))
+const MarketplaceSection        = lazy(() => import('../sections/MarketplaceSection'))
 const BrandingSection           = lazy(() => import('../sections/BrandingSection'))
 const CMSPagesSection           = lazy(() => import('../sections/CMSPagesSection'))
 const ActsSection               = lazy(() => import('../sections/ActsSection'))
@@ -66,6 +67,12 @@ const LtvAnalyticsSection        = lazy(() => import('../sections/ltv/LtvAnalyti
 const CrossClinicDirectorySection = lazy(() => import('../sections/CrossClinicDirectorySection'))
 // Раздел «Клиники сети»: карточки + модалка редактирования (реквизиты + руководитель)
 const ClinicsNetworkSection      = lazy(() => import('../sections/ClinicsNetworkSection'))
+// Модули франшизы: телемедицина / лояльность / инвентарь
+const TelemedicineSection        = lazy(() => import('../sections/TelemedicineSection'))
+const LoyaltySection             = lazy(() => import('../sections/loyalty/LoyaltySection'))
+const InventorySection           = lazy(() => import('../sections/inventory/InventorySection'))
+// Module Monitoring System — health-state платных модулей тенанта
+const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -115,13 +122,23 @@ const NAV_GROUPS = [
     ],
   },
   {
+    title: 'Модули',
+    items: [
+      { id: 'telemedicine', label: 'Телемедицина',         icon: 'video_call'  },
+      { id: 'loyalty',      label: 'Программа лояльности', icon: 'stars'       },
+      { id: 'inventory',    label: 'Учёт инвентаря',       icon: 'inventory_2' },
+    ],
+  },
+  {
     title: 'Платформа',
     items: [
-      { id: 'modules',   label: 'Модули',      icon: 'extension'             },
-      { id: 'roles',     label: 'Роли и права',icon: 'admin_panel_settings'  },
-      { id: 'webhooks',  label: 'Webhooks',    icon: 'webhook'               },
-      { id: 'knowledge', label: 'База AI',     icon: 'library_books'         },
-      { id: 'settings',  label: 'Настройки',   icon: 'settings'              },
+      { id: 'marketplace', label: 'Маркетплейс',          icon: 'storefront'         },
+      { id: 'modules',    label: 'Каталог модулей',     icon: 'extension'           },
+      { id: 'monitoring', label: 'Мониторинг модулей',  icon: 'monitor_heart'       },
+      { id: 'roles',      label: 'Роли и права',        icon: 'admin_panel_settings'},
+      { id: 'webhooks',   label: 'Webhooks',            icon: 'webhook'             },
+      { id: 'knowledge',  label: 'База AI',             icon: 'library_books'       },
+      { id: 'settings',   label: 'Настройки',           icon: 'settings'            },
     ],
   },
 ]
@@ -130,6 +147,9 @@ const PAGE_TITLES = {
   overview:   { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
   tenants:    { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
   partners_clinics: { title: 'Клиники-партнёры', subtitle: 'Контракты royalty / per_referral / hybrid' },
+  telemedicine: { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
+  loyalty:      { title: 'Программа лояльности',  subtitle: 'Уровни, правила начисления и обмен бонусов' },
+  inventory:    { title: 'Учёт инвентаря',        subtitle: 'Расходные материалы, оборудование, медикаменты' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
@@ -149,7 +169,9 @@ const PAGE_TITLES = {
   wiki:       { title: 'База знаний',      subtitle: 'Wiki-страницы для сотрудников и пациентов' },
   cms:        { title: 'CMS-страницы',     subtitle: 'Публичные страницы лендинга и портала' },
   contacts:   { title: 'Заявки',           subtitle: 'Сообщения с формы обратной связи' },
+  marketplace:{ title: 'Маркетплейс модулей', subtitle: 'Подключение новых возможностей: триал 14 дней без оплаты' },
   modules:    { title: 'Каталог модулей',  subtitle: 'Платные модули и их подключение' },
+  monitoring: { title: 'Мониторинг модулей',subtitle: 'Состояние платных модулей: ok / degraded / error / idle' },
   roles:      { title: 'Роли и права',     subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   webhooks:   { title: 'Webhooks',         subtitle: 'Интеграции и исходящие события' },
   knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
@@ -1870,31 +1892,41 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   useEffect(() => { setDrawerOpen(false) }, [route])
 
   // ── Загрузка аналитики ───────────────────────────────────────────────────
+  // AbortController защищает от race condition: при быстром unmount компонента
+  // (logout, переход на другой кабинет) запрос отменяется и не пытается setState.
   useEffect(() => {
+    const ac = new AbortController()
     setAnalyticsLoading(true)
-    api.get('/analytics/overview')
-      .then(r => setAnalytics(r.data))
+    api.get('/analytics/overview', { signal: ac.signal })
+      .then(r => { if (!ac.signal.aborted) setAnalytics(r.data) })
       .catch(() => {})
-      .finally(() => setAnalyticsLoading(false))
+      .finally(() => { if (!ac.signal.aborted) setAnalyticsLoading(false) })
+    return () => ac.abort()
   }, [])
 
   // ── Загрузка профиля франшизы и тенантов ─────────────────────────────────
-  const reloadTenants = useCallback(async () => {
+  const reloadTenants = useCallback(async (signal) => {
     setTenantsLoading(true)
     try {
       const [meR, tR] = await Promise.all([
-        api.get('/franchise-owner/me').catch(() => ({ data: null })),
-        api.get('/franchise-owner/tenants').catch(() => ({ data: [] })),
+        api.get('/franchise-owner/me', { signal }).catch(() => ({ data: null })),
+        api.get('/franchise-owner/tenants', { signal }).catch(() => ({ data: [] })),
       ])
+      if (signal?.aborted) return
       setMe(meR.data)
       setTenants(Array.isArray(tR.data) ? tR.data : [])
     } catch {
-      setTenants([])
+      if (!signal?.aborted) setTenants([])
     }
-    setTenantsLoading(false)
+    if (!signal?.aborted) setTenantsLoading(false)
   }, [])
 
-  useEffect(() => { reloadTenants() }, [reloadTenants])
+  // AbortController защищает от race при быстром unmount.
+  useEffect(() => {
+    const ac = new AbortController()
+    reloadTenants(ac.signal)
+    return () => ac.abort()
+  }, [reloadTenants])
 
   // ── Текст шапки страницы ─────────────────────────────────────────────────
   const pageMeta = PAGE_TITLES[route] || PAGE_TITLES.overview
@@ -1993,10 +2025,45 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
         </Suspense>
       )
     }
-    if (route === 'modules') {
+    if (route === 'telemedicine') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <TelemedicineSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'loyalty') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <LoyaltySection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'inventory') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <InventorySection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'marketplace') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <MarketplaceSection tenants={tenants || []} />
+        </Suspense>
+      )
+    }
+        if (route === 'modules') {
       return (
         <Suspense fallback={<SectionLoader />}>
           <ModulesCatalogSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'monitoring') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <ModuleMonitoringSection token={adminToken} />
         </Suspense>
       )
     }

@@ -10,6 +10,10 @@ from app.database import Base
 class BonusStatus(str, enum.Enum):
     PENDING = "pending"
     PAID = "paid"
+    # Фикс #4 (audit Фаза 1): отмена бонуса при отмене направления.
+    # Используется bonus_service.mark_bonus_cancelled — раньше код ссылался на
+    # BonusStatus.CANCELLED, но значение в enum отсутствовало (AttributeError).
+    CANCELLED = "cancelled"
 
 
 class BonusType(str, enum.Enum):

@@ -33,9 +33,6 @@ import {
   useToast,
 } from '../design'
 
-const BrandingSection = lazy(() => import('../sections/BrandingSection'))
-const CMSPagesSection = lazy(() => import('../sections/CMSPagesSection'))
-const ActsSection     = lazy(() => import('../sections/ActsSection'))
 
 // ─── HTTP-клиент: единый apiClient (auto-Bearer + auto-refresh).
 // Сигнатура (token) сохранена для обратной совместимости — не используется.
@@ -111,7 +108,24 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [bookVisitResult, setBookVisitResult] = useState(null)
 
   // ─── Создание направления ───
-  const [form, setForm] = useState({ to_clinic_id:'', service_id:'', patient_phone:'', patient_name:'', notes:'' })
+  const [form, setForm] = useState({
+    referral_type: 'service',  // service | doctor | lab
+    to_clinic_id: '', service_id: '', target_doctor_id: '', lab_tests: '',
+    patient_phone: '', patient_name: '', notes: '', appointment_at: ''
+  })
+  // Список штатных врачей выбранной клиники (для type=doctor)
+  const [referralDoctors, setReferralDoctors] = useState([])
+  // Список анализов из МИС (для type=lab) с категориями
+  const [labCatalog, setLabCatalog] = useState([])    // [{id, name, category, price}]
+  const [labLoading, setLabLoading] = useState(false)
+  const [labQuery, setLabQuery] = useState('')        // поиск
+  const [labCategoryFilter, setLabCategoryFilter] = useState('')
+  const [labSelectedIds, setLabSelectedIds] = useState(new Set())  // выбранные анализы
+  const [misSearching, setMisSearching] = useState(false)
+  const [misHint, setMisHint] = useState('')
+  const [misMatches, setMisMatches] = useState([])     // найденные пациенты в МИС
+  const [misMatchAccepted, setMisMatchAccepted] = useState(null) // выбранный match (mis_patient_id)
+  const [misConfirmAddNew, setMisConfirmAddNew] = useState(false)
   const [createdRef, setCreatedRef] = useState(null)
 
   // ─── Принять пациента (premium-фишка): QR scan + short_code + поиск ───
@@ -181,9 +195,9 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   // ─── KPI: сегодняшние направления + баланс бонусов ───
   async function loadStats() {
     try {
-      const [todayRes, balRes] = await Promise.all([
+      const [todayRes, sumRes] = await Promise.all([
         a.get('/referrals/', { status:'all', limit:200 }).catch(() => ({ data:[] })),
-        a.get('/bonuses/balance').catch(() => ({ data:{ balance:0 } })),
+        a.get('/bonuses/summary').catch(() => ({ data:{ total_pending:0, total_paid:0, total_referrals:0, confirmed_referrals:0 } })),
       ])
       const today = new Date().toDateString()
       const allRefs = Array.isArray(todayRes.data) ? todayRes.data : []
@@ -195,9 +209,14 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         const ds = d.toDateString()
         series.push(allRefs.filter(r => new Date(r.created_at).toDateString() === ds).length)
       }
+      const sum = sumRes.data || {}
       setStats({
         today_count: todayRefs.length,
-        balance: balRes.data?.balance || 0,
+        balance: (sum.total_pending || 0) + (sum.total_paid || 0),
+        bonus_pending: sum.total_pending || 0,
+        bonus_paid: sum.total_paid || 0,
+        my_total_referrals: sum.total_referrals || 0,
+        my_confirmed_referrals: sum.confirmed_referrals || 0,
         confirmed_today: todayRefs.filter(r => r.status === 'confirmed').length,
         completed_today: todayRefs.filter(r => r.status === 'confirmed').length,
         series,
@@ -231,15 +250,69 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
     try { const res = await a.get('/services/'); setServices(Array.isArray(res.data) ? res.data : []) } catch {}
   }
 
+  // Список штатных врачей выбранной клиники (для type=doctor)
+  async function loadDoctorsForClinic(clinicId) {
+    if (!clinicId) { setReferralDoctors([]); return }
+    try {
+      const res = await a.get('/doctors', { clinic_id: clinicId })
+      setReferralDoctors(Array.isArray(res.data) ? res.data : [])
+    } catch { setReferralDoctors([]) }
+  }
+
+  // Список анализов из МИС с категориями (для type=lab)
+  async function loadLabCatalog(clinicId) {
+    if (!clinicId) { setLabCatalog([]); return }
+    setLabLoading(true)
+    try {
+      const res = await a.get(`/clinics/${clinicId}/services`, { lab_only: true })
+      const list = Array.isArray(res.data) ? res.data : []
+      // Фильтр: только лабораторные / анализы (по категории или ключевым словам)
+      const labs = list.filter(s => {
+        const cat = (s.category || '').toLowerCase()
+        const name = (s.name || '').toLowerCase()
+        return cat.includes('анализ') || cat.includes('лаборат') || cat.includes('lab')
+            || name.includes('анализ') || name.includes('кровь') || name.includes('моча')
+            || /оам|оак|биохим|гемогл|глюкоза|холестерин|тироид|ттг|витамин/.test(name)
+      })
+      setLabCatalog(labs)
+    } catch { setLabCatalog([]) }
+    setLabLoading(false)
+  }
+
+
   async function createReferral(e) {
     e.preventDefault()
-    if (!form.to_clinic_id || !form.service_id || !form.patient_phone) return
+    if (!form.to_clinic_id || !form.patient_phone) return
+    if (form.referral_type === 'service' && !form.service_id) { setError('Выберите услугу'); return }
+    if (form.referral_type === 'doctor' && !form.target_doctor_id) { setError('Выберите врача'); return }
+    if (form.referral_type === 'lab' && labSelectedIds.size === 0 && !form.lab_tests.trim()) {
+      setError('Выберите анализы из списка или укажите их вручную'); return
+    }
     setLoading(true); setError('')
     try {
-      const res = await a.post('/referrals/', { to_clinic_id:form.to_clinic_id, service_id:form.service_id, patient_phone:form.patient_phone, patient_name:form.patient_name, notes:form.notes })
+      // Если выбраны анализы из каталога — собрать их в lab_tests текстом
+      let labTextParts = []
+      if (form.referral_type === 'lab') {
+        labCatalog.filter(l => labSelectedIds.has(l.id)).forEach(l => labTextParts.push(l.name))
+        if (form.lab_tests.trim()) labTextParts.push(form.lab_tests.trim())
+      }
+      const payload = {
+        referral_type: form.referral_type,
+        to_clinic_id: form.to_clinic_id,
+        patient_phone: form.patient_phone,
+        patient_name: form.patient_name || null,
+        notes: form.notes || null,
+        appointment_at: form.appointment_at || null,
+      }
+      if (form.referral_type === 'service') payload.service_id = form.service_id
+      if (form.referral_type === 'doctor')  payload.target_doctor_id = form.target_doctor_id
+      if (form.referral_type === 'lab')     payload.lab_tests = labTextParts.join('; ')
+      const res = await a.post('/referrals/', payload)
       setCreatedRef(res.data)
-      setForm({ to_clinic_id:'', service_id:'', patient_phone:'', patient_name:'', notes:'' })
-      loadStats() // обновим KPI
+      setForm({ referral_type:'service', to_clinic_id:'', service_id:'', target_doctor_id:'', lab_tests:'', patient_phone:'', patient_name:'', notes:'', appointment_at:'' })
+      setLabSelectedIds(new Set()); setLabQuery(''); setLabCategoryFilter('')
+      setMisMatches([]); setMisMatchAccepted(null); setMisHint('')
+      loadStats()
     } catch(err) { setError(err?.response?.data?.detail || 'Ошибка создания направления') }
     setLoading(false)
   }
@@ -273,15 +346,10 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const roleIcon  = ROLE_ICONS[user.role]  || 'admin_panel_settings'
   const isReg = user?.role === 'reg'
 
-  // ─── Пункты «Ещё»: nurse не видит брендинг/CMS/акты ───
+  // ─── Пункты «Ещё» ───
   const moreItems = [
     { key:'bonuses',  label:'Бонусы',   icon:'payments'   },
     { key:'doctors',  label:'Врачи',    icon:'people'     },
-    ...(isReg ? [
-      { key:'branding', label:'Брендинг',icon:'palette' },
-      { key:'cms',      label:'CMS',     icon:'article' },
-      { key:'acts',     label:'Акты',    icon:'receipt' },
-    ] : []),
   ]
 
   // ─── Bottom nav (для reg есть «Запись», для nurse — Приезжие) ───
@@ -541,6 +609,20 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                       delta={stats.today_count > 0 ? `${Math.round(stats.confirmed_today / stats.today_count * 100)}%` : '—'}
                       trend="up"
                     />
+                    <KpiCard
+                      label="Мои направления"
+                      value={stats.my_total_referrals ?? 0}
+                      icon={<Icon name="assignment" size={16} />}
+                      delta={(stats.my_confirmed_referrals ?? 0) + ' подтв.'}
+                      trend="up"
+                    />
+                    <KpiCard
+                      label="Мои бонусы"
+                      value={fmtMoney((stats.bonus_pending || 0) + (stats.bonus_paid || 0))}
+                      icon={<Icon name="payments" size={16} />}
+                      delta={stats.bonus_pending > 0 ? `${fmtMoney(stats.bonus_pending)} ждёт выплаты` : (stats.bonus_paid > 0 ? `${fmtMoney(stats.bonus_paid)} выплачено` : '—')}
+                      trend={stats.bonus_pending > 0 ? 'up' : 'flat'}
+                    />
                   </>
                 ) : (
                   <>
@@ -760,11 +842,49 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                   </div>
                 </Card.Header>
                 <form onSubmit={createReferral} className="space-y-4">
+                  {/* Переключатель типа направления */}
+                  <div>
+                    <label className="ks-label">Тип направления</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { v:'service', icon:'medical_services', label:'На услугу', sub:'КТ, МРТ, УЗИ…' },
+                        { v:'doctor',  icon:'person',           label:'К врачу',    sub:'ЛОР, гинеколог…' },
+                        { v:'lab',     icon:'biotech',          label:'Анализы',    sub:'Лаборатория' },
+                      ].map(t => {
+                        const on = form.referral_type === t.v
+                        return (
+                          <button
+                            type="button"
+                            key={t.v}
+                            onClick={() => setForm(p => ({ ...p, referral_type: t.v }))}
+                            className="rounded-xl px-2 py-3 text-left transition"
+                            style={{
+                              background: on ? 'var(--accent-soft)' : 'var(--surface-2)',
+                              border: '1px solid ' + (on ? 'var(--accent-line)' : 'var(--line)'),
+                            }}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Icon name={t.icon} size={18} fill={on ? 1 : 0} />
+                              <span className="text-[13px] font-semibold" style={{ color: on ? 'var(--accent)' : 'var(--fg)' }}>{t.label}</span>
+                            </div>
+                            <div className="text-[11px] mt-0.5" style={{ color: 'var(--fg-3)' }}>{t.sub}</div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
                   <div>
                     <label className="ks-label">Клиника назначения *</label>
                     <select
                       value={form.to_clinic_id}
-                      onChange={e => setForm(p => ({ ...p, to_clinic_id: e.target.value }))}
+                      onChange={e => {
+                        const cid = e.target.value
+                        setForm(p => ({ ...p, to_clinic_id: cid, target_doctor_id: '', service_id: '' }))
+                        if (form.referral_type === 'doctor') loadDoctorsForClinic(cid)
+                        if (form.referral_type === 'lab')    loadLabCatalog(cid)
+                        setLabSelectedIds(new Set())
+                      }}
                       required
                       className="ks-input"
                     >
@@ -772,33 +892,329 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                       {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="ks-label">Услуга *</label>
-                    <select
-                      value={form.service_id}
-                      onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))}
-                      required
-                      className="ks-input"
-                    >
-                      <option value="">Выбрать услугу…</option>
-                      {services.map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}{s.bonus_amount > 0 ? ` (+${s.bonus_amount} ₽)` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+
+                  {/* Поля по выбранному типу */}
+                  {form.referral_type === 'service' && (
+                    <div>
+                      <label className="ks-label">Услуга *</label>
+                      <select
+                        value={form.service_id}
+                        onChange={e => setForm(p => ({ ...p, service_id: e.target.value }))}
+                        required
+                        className="ks-input"
+                      >
+                        <option value="">Выбрать услугу…</option>
+                        {services.filter(s => !form.to_clinic_id || s.clinic_id === form.to_clinic_id).map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}{s.bonus_amount > 0 ? ` (+${s.bonus_amount} ₽)` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {form.referral_type === 'doctor' && (
+                    <>
+                      <div>
+                        <label className="ks-label">Врач *</label>
+                        <select
+                          value={form.target_doctor_id}
+                          onChange={e => setForm(p => ({ ...p, target_doctor_id: e.target.value }))}
+                          required
+                          className="ks-input"
+                          disabled={!form.to_clinic_id}
+                        >
+                          <option value="">{form.to_clinic_id ? 'Выбрать врача…' : 'Сначала выберите клинику'}</option>
+                          {referralDoctors.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.full_name}{d.specialization ? ' · ' + d.specialization : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="ks-label">Дата и время приёма (опц.)</label>
+                        <input
+                          type="datetime-local"
+                          value={form.appointment_at}
+                          onChange={e => setForm(p => ({ ...p, appointment_at: e.target.value }))}
+                          className="ks-input"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {form.referral_type === 'lab' && (
+                    <div>
+                      <label className="ks-label">
+                        Анализы * {labSelectedIds.size > 0 && (
+                          <span style={{ color: 'var(--accent)', fontWeight: 700 }}>· выбрано {labSelectedIds.size}</span>
+                        )}
+                      </label>
+                      {!form.to_clinic_id && (
+                        <div className="text-[12px] py-2" style={{ color: 'var(--fg-3)' }}>
+                          Сначала выберите клинику — анализы загрузятся из её МИС
+                        </div>
+                      )}
+                      {form.to_clinic_id && labLoading && (
+                        <div className="text-[12px] py-2" style={{ color: 'var(--fg-3)' }}>
+                          Загружаем каталог анализов из МИС…
+                        </div>
+                      )}
+                      {form.to_clinic_id && !labLoading && labCatalog.length === 0 && (
+                        <div className="text-[12px] py-2" style={{ color: 'var(--fg-3)' }}>
+                          В МИС не нашлось анализов. Можно вписать вручную:
+                        </div>
+                      )}
+                      {form.to_clinic_id && !labLoading && labCatalog.length > 0 && (
+                        <>
+                          {/* Поиск + фильтр категории */}
+                          <div className="flex gap-2 mb-2">
+                            <input
+                              type="text"
+                              value={labQuery}
+                              onChange={e => setLabQuery(e.target.value)}
+                              placeholder="🔍 Найти анализ (например: гемоглобин, тироид)"
+                              className="ks-input flex-1"
+                            />
+                            <select
+                              value={labCategoryFilter}
+                              onChange={e => setLabCategoryFilter(e.target.value)}
+                              className="ks-input"
+                              style={{ width: 180 }}
+                            >
+                              <option value="">Все категории</option>
+                              {[...new Set(labCatalog.map(l => l.category).filter(Boolean))].sort().map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {/* Сгруппированный список */}
+                          <div
+                            className="rounded-xl border"
+                            style={{ borderColor: 'var(--line)', maxHeight: 320, overflowY: 'auto' }}
+                          >
+                            {(() => {
+                              const q = labQuery.toLowerCase().trim()
+                              const filtered = labCatalog.filter(l => {
+                                if (labCategoryFilter && l.category !== labCategoryFilter) return false
+                                if (q && !l.name.toLowerCase().includes(q)) return false
+                                return true
+                              })
+                              if (filtered.length === 0) return (
+                                <div className="text-[12px] p-3 text-center" style={{ color: 'var(--fg-3)' }}>
+                                  Ничего не найдено
+                                </div>
+                              )
+                              const grouped = {}
+                              filtered.forEach(l => {
+                                const cat = l.category || '— Без категории —'
+                                if (!grouped[cat]) grouped[cat] = []
+                                grouped[cat].push(l)
+                              })
+                              return Object.keys(grouped).sort().map(cat => (
+                                <div key={cat}>
+                                  <div
+                                    className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide sticky top-0"
+                                    style={{ background: 'var(--surface-2)', color: 'var(--fg-3)', borderBottom: '1px solid var(--line)' }}
+                                  >
+                                    {cat} <span style={{ color: 'var(--accent)' }}>· {grouped[cat].length}</span>
+                                  </div>
+                                  {grouped[cat].map(l => {
+                                    const on = labSelectedIds.has(l.id)
+                                    return (
+                                      <label
+                                        key={l.id}
+                                        className="flex items-center gap-2 px-3 py-2 text-[13px] cursor-pointer transition"
+                                        style={{ background: on ? 'var(--accent-soft)' : 'transparent', borderBottom: '1px solid var(--line)' }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={on}
+                                          onChange={() => setLabSelectedIds(prev => {
+                                            const n = new Set(prev)
+                                            if (n.has(l.id)) n.delete(l.id); else n.add(l.id)
+                                            return n
+                                          })}
+                                          style={{ accentColor: 'var(--accent)' }}
+                                        />
+                                        <span className="flex-1">{l.name}</span>
+                                        {l.price > 0 && (
+                                          <span className="text-[12px]" style={{ color: 'var(--fg-3)' }}>{l.price} ₽</span>
+                                        )}
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              ))
+                            })()}
+                          </div>
+                          {labSelectedIds.size > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setLabSelectedIds(new Set())}
+                              className="text-[12px] mt-1"
+                              style={{ color: 'var(--fg-3)' }}
+                            >
+                              Сбросить выбор ({labSelectedIds.size})
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {/* Поле для ручных анализов (если в МИС нет или хочется добавить) */}
+                      <textarea
+                        value={form.lab_tests}
+                        onChange={e => setForm(p => ({ ...p, lab_tests: e.target.value }))}
+                        rows={2}
+                        placeholder={labCatalog.length > 0 ? 'Дополнительно вручную (необязательно)' : 'Например: ОАК, биохимия, ТТГ…'}
+                        className="ks-input mt-2"
+                        style={{ resize: 'none' }}
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="ks-label">Телефон пациента *</label>
-                    <input
-                      type="tel"
-                      inputMode="tel"
-                      value={form.patient_phone}
-                      onChange={e => setForm(p => ({ ...p, patient_phone: e.target.value }))}
-                      placeholder="+7…"
-                      required
-                      className="ks-input"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        value={form.patient_phone}
+                        onChange={e => setForm(p => ({ ...p, patient_phone: e.target.value }))}
+                        placeholder="+7…"
+                        required
+                        className="ks-input flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="md"
+                        disabled={misSearching || (!form.patient_phone && !form.patient_name)}
+                        onClick={async () => {
+                          if (!form.patient_phone && !form.patient_name) return
+                          setMisSearching(true); setMisHint(''); setMisMatches([]); setMisMatchAccepted(null)
+                          try {
+                            const params = {}
+                            if (form.patient_phone) params.phone = form.patient_phone
+                            if (form.patient_name)  params.full_name = form.patient_name
+                            const r = await api(adminToken).get('/referrals/verify-patient', params)
+                            const d = r.data
+                            if (d?.error) {
+                              setMisHint('МИС: ' + d.error)
+                            } else if (d?.matches && d.matches.length > 0) {
+                              setMisMatches(d.matches)
+                              setMisHint('Найдено в МИС: ' + d.matches.length)
+                            } else {
+                              setMisHint('В МИС не найден — будет создан при первом приёме')
+                            }
+                          } catch (e) {
+                            setMisHint('Ошибка поиска в МИС')
+                          }
+                          setMisSearching(false)
+                        }}
+                        title="Найти пациента в МИС Renovatio (по телефону и/или ФИО)"
+                      >
+                        <Icon name={misSearching ? 'hourglass_empty' : 'travel_explore'} size={18} fill={1} />
+                        {misSearching ? '...' : 'МИС'}
+                      </Button>
+                    </div>
+                    {misHint && misMatches.length === 0 && (
+                      <div className="text-[12px] mt-1" style={{ color: 'var(--fg-3)' }}>
+                        {misHint}
+                      </div>
+                    )}
+                    {misMatches.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {misMatches.map(m => {
+                          const accepted = misMatchAccepted === m.mis_patient_id
+                          return (
+                            <div
+                              key={m.mis_patient_id}
+                              className="rounded-xl p-3"
+                              style={{
+                                background: accepted ? 'var(--accent-soft)' : 'var(--surface-2)',
+                                border: '1px solid ' + (accepted ? 'var(--accent-line)' : 'var(--line)'),
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="font-semibold text-[14px]" style={{ color: 'var(--fg)' }}>
+                                    {m.name || '—'}
+                                  </div>
+                                  <div className="text-[12px] mt-0.5" style={{ color: 'var(--fg-2)' }}>
+                                    {[m.birth_date, m.age, m.gender].filter(Boolean).join(' · ')}
+                                  </div>
+                                  <div className="text-[12px] mt-0.5" style={{ color: 'var(--fg-2)' }}>
+                                    МИС № {m.mis_number || m.mis_patient_id} · тел. {m.mobile || '—'}
+                                  </div>
+                                  {m.match_type === 'name' && m.phone_mismatch && (
+                                    <div className="text-[12px] mt-1 font-semibold" style={{ color: 'var(--bad)' }}>
+                                      ⚠ В МИС другой телефон: {m.mobile}
+                                    </div>
+                                  )}
+                                  {m.match_type === 'phone' && (
+                                    <div className="text-[11px] mt-1" style={{ color: 'var(--good)' }}>
+                                      Совпадение по телефону
+                                    </div>
+                                  )}
+                                  {m.match_type === 'name' && !m.phone_mismatch && (
+                                    <div className="text-[11px] mt-1" style={{ color: 'var(--good)' }}>
+                                      Совпадение по ФИО
+                                    </div>
+                                  )}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant={accepted ? 'primary' : 'secondary'}
+                                  size="sm"
+                                  onClick={() => {
+                                    // Принять: вписать ФИО и телефон из МИС
+                                    setForm(p => ({
+                                      ...p,
+                                      patient_name: m.name || p.patient_name,
+                                      patient_phone: m.mobile || p.patient_phone,
+                                    }))
+                                    setMisMatchAccepted(m.mis_patient_id)
+                                  }}
+                                >
+                                  <Icon name={accepted ? 'check_circle' : 'check'} size={16} fill={1} />
+                                  {accepted ? 'Принят' : 'Принять'}
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                        {/* Кнопка «Это другой пациент — создать нового» если все совпадения по name с phone_mismatch */}
+                        {misMatches.every(m => m.match_type === 'name' && m.phone_mismatch) && form.patient_phone && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={misConfirmAddNew}
+                            onClick={async () => {
+                              if (!form.patient_phone) return
+                              setMisConfirmAddNew(true); setMisHint('')
+                              try {
+                                const r = await api(adminToken).post('/referrals/mis-add-patient', {
+                                  phone: form.patient_phone, full_name: form.patient_name || ''
+                                })
+                                if (r.data?.mis_patient_id) {
+                                  setMisHint('Создан новый пациент в МИС № ' + r.data.mis_patient_id)
+                                  setMisMatches([])
+                                  setMisMatchAccepted(r.data.mis_patient_id)
+                                }
+                              } catch (e) {
+                                setMisHint('Ошибка создания в МИС: ' + (e.response?.data?.detail || ''))
+                              }
+                              setMisConfirmAddNew(false)
+                            }}
+                            className="w-full"
+                          >
+                            <Icon name="person_add" size={16} fill={1} />
+                            {misConfirmAddNew ? 'Создаём…' : 'Это другой человек — создать в МИС нового'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="ks-label">ФИО пациента</label>
@@ -1151,22 +1567,6 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           </div>
         )}
 
-        {/* ───── ADMIN-ONLY (брендинг/CMS/акты) ───── */}
-        {tab === 'branding' && isReg && (
-          <Suspense fallback={<div className="flex justify-center py-10"><div className="ks-spinner" /></div>}>
-            <BrandingSection token={adminToken} />
-          </Suspense>
-        )}
-        {tab === 'cms' && isReg && (
-          <Suspense fallback={<div className="flex justify-center py-10"><div className="ks-spinner" /></div>}>
-            <CMSPagesSection token={adminToken} />
-          </Suspense>
-        )}
-        {tab === 'acts' && isReg && (
-          <Suspense fallback={<div className="flex justify-center py-10"><div className="ks-spinner" /></div>}>
-            <ActsSection token={adminToken} />
-          </Suspense>
-        )}
       </div>
 
       {/* ───── BOTTOM NAV ───── */}

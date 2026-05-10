@@ -46,8 +46,11 @@ import RecruiterCabinet from './RecruiterCabinet'
 import PartnerDoctorCabinet from './PartnerDoctorCabinet'
 import VisitingDoctorCabinet from './VisitingDoctorCabinet'
 import InviteAccept from './InviteAccept'
-import PatientCabinet from './PatientCabinet'
-import FranchiseOwnerCabinet from './FranchiseOwnerCabinet'
+// PatientCabinet — lazy. Тяжёлый модуль (3000+ строк); грузим только если super_admin зашёл /p/.
+const PatientCabinet = lazy(() => import('./PatientCabinet'))
+// FranchiseOwnerCabinet — lazy. Открывается только для роли franchise_owner и super_admin.
+// Сам по себе — 2400+ строк, плюс куча секций. Не нужен другим ролям.
+const FranchiseOwnerCabinet = lazy(() => import('./FranchiseOwnerCabinet'))
 // W4: Onboarding wizard — показывается franchise_owner до завершения первичной настройки
 const OnboardingWizard = lazy(() => import('./onboarding/OnboardingWizard'))
 import { API_BASE, BASE_PATH, SLUG } from '../config'
@@ -174,7 +177,11 @@ export default function AdminRoot() {
 
   // ── Пациент → личный кабинет пациента
   if (role === 'patient') {
-    return <PatientCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return (
+      <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
+        <PatientCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+      </Suspense>
+    )
   }
 
   // ── Рекрутер → кабинет рекрутера
@@ -285,5 +292,9 @@ function FranchiseOwnerWithOnboarding({ adminToken, user, onLogout }) {
     )
   }
 
-  return <FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={onLogout} />
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
+      <FranchiseOwnerCabinet adminToken={adminToken} user={user} onLogout={onLogout} />
+    </Suspense>
+  )
 }

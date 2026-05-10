@@ -46,6 +46,12 @@ async def get_summary(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep
+        filters.append(_or_rep(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope: lika (manager Лорсановой) видит только свою клинику;
     # super_admin/franchise_owner — все клиники в скоупе.
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
@@ -109,6 +115,12 @@ async def get_admin_stats(
 
     if current_user.tenant_id is not None:
         ref_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep2
+        ref_filters.append(_or_rep2(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope: lika видит сотрудников только своей клиники.
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -210,6 +222,12 @@ async def get_clinic_flow(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep
+        filters.append(_or_rep(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope (фильтр потоков, в которых участвует одна из клиник скоупа)
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -250,6 +268,8 @@ async def get_clinic_flow(
     clinic_filter = [Clinic.id.in_(list(all_clinic_ids))]
     if current_user.tenant_id is not None:
         clinic_filter.append(Clinic.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        clinic_filter.append(Clinic.id == current_user.clinic_id)
     clinic_q = await db.execute(select(Clinic.id, Clinic.name).where(*clinic_filter))
     clinic_names = {row.id: row.name for row in clinic_q.all()}
 
@@ -286,6 +306,12 @@ async def export_referrals(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep
+        filters.append(_or_rep(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope с проверкой прав
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -366,6 +392,12 @@ async def list_bonuses_by_admin(
 
     if current_user.tenant_id is not None:
         ref_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep2
+        ref_filters.append(_or_rep2(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope: lika видит бонусы сотрудников только своей клиники.
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -451,6 +483,12 @@ async def list_all_referrals(
 
     if current_user.tenant_id is not None:
         filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep
+        filters.append(_or_rep(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     # Per-clinic scope: lika видит направления только своей клиники.
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
@@ -534,6 +572,12 @@ async def get_daily_report(
     extra_filters = []
     if current_user.tenant_id is not None:
         extra_filters.append(Referral.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        from sqlalchemy import or_ as _or_rep3
+        extra_filters.append(_or_rep3(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
     filter_ids = await resolve_clinic_filter_ids(db, current_user, clinic_id)
     if filter_ids == []:
         return [

@@ -26,6 +26,27 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
+
+    # ── Impersonation: если в токене imp=true — кладём данные impersonator
+    # в contextvar чтобы audit_service записывал реального super_admin как actor.
+    # Это критично для compliance / GDPR: мы хотим знать кто из super_admin'ов
+    # сделал действие под видом tenant-юзера.
+    if payload.get("imp") is True:
+        act_id_raw = payload.get("act")
+        if act_id_raw:
+            try:
+                act_id = uuid.UUID(act_id_raw)
+                from app.core.request_ctx import current_impersonator
+                current_impersonator.set({
+                    "actor_id": act_id,
+                    "actor_name": payload.get("act_name") or "super_admin",
+                    "target_id": user.id,
+                    "target_name": user.full_name,
+                    "reason": payload.get("imp_reason"),
+                })
+            except (ValueError, Exception):
+                pass
+
     return user
 
 

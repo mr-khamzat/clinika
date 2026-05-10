@@ -208,7 +208,7 @@ async def register_doctor_direct(
 
     if body.email:
         existing_email = await db.execute(select(User).where(User.email == body.email))
-        if existing_email.scalar_one_or_none():
+        if existing_email.scalars().first():
             raise HTTPException(status_code=409, detail="Пользователь с таким email уже существует")
 
     # Проверяем клиники
@@ -431,7 +431,7 @@ async def accept_invite(
         raise HTTPException(status_code=410, detail="Приглашение истекло")
 
     existing = await db.execute(select(User).where(User.email == invite.email))
-    if existing.scalar_one_or_none():
+    if existing.scalars().first():
         raise HTTPException(status_code=409, detail="Пользователь с таким email уже существует")
 
     recruiter = await db.get(User, invite.recruiter_id) if invite.recruiter_id else None

@@ -1,6 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import api from '../api'
 import { useConfirm } from '../design'
+
+// ── DOMPurify whitelist для wiki-контента ─────────────────────────────────────
+// Разрешаем только теги/атрибуты, которые реально использует renderMd.
+// ALLOWED_URI_REGEXP блокирует javascript:/data: в href/src.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'br', 'strong', 'em', 'b', 'i', 'u', 's',
+    'ul', 'ol', 'li',
+    'blockquote', 'pre', 'code',
+    'a', 'img', 'hr',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'div', 'span',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
+  ALLOWED_URI_REGEXP: /^(?:https?|mailto):/,
+}
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
 function renderMd(raw) {
@@ -381,7 +399,7 @@ export default function WikiSection({ token }) {
               <div className="h-full overflow-y-auto p-6">
                 <div
                   className="max-w-3xl mx-auto prose-custom"
-                  dangerouslySetInnerHTML={{ __html: renderMd(form.content_md) }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMd(form.content_md), SANITIZE_CONFIG) }}
                 />
               </div>
             )}

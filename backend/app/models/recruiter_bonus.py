@@ -10,6 +10,8 @@ from app.database import Base
 class RecruiterBonusStatus(str, enum.Enum):
     PENDING = "pending"
     PAID = "paid"
+    # Фикс #4 (audit Фаза 1): отмена начисления рекрутера при отмене направления.
+    CANCELLED = "cancelled"
 
 
 class RecruiterBonus(Base):

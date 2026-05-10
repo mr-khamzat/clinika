@@ -13,6 +13,8 @@ echo "=== $(date -Iseconds) clinika-cleanup START ===" >> "$LOG"
 
 # 1. Build cache > 24 часа (раньше было 7 дней — слишком долго при частых rebuild'ах)
 docker builder prune -af --filter "until=24h" 2>&1 | tail -2 >> "$LOG"
+# buildx (containerd snapshotter cache — может расти на 5-25 GB)
+docker buildx prune -af --filter "until=24h" 2>&1 | tail -2 >> "$LOG"
 
 # 2. Все неиспользуемые images (не только dangling — `-a` флаг) > 24 часа
 # Активные не трогаем (они нужны контейнерам). Старые версии — в мусор.

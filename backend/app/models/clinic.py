@@ -17,6 +17,10 @@ class Clinic(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     mis_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # МИС per clinic (fallback на tenant settings если NULL) — bonusv2_01
+    mis_api_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mis_api_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    mis_type: Mapped[str | None] = mapped_column(String(32), nullable=True)  # renovatio | medods | medai | ...
 
     # ── Geo поля ──────────────────────────────────────────────────────────────
     city_id: Mapped[uuid.UUID | None] = mapped_column(

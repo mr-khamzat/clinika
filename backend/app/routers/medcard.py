@@ -468,3 +468,153 @@ async def staff_list_vaccinations(
                    PatientVaccination.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
     return [_vacc_dict(v) for v in rows]
+
+
+# ── Уровень 1: Timeline приёмов (автоматически из Referral + Appointment + МИС) ──
+
+@router.get("/patient/medcard/timeline")
+async def patient_medcard_timeline(
+    x_patient_session: Optional[str] = Header(None, alias="X-Patient-Session"),
+    session_token: Optional[str] = Query(None),
+    t: Optional[str] = Query(None),
+    days: int = Query(365, ge=30, le=3650),
+    db: AsyncSession = Depends(get_db),
+):
+    """Хронология медицинских событий пациента (Уровень 1).
+
+    Агрегирует:
+    - Подтверждённые/завершённые направления (Referral.status=confirmed)
+    - Записи к врачу (Appointment.status=completed)
+    - МИС-визиты (через find_patient_by_phone + getAppointments)
+
+    Сортировка по дате (новые сверху).
+    """
+    from app.models.referral import Referral, ReferralStatus
+    from app.models.doctor import Appointment, AppointmentStatus, Doctor
+    from app.models.clinic import Clinic
+    from app.models.service import Service
+    from app.models.user import User
+    from datetime import timedelta
+
+    session = await _patient_session_or_401(db, session_token or t, x_patient_session)
+    phone = normalize_phone(session.phone)
+    since = datetime.utcnow() - timedelta(days=days)
+    items: list[dict] = []
+
+    # 1) Подтверждённые направления
+    refs = (await db.execute(
+        select(Referral).where(
+            Referral.patient_phone.in_([phone, "+" + phone, "8" + phone[1:]]),
+            Referral.confirmed_at.isnot(None),
+            Referral.confirmed_at >= since,
+        ).order_by(Referral.confirmed_at.desc())
+    )).scalars().all()
+
+    for r in refs:
+        # Подгружаем clinic и service / doctor для отображения
+        to_clinic_name = None
+        if r.to_clinic_id:
+            cl = await db.get(Clinic, r.to_clinic_id)
+            to_clinic_name = cl.name if cl else None
+        service_name = None
+        if r.service_id:
+            sv = await db.get(Service, r.service_id)
+            service_name = sv.name if sv else None
+        target_doctor_name = None
+        if getattr(r, "target_doctor_id", None):
+            d = await db.get(Doctor, r.target_doctor_id)
+            target_doctor_name = d.full_name if d else None
+
+        items.append({
+            "type": "referral",
+            "date": r.confirmed_at.isoformat() if r.confirmed_at else None,
+            "title": service_name or target_doctor_name or (r.lab_tests[:80] if r.lab_tests else "Направление"),
+            "subtitle": to_clinic_name or "Клиника",
+            "referral_type": getattr(r, "referral_type", "service"),
+            "referral_id": str(r.id),
+            "icon": "assignment_turned_in",
+            "category": "Направление",
+        })
+
+    # 2) Завершённые записи к врачу
+    apts = (await db.execute(
+        select(Appointment).where(
+            Appointment.patient_phone.in_([phone, "+" + phone]),
+            Appointment.status == AppointmentStatus.COMPLETED,
+            Appointment.appointment_date >= since.date(),
+        ).order_by(Appointment.appointment_date.desc())
+    )).scalars().all()
+
+    for a in apts:
+        doc_name = None
+        if a.doctor_id:
+            doc = await db.get(Doctor, a.doctor_id)
+            doc_name = doc.full_name if doc else None
+        items.append({
+            "type": "appointment",
+            "date": a.appointment_date.isoformat() if a.appointment_date else None,
+            "title": doc_name or "Приём",
+            "subtitle": (a.notes[:120] if a.notes else None) or "Завершённый приём",
+            "appointment_id": str(a.id),
+            "icon": "stethoscope",
+            "category": "Приём врача",
+            "price": float(a.price) if a.price is not None else None,
+            "payment_method": getattr(a, "payment_method", None),
+        })
+
+    # 3) МИС-визиты (если у тенанта подключён МИС)
+    if session.tenant_id:
+        try:
+            from app.services.mis_client import find_patient_by_phone, _post as _mis_post
+            from app.services.settings_service import get_setting as _get_s
+            api_url = await _get_s(db, "mis_api_url", "", tenant_id=session.tenant_id)
+            api_key = await _get_s(db, "mis_api_key", "", tenant_id=session.tenant_id)
+            if api_url and api_key:
+                mp = await find_patient_by_phone(session.phone, api_url=api_url, api_key=api_key)
+                if mp and (mp.get("patient_id") or mp.get("id")):
+                    mis_pid = mp.get("patient_id") or mp.get("id")
+                    # Получим все клиники тенанта с mis_id
+                    clinics = (await db.execute(
+                        select(Clinic).where(
+                            Clinic.tenant_id == session.tenant_id,
+                            Clinic.mis_id.isnot(None),
+                            Clinic.is_active == True,
+                        )
+                    )).scalars().all()
+                    date_from = since.strftime("%d.%m.%Y")
+                    date_to = datetime.now().strftime("%d.%m.%Y")
+                    for c in clinics:
+                        try:
+                            r = await _mis_post(
+                                "getAppointments",
+                                api_url=api_url, api_key=api_key,
+                                clinic_id=c.mis_id,
+                                date_from=date_from, date_to=date_to,
+                                patient_id=mis_pid,
+                            )
+                            data = r.get("data") or []
+                            if isinstance(data, list):
+                                for v in data[:30]:
+                                    items.append({
+                                        "type": "mis_visit",
+                                        "date": v.get("time_start"),
+                                        "title": (v.get("doctor_name") or v.get("specialty") or "Визит"),
+                                        "subtitle": v.get("services_name") or v.get("comment") or c.name,
+                                        "icon": "medical_information",
+                                        "category": "Визит в МИС",
+                                        "mis_appointment_id": v.get("id"),
+                                        "clinic_name": c.name,
+                                    })
+                        except Exception:
+                            continue
+        except Exception:
+            pass
+
+    # Сортировка по дате (новые сверху). Items без даты — в конец.
+    def _sort_key(it):
+        d = it.get("date")
+        if not d: return ""
+        return str(d)
+    items.sort(key=_sort_key, reverse=True)
+
+    return {"items": items[:200], "total": len(items)}

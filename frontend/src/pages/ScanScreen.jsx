@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+// html5-qrcode (~250KB) — динамический импорт: грузим только при первом startScan.
+// Если бы был статический import, всё равно попало бы в vendor-pdf-qr, но цепочка graph-а
+// иногда зацепляет родителя через side-effects. Динамика гарантирует чистый чанк.
 import { scanQR, confirmByCode } from '../api'
 import { useNavigate } from 'react-router-dom'
 
@@ -17,6 +19,7 @@ export default function ScanScreen() {
     setScanning(true)
     setError(null)
     setResult(null)
+    const { Html5Qrcode } = await import('html5-qrcode')
     const scanner = new Html5Qrcode('qr-reader')
     scannerRef.current = scanner
     try {

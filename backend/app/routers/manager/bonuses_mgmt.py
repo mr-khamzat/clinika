@@ -82,12 +82,17 @@ async def list_cancel_requests(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(Referral).where(
-            Referral.status == ReferralStatus.CANCEL_REQUESTED,
-            Referral.tenant_id == current_user.tenant_id if current_user.tenant_id else True
-        ).order_by(Referral.cancel_requested_at.desc())
+    from sqlalchemy import or_ as _or_
+    _q = select(Referral).where(
+        Referral.status == ReferralStatus.CANCEL_REQUESTED,
+        Referral.tenant_id == current_user.tenant_id if current_user.tenant_id else True,
     )
+    if current_user.clinic_id:
+        _q = _q.where(_or_(
+            Referral.from_clinic_id == current_user.clinic_id,
+            Referral.to_clinic_id == current_user.clinic_id,
+        ))
+    result = await db.execute(_q.order_by(Referral.cancel_requested_at.desc()))
     referrals = result.scalars().all()
     items = []
     for r in referrals:
@@ -114,6 +119,23 @@ async def approve_cancel(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
+    """Подтверждение отмены направления.
+
+    Фикс #4 (audit Фаза 1): раньше делался физический ``db.delete(bonus)``,
+    что разрывало финансовый аудит — Ledger BONUS_ACCRUED оставался,
+    а BillingLedger platform_fee никогда не возвращался во франшизу. Теперь
+    каждый бонус помечается CANCELLED через bonus_service.mark_bonus_cancelled,
+    который сам пишет ledger BONUS_CANCELLED и refund платформенной комиссии.
+
+    Также:
+    - ``RecruiterBonus`` получает статус CANCELLED (если есть в enum).
+    - ``InterClinicInvoice`` (если был автогенерирован) → ``cancelled``.
+    """
+    from app.services.bonus_service import mark_bonus_cancelled
+    from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus
+    from app.models.inter_clinic_invoice import InterClinicInvoice, ICIStatus
+    from app.services.inter_clinic_invoice_service import mark_cancelled as _ici_mark_cancelled
+
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()
     if (not referral or referral.status != ReferralStatus.CANCEL_REQUESTED
@@ -122,9 +144,43 @@ async def approve_cancel(
     referral.status = ReferralStatus.CANCELLED
     referral.cancelled_at = datetime.utcnow()
     referral.cancelled_by_id = current_user.id
+
+    # 1) Bonus → CANCELLED через сервис (refund в Ledger + откат platform_fee).
     bonus_res = await db.execute(select(Bonus).where(Bonus.referral_id == referral_id))
     for bonus in bonus_res.scalars().all():
-        await db.delete(bonus)
+        try:
+            await mark_bonus_cancelled(db, bonus.id)
+        except Exception:
+            import logging as _lg
+            _lg.getLogger(__name__).exception("approve_cancel: mark_bonus_cancelled failed bonus_id=%s", bonus.id)
+
+    # 2) RecruiterBonus → CANCELLED (если такое значение есть в enum).
+    try:
+        rb_res = await db.execute(select(RecruiterBonus).where(RecruiterBonus.referral_id == referral_id))
+        for rb in rb_res.scalars().all():
+            cancelled_val = getattr(RecruiterBonusStatus, "CANCELLED", None)
+            if cancelled_val is not None:
+                rb.status = cancelled_val
+            else:
+                # Fallback: чтобы рекрутер не получил выплату при cancel —
+                # обнуляем сумму. Удалять запись нельзя — нужна для аудита.
+                rb.amount = 0
+    except Exception:
+        import logging as _lg
+        _lg.getLogger(__name__).exception("approve_cancel: cancel RecruiterBonus failed referral_id=%s", referral_id)
+
+    # 3) Авто-сгенерированный межклиничный счёт → 'cancelled'.
+    try:
+        ici_res = await db.execute(
+            select(InterClinicInvoice).where(InterClinicInvoice.referral_id == referral_id)
+        )
+        for inv in ici_res.scalars().all():
+            if inv.status not in (ICIStatus.PAID, ICIStatus.CANCELLED):
+                await _ici_mark_cancelled(db, inv.id)
+    except Exception:
+        import logging as _lg
+        _lg.getLogger(__name__).exception("approve_cancel: cancel ICI failed referral_id=%s", referral_id)
+
     await log_activity(db, current_user, "Отмена направления подтверждена", "referral", referral_id)
     await db.commit()
     return {"status": "cancelled"}

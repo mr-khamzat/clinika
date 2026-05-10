@@ -39,21 +39,23 @@ MANUAL_BLOCK_PREFIX = "Доступ заблокирован администр�
 
 
 def _client_ip(request: Request) -> Optional[str]:
-    """Извлечь реальный IP клиента из заголовков proxy / fallback на client.host.
-    Приоритет: X-Forwarded-For (первый IP — реальный клиент перед цепочкой прокси)
-    → X-Real-IP → request.client.host. У нас nginx ставит X-Real-IP=$remote_addr
-    (часто IP nginx внутри docker), а в XFF — публичный IP клиента.
+    """Извлечь реальный IP клиента.
+    Phase 0 fix: приоритет X-Real-IP (от nginx, доверенный proxy),
+    XFF — fallback т.к. spoof'ится клиентом (`X-Forwarded-For: 91.x` обходит region-lock).
+    Если nginx не поставил X-Real-IP — берём ПОСЛЕДНИЙ IP в XFF (наиболее ближний к серверу),
+    а не первый (как было раньше).
     """
     if request is None:
         return None
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        first = xff.split(",")[0].strip()
-        if first:
-            return first
     real = request.headers.get("x-real-ip")
     if real:
         return real.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # Берём ПОСЛЕДНИЙ — он от ближайшего trusted proxy, не от клиента
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
     if request.client:
         return request.client.host
     return None

@@ -209,6 +209,11 @@ async def list_bonus_aggregation(
     )
     if current_user.tenant_id:
         q = q.where(Bonus.tenant_id == current_user.tenant_id)
+    if current_user.clinic_id is not None:
+        # bonuses через admin_id → ограничим админами своей клиники
+        from sqlalchemy import select as _sel_fin
+        admin_ids_subq = _sel_fin(User.id).where(User.clinic_id == current_user.clinic_id)
+        q = q.where(Bonus.admin_id.in_(admin_ids_subq))
     if status:
         q = q.where(Bonus.status == status)
     q = q.order_by(func.coalesce(func.sum(Bonus.amount), 0).desc())

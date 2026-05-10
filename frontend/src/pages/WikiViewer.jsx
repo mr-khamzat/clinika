@@ -19,7 +19,7 @@ const SANITIZE_CONFIG = {
   ],
   ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel'],
   // Разрешаем только http/https/mailto в href/src — никаких javascript: или data:.
-  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+  ALLOWED_URI_REGEXP: /^(?:https?|mailto):/,
 }
 
 const sanitize = (html) => DOMPurify.sanitize(html, SANITIZE_CONFIG)

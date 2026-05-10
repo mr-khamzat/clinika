@@ -80,7 +80,7 @@ class InventoryItem(Base):
     sku: Mapped[str] = mapped_column(String(50), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     category: Mapped[InventoryCategory] = mapped_column(
-        SAEnum(InventoryCategory, name="inventory_category", create_type=False),
+        SAEnum(InventoryCategory, name="inventory_category", create_type=False, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=InventoryCategory.CONSUMABLE,
     )
@@ -190,7 +190,7 @@ class InventoryMovement(Base):
         nullable=False,
     )
     type: Mapped[InventoryMovementType] = mapped_column(
-        SAEnum(InventoryMovementType, name="inventory_movement_type", create_type=False),
+        SAEnum(InventoryMovementType, name="inventory_movement_type", create_type=False, values_callable=lambda x: [e.value for e in x]),
         nullable=False,
     )
     quantity: Mapped[Decimal] = mapped_column(Numeric(12, 3), nullable=False)

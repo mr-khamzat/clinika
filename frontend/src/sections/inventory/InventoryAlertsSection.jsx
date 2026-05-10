@@ -27,7 +27,7 @@ export default function InventoryAlertsSection() {
       setData(res.data || { low_stock: [], expiring: [], expired: [] })
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Ошибка'
-      toast?.({ kind: 'error', text: String(msg) })
+      toast?.(String(msg), 'error')
     } finally {
       setLoading(false)
     }

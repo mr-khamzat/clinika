@@ -37,6 +37,11 @@ class DoctorCreate(BaseModel):
     bio: Optional[str] = None
     slot_duration: int = 30
     experience_years: Optional[int] = None
+    # bonusv2_01: бонус за направление к этому врачу (получает АВТОР направления)
+    referral_bonus_type: Optional[str] = None  # none | fixed | percent
+    referral_bonus_amount: Optional[float] = None
+    referral_bonus_percent: Optional[float] = None
+    visit_price: Optional[float] = None
 
 class DoctorUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -47,6 +52,10 @@ class DoctorUpdate(BaseModel):
     experience_years: Optional[int] = None
     clinic_id: Optional[uuid.UUID] = None
     is_active: Optional[bool] = None
+    referral_bonus_type: Optional[str] = None
+    referral_bonus_amount: Optional[float] = None
+    referral_bonus_percent: Optional[float] = None
+    visit_price: Optional[float] = None
 
 class DoctorOut(BaseModel):
     id: uuid.UUID
@@ -58,6 +67,10 @@ class DoctorOut(BaseModel):
     slot_duration: int
     experience_years: Optional[int] = None
     is_active: bool
+    referral_bonus_type: Optional[str] = None
+    referral_bonus_amount: Optional[float] = None
+    referral_bonus_percent: Optional[float] = None
+    visit_price: Optional[float] = None
     class Config: from_attributes = True
 
 class ScheduleDayIn(BaseModel):
