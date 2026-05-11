@@ -24,6 +24,12 @@ import axios from 'axios'
 import useAuthStore from '../store/auth'
 import { API_BASE, SLUG } from '../config'
 import { BrandLogo } from '../components/BrandLogo'
+import SocialProof from '../components/landing/SocialProof'
+import FunctionalShowcase from '../components/landing/FunctionalShowcase'
+import Testimonials from '../components/landing/Testimonials'
+import FaqAccordion from '../components/landing/FaqAccordion'
+import CtaNewsletter from '../components/landing/CtaNewsletter'
+import { LANDING_EXTRAS_CSS } from '../components/landing/landing_extras.css.js'
 
 // ===== БЛОК: SVG-иконки (без внешней либы) =====
 function Icon({ d, size = 18, stroke = 'currentColor' }) {
@@ -301,6 +307,14 @@ export default function Landing() {
     setMenuOpen(false)
   }
 
+  // ===== БЛОК: глобальный listener для CustomEvent 'ks:open-contact' =====
+  // Позволяет вложенным компонентам (FAQ, и др.) открывать ContactModal без props.
+  useEffect(() => {
+    const fn = () => setShowContact(true)
+    window.addEventListener('ks:open-contact', fn)
+    return () => window.removeEventListener('ks:open-contact', fn)
+  }, [])
+
   // ===== БЛОК: Роли (для табов в секции «Кабинеты») =====
   const ROLES = {
     patient: {
@@ -399,6 +413,7 @@ export default function Landing() {
   return (
     <>
       <style>{LANDING_CSS}</style>
+      <style>{LANDING_EXTRAS_CSS}</style>
 
       {/* ===== БЛОК: NAV (sticky, с burger-меню на мобиле) ===== */}
       <nav className="ks-nav">
@@ -407,14 +422,14 @@ export default function Landing() {
           <div className="ks-nav-links">
             {[
               ['features', 'Возможности'],
-              ['roles', 'Кабинеты'],
+              ['showcase', 'Что внутри'],
               ['pricing', 'Тарифы'],
-              ['modules', 'Модули'],
-              ['calls', 'Calls'],
+              ['testimonials', 'Отзывы'],
+              ['faq', 'FAQ'],
             ].map(([id, label]) => (
               <button key={id} onClick={() => scrollTo(id)} className="ks-nav-link">{label}</button>
             ))}
-            <a href="/franchise" className="ks-nav-link">Франчайзи</a>
+            <a href="/wiki" className="ks-nav-link">Wiki</a>
           </div>
           <div className="ks-nav-actions">
             <button onClick={() => setShowLogin(true)} className="ks-nav-link ks-nav-link-strong">Войти</button>
@@ -428,18 +443,19 @@ export default function Landing() {
           <div className="ks-nav-mobile">
             {[
               ['features', 'Возможности'],
-              ['roles', 'Кабинеты'],
+              ['showcase', 'Что внутри'],
               ['pricing', 'Тарифы'],
-              ['modules', 'Модули'],
-              ['calls', 'Calls'],
+              ['testimonials', 'Отзывы'],
+              ['faq', 'FAQ'],
             ].map(([id, label]) => (
               <button key={id} onClick={() => scrollTo(id)} className="ks-nav-mobile-link">{label}</button>
             ))}
+            <a href="/wiki" className="ks-nav-mobile-link">Wiki</a>
             <a href="/franchise" className="ks-nav-mobile-link">Франчайзи</a>
             <button onClick={() => { setShowLogin(true); setMenuOpen(false) }} className="ks-nav-mobile-link">Войти</button>
-            <button onClick={() => { setShowContact(true); setMenuOpen(false) }} className="ks-btn-primary ks-btn-block" style={{ marginTop: 8 }}>
-              Создать клинику
-            </button>
+            <a href="/signup" className="ks-btn-primary ks-btn-block" style={{ marginTop: 8, textAlign: 'center' }}>
+              Начать бесплатно
+            </a>
           </div>
         )}
       </nav>
@@ -547,6 +563,9 @@ export default function Landing() {
           ))}
         </div>
       </div>
+
+      {/* ===== БЛОК: SOCIAL PROOF — клиники, которые нам доверяют ===== */}
+      <SocialProof />
 
       {/* ===== БЛОК: PROBLEMS — то с чем сталкиваются клиники ===== */}
       <section className="ks-section" style={{ paddingTop: 64, paddingBottom: 32 }}>
@@ -669,6 +688,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ===== БЛОК: FUNCTIONAL SHOWCASE — alternating «текст + мок» ===== */}
+      <FunctionalShowcase />
+
       {/* ===== БЛОК: FLOW (4 шага · 28 дней) ===== */}
       <section className="ks-section ks-flow">
         <div className="ks-section-inner">
@@ -752,6 +774,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ===== БЛОК: TESTIMONIALS — 3 цитаты ===== */}
+      <Testimonials />
 
       {/* ===== БЛОК: MODULES (подключаемые модули с реальными ценами из БД) ===== */}
       <section id="modules" className="ks-section">
@@ -874,21 +899,11 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== БЛОК: CTA (14 дней триал) ===== */}
-      <section className="ks-cta">
-        <div className="ks-cta-card">
-          <h2>Начать бесплатно — 14 дней</h2>
-          <p>Без банковской карты. Создадим тенант, импортируем услуги, запустим за 1 день. Покажем дашборд сети и проведём по кабинетам.</p>
-          <div className="ks-cta-actions">
-            <a href="/signup" className="ks-btn-cta-primary">
-              Начать бесплатно {ICONS.arrow}
-            </a>
-            <button onClick={() => setShowLogin(true)} className="ks-btn-cta-secondary">
-              Уже клиент — войти
-            </button>
-          </div>
-        </div>
-      </section>
+      {/* ===== БЛОК: FAQ — 7 типовых вопросов ===== */}
+      <FaqAccordion />
+
+      {/* ===== БЛОК: CTA Newsletter (большой финал) ===== */}
+      <CtaNewsletter />
 
       {/* ===== БЛОК: FOOTER ===== */}
       <footer className="ks-footer">
@@ -898,6 +913,21 @@ export default function Landing() {
             <p className="ks-footer-tagline">
               SaaS-платформа для медицинских сетей. Запись, ЭМК, биллинг, аналитика и кабинеты для всех ролей.
             </p>
+            <div className="ks-footer-social" aria-label="Соцсети">
+              <a href="https://t.me/klinikset" target="_blank" rel="noreferrer" aria-label="Telegram" title="Telegram">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.24 3.64 11.95c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+              </a>
+              <a href="https://vk.com/klinikset" target="_blank" rel="noreferrer" aria-label="VK" title="VK">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.78 17.5h1.2s.36-.04.55-.24c.17-.18.17-.52.17-.52s-.02-1.6.72-1.84c.73-.23 1.66 1.55 2.66 2.23.74.52 1.31.4 1.31.4l2.62-.04s1.37-.08.72-1.16c-.05-.09-.38-.81-1.96-2.28-1.66-1.54-1.44-1.29.56-3.96 1.22-1.62 1.7-2.61 1.55-3.04-.14-.41-1.05-.3-1.05-.3l-2.94.02s-.22-.03-.38.07c-.16.09-.26.31-.26.31s-.47 1.27-1.1 2.34c-1.33 2.27-1.86 2.4-2.07 2.26-.5-.32-.38-1.3-.38-2-.01-2.18.33-3.09-.64-3.32-.32-.08-.56-.13-1.39-.14-1.07-.01-1.97.01-2.49.26-.34.17-.61.55-.45.57.2.03.65.13.89.46.31.41.3 1.34.3 1.34s.18 2.61-.42 2.93c-.41.22-.97-.23-2.16-2.29-.61-1.05-1.07-2.22-1.07-2.22s-.09-.21-.25-.33c-.19-.14-.46-.18-.46-.18l-2.79.02s-.42.01-.57.19c-.14.16-.01.5-.01.5s2.18 5.1 4.65 7.67c2.27 2.36 4.85 2.21 4.85 2.21z"/></svg>
+              </a>
+              <a href="https://youtube.com/@klinikset" target="_blank" rel="noreferrer" aria-label="YouTube" title="YouTube">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58zM10 15.5v-7l5.5 3.5z"/></svg>
+              </a>
+            </div>
+            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.5 }}>
+              <div>тел.: +7 (800) 555-12-34</div>
+              <div>email: hello@клиниксеть.рф</div>
+            </div>
           </div>
           <div className="ks-footer-col">
             <h6>Продукт</h6>
