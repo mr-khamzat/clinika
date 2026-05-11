@@ -71,6 +71,9 @@ const ClinicsNetworkSection      = lazy(() => import('../sections/ClinicsNetwork
 // Модули франшизы: телемедицина / лояльность / инвентарь
 const TelemedicineSection        = lazy(() => import('../sections/TelemedicineSection'))
 const LoyaltySection             = lazy(() => import('../sections/loyalty/LoyaltySection'))
+// Глава 8 — Награды/Лидерборд/Claims/Manual-adjust (отдельно от LoyaltySection,
+// которая управляет тирами/правилами/обменом).
+const AdminLoyaltySection        = lazy(() => import('../sections/AdminLoyaltySection'))
 const InventorySection           = lazy(() => import('../sections/inventory/InventorySection'))
 // Module Monitoring System — health-state платных модулей тенанта
 const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
@@ -133,6 +136,8 @@ const NAV_GROUPS = [
     items: [
       { id: 'telemedicine', label: 'Телемедицина',         icon: 'video_call'  },
       { id: 'loyalty',      label: 'Программа лояльности', icon: 'stars'       },
+      // Глава 8 — отдельный пункт «Награды и пациенты» (CRUD каталог + лидерборд + claims + ручная корректировка)
+      { id: 'rewards_admin', label: 'Награды и пациенты',  icon: 'workspace_premium' },
       { id: 'inventory',    label: 'Учёт инвентаря',       icon: 'inventory_2' },
     ],
   },
@@ -166,6 +171,8 @@ const PAGE_TITLES = {
   partners_clinics: { title: 'Клиники-партнёры', subtitle: 'Контракты royalty / per_referral / hybrid' },
   telemedicine: { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   loyalty:      { title: 'Программа лояльности',  subtitle: 'Уровни, правила начисления и обмен бонусов' },
+  // Глава 8 — управление наградами и пациентами
+  rewards_admin: { title: 'Награды и пациенты',    subtitle: 'Каталог наград, лидерборд, запросы пациентов и ручная корректировка баллов' },
   inventory:    { title: 'Учёт инвентаря',        subtitle: 'Расходные материалы, оборудование, медикаменты' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
@@ -2058,6 +2065,14 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <LoyaltySection token={adminToken} />
+        </Suspense>
+      )
+    }
+    // Глава 8 — Награды и пациенты (CRUD + leaderboard + claims + manual-adjust)
+    if (route === 'rewards_admin') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdminLoyaltySection token={adminToken} />
         </Suspense>
       )
     }

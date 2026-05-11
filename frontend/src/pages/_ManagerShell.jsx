@@ -46,6 +46,8 @@ export const MGR_NAV = [
   { key:'forecast',     label:'Прогноз расходов',    icon:'trending_up',  path:'/manager/forecast' },
   // Глава 7 — Регламент-конструктор: «Мои регламенты» для управляющего
   { key:'regulations',  label:'Регламенты',          icon:'rule',         path:'/manager/regulations' },
+  // Глава 8 — Программа лояльности (Награды + Лидерборд + Claims + Manual Adjust)
+  { key:'loyalty',      label:'Лояльность',          icon:'workspace_premium', path:'/manager/loyalty' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)

@@ -12,15 +12,15 @@ import { loadTelegramSDK } from '../lib/tg'
 
 // Лениво подгружаемые вкладки кабинета (записи, медкарта, документы, рецепты, витальные)
 const AppointmentsTab  = lazy(() => import('../sections/patient/AppointmentsTab'))
+// Глава 8 — Программа лояльности и расходник
+const PatientLoyaltySection  = lazy(() => import('../sections/PatientLoyaltySection'))
+const PatientSpendingSection = lazy(() => import('../sections/PatientSpendingSection'))
 const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
 const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
 // W6: AI-ассистент пациенту через Gemini — плавающий чат-виджет
 const PatientAiWidget  = lazy(() => import('../sections/patient/PatientAiWidget'))
-// Глава 8: Семейный профиль пациента (новый раздел кабинета)
-const PatientFamilySection = lazy(() => import('../sections/PatientFamilySection'))
-import SwitchContextBanner from '../components/family/SwitchContextBanner'
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
@@ -2453,7 +2453,9 @@ export default function PatientCabinet() {
         { key: 'appointments', icon: 'event_available',     label: 'Записи'     },
         { key: 'referrals',    icon: 'assignment',          label: 'Направления'},
         { key: 'health',       icon: 'health_and_safety',   label: 'Здоровье'   },
-        { key: 'family',       icon: 'family_restroom',     label: 'Семья'      },
+        // Глава 8 — Программа лояльности и расходник
+        { key: 'loyalty',      icon: 'workspace_premium',   label: 'Бонусы'     },
+        { key: 'spending',     icon: 'receipt_long',        label: 'Расходник'  },
         { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
         { key: 'support',      icon: 'chat_bubble',         label: 'Чат'        },
         { key: 'me',           icon: 'account_circle',      label: 'Я'          },
@@ -2470,8 +2472,6 @@ export default function PatientCabinet() {
       token={callToken}
     />
     <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
-      {/* Глава 8: баннер активного контекста семьи (виден когда выбран родственник) */}
-      <SwitchContextBanner />
       <style>{`
         @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
@@ -3001,15 +3001,20 @@ export default function PatientCabinet() {
           </div>
         )}
 
-        {/* ── FAMILY — семейный профиль (Глава 8) ── */}
-        {tab === 'family' && !data?.type && (
+        {/* ── LOYALTY — Глава 8: программа лояльности (тиры/баллы/награды) ── */}
+        {tab === 'loyalty' && !data?.type && (
           <div className="tab-enter">
             <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
-              <PatientFamilySection
-                sessionToken={localStorage.getItem(SESSION_KEY)}
-                ownerName={patient_name}
-                onContextChanged={() => { /* реактивно — через window event */ }}
-              />
+              <PatientLoyaltySection sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── SPENDING — Глава 8: расходник (траты по годам/категориям/клиникам) ── */}
+        {tab === 'spending' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientSpendingSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
         )}
@@ -3026,13 +3031,14 @@ export default function PatientCabinet() {
       </div>
 
       {/* ── Bottom Navigation ── */}
+      {/* Глава 8: с добавлением «Бонусы» и «Расходник» вкладок стало 9 — включаем overflow-x-auto */}
       <div className="fixed bottom-0 left-0 right-0 z-40" style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom,0px)' }}>
-        <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2">
+        <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
           {TABS.map(t => {
             const isActive = tab === t.key
             return (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-2xl transition-all"
+                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all flex-shrink-0"
                 style={{ color: isActive ? '#1565C0' : '#9CA3AF', background: isActive ? 'rgba(21,101,192,.08)' : 'transparent' }}>
                 <span className="material-symbols-outlined text-2xl leading-none transition-all"
                   style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0", transform: isActive ? 'scale(1.1)' : 'scale(1)' }}>

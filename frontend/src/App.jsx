@@ -53,6 +53,8 @@ const ManagerMultiClinic    = lazy(() => import('./pages/ManagerMultiClinic'))
 const ManagerForecast       = lazy(() => import('./pages/ManagerForecast'))
 // Глава 7 — Регламент-конструктор: «Мои регламенты» для менеджера
 const ManagerRegulations    = lazy(() => import('./pages/ManagerRegulations'))
+// Глава 8 — Программа лояльности (управление наградами, лидерборд, claims)
+const ManagerLoyalty        = lazy(() => import('./pages/ManagerLoyalty'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -273,6 +275,8 @@ function MiniApp() {
               <Route path="manager/forecast"     element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerForecast /></Suspense>} />
               {/* Глава 7 — Регламент-конструктор: «Мои регламенты» для управляющего */}
               <Route path="manager/regulations"  element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerRegulations /></Suspense>} />
+              {/* Глава 8 — Программа лояльности: каталог наград, лидерборд, claims, ручная корректировка */}
+              <Route path="manager/loyalty"      element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLoyalty /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}
