@@ -52,6 +52,8 @@ export const MGR_NAV = [
   { key:'chat',         label:'Чат пациентов',       icon:'forum',             path:'/manager/chat' },
   // Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...)
   { key:'lab',          label:'Лаборатории',         icon:'science',           path:'/manager/lab' },
+  // Глава 10 — Агрегаторы лидов: входящие заявки от DocDoc/ПроДокторов/Yandex Health
+  { key:'aggregator',   label:'Заявки агрегаторов',  icon:'campaign',          path:'/manager/aggregator' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)

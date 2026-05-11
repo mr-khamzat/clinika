@@ -84,6 +84,12 @@ const RegulationsAdminSection   = lazy(() => import('../sections/RegulationsAdmi
 const RegulationsReaderSection  = lazy(() => import('../sections/RegulationsReaderSection'))
 // Глава 10 — Wellness-партнёры: CRUD для super_admin
 const AdminWellnessSection       = lazy(() => import('../sections/AdminWellnessSection'))
+// Глава 10 — Партнёрства агрегаторов: CRUD (DocDoc/ПроДокторов/...) + API-ключи
+const AdminAggregatorPartnershipsSection = lazy(() => import('../sections/AdminAggregatorPartnershipsSection'))
+// Глава 10 — Заявки от агрегаторов: список лидов + статистика (для franchise_owner тоже полезно)
+const AdminAggregatorSection     = lazy(() => import('../sections/AdminAggregatorSection'))
+// Глава 10 — Состояние системы: health-метрики + disaster mode (super_admin)
+const AdminSystemStatusSection   = lazy(() => import('../sections/AdminSystemStatusSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -143,6 +149,10 @@ const NAV_GROUPS = [
       { id: 'inventory',    label: 'Учёт инвентаря',       icon: 'inventory_2' },
       // Глава 10 — Wellness-партнёры (фитнес/спа/питание/йога/психология) для пациентов с подпиской
       { id: 'wellness_admin', label: 'Wellness партнёры',  icon: 'fitness_center' },
+      // Глава 10 — Партнёрства агрегаторов (DocDoc/ПроДокторов/Yandex Health): CRUD + API-ключи
+      { id: 'aggregator_partnerships', label: 'Партнёрства агрегаторов', icon: 'handshake' },
+      // Глава 10 — Лиды от агрегаторов (manager-style таблица для franchise_owner)
+      { id: 'aggregator_leads', label: 'Заявки агрегаторов', icon: 'campaign' },
     ],
   },
   {
@@ -151,6 +161,8 @@ const NAV_GROUPS = [
       { id: 'marketplace', label: 'Маркетплейс',          icon: 'storefront'         },
       { id: 'modules',    label: 'Каталог модулей',     icon: 'extension'           },
       { id: 'monitoring', label: 'Мониторинг модулей',  icon: 'monitor_heart'       },
+      // Глава 10 — Состояние системы (health-метрики + disaster mode) — для super_admin
+      { id: 'system_status', label: 'Состояние системы', icon: 'monitor_heart'    },
       { id: 'roles',      label: 'Роли и права',        icon: 'admin_panel_settings'},
       // Глава 7 — Регламент-конструктор: админка для franchise_owner
       { id: 'regulations_admin', label: 'Конструктор регламентов', icon: 'rule_settings' },
@@ -180,6 +192,12 @@ const PAGE_TITLES = {
   inventory:    { title: 'Учёт инвентаря',        subtitle: 'Расходные материалы, оборудование, медикаменты' },
   // Глава 10 — Wellness-партнёры (CRUD для super_admin)
   wellness_admin: { title: 'Wellness партнёры',    subtitle: 'Партнёрские бонусы для пациентов: фитнес, спа, питание, психология, йога' },
+  // Глава 10 — Партнёрства агрегаторов (DocDoc/ПроДокторов/Yandex Health)
+  aggregator_partnerships: { title: 'Партнёрства агрегаторов', subtitle: 'Подключение DocDoc / ПроДокторов / Яндекс.Здоровье — комиссии и API-ключи' },
+  // Глава 10 — Заявки от агрегаторов
+  aggregator_leads: { title: 'Заявки агрегаторов', subtitle: 'Входящие лиды от партнёров-агрегаторов и статистика по источникам' },
+  // Глава 10 — Состояние системы (super_admin)
+  system_status: { title: 'Состояние системы', subtitle: 'Здоровье БД/Redis/диска, активные подписки и disaster-mode' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
@@ -2094,6 +2112,30 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <AdminWellnessSection />
+        </Suspense>
+      )
+    }
+    // Глава 10 — Партнёрства агрегаторов: CRUD (DocDoc/ПроДокторов/...) + одноразовые API-ключи
+    if (route === 'aggregator_partnerships') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdminAggregatorPartnershipsSection />
+        </Suspense>
+      )
+    }
+    // Глава 10 — Заявки от агрегаторов (manager-style, но в кабинете франчайзи)
+    if (route === 'aggregator_leads') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdminAggregatorSection />
+        </Suspense>
+      )
+    }
+    // Глава 10 — Состояние системы (super_admin): health + disaster-mode
+    if (route === 'system_status') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdminSystemStatusSection />
         </Suspense>
       )
     }

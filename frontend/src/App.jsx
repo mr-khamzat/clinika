@@ -59,6 +59,8 @@ const ManagerLoyalty        = lazy(() => import('./pages/ManagerLoyalty'))
 const ManagerChatPage       = lazy(() => import('./pages/ManagerChatPage'))
 // Глава 10 — Лабораторные интеграции: CRUD провайдеров
 const ManagerLab            = lazy(() => import('./pages/ManagerLab'))
+// Глава 10 — Агрегаторы лидов: входящие заявки от DocDoc/ПроДокторов/Yandex Health
+const ManagerAggregator     = lazy(() => import('./pages/ManagerAggregator'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -285,6 +287,8 @@ function MiniApp() {
               <Route path="manager/chat"         element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerChatPage /></Suspense>} />
               {/* Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...) */}
               <Route path="manager/lab"          element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLab /></Suspense>} />
+              {/* Глава 10 — Агрегаторы лидов: DocDoc/ПроДокторов/Yandex Health */}
+              <Route path="manager/aggregator"   element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerAggregator /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}
