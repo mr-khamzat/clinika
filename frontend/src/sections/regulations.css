@@ -1,0 +1,360 @@
+/* ============================================================
+   Стили регламент-конструктора (Глава 7)
+   Подключаются из RegulationBuilderSection.jsx и RegulationsAdminSection.jsx.
+   Цель — премиум-минимализм в духе Notion.
+   ============================================================ */
+
+/* ── Контейнер 2-колонного билдера ────────────────────────── */
+.reg-builder-shell {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .reg-builder-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Sidebar (метаданные) ─────────────────────────────────── */
+.reg-side {
+  position: sticky;
+  top: 16px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #ececec;
+  padding: 18px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+}
+.reg-side h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.reg-side .reg-field {
+  margin-bottom: 14px;
+}
+.reg-side label.reg-checkrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+/* ── Поля ввода ──────────────────────────────────────────── */
+.reg-input,
+.reg-textarea,
+.reg-select {
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: #fafafa;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+  font-family: inherit;
+}
+.reg-input:focus,
+.reg-textarea:focus,
+.reg-select:focus {
+  border-color: #7c3aed;
+  background: #fff;
+}
+.reg-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.45;
+}
+
+/* ── Главный конструктор ─────────────────────────────────── */
+.reg-main {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #ececec;
+  padding: 18px;
+  min-height: 60vh;
+}
+.reg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.reg-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.reg-tool-btn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #f9f5ff;
+}
+.reg-tool-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+.reg-tool-btn.reg-ai {
+  background: linear-gradient(90deg, #7c3aed, #ec4899);
+  color: #fff;
+  border-color: transparent;
+}
+.reg-tool-btn.reg-ai:hover {
+  filter: brightness(1.05);
+  color: #fff;
+}
+
+/* ── Шаги ────────────────────────────────────────────────── */
+.reg-step {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+.reg-step:hover {
+  border-color: #d8d2ff;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.06);
+}
+.reg-step.reg-drag-over {
+  border-color: #7c3aed;
+  background: #faf7ff;
+}
+.reg-step-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #9ca3af;
+  cursor: grab;
+  padding-top: 4px;
+}
+.reg-step-handle:active {
+  cursor: grabbing;
+}
+.reg-step-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.reg-step.reg-type-checkbox .reg-step-icon { background: #ecfdf5; color: #059669; }
+.reg-step.reg-type-action   .reg-step-icon { background: #fef3c7; color: #b45309; }
+.reg-step.reg-type-file     .reg-step-icon { background: #eef2ff; color: #4f46e5; }
+.reg-step.reg-type-text     .reg-step-icon { background: #f3f4f6; color: #6b7280; }
+
+.reg-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.reg-step-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+.reg-icon-btn {
+  background: transparent;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  cursor: pointer;
+}
+.reg-icon-btn:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+.reg-icon-btn.danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* ── Чипы статуса ────────────────────────────────────────── */
+.reg-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+.reg-chip-draft     { background: #fef3c7; color: #92400e; }
+.reg-chip-published { background: #dcfce7; color: #166534; }
+.reg-chip-archived  { background: #f3f4f6; color: #4b5563; }
+
+/* ── Таблица регламентов ─────────────────────────────────── */
+.reg-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 14px;
+}
+.reg-table th,
+.reg-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f1f1;
+  vertical-align: middle;
+}
+.reg-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: #fafafa;
+}
+.reg-table tr:hover td {
+  background: #fafafa;
+}
+
+/* ── Таймлайн версий ─────────────────────────────────────── */
+.reg-timeline {
+  position: relative;
+  padding-left: 24px;
+}
+.reg-timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 8px;
+  width: 2px;
+  background: #ececec;
+}
+.reg-tl-item {
+  position: relative;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #fff;
+  border: 1px solid #ececec;
+  border-radius: 10px;
+}
+.reg-tl-item::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #c4b5fd;
+}
+.reg-tl-item.is-current::before {
+  background: #7c3aed;
+  border-color: #7c3aed;
+}
+.reg-tl-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1f2937;
+  line-height: 1;
+}
+
+/* ── Модалки (бэкдроп лёгкий) ────────────────────────────── */
+.reg-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+.reg-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  overflow: auto;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+.reg-modal h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+.reg-modal .reg-modal-sub {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+/* ── Прогресс-бар охвата ─────────────────────────────────── */
+.reg-progress {
+  width: 100%;
+  height: 8px;
+  background: #f3f4f6;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.reg-progress > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #ec4899);
+  transition: width 200ms ease;
+}
+
+/* ── Скелетон ───────────────────────────────────────────── */
+.reg-skel {
+  background: linear-gradient(90deg, #f3f4f6 0%, #ececec 50%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: regShimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+@keyframes regShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Бейджи AI ───────────────────────────────────────────── */
+.reg-ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  margin-left: 8px;
+}
