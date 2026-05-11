@@ -21,6 +21,9 @@ const PatientDocumentsSection    = lazy(() => import('../sections/PatientDocumen
 // Глава 9 — Премиум-чат с клиникой и календарь (ICS + Google/Apple)
 const PatientChatSection         = lazy(() => import('../sections/PatientChatSection'))
 const PatientCalendarSection     = lazy(() => import('../sections/PatientCalendarSection'))
+// Глава 10 — Лабораторные результаты + Wellness-партнёры
+const PatientLabResultsSection   = lazy(() => import('../sections/PatientLabResultsSection'))
+const PatientWellnessSection     = lazy(() => import('../sections/PatientWellnessSection'))
 const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
@@ -2465,6 +2468,9 @@ export default function PatientCabinet() {
         // Глава 9 — Подписка «Здоровье+» и Документы
         { key: 'subscription', icon: 'verified',            label: 'Подписка'   },
         { key: 'documents',    icon: 'folder',              label: 'Документы'  },
+        // Глава 10 — Анализы и Wellness-партнёры
+        { key: 'lab',          icon: 'biotech',             label: 'Анализы'    },
+        { key: 'wellness',     icon: 'fitness_center',      label: 'Партнёры'   },
         // Глава 9 — Сообщения (чат с клиникой) и Календарь (Google/Apple)
         { key: 'messages',     icon: 'chat_bubble',         label: 'Сообщения'  },
         { key: 'calendar',     icon: 'calendar_month',      label: 'Календарь'  },
@@ -3066,6 +3072,24 @@ export default function PatientCabinet() {
           <div className="tab-enter">
             <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
               <PatientDocumentsSection sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── LAB — Глава 10: результаты лабораторных анализов ── */}
+        {tab === 'lab' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientLabResultsSection sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── WELLNESS — Глава 10: партнёрская программа (скидки от партнёров) ── */}
+        {tab === 'wellness' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientWellnessSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
         )}

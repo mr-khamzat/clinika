@@ -57,6 +57,8 @@ const ManagerRegulations    = lazy(() => import('./pages/ManagerRegulations'))
 const ManagerLoyalty        = lazy(() => import('./pages/ManagerLoyalty'))
 // Глава 9 — Чат с пациентами (премиум-чат клиники)
 const ManagerChatPage       = lazy(() => import('./pages/ManagerChatPage'))
+// Глава 10 — Лабораторные интеграции: CRUD провайдеров
+const ManagerLab            = lazy(() => import('./pages/ManagerLab'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -281,6 +283,8 @@ function MiniApp() {
               <Route path="manager/loyalty"      element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLoyalty /></Suspense>} />
               {/* Глава 9 — Чат с пациентами (премиум-чат клиники) */}
               <Route path="manager/chat"         element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerChatPage /></Suspense>} />
+              {/* Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...) */}
+              <Route path="manager/lab"          element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLab /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}

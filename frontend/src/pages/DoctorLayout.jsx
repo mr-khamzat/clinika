@@ -61,6 +61,8 @@ const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReade
 const ClinicChatSection = lazy(() => import('../sections/ClinicChatSection'))
 // Глава 9: Документы пациента — контекстная панель в карточке приёма (lazy)
 const DoctorPatientDocumentsSection = lazy(() => import('../sections/DoctorPatientDocumentsSection'))
+// Глава 10: Лабораторные интеграции — заявки врача на анализы
+const DoctorLabOrdersSection = lazy(() => import('../sections/DoctorLabOrdersSection'))
 
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -103,6 +105,8 @@ const NAV = [
   { id: 'ai',           label: 'AI-инструменты', icon: 'auto_awesome',    group: 'work' },
   { id: 'patients',     label: 'Мои пациенты',   icon: 'group',           group: 'work' },
   { id: 'referrals',    label: 'Направления',    icon: 'assignment',      group: 'work' },
+  // Глава 10 — Лабораторные интеграции
+  { id: 'lab',          label: 'Анализы',        icon: 'science',         group: 'work' },
   { id: 'chat',         label: 'Чат',            icon: 'chat_bubble',     group: 'work' },
   { id: 'earnings',     label: 'Заработок',      icon: 'payments',        group: 'cabinet' },
   { id: 'rating',       label: 'Рейтинг',        icon: 'star',            group: 'cabinet' },
@@ -979,7 +983,7 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
 
   // Защита: если кабинет не привязан, доступны только некоторые секции
   const needBinding = !doctorId
-  const allowedWithoutBinding = new Set(['referrals', 'earnings', 'rating', 'time', 'chat'])
+  const allowedWithoutBinding = new Set(['referrals', 'earnings', 'rating', 'time', 'chat', 'lab'])
 
   const renderRoute = () => {
     if (needBinding && !allowedWithoutBinding.has(route)) {
@@ -1005,6 +1009,11 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
       case 'rating':       return <RatingPage />
       case 'time':         return <TimePage />
       case 'chat':         return <ChatPage />
+      case 'lab':          return (
+        <Suspense fallback={<Spinner />}>
+          <DoctorLabOrdersSection />
+        </Suspense>
+      )
       case 'regulations':  return (
         <Suspense fallback={<Spinner />}>
           <RegulationsReaderSection user={user} />

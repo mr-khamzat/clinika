@@ -82,6 +82,8 @@ const FranchiseAnalyticsSection = lazy(() => import('../sections/FranchiseAnalyt
 // Глава 7 — Регламент-конструктор: админка (builder-агент) + читатель (мой раздел)
 const RegulationsAdminSection   = lazy(() => import('../sections/RegulationsAdminSection'))
 const RegulationsReaderSection  = lazy(() => import('../sections/RegulationsReaderSection'))
+// Глава 10 — Wellness-партнёры: CRUD для super_admin
+const AdminWellnessSection       = lazy(() => import('../sections/AdminWellnessSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -139,6 +141,8 @@ const NAV_GROUPS = [
       // Глава 8 — отдельный пункт «Награды и пациенты» (CRUD каталог + лидерборд + claims + ручная корректировка)
       { id: 'rewards_admin', label: 'Награды и пациенты',  icon: 'workspace_premium' },
       { id: 'inventory',    label: 'Учёт инвентаря',       icon: 'inventory_2' },
+      // Глава 10 — Wellness-партнёры (фитнес/спа/питание/йога/психология) для пациентов с подпиской
+      { id: 'wellness_admin', label: 'Wellness партнёры',  icon: 'fitness_center' },
     ],
   },
   {
@@ -174,6 +178,8 @@ const PAGE_TITLES = {
   // Глава 8 — управление наградами и пациентами
   rewards_admin: { title: 'Награды и пациенты',    subtitle: 'Каталог наград, лидерборд, запросы пациентов и ручная корректировка баллов' },
   inventory:    { title: 'Учёт инвентаря',        subtitle: 'Расходные материалы, оборудование, медикаменты' },
+  // Глава 10 — Wellness-партнёры (CRUD для super_admin)
+  wellness_admin: { title: 'Wellness партнёры',    subtitle: 'Партнёрские бонусы для пациентов: фитнес, спа, питание, психология, йога' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
@@ -2080,6 +2086,14 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <InventorySection token={adminToken} />
+        </Suspense>
+      )
+    }
+    // Глава 10 — Wellness-партнёры (CRUD каталог + аналитика по кликам)
+    if (route === 'wellness_admin') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <AdminWellnessSection />
         </Suspense>
       )
     }

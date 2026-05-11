@@ -50,6 +50,8 @@ export const MGR_NAV = [
   { key:'loyalty',      label:'Лояльность',          icon:'workspace_premium', path:'/manager/loyalty' },
   // Глава 9 — Чат с пациентами (премиум-чат клиники)
   { key:'chat',         label:'Чат пациентов',       icon:'forum',             path:'/manager/chat' },
+  // Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...)
+  { key:'lab',          label:'Лаборатории',         icon:'science',           path:'/manager/lab' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)
