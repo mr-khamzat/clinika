@@ -14,23 +14,27 @@
  * Логику и API-вызовы НЕ трогаем — только UI компоненты.
  * ========================================
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / KpiRow / Chip / EmptyState
 import { Card, KpiCard, KpiRow, Chip, EmptyState } from '../design'
 // Глава 6: Direct billing — счета пациентам, статистика, PDF
 import ExternalDoctorBillingSection from '../components/doctor/ExternalDoctorBillingSection'
+// Глава 7: Мои регламенты (читатель)
+const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 
 const ACCENT = '#1565C0'
 const DARK   = '#0d2040'
 
 const NAV = [
-  { key: 'dashboard', label: 'Главная',      icon: 'dashboard'      },
-  { key: 'referrals', label: 'Направления',  icon: 'send'           },
-  { key: 'schedule',  label: 'Расписание',   icon: 'calendar_today' },
-  { key: 'bonuses',   label: 'Бонусы',       icon: 'payments'       },
-  { key: 'billing',   label: 'Счета',        icon: 'receipt_long'   },
+  { key: 'dashboard',   label: 'Главная',      icon: 'dashboard'      },
+  { key: 'referrals',   label: 'Направления',  icon: 'send'           },
+  { key: 'schedule',    label: 'Расписание',   icon: 'calendar_today' },
+  { key: 'bonuses',     label: 'Бонусы',       icon: 'payments'       },
+  { key: 'billing',     label: 'Счета',        icon: 'receipt_long'   },
+  // Глава 7: «Мои регламенты»
+  { key: 'regulations', label: 'Регламенты',   icon: 'rule'           },
 ]
 
 function fmt(d) {
@@ -220,6 +224,13 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
         {/* Billing (Глава 6) */}
         {tab === 'billing' && (
           <ExternalDoctorBillingSection />
+        )}
+
+        {/* Глава 7: Мои регламенты (читатель) */}
+        {tab === 'regulations' && (
+          <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Загрузка…</div>}>
+            <RegulationsReaderSection user={user} />
+          </Suspense>
         )}
       </div>
 

@@ -76,6 +76,9 @@ const InventorySection           = lazy(() => import('../sections/inventory/Inve
 const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
 // Глава 3 ROADMAP — Премиум-аналитика франшизы
 const FranchiseAnalyticsSection = lazy(() => import('../sections/FranchiseAnalyticsSection'))
+// Глава 7 — Регламент-конструктор: админка (builder-агент) + читатель (мой раздел)
+const RegulationsAdminSection   = lazy(() => import('../sections/RegulationsAdminSection'))
+const RegulationsReaderSection  = lazy(() => import('../sections/RegulationsReaderSection'))
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -140,10 +143,19 @@ const NAV_GROUPS = [
       { id: 'modules',    label: 'Каталог модулей',     icon: 'extension'           },
       { id: 'monitoring', label: 'Мониторинг модулей',  icon: 'monitor_heart'       },
       { id: 'roles',      label: 'Роли и права',        icon: 'admin_panel_settings'},
+      // Глава 7 — Регламент-конструктор: админка для franchise_owner
+      { id: 'regulations_admin', label: 'Конструктор регламентов', icon: 'rule_settings' },
       { id: 'webhooks',   label: 'Webhooks',            icon: 'webhook'             },
       { id: 'api_keys',   label: 'API-ключи',           icon: 'vpn_key'             },
       { id: 'knowledge',  label: 'База AI',             icon: 'library_books'       },
       { id: 'settings',   label: 'Настройки',           icon: 'settings'            },
+    ],
+  },
+  // Глава 7 — Регламент-конструктор: персональный раздел владельца как читателя
+  {
+    title: 'Мой раздел',
+    items: [
+      { id: 'regulations_my', label: 'Мои регламенты', icon: 'rule' },
     ],
   },
 ]
@@ -183,6 +195,9 @@ const PAGE_TITLES = {
   api_keys:   { title: 'API-ключи',        subtitle: 'Внешний доступ для CRM, BI и собственных интеграций' },
   knowledge:  { title: 'База знаний AI',   subtitle: 'FAQ-ответы для AI-чата пациентов' },
   settings:   { title: 'Настройки',        subtitle: 'Брендинг, домен, MIS-интеграция' },
+  // Глава 7 — Регламент-конструктор
+  regulations_admin: { title: 'Конструктор регламентов', subtitle: 'Создание и публикация регламентов для сотрудников сети' },
+  regulations_my:    { title: 'Мои регламенты',          subtitle: 'Назначенные вам регламенты и подтверждение ознакомления' },
 }
 
 // ── Подсказки (info-hints) для каждой секции — отображаются рядом с заголовком ─
@@ -2134,6 +2149,21 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     }
     if (route === 'network_billing') {
       return <NetworkBillingSection />
+    }
+    // Глава 7 — Регламент-конструктор (admin + reader для franchise_owner)
+    if (route === 'regulations_admin') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <RegulationsAdminSection adminToken={adminToken} user={user} />
+        </Suspense>
+      )
+    }
+    if (route === 'regulations_my') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <RegulationsReaderSection user={user} />
+        </Suspense>
+      )
     }
     return null
   }

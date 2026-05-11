@@ -38,6 +38,8 @@ import RegQuickBar from '../components/RegQuickBar'
 import RegCommandPalette from '../components/RegCommandPalette'
 import RegMobilePatientForm from '../components/RegMobilePatientForm'
 import useRegHotkeys from '../hooks/useRegHotkeys'
+// ─── Глава 7: Мои регламенты (читатель) ───
+const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 
 // LocalStorage-ключ «последнее напечатанное направление» — для Alt+P и Quick-bar «Печать»
 const LAST_PRINT_KEY = 'reg_last_print_ref'
@@ -371,8 +373,10 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
 
   // ─── Пункты «Ещё» ───
   const moreItems = [
-    { key:'bonuses',  label:'Бонусы',   icon:'payments'   },
-    { key:'doctors',  label:'Врачи',    icon:'people'     },
+    { key:'bonuses',     label:'Бонусы',     icon:'payments' },
+    { key:'doctors',     label:'Врачи',      icon:'people'   },
+    // Глава 7: «Мои регламенты» (читатель)
+    { key:'regulations', label:'Регламенты', icon:'rule'     },
   ]
 
   // ─── Bottom nav (для reg есть «Запись», для nurse — Приезжие) ───
@@ -1742,6 +1746,13 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
               </>
             )}
           </div>
+        )}
+
+        {/* Глава 7: Мои регламенты (читатель) */}
+        {tab === 'regulations' && (
+          <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
+            <RegulationsReaderSection user={user} />
+          </Suspense>
         )}
 
       </div>

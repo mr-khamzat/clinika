@@ -16,10 +16,12 @@
  * Логика и API НЕ трогаем.
  * ========================================
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { API_BASE } from '../config'
 // Дизайн-система: Card / Button / Chip / KpiCard / KpiRow / EmptyState
 import { Card, Button, Chip, KpiCard, KpiRow, EmptyState } from '../design'
+// Глава 7: Мои регламенты (читатель)
+const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 
 const PRIMARY = '#0097A7'
 const DARK    = '#004D5F'
@@ -461,11 +463,13 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
   useEffect(() => { loadStats() }, [loadStats])
 
   const TABS = [
-    { key:'dashboard', label:'Главная',      icon:'home'       },
-    { key:'register',  label:'Регистрация',  icon:'person_add' },
-    { key:'doctors',   label:'Врачи',        icon:'group'      },
-    { key:'bonuses',   label:'Бонусы',       icon:'payments'   },
-    { key:'percent',   label:'Мой %',        icon:'percent'    },
+    { key:'dashboard',   label:'Главная',      icon:'home'       },
+    { key:'register',    label:'Регистрация',  icon:'person_add' },
+    { key:'doctors',     label:'Врачи',        icon:'group'      },
+    { key:'bonuses',     label:'Бонусы',       icon:'payments'   },
+    { key:'percent',     label:'Мой %',        icon:'percent'    },
+    // Глава 7: «Мои регламенты»
+    { key:'regulations', label:'Регламенты',   icon:'rule'       },
   ]
 
   return (
@@ -520,6 +524,12 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         {tab === 'doctors'   && <DoctorsTab token={adminToken} />}
         {tab === 'bonuses'   && <BonusesTab token={adminToken} />}
         {tab === 'percent'   && <PercentTab stats={stats} />}
+        {/* Глава 7: Мои регламенты (читатель) */}
+        {tab === 'regulations' && (
+          <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: '#9ca3af' }}>Загрузка…</div>}>
+            <RegulationsReaderSection user={user} />
+          </Suspense>
+        )}
       </div>
 
       {/* TODO(design-system): Bottom Navigation — мобильный паттерн. */}

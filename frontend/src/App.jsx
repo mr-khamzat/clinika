@@ -51,6 +51,8 @@ const ManagerDoctorLoadPage = lazy(() => import('./pages/ManagerDoctorLoadPage')
 const ManagerTemplatesPage  = lazy(() => import('./pages/ManagerTemplatesPage'))
 const ManagerMultiClinic    = lazy(() => import('./pages/ManagerMultiClinic'))
 const ManagerForecast       = lazy(() => import('./pages/ManagerForecast'))
+// Глава 7 — Регламент-конструктор: «Мои регламенты» для менеджера
+const ManagerRegulations    = lazy(() => import('./pages/ManagerRegulations'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -269,6 +271,8 @@ function MiniApp() {
               <Route path="manager/templates"    element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerTemplatesPage /></Suspense>} />
               <Route path="manager/multi-clinic" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerMultiClinic /></Suspense>} />
               <Route path="manager/forecast"     element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerForecast /></Suspense>} />
+              {/* Глава 7 — Регламент-конструктор: «Мои регламенты» для управляющего */}
+              <Route path="manager/regulations"  element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerRegulations /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}

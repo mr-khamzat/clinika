@@ -30,7 +30,7 @@
  * базовые компоненты из ../design.
  * ========================================
  */
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
 import api from '../api'
 import {
   Page,
@@ -55,6 +55,8 @@ import useTheme from '../lib/useTheme'
 // W3: глобальный поиск Cmd+K и центр уведомлений
 import CommandPalette from '../components/CommandPalette'
 import NotificationsBell from '../components/NotificationsBell'
+// Глава 7: Мои регламенты (читатель)
+const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -101,6 +103,8 @@ const NAV = [
   { id: 'earnings',     label: 'Заработок',      icon: 'payments',        group: 'cabinet' },
   { id: 'rating',       label: 'Рейтинг',        icon: 'star',            group: 'cabinet' },
   { id: 'time',         label: 'Время и отпуск', icon: 'schedule',        group: 'cabinet' },
+  // Глава 7 — Регламент-конструктор: «Мои регламенты»
+  { id: 'regulations',  label: 'Регламенты',     icon: 'rule',            group: 'cabinet' },
 ]
 
 // Mobile bottom nav: только 5 самых частых
@@ -966,6 +970,11 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
       case 'rating':       return <RatingPage />
       case 'time':         return <TimePage />
       case 'chat':         return <ChatPage />
+      case 'regulations':  return (
+        <Suspense fallback={<Spinner />}>
+          <RegulationsReaderSection user={user} />
+        </Suspense>
+      )
       default:             return null
     }
   }

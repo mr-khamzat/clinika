@@ -44,6 +44,8 @@ export const MGR_NAV = [
   { key:'templates',    label:'Шаблоны направлений', icon:'dynamic_form', path:'/manager/templates' },
   { key:'multi-clinic', label:'Все клиники',         icon:'domain',       path:'/manager/multi-clinic', requiresMultiClinic: true },
   { key:'forecast',     label:'Прогноз расходов',    icon:'trending_up',  path:'/manager/forecast' },
+  // Глава 7 — Регламент-конструктор: «Мои регламенты» для управляющего
+  { key:'regulations',  label:'Регламенты',          icon:'rule',         path:'/manager/regulations' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)
