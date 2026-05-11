@@ -12,6 +12,8 @@ import { API_BASE } from '../../config'
 
 export default function CtaNewsletter() {
   const [email, setEmail] = useState('')
+  // website_url — honeypot для отсева ботов (скрыт CSS-ом)
+  const [website, setWebsite] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -25,6 +27,7 @@ export default function CtaNewsletter() {
         email,
         phone: '',
         message: 'Подписка на дайджест с лендинга',
+        website_url: website,
       })
     } catch {
       try { localStorage.setItem('ks_newsletter_email', email) } catch {}
@@ -54,6 +57,17 @@ export default function CtaNewsletter() {
           </div>
 
           <form onSubmit={submit} className="ks-cta-news" aria-label="Подписка на дайджест">
+            {/* Honeypot: скрытое поле, заполнят только боты → 403 на бэке */}
+            <input
+              type="text"
+              name="website_url"
+              tabIndex={-1}
+              autoComplete="off"
+              value={website}
+              onChange={e => setWebsite(e.target.value)}
+              style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+              aria-hidden="true"
+            />
             {sent ? (
               <div className="ks-cta-news-ok">
                 <span aria-hidden>✓</span> Спасибо! Раз в две недели присылаем дайджест по платформе.

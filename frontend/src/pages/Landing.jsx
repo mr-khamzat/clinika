@@ -154,7 +154,8 @@ function LoginModal({ onClose }) {
 
 // ===== БЛОК: ContactModal — форма «Получить демо» (POST /contact/) =====
 function ContactModal({ onClose }) {
-  const [form, setForm] = useState({ name: '', phone: '', email: '', message: '' })
+  // website_url — honeypot для отсева ботов (скрыт CSS-ом)
+  const [form, setForm] = useState({ name: '', phone: '', email: '', message: '', website_url: '' })
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -188,6 +189,17 @@ function ContactModal({ onClose }) {
               <p>Расскажите о вашей клинике — подключим за 14 дней</p>
             </div>
             <form onSubmit={handleSubmit} className="ks-modal-body">
+              {/* Honeypot: скрытое поле, заполнят только боты → 403 на бэке */}
+              <input
+                type="text"
+                name="website_url"
+                tabIndex={-1}
+                autoComplete="off"
+                value={form.website_url}
+                onChange={e => setForm(p => ({ ...p, website_url: e.target.value }))}
+                style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+                aria-hidden="true"
+              />
               <label className="ks-field">
                 <span>Имя <em>*</em></span>
                 <div className="ks-input-wrap">

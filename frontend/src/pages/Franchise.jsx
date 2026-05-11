@@ -43,8 +43,8 @@ const ICONS = {
 
 // ===== БЛОК: Главный компонент =====
 export default function Franchise() {
-  // Форма заявки на франчайзи
-  const [form, setForm] = useState({ name: '', phone: '', email: '', city: '', clinics: '1', message: '' })
+  // Форма заявки на франчайзи (website_url — honeypot)
+  const [form, setForm] = useState({ name: '', phone: '', email: '', city: '', clinics: '1', message: '', website_url: '' })
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -56,6 +56,7 @@ export default function Franchise() {
       phone: form.phone,
       email: form.email || '',
       message: `[Франчайзи] Город: ${form.city}; планируемое число клиник: ${form.clinics}.\n\n${form.message || ''}`.trim(),
+      website_url: form.website_url,
     }
     try {
       await axios.post(API_BASE + '/contact/', payload)
@@ -267,6 +268,17 @@ export default function Franchise() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="ks-fr-form-card">
+              {/* Honeypot: скрытое поле, заполнят только боты → 403 на бэке */}
+              <input
+                type="text"
+                name="website_url"
+                tabIndex={-1}
+                autoComplete="off"
+                value={form.website_url}
+                onChange={e => setForm(p => ({ ...p, website_url: e.target.value }))}
+                style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+                aria-hidden="true"
+              />
               {error && <div className="ks-form-error">{error}</div>}
               <div className="ks-fr-form-grid">
                 <label className="ks-field">

@@ -422,6 +422,8 @@ function StepDateTime({ doctor, onBack, onNext }) {
 function StepContacts({ doctor, dateSlot, onBack, onSuccess }) {
   const [name, setName]     = useState('')
   const [phone, setPhone]   = useState('+7')
+  // website_url — honeypot для отсева ботов (скрыт CSS-ом)
+  const [website, setWebsite] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState(null)
 
@@ -447,6 +449,7 @@ function StepContacts({ doctor, dateSlot, onBack, onSuccess }) {
         start_time: dateSlot.slot.start_time,
         patient_name: name.trim(),
         patient_phone: phone,
+        website_url: website,
       })
       onSuccess(r.data)
     } catch (e) {
@@ -480,6 +483,17 @@ function StepContacts({ doctor, dateSlot, onBack, onSuccess }) {
       </div>
 
       <div style={{ padding: '0 16px' }}>
+        {/* Honeypot: скрытое поле, заполнят только боты → 403 на бэке */}
+        <input
+          type="text"
+          name="website_url"
+          tabIndex={-1}
+          autoComplete="off"
+          value={website}
+          onChange={e => setWebsite(e.target.value)}
+          style={{ position: 'absolute', left: '-9999px', width: 1, height: 1, opacity: 0 }}
+          aria-hidden="true"
+        />
         {/* Резюме записи */}
         <div style={{
           background: `linear-gradient(135deg, rgba(21,101,192,.06), rgba(0,151,167,.06))`,
