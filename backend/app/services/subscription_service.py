@@ -7,6 +7,10 @@
   - cancel: status=cancelled, expires_at не меняется (доступ до конца периода);
   - resume: если cancelled и expires_at в будущем — возвращаем active;
   - is_active(patient): любой не-expired + status in (active, trial, paused).
+
+С версии subplans01 каталог планов хранится в БД (таблица subscription_plans),
+управляется super_admin (глобально) и franchise_owner (override по тенанту).
+Словарь PLANS оставлен как fallback, если БД пустая.
 """
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -19,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.subscription import PatientSubscription, PatientSubscriptionHistory
 
 
-# Каталог планов (в будущем — из tenant_settings / commercial_modules)
+# ── Fallback-словарь (если БД пустая на первый запуск) ──────────────────────
 PLANS = {
     "health_plus": {
         "title": "Здоровье+",
@@ -56,10 +60,15 @@ PLANS = {
 
 
 def plan_meta(plan: str) -> dict:
+    """Возвращает fallback-метаданные плана (если БД недоступна).
+
+    Для актуальных данных используйте subscription_plan_service.get_plan_by_key.
+    """
     return PLANS.get(plan) or {}
 
 
 def all_plans() -> list[dict]:
+    """Fallback-список планов (используется, если БД пустая)."""
     return [
         {
             "plan": key,
@@ -70,6 +79,69 @@ def all_plans() -> list[dict]:
         }
         for key, v in PLANS.items()
     ]
+
+
+async def all_plans_db(
+    db: AsyncSession,
+    tenant_id: uuid.UUID | None = None,
+) -> list[dict]:
+    """Список планов из БД (с применением override для tenant_id).
+
+    Если БД пуста — возвращает fallback all_plans().
+    Формат записи совместим с UI пациента: plan, title, price_monthly,
+    price_annual, trial_days, benefits, features.
+    """
+    from app.services import subscription_plan_service as sps
+    rows = await sps.get_effective_plans(db, tenant_id)
+    if not rows:
+        return all_plans()
+    out = []
+    for r in rows:
+        out.append({
+            "plan": r["plan_key"],
+            "title": r["title"],
+            "description": r.get("description") or "",
+            "price_monthly": r.get("price_monthly"),
+            "price_annual": r.get("price_annual"),
+            "trial_days": r.get("trial_days") or 7,
+            "benefits": r.get("benefits") or [],
+            "features": r.get("features") or {},
+            "is_override": r.get("is_override", False),
+            "has_override": r.get("has_override", False),
+        })
+    return out
+
+
+async def plan_meta_db(
+    db: AsyncSession,
+    plan: str,
+    tenant_id: uuid.UUID | None = None,
+) -> dict:
+    """Получить актуальный план из БД (с override) или fallback из PLANS."""
+    from app.services import subscription_plan_service as sps
+    row = await sps.get_plan_by_key(db, tenant_id, plan)
+    if row:
+        return {
+            "title": row.get("title") or plan,
+            "description": row.get("description") or "",
+            "price_monthly": Decimal(str(row.get("price_monthly") or 0)),
+            "price_annual": Decimal(str(row.get("price_annual"))) if row.get("price_annual") else None,
+            "trial_days": int(row.get("trial_days") or 7),
+            "benefits": list(row.get("benefits") or []),
+            "features": dict(row.get("features") or {}),
+        }
+    fb = plan_meta(plan)
+    if not fb:
+        return {}
+    return {
+        "title": fb.get("title") or plan,
+        "description": "",
+        "price_monthly": fb.get("price_monthly") or Decimal("0"),
+        "price_annual": None,
+        "trial_days": fb.get("trial_days") or 7,
+        "benefits": fb.get("benefits") or [],
+        "features": {},
+    }
 
 
 def serialize_subscription(s: PatientSubscription) -> dict:
@@ -140,10 +212,11 @@ async def start_subscription(
 ) -> PatientSubscription:
     """
     Создать подписку.
-    Если trial_days > 0 — статус=trial, иначе=active (но без реальной оплаты
-    остаётся в статусе trial — ЮKassa подключим позже).
+    Цена/trial берутся из БД (subscription_plans с учётом override),
+    fallback — PLANS словарь.
     """
-    meta = plan_meta(plan)
+    # Берём актуальные параметры плана из БД с применением override
+    meta = await plan_meta_db(db, plan, tenant_id)
     if not meta:
         raise ValueError(f"Unknown plan: {plan}")
 
@@ -214,7 +287,11 @@ async def resume_subscription(
 
 
 def benefits_for(plan: str) -> dict:
-    """Список текущих привилегий для UI."""
+    """Список текущих привилегий для UI (fallback по PLANS).
+
+    Для актуальных данных пациент видит features из effective plan,
+    собранных через subscription_plan_service.
+    """
     meta = plan_meta(plan)
     return {
         "plan": plan,
@@ -226,4 +303,27 @@ def benefits_for(plan: str) -> dict:
         "priority_booking": True,
         "family_members_allowed": 4 if plan in ("family_plus", "pro") else 1,
         "telemedicine_unlimited": plan == "pro",
+    }
+
+
+async def benefits_for_db(
+    db: AsyncSession,
+    plan: str,
+    tenant_id: uuid.UUID | None = None,
+) -> dict:
+    """Список привилегий из БД (с применением override) или fallback."""
+    meta = await plan_meta_db(db, plan, tenant_id)
+    if not meta:
+        return benefits_for(plan)
+    feats = meta.get("features") or {}
+    return {
+        "plan": plan,
+        "title": meta.get("title") or plan,
+        "benefits": meta.get("benefits") or [],
+        "discount_percent": int(feats.get("discount_percent", 0)),
+        "unlimited_chat": bool(feats.get("unlimited_chat", False)),
+        "monthly_supply": bool(feats.get("monthly_supply", False)),
+        "priority_booking": bool(feats.get("priority_booking", False)),
+        "family_members_allowed": int(feats.get("family_members_allowed", 1)),
+        "telemedicine_unlimited": bool(feats.get("telemedicine_unlimited", False)),
     }

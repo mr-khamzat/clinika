@@ -3,6 +3,10 @@
 
 Все patient-эндпоинты требуют patient_session_token (Authorization Bearer /
 X-Patient-Session / ?session_token=).
+
+С subplans01 каталог планов берётся из БД (subscription_plans) с применением
+override на тенант. Tenant определяется из patient_session или из
+query ?slug=<tenant_slug> для публичного списка планов на лендинге.
 """
 import uuid
 from typing import Optional
@@ -16,6 +20,7 @@ from app.database import get_db
 from app.models.patient_account import PatientAccount
 from app.models.patient_session import PatientSession
 from app.models.subscription import PatientSubscription
+from app.models.tenant import Tenant
 from app.services import family_service as fs
 from app.services import subscription_service as ss
 from app.services.patient_session_service import restore_session
@@ -54,6 +59,16 @@ async def _account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
     return acc
 
 
+async def _resolve_tenant_from_slug(
+    db: AsyncSession, slug: Optional[str]
+) -> uuid.UUID | None:
+    if not slug:
+        return None
+    r = await db.execute(select(Tenant).where(Tenant.slug == slug))
+    t = r.scalar_one_or_none()
+    return t.id if t else None
+
+
 # ── Schemas ────────────────────────────────────────────────────────────────
 class StartSubscriptionIn(BaseModel):
     plan: str = Field(min_length=1, max_length=40)
@@ -67,9 +82,20 @@ class CancelSubscriptionIn(BaseModel):
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/patient/subscription/plans")
-async def list_plans():
-    """Список доступных планов (public, без auth — также используется на лендинге)."""
-    return {"plans": ss.all_plans()}
+async def list_plans(
+    slug: Optional[str] = Query(None, description="tenant slug для override"),
+    x_tenant_slug: Optional[str] = Header(None, alias="X-Tenant-Slug"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список планов из БД (с применением override для tenant).
+
+    Принимает tenant через ?slug= или заголовок X-Tenant-Slug.
+    Если tenant не задан — возвращает глобальные шаблоны.
+    Если БД пустая — fallback на хардкод PLANS.
+    """
+    tenant_id = await _resolve_tenant_from_slug(db, slug or x_tenant_slug)
+    plans = await ss.all_plans_db(db, tenant_id=tenant_id)
+    return {"plans": plans, "tenant_id": str(tenant_id) if tenant_id else None}
 
 
 @router.get("/patient/subscription/my")
@@ -88,7 +114,9 @@ async def get_my_subscription(
     if not sub:
         raise HTTPException(404, "No active subscription")
     payload = ss.serialize_subscription(sub)
-    payload["benefits"] = ss.benefits_for(sub.plan)["benefits"]
+    benefits = await ss.benefits_for_db(db, sub.plan,
+                                          tenant_id=sess.tenant_id)
+    payload["benefits"] = benefits.get("benefits") or []
     return payload
 
 
@@ -102,16 +130,19 @@ async def start_subscription(
     t: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    if body.plan not in ss.PLANS:
-        raise HTTPException(400, f"Unknown plan: {body.plan}")
     sess = await _get_session(db, request, authorization, x_patient_session,
                               session_token or t)
     acc = await _account(db, sess)
+    # Проверяем, что план существует (в БД или fallback)
+    meta = await ss.plan_meta_db(db, body.plan, tenant_id=sess.tenant_id)
+    if not meta:
+        raise HTTPException(400, f"Unknown plan: {body.plan}")
 
     sub = await ss.start_subscription(
         db,
         patient_id=acc.id,
         plan=body.plan,
+        tenant_id=sess.tenant_id,
         trial_days=body.trial_days,
         payment_method=None,
     )
@@ -207,5 +238,6 @@ async def get_benefits(
         "plan": sub.plan,
         "status": sub.status,
         "expires_at": sub.expires_at.isoformat() if sub.expires_at else None,
-        "benefits": ss.benefits_for(sub.plan),
+        "benefits": await ss.benefits_for_db(db, sub.plan,
+                                               tenant_id=sess.tenant_id),
     }

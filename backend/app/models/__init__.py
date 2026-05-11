@@ -185,6 +185,7 @@ from app.models.loyalty_ext import LoyaltyAccountExt, LoyaltyEvent, LoyaltyClaim
 
 # Глава 9 — Подписка «Здоровье+», асинхронный чат, iCal, document storage
 from app.models.subscription import PatientSubscription, PatientSubscriptionHistory
+from app.models.subscription_plan import SubscriptionPlan
 from app.models.chat import ChatThread, ChatMessage
 from app.models.calendar import PatientCalendarToken
 

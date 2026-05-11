@@ -48,6 +48,7 @@ const TelemedicineSection = lazy(() => import("../sections/TelemedicineSection")
 const SmsMarketingSection = lazy(() => import("../sections/sms/SmsMarketingSection"))
 // W7 — Inventory: учёт расходных материалов и оборудования (модуль inventory)
 const InventorySection = lazy(() => import("../sections/inventory/InventorySection"))
+const SuperAdminSubscriptionPlansSection = lazy(() => import("../sections/SuperAdminSubscriptionPlansSection"))
 // Module Monitoring System — health-state платных модулей по всем тенантам (heatmap)
 const PlatformModulesSection = lazy(() => import("../sections/PlatformModulesSection"))
 // Cross-clinic directory: справочник сотрудников всех клиник тенанта
@@ -182,6 +183,7 @@ const NAV = [
   { key: 'telemedicine',       label: 'Телемедицина',         icon: 'video_call' },
   { key: 'sms_marketing',      label: 'SMS-маркетинг',         icon: 'sms' },
   { key: 'inventory',          label: 'Инвентарь',             icon: 'inventory_2' },
+  { key: 'subscription_plans', label: 'Тарифы платформы',  icon: 'workspace_premium' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -243,6 +245,7 @@ const NAV_GROUP_OF = {
   telemedicine:       'TENANT',
   sms_marketing:      'MARKETING',
   inventory:          'TENANT',
+  subscription_plans: 'PLATFORM',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETING', 'SYSTEM', 'TENANT']
 
@@ -290,6 +293,7 @@ const PAGE_TITLES = {
   telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   sms_marketing:      { title: 'SMS-маркетинг',         subtitle: 'Шаблоны, рассылки спящим пациентам, история отправок и аналитика' },
   inventory:          { title: 'Учёт инвентаря',         subtitle: 'Расходные материалы, оборудование, медикаменты — остатки, движения и алерты' },
+  subscription_plans: { title: 'Тарифы подписки', subtitle: 'Каталог планов «Здоровье+»: глобальные шаблоны и override-ы по тенантам' },
 }
 
 // ---------------------------------------------------------------------------
@@ -7912,7 +7916,7 @@ const ADMIN_SECTIONS = new Set([
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
   'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
-  'loyalty','recordings','telemedicine','sms_marketing','inventory',
+  'loyalty','recordings','telemedicine','sms_marketing','inventory','subscription_plans',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.
@@ -8159,6 +8163,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'telemedicine':       return <Suspense fallback={<SectionLoader />}><TelemedicineSection token={adminToken} /></Suspense>
       case 'sms_marketing':      return <Suspense fallback={<SectionLoader />}><SmsMarketingSection token={adminToken} /></Suspense>
       case 'inventory':          return <Suspense fallback={<SectionLoader />}><InventorySection token={adminToken} /></Suspense>
+      case 'subscription_plans': return <Suspense fallback={<SectionLoader />}><SuperAdminSubscriptionPlansSection token={adminToken} /></Suspense>
       case 'platform_modules':   return <Suspense fallback={<SectionLoader />}><PlatformModulesSection token={adminToken} /></Suspense>
       default:               return null
     }

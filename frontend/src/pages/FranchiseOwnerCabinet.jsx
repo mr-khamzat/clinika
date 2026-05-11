@@ -75,6 +75,7 @@ const LoyaltySection             = lazy(() => import('../sections/loyalty/Loyalt
 // которая управляет тирами/правилами/обменом).
 const AdminLoyaltySection        = lazy(() => import('../sections/AdminLoyaltySection'))
 const InventorySection           = lazy(() => import('../sections/inventory/InventorySection'))
+const FranchiseSubscriptionPlansSection = lazy(() => import('../sections/FranchiseSubscriptionPlansSection'))
 // Module Monitoring System — health-state платных модулей тенанта
 const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
 // Глава 3 ROADMAP — Премиум-аналитика франшизы
@@ -144,6 +145,7 @@ const NAV_GROUPS = [
     items: [
       { id: 'telemedicine', label: 'Телемедицина',         icon: 'video_call'  },
       { id: 'loyalty',      label: 'Программа лояльности', icon: 'stars'       },
+      { id: 'subscription_plans', label: 'Тарифы подписки',     icon: 'card_membership' },
       // Глава 8 — отдельный пункт «Награды и пациенты» (CRUD каталог + лидерборд + claims + ручная корректировка)
       { id: 'rewards_admin', label: 'Награды и пациенты',  icon: 'workspace_premium' },
       { id: 'inventory',    label: 'Учёт инвентаря',       icon: 'inventory_2' },
@@ -187,6 +189,7 @@ const PAGE_TITLES = {
   partners_clinics: { title: 'Клиники-партнёры', subtitle: 'Контракты royalty / per_referral / hybrid' },
   telemedicine: { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   loyalty:      { title: 'Программа лояльности',  subtitle: 'Уровни, правила начисления и обмен бонусов' },
+  subscription_plans: { title: 'Тарифы подписки', subtitle: 'Тарифы «Здоровье+» для пациентов вашей сети (override на платформенные)' },
   // Глава 8 — управление наградами и пациентами
   rewards_admin: { title: 'Награды и пациенты',    subtitle: 'Каталог наград, лидерборд, запросы пациентов и ручная корректировка баллов' },
   inventory:    { title: 'Учёт инвентаря',        subtitle: 'Расходные материалы, оборудование, медикаменты' },
@@ -2107,6 +2110,14 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
         </Suspense>
       )
     }
+    if (route === 'subscription_plans') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <FranchiseSubscriptionPlansSection adminToken={adminToken} />
+        </Suspense>
+      )
+    }
+
     // Глава 10 — Wellness-партнёры (CRUD каталог + аналитика по кликам)
     if (route === 'wellness_admin') {
       return (

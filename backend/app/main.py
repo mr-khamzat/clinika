@@ -130,6 +130,7 @@ from app.routers.module_monitoring import router as module_monitoring_router
 from app.routers.security import router as security_router
 # Глава 9 — Подписка Здоровье+, async-чат, iCal, document storage
 from app.routers.patient_subscription import router as patient_subscription_router
+from app.routers.admin_subscription_plans import router as admin_subscription_plans_router
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.patient_calendar import router as patient_calendar_router
@@ -1568,6 +1569,7 @@ app.include_router(module_monitoring_router)
 app.include_router(security_router)
 # Глава 9 — Подписка/чат/календарь/документы пациента
 app.include_router(patient_subscription_router)
+app.include_router(admin_subscription_plans_router)
 app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
 app.include_router(patient_calendar_router)
