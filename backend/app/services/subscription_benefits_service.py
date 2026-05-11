@@ -77,6 +77,7 @@ async def _list_examples_for_category(
             Service.is_active.is_(True),
             or_(*filters),
         )
+        .group_by(Service.name)
         .order_by(Service.name.asc())
         .limit(5)
     )

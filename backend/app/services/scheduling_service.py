@@ -119,6 +119,7 @@ async def book_slot(
         end_time=end_time,
         notes=notes,
         status=AppointmentStatus.PENDING,
+        price=doctor.visit_price,
     )
     db.add(appointment)
     await db.flush()

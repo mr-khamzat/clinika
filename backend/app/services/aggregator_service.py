@@ -30,7 +30,7 @@ def generate_api_key() -> tuple[str, str, str]:
     raw = secrets.token_urlsafe(32)
     plaintext = f"{KEY_PREFIX}{raw}"
     hashed = hashlib.sha256(plaintext.encode()).hexdigest()
-    display = plaintext[: len(KEY_PREFIX) + 8] + "..."
+    display = plaintext[: 13] + "..."
     return plaintext, hashed[:80], display
 
 
