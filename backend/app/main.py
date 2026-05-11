@@ -135,6 +135,19 @@ from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.patient_calendar import router as patient_calendar_router
 from app.routers.patient_documents_v2 import router as patient_health_documents_router
 from app.routers.doctor_patient_documents import router as doctor_patient_documents_router
+# Глава 10 — Интеграции (лаборатория / wellness / агрегаторы / disaster mode)
+from app.routers.admin_lab import router as admin_lab_router
+from app.routers.doctor_lab import router as doctor_lab_router
+from app.routers.patient_lab import router as patient_lab_router
+from app.routers.wellness import router as wellness_router
+from app.routers.admin_aggregator import router as admin_aggregator_router
+from app.routers.public_aggregator import router as public_aggregator_router
+from app.routers.admin_system import (
+    router as admin_system_router,
+    detailed_router as health_detailed_router,
+    disaster_health_check,
+)
+from app.core import disaster_middleware as _disaster_mw
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -1025,6 +1038,8 @@ async def lifespan(app: FastAPI):
     )
     # Daily digest по модулям всех тенантов админу платформы (09:00 МСК = 06:00 UTC)
     scheduler.add_job(module_daily_digest_job, 'cron', hour=6, minute=0, id='module_daily_digest', replace_existing=True)
+    # Глава 10: каждые 5 минут проверяем DB/disk; если критично → авто-disaster mode.
+    scheduler.add_job(disaster_health_check, 'interval', minutes=5, id='disaster_health_check', replace_existing=True)
     scheduler.start()
     # Лог зарегистрированных job'ов — удобно дебажить что реально стартует
     try:
@@ -1360,6 +1375,15 @@ async def request_ctx_middleware(request: Request, call_next):
         current_request.reset(token)
 
 
+# ─── Глава 10: Disaster-mode middleware ───
+# Если файл /app/data/disaster_mode.flag существует — блокируем все mutation-запросы
+# (POST/PUT/PATCH/DELETE) с 503. GET-запросы продолжают работать (read-only).
+# Whitelisted: /health*, /docs, /admin/system/*.
+@app.middleware("http")
+async def _disaster_mode_dispatch(request: Request, call_next):
+    return await _disaster_mw.disaster_middleware(request, call_next)
+
+
 # ─── Security headers ───
 @app.middleware("http")
 async def request_metrics_middleware(request: Request, call_next):
@@ -1549,6 +1573,15 @@ app.include_router(clinic_chat_router)
 app.include_router(patient_calendar_router)
 app.include_router(patient_health_documents_router)
 app.include_router(doctor_patient_documents_router)
+# Глава 10 — Интеграции
+app.include_router(admin_lab_router)
+app.include_router(doctor_lab_router)
+app.include_router(patient_lab_router)
+app.include_router(wellness_router)
+app.include_router(admin_aggregator_router)
+app.include_router(public_aggregator_router)
+app.include_router(admin_system_router)
+app.include_router(health_detailed_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin

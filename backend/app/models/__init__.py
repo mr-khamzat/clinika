@@ -187,3 +187,8 @@ from app.models.loyalty_ext import LoyaltyAccountExt, LoyaltyEvent, LoyaltyClaim
 from app.models.subscription import PatientSubscription, PatientSubscriptionHistory
 from app.models.chat import ChatThread, ChatMessage
 from app.models.calendar import PatientCalendarToken
+
+# Глава 10 — Интеграции (лаборатория / wellness партнёрки / партнёрская программа агрегаторам)
+from app.models.lab import LabProvider, LabOrder, LabResult
+from app.models.wellness import WellnessPartner, WellnessPartnerClick
+from app.models.aggregator import AggregatorPartnership, AggregatorLead
