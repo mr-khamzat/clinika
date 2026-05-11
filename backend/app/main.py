@@ -1424,6 +1424,8 @@ async def prometheus_middleware(request: Request, call_next):
 app.include_router(domain_router)  # /.well-known/clinika-domain/*
 app.include_router(auth.router)
 app.include_router(password_reset_router)
+from app.routers.reg_speed import router as reg_speed_router
+app.include_router(reg_speed_router)  # Глава 5: PDF/печать/поиск пациентов для регистратора
 app.include_router(referrals.router)
 app.include_router(bonuses.router)
 app.include_router(clinics.router)

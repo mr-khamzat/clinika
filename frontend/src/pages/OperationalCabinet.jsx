@@ -33,6 +33,15 @@ import {
   useToast,
 } from '../design'
 
+// ─── Глава 5: Регистратор скорость ───
+import RegQuickBar from '../components/RegQuickBar'
+import RegCommandPalette from '../components/RegCommandPalette'
+import RegMobilePatientForm from '../components/RegMobilePatientForm'
+import useRegHotkeys from '../hooks/useRegHotkeys'
+
+// LocalStorage-ключ «последнее напечатанное направление» — для Alt+P и Quick-bar «Печать»
+const LAST_PRINT_KEY = 'reg_last_print_ref'
+
 
 // ─── HTTP-клиент: единый apiClient (auto-Bearer + auto-refresh).
 // Сигнатура (token) сохранена для обратной совместимости — не используется.
@@ -134,6 +143,15 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [acceptBusy, setAcceptBusy] = useState(false)
   const [acceptResult, setAcceptResult] = useState(null) // { ok:true, referral } | { ok:false, msg }
   const [referralFilter, setReferralFilter] = useState('all') // all|created|confirmed|expired
+
+  // ─── Глава 5: Регистратор скорость ───
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const [quickPatientOpen, setQuickPatientOpen] = useState(false)
+  const [referralListFilter, setReferralListFilter] = useState('') // строка поиска в направлениях
+  const referralSearchRef = useRef(null)
+  const [lastPrintRefId, setLastPrintRefId] = useState(() => {
+    try { return localStorage.getItem(LAST_PRINT_KEY) || '' } catch { return '' }
+  })
 
   const a = api(adminToken)
 
@@ -309,6 +327,11 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
       if (form.referral_type === 'lab')     payload.lab_tests = labTextParts.join('; ')
       const res = await a.post('/referrals/', payload)
       setCreatedRef(res.data)
+      // Глава 5: запоминаем последнее направление для Quick-bar «Печать»
+      if (res.data?.id) {
+        try { localStorage.setItem(LAST_PRINT_KEY, res.data.id) } catch {}
+        setLastPrintRefId(res.data.id)
+      }
       setForm({ referral_type:'service', to_clinic_id:'', service_id:'', target_doctor_id:'', lab_tests:'', patient_phone:'', patient_name:'', notes:'', appointment_at:'' })
       setLabSelectedIds(new Set()); setLabQuery(''); setLabCategoryFilter('')
       setMisMatches([]); setMisMatchAccepted(null); setMisHint('')
@@ -367,9 +390,106 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
 
   // ─── Фильтрация направлений ───
   const filteredReferrals = referrals.filter(r => {
-    if (referralFilter === 'all') return true
-    return r.status === referralFilter
+    if (referralFilter !== 'all' && r.status !== referralFilter) return false
+    if (referralListFilter.trim()) {
+      const q = referralListFilter.trim().toLowerCase()
+      const name = (r.patient_name || '').toLowerCase()
+      const phone = (r.patient_phone || '').toLowerCase()
+      const code = String(r.short_code || '')
+      if (!name.includes(q) && !phone.includes(q) && !code.includes(q)) return false
+    }
+    return true
   })
+
+  // ─── Глава 5: печать PDF одного направления ───
+  function openPrintForReferral(refId) {
+    if (!refId) { toast?.('Нет направления для печати', 'info'); return }
+    try {
+      localStorage.setItem(LAST_PRINT_KEY, refId)
+      setLastPrintRefId(refId)
+    } catch {}
+    const url = `${API_BASE}/referrals/${refId}/print`
+    // Открываем через скрытый iframe → window.print() для прямого Print Preview
+    // Иначе fallback: новая вкладка.
+    try {
+      const iframe = document.createElement('iframe')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+      iframe.title = 'Печать направления'
+      iframe.onload = () => {
+        try {
+          // Cookie/Bearer прокидывает axios — а iframe идёт без Authorization.
+          // Поэтому: если 401 — открываем в новой вкладке (там пользователь сам авторизован).
+          setTimeout(() => {
+            try { iframe.contentWindow?.focus(); iframe.contentWindow?.print() } catch {}
+            setTimeout(() => { try { document.body.removeChild(iframe) } catch {} }, 2000)
+          }, 500)
+        } catch {
+          window.open(url, '_blank')
+        }
+      }
+      // Чтобы передать Bearer — используем blob через apiClient
+      apiClient.get(`/referrals/${refId}/print`, { responseType: 'blob' })
+        .then(resp => {
+          const blobUrl = URL.createObjectURL(resp.data)
+          iframe.src = blobUrl
+          document.body.appendChild(iframe)
+          // Через 30 секунд освободим URL
+          setTimeout(() => { try { URL.revokeObjectURL(blobUrl) } catch {} }, 30000)
+        })
+        .catch(() => {
+          toast?.('Не удалось загрузить PDF', 'error')
+        })
+    } catch {
+      window.open(url, '_blank')
+    }
+  }
+
+  // ─── Глава 5: обработчик действий Quick-bar / Command Palette ───
+  function handleQuickAction(key) {
+    switch (key) {
+      case 'new':
+        setQuickPatientOpen(true)
+        break
+      case 'book':
+        setTab(isReg ? 'visiting' : 'create')
+        break
+      case 'search':
+        setTab('referrals')
+        setTimeout(() => referralSearchRef.current?.focus(), 60)
+        break
+      case 'print':
+        if (lastPrintRefId) openPrintForReferral(lastPrintRefId)
+        else toast?.('Сначала откройте направление для печати', 'info')
+        break
+      case 'waitlist':
+        setTab('referrals')
+        setReferralFilter('created')
+        break
+      case 'cmd':
+        setCmdOpen(true)
+        break
+      case 'profile':
+        setMoreOpen(true)
+        break
+      default:
+        break
+    }
+  }
+
+  // ─── Глобальные горячие клавиши (Alt+N/R/S/P/W + Ctrl+K) ───
+  useRegHotkeys({
+    onNewPatient:      () => setQuickPatientOpen(true),
+    onBookAppointment: () => setTab(isReg ? 'visiting' : 'create'),
+    onSearch:          () => { setTab('referrals'); setTimeout(() => referralSearchRef.current?.focus(), 60) },
+    onPrintLast:       () => lastPrintRefId ? openPrintForReferral(lastPrintRefId) : toast?.('Нет последнего направления', 'info'),
+    onWaitlist:        () => { setTab('referrals'); setReferralFilter('created') },
+    onCommandPalette:  () => setCmdOpen(true),
+  }, { disabled: !isReg })
 
   return (
     <Page theme="light" className="ks-reg">
@@ -543,6 +663,16 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
             </div>
           ))}
         </div>
+
+        {/* ─── Глава 5: Quick-bar регистратора (Alt+N/R/S/P/W + Ctrl+K) ─── */}
+        {isReg && (
+          <div className="max-w-3xl mx-auto">
+            <RegQuickBar
+              onAction={handleQuickAction}
+              lastPrintAvailable={!!lastPrintRefId}
+            />
+          </div>
+        )}
       </div>
 
       {/* ─── Контент ─── */}
@@ -1258,6 +1388,34 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {/* ───── НАПРАВЛЕНИЯ ───── */}
         {tab === 'referrals' && (
           <div className="space-y-3">
+            {/* Глава 5: быстрый поиск по направлениям (Alt+S фокусит сюда) */}
+            <div className="relative">
+              <Icon
+                name="search"
+                size={18}
+                style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg-3)' }}
+              />
+              <input
+                ref={referralSearchRef}
+                type="text"
+                value={referralListFilter}
+                onChange={(e) => setReferralListFilter(e.target.value)}
+                placeholder="Поиск по ФИО, телефону или коду (Alt+S)"
+                className="ks-input"
+                style={{ paddingLeft: 38 }}
+              />
+              {referralListFilter && (
+                <button
+                  type="button"
+                  onClick={() => setReferralListFilter('')}
+                  aria-label="Очистить"
+                  style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'transparent', border: 0, cursor: 'pointer', color: 'var(--fg-3)' }}
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              )}
+            </div>
+
             {/* Фильтр через design-system <Tabs> */}
             <div className="overflow-x-auto -mx-4 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
               <Tabs
@@ -1327,7 +1485,7 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                       )}
                     </div>
                     {/* ─── Quick Actions (W4): иконки прямо на карточке направления ─── */}
-                    <div className="mt-2">
+                    <div className="mt-2 flex items-center gap-2 flex-wrap">
                       <QuickActions
                         compact
                         actions={buildPatientCardActions({
@@ -1340,6 +1498,25 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                           }) : undefined,
                         })}
                       />
+                      {/* Глава 5: PDF направления в 1 клик */}
+                      <button
+                        type="button"
+                        onClick={() => openPrintForReferral(r.id)}
+                        title="Печать направления (PDF)"
+                        aria-label="Печать направления"
+                        className="reg-print-btn"
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 6,
+                          padding: '6px 12px', borderRadius: 9,
+                          background: 'var(--accent-soft)',
+                          border: '1px solid var(--accent-line)',
+                          color: 'var(--accent)',
+                          fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                        }}
+                      >
+                        <Icon name="print" size={16} />
+                        Печать
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1984,6 +2161,47 @@ ${code ? `<div class="code">${code}</div>` : ''}
           </div>
         )}
       </Modal>
+
+      {/* ───── Глава 5: Командная палитра (Ctrl+K) ───── */}
+      {isReg && (
+        <RegCommandPalette
+          open={cmdOpen}
+          onClose={() => setCmdOpen(false)}
+          onCommand={(cmdId) => handleQuickAction(cmdId)}
+          onSelectPatient={(p) => {
+            // открыть направления и отфильтровать по телефону
+            setTab('referrals')
+            setReferralListFilter(p.patient_phone || '')
+            setTimeout(() => referralSearchRef.current?.focus(), 80)
+          }}
+        />
+      )}
+
+      {/* ───── Глава 5: Mobile-first форма пациента ───── */}
+      {isReg && (
+        <RegMobilePatientForm
+          open={quickPatientOpen}
+          onClose={() => setQuickPatientOpen(false)}
+          onCreated={(patient) => {
+            if (patient?.book_now) {
+              // Подставляем телефон/имя в форму создания направления и переключаемся
+              setForm(prev => ({
+                ...prev,
+                patient_phone: patient.patient_phone || '',
+                patient_name:  patient.patient_name  || '',
+              }))
+              setTab('create')
+              toast?.('Пациент сохранён, можно создать направление', 'success')
+            } else if (patient?.duplicate) {
+              setTab('referrals')
+              setReferralListFilter(patient.patient_phone || '')
+            } else {
+              toast?.('Пациент сохранён', 'success')
+            }
+          }}
+          smsModuleEnabled={false}
+        />
+      )}
     </Page>
   )
 }
