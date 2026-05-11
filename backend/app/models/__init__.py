@@ -182,3 +182,8 @@ from app.models.regulation import (
 # Глава 8 — Семейный профиль (UUID-based) + расширенная лояльность
 from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.loyalty_ext import LoyaltyAccountExt, LoyaltyEvent, LoyaltyClaim
+
+# Глава 9 — Подписка «Здоровье+», асинхронный чат, iCal, document storage
+from app.models.subscription import PatientSubscription, PatientSubscriptionHistory
+from app.models.chat import ChatThread, ChatMessage
+from app.models.calendar import PatientCalendarToken

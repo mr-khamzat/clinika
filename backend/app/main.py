@@ -128,6 +128,13 @@ from app.routers.inventory import router as inventory_router
 from app.routers.module_monitoring import router as module_monitoring_router
 # Журнал безопасности — единый dashboard алертов для super_admin
 from app.routers.security import router as security_router
+# Глава 9 — Подписка Здоровье+, async-чат, iCal, document storage
+from app.routers.patient_subscription import router as patient_subscription_router
+from app.routers.patient_chat_threads import router as patient_chat_threads_router
+from app.routers.clinic_chat import router as clinic_chat_router
+from app.routers.patient_calendar import router as patient_calendar_router
+from app.routers.patient_documents_v2 import router as patient_health_documents_router
+from app.routers.doctor_patient_documents import router as doctor_patient_documents_router
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
@@ -1535,6 +1542,13 @@ app.include_router(inventory_router)
 app.include_router(module_monitoring_router)
 # Журнал безопасности — единый dashboard алертов для super_admin
 app.include_router(security_router)
+# Глава 9 — Подписка/чат/календарь/документы пациента
+app.include_router(patient_subscription_router)
+app.include_router(patient_chat_threads_router)
+app.include_router(clinic_chat_router)
+app.include_router(patient_calendar_router)
+app.include_router(patient_health_documents_router)
+app.include_router(doctor_patient_documents_router)
 app.include_router(prometheus_router)
 
 # Reviews plugin
