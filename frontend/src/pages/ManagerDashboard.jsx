@@ -54,6 +54,8 @@ const ALL_NAV = [
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },
   { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments' },
+  // Глава 9 — Чат с пациентами (премиум-чат клиники)
+  { key:'chat',         label:'Чат пациентов', icon:'forum',     path:'/manager/chat' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => ALL_NAV.find(n => n.key === k)).filter(Boolean)

@@ -18,6 +18,9 @@ const PatientSpendingSection = lazy(() => import('../sections/PatientSpendingSec
 // Глава 9 — Подписка «Здоровье+» и хранилище документов
 const PatientSubscriptionSection = lazy(() => import('../sections/PatientSubscriptionSection'))
 const PatientDocumentsSection    = lazy(() => import('../sections/PatientDocumentsSection'))
+// Глава 9 — Премиум-чат с клиникой и календарь (ICS + Google/Apple)
+const PatientChatSection         = lazy(() => import('../sections/PatientChatSection'))
+const PatientCalendarSection     = lazy(() => import('../sections/PatientCalendarSection'))
 const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
@@ -2462,8 +2465,11 @@ export default function PatientCabinet() {
         // Глава 9 — Подписка «Здоровье+» и Документы
         { key: 'subscription', icon: 'verified',            label: 'Подписка'   },
         { key: 'documents',    icon: 'folder',              label: 'Документы'  },
+        // Глава 9 — Сообщения (чат с клиникой) и Календарь (Google/Apple)
+        { key: 'messages',     icon: 'chat_bubble',         label: 'Сообщения'  },
+        { key: 'calendar',     icon: 'calendar_month',      label: 'Календарь'  },
         { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
-        { key: 'support',      icon: 'chat_bubble',         label: 'Чат'        },
+        { key: 'support',      icon: 'support_agent',       label: 'Поддержка'  },
         { key: 'me',           icon: 'account_circle',      label: 'Я'          },
       ]
 
@@ -2979,10 +2985,31 @@ export default function PatientCabinet() {
           </div>
         )}
 
-        {/* ── SUPPORT ── */}
+        {/* ── SUPPORT ── (AI-чат + старая поддержка) */}
         {tab === 'support' && !data?.type && (
           <div className="tab-enter">
             <ChatTab phone={patient_phone} sessionToken={localStorage.getItem(SESSION_KEY)} />
+          </div>
+        )}
+
+        {/* ── MESSAGES — Глава 9: премиум-чат с клиниками ── */}
+        {tab === 'messages' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientChatSection
+                sessionToken={localStorage.getItem(SESSION_KEY)}
+                onGoSubscription={() => setTab('subscription')}
+              />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── CALENDAR — Глава 9: предстоящие приёмы + ICS-подписка ── */}
+        {tab === 'calendar' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientCalendarSection sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
           </div>
         )}
 

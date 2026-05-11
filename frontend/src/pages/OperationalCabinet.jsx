@@ -40,6 +40,8 @@ import RegMobilePatientForm from '../components/RegMobilePatientForm'
 import useRegHotkeys from '../hooks/useRegHotkeys'
 // ─── Глава 7: Мои регламенты (читатель) ───
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
+// ─── Глава 9: Чат с пациентами (премиум-чат клиники) ───
+const ClinicChatSection = lazy(() => import('../sections/ClinicChatSection'))
 
 // LocalStorage-ключ «последнее напечатанное направление» — для Alt+P и Quick-bar «Печать»
 const LAST_PRINT_KEY = 'reg_last_print_ref'
@@ -377,6 +379,8 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
     { key:'doctors',     label:'Врачи',      icon:'people'   },
     // Глава 7: «Мои регламенты» (читатель)
     { key:'regulations', label:'Регламенты', icon:'rule'     },
+    // Глава 9: Чат с пациентами (премиум-чат клиники) — для reg/nurse
+    { key:'chat',        label:'Чат пациентов', icon:'forum' },
   ]
 
   // ─── Bottom nav (для reg есть «Запись», для nurse — Приезжие) ───
@@ -1752,6 +1756,13 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
         {tab === 'regulations' && (
           <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
             <RegulationsReaderSection user={user} />
+          </Suspense>
+        )}
+
+        {/* Глава 9: Чат с пациентами (премиум-чат клиники) */}
+        {tab === 'chat' && (
+          <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
+            <ClinicChatSection role={user?.role || 'reg'} />
           </Suspense>
         )}
 

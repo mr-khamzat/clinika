@@ -57,6 +57,8 @@ import CommandPalette from '../components/CommandPalette'
 import NotificationsBell from '../components/NotificationsBell'
 // Глава 7: Мои регламенты (читатель)
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
+// Глава 9: Чат врача с пациентами (премиум-чат клиники)
+const ClinicChatSection = lazy(() => import('../sections/ClinicChatSection'))
 // Глава 9: Документы пациента — контекстная панель в карточке приёма (lazy)
 const DoctorPatientDocumentsSection = lazy(() => import('../sections/DoctorPatientDocumentsSection'))
 
@@ -921,16 +923,11 @@ function ChatPage() {
     <>
       <SectionHeader
         title="Чат с пациентами"
-        subtitle="Защищённый канал по 152-ФЗ · функция в разработке"
-        actions={<Chip variant="warn">скоро</Chip>}
+        subtitle="Защищённый канал по 152-ФЗ"
       />
-      <Card>
-        <EmptyState
-          icon={<MIcon name="chat_bubble" size={28} />}
-          title="Чат будет здесь"
-          message="Сообщения от пациентов, уточнение терапии, поддержка по 152-ФЗ."
-        />
-      </Card>
+      <Suspense fallback={<Spinner />}>
+        <ClinicChatSection role="doctor" />
+      </Suspense>
     </>
   )
 }

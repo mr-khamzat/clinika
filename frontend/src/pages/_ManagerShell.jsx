@@ -48,6 +48,8 @@ export const MGR_NAV = [
   { key:'regulations',  label:'Регламенты',          icon:'rule',         path:'/manager/regulations' },
   // Глава 8 — Программа лояльности (Награды + Лидерборд + Claims + Manual Adjust)
   { key:'loyalty',      label:'Лояльность',          icon:'workspace_premium', path:'/manager/loyalty' },
+  // Глава 9 — Чат с пациентами (премиум-чат клиники)
+  { key:'chat',         label:'Чат пациентов',       icon:'forum',             path:'/manager/chat' },
 ]
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)
