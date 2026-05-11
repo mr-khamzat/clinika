@@ -94,11 +94,13 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
 
   return (
     <div className="flex flex-col" style={{ minHeight: 'calc(100vh - 200px)' }}>
-      {/* Sticky segment-control */}
+      {/* Sticky segment-control — sticky под адаптивной шапкой PatientCabinet.
+          Шапка вверху имеет высоту ≈56px + safe-area; сегмент-контрол должен
+          приклеиваться к её нижней границе, чтобы не перекрываться. */}
       <div
         className="sticky z-20 px-3 py-2"
         style={{
-          top: 0,
+          top: 'calc(56px + env(safe-area-inset-top, 0px))',
           background: 'var(--bg-1, #F0F4F8)',
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',

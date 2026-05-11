@@ -41,6 +41,19 @@ const REF_KEY     = 'clinika_patient_ref'
 const SESSION_KEY = 'clinika_patient_session'
 const SLUG_KEY    = 'clinika_patient_slug'
 
+// ── Темы шапки по секциям (UX-редизайн адаптивной шапки) ──
+// Каждая секция получает собственный градиент + цвет-акцент, чтобы при
+// переключении табов (Здоровье/Чаты/Бонусы/Профиль) пользователь визуально
+// сразу понимал, в каком разделе находится. На iOS шапка учитывает
+// env(safe-area-inset-top) — высота вычисляется как 56px + safe-area.
+const SECTION_THEMES = {
+  home:    { gradient: 'linear-gradient(135deg,#0A2342 0%,#1565C0 100%)', accent: '#0097A7', label: 'Главная',                icon: 'home' },
+  health:  { gradient: 'linear-gradient(135deg,#E91E63 0%,#C2185B 100%)', accent: '#E91E63', label: 'Здоровье',               icon: 'favorite' },
+  chats:   { gradient: 'linear-gradient(135deg,#1565C0 0%,#0097A7 100%)', accent: '#0097A7', label: 'Чаты',                   icon: 'chat' },
+  rewards: { gradient: 'linear-gradient(135deg,#FFA500 0%,#9333EA 100%)', accent: '#FFD700', label: 'Привилегии и бонусы',    icon: 'card_giftcard' },
+  profile: { gradient: 'linear-gradient(135deg,#475569 0%,#1E293B 100%)', accent: '#64748B', label: 'Личный кабинет',         icon: 'person' },
+}
+
 // Сохраняем slug при каждом заходе в кабинет — это позволяет корню /
 // сделать редирект сюда, если PWA-ярлык открылся в корневом scope.
 if (typeof window !== 'undefined' && SLUG) {
@@ -2594,36 +2607,87 @@ export default function PatientCabinet() {
         @keyframes adGlow { 0%,100%{opacity:.7} 50%{opacity:1} }
       `}</style>
 
-      {/* ── Hero Header — только на «Главной» (UX-редизайн), на остальных секциях
-              показываем компактный sticky-header (44px) с названием раздела ── */}
-      {section !== 'home' && !isApt && (
-        <div
-          className="sticky top-0 z-30 flex items-center justify-between px-3"
-          style={{
-            height: 44,
-            paddingTop: 'env(safe-area-inset-top,0px)',
-            background: 'rgba(255,255,255,.96)',
-            WebkitBackdropFilter: 'blur(20px)',
-            backdropFilter: 'blur(20px)',
-            borderBottom: '1px solid rgba(0,0,0,.06)',
-          }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0097A7,#0A2342)' }}>
-              <span className="material-symbols-outlined text-white" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>
-                {SECTIONS.find(s => s.key === section)?.icon || 'home'}
-              </span>
+      {/* ── Адаптивная sticky-шапка для не-home секций (UX-редизайн) ──
+          Каждая секция (health/chats/rewards/profile) получает собственный
+          градиент + иконку + label. На sub-page внутри секции (tab !== null
+          и !== root) показываем breadcrumb «Section / Tab» + back-кнопку
+          слева, заменяющую кружок-иконку.
+          Высота: 56px (видимая) + env(safe-area-inset-top) сверху, чтобы
+          на iPhone с notch контент не перекрывался шапкой и не вылезал
+          под динамический остров. ── */}
+      {section !== 'home' && !isApt && (() => {
+        const theme = SECTION_THEMES[section] || SECTION_THEMES.home
+        const sectionIcon = SECTIONS.find(s => s.key === section)?.icon || theme.icon
+        const sectionLabel = SECTIONS.find(s => s.key === section)?.label || theme.label
+        // sub-page определяется так же, как ниже (HEALTH_MENU / REWARDS_MENU / PROFILE_MENU)
+        const subItems = section === 'health' ? HEALTH_MENU
+                       : section === 'rewards' ? REWARDS_MENU
+                       : section === 'profile' ? PROFILE_MENU
+                       : []
+        const sub = subItems.find(i => i.key === tab) || null
+        const isSubPage = !!sub
+        return (
+          <div
+            className="sticky top-0 z-30 flex items-center gap-2 px-3"
+            style={{
+              minHeight: 'calc(56px + env(safe-area-inset-top, 0px))',
+              paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)',
+              paddingBottom: 6,
+              background: theme.gradient,
+              // Плотный fallback под иконки/текст: на старых браузерах без
+              // backdrop-filter градиент остаётся непрозрачным (читаемо).
+              WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+              backdropFilter: 'saturate(180%) blur(20px)',
+              borderBottom: '1px solid rgba(255,255,255,.10)',
+              boxShadow: '0 2px 10px rgba(0,0,0,.08)',
+              color: '#fff',
+            }}
+          >
+            {/* Слева: либо иконка-кружок секции, либо back-кнопка на sub-page */}
+            {isSubPage ? (
+              <button
+                onClick={() => setTab(null)}
+                aria-label="Назад к разделу"
+                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95"
+                style={{ background: 'rgba(255,255,255,.18)', minWidth: 44, minHeight: 44 }}
+              >
+                <span className="material-symbols-outlined text-white" style={{ fontSize: 22 }}>arrow_back_ios_new</span>
+              </button>
+            ) : (
+              <div
+                className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+                style={{ background: 'rgba(255,255,255,.18)' }}
+              >
+                <span className="material-symbols-outlined text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
+                  {sectionIcon}
+                </span>
+              </div>
+            )}
+
+            {/* Центр: breadcrumb или просто заголовок секции */}
+            <div className="flex-1 min-w-0">
+              {isSubPage ? (
+                <>
+                  <p className="text-[11px] font-semibold leading-none truncate" style={{ color: 'rgba(255,255,255,.75)' }}>
+                    {sectionLabel}
+                  </p>
+                  <h1 className="font-extrabold text-[16px] leading-tight mt-0.5 truncate" style={{ color: '#fff' }}>
+                    {sub.label}
+                  </h1>
+                </>
+              ) : (
+                <h1 className="font-extrabold text-[17px] leading-tight truncate" style={{ color: '#fff' }}>
+                  {sectionLabel}
+                </h1>
+              )}
             </div>
-            <h1 className="font-bold text-[16px] truncate" style={{ color: 'var(--fg, #0A2342)' }}>
-              {SECTIONS.find(s => s.key === section)?.label || 'Кабинет'}
-            </h1>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {(typeof window !== 'undefined' && localStorage.getItem(SESSION_KEY)) && (
+
+            {/* Справа: кнопка «Семья» (на не-sub-page) */}
+            {!isSubPage && (typeof window !== 'undefined' && localStorage.getItem(SESSION_KEY)) && (
               <button onClick={() => setFamilyOpen(true)} title="Семья"
-                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-95 relative"
-                style={{ background: 'rgba(0,151,167,.10)', minWidth: 44, minHeight: 44 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#00838F' }}>group</span>
+                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95 relative"
+                style={{ background: 'rgba(255,255,255,.18)', minWidth: 44, minHeight: 44 }}>
+                <span className="material-symbols-outlined text-white" style={{ fontSize: 20 }}>group</span>
                 {familyList.length > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
                     style={{ background:'#10B981', color:'#fff', border: '1.5px solid #fff' }}>
@@ -2633,8 +2697,8 @@ export default function PatientCabinet() {
               </button>
             )}
           </div>
-        </div>
-      )}
+        )
+      })()}
       {/* ── Hero Header (только в Home-секции) ── */}
       {(section === 'home' || isApt) && (
       <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A2342 0%,#1565C0 70%,#0097A7 100%)', paddingBottom: 32 }}>
@@ -2778,31 +2842,8 @@ export default function PatientCabinet() {
           </div>
         )}
 
-        {/* ── Sub-page header (back-кнопка) для разделов внутри секций ── */}
-        {(() => {
-          if (isApt) return null
-          const isSubPage = (
-            (section === 'health'  && tab && tab !== null && tab !== undefined && HEALTH_MENU.some(i => i.key === tab))  ||
-            (section === 'rewards' && tab && REWARDS_MENU.some(i => i.key === tab)) ||
-            (section === 'profile' && tab && PROFILE_MENU.some(i => i.key === tab))
-          )
-          if (!isSubPage) return null
-          const allItems = [...HEALTH_MENU, ...REWARDS_MENU, ...PROFILE_MENU]
-          const cur = allItems.find(i => i.key === tab)
-          return (
-            <div className="flex items-center gap-2 -mt-1 mb-3 tab-enter">
-              <button
-                onClick={() => setTab(null)}
-                aria-label="Назад"
-                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95"
-                style={{ background: '#fff', border: '1px solid rgba(0,0,0,.06)', minWidth: 44, minHeight: 44 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#0A2342' }}>arrow_back_ios_new</span>
-              </button>
-              <h2 className="text-[16px] font-bold truncate" style={{ color: 'var(--fg, #0A2342)' }}>{cur?.label || ''}</h2>
-            </div>
-          )
-        })()}
+        {/* Sub-page header (back-кнопка + breadcrumb) теперь вынесен в
+            sticky-шапку наверху — здесь дополнительный inline-back не нужен. */}
 
         {/* ── СЕКЦИЯ: Здоровье → меню (если sub-page не выбрана) ── */}
         {section === 'health' && tab === null && !isApt && (
