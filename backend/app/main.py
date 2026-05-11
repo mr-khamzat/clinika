@@ -131,6 +131,7 @@ from app.routers.security import router as security_router
 # Глава 9 — Подписка Здоровье+, async-чат, iCal, document storage
 from app.routers.patient_subscription import router as patient_subscription_router
 from app.routers.admin_subscription_plans import router as admin_subscription_plans_router
+from app.routers.manager_subscription_cash import router as manager_subscription_cash_router
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.patient_calendar import router as patient_calendar_router
@@ -470,6 +471,29 @@ async def inventory_alerts_job():
             logging.getLogger('scheduler').info(f'inventory_alerts: notified {n} tenants')
     except Exception as e:
         logging.getLogger('scheduler').error(f'inventory_alerts: {e}')
+
+
+async def subscription_monthly_supply_job():
+    """APScheduler: 1-го числа каждого месяца в 03:00 UTC — для каждой
+    активной подписки с features.monthly_supply=True генерирует расходник
+    за предыдущий месяц и шлёт patient-notification.
+    """
+    import logging
+    try:
+        from app.database import AsyncSessionLocal  # type: ignore
+        from app.services import subscription_supply_cron as sup
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'supply_cron import failed: {e}')
+        return
+    try:
+        async with AsyncSessionLocal() as db:  # type: ignore
+            res = await sup.run_monthly_for_all(db)
+            await db.commit()
+            logging.getLogger('scheduler').info(
+                f"subscription_monthly_supply: {res.get('ok')}/{res.get('processed')} ok"
+            )
+    except Exception as e:
+        logging.getLogger('scheduler').error(f'subscription_monthly_supply: {e}')
 
 
 async def module_health_check_job():
@@ -1009,6 +1033,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(transcription_dispatch_job, 'interval', minutes=2, id='transcription_dispatch', replace_existing=True)
     # Inventory-алерты (low_stock + expiring + expired) — ежедневно в 09:00 UTC
     scheduler.add_job(inventory_alerts_job, 'cron', hour=9, minute=0, id='inventory_alerts', replace_existing=True)
+    # Здоровье+: ежемесячный расходник пациентам — 1-го числа в 03:00 UTC
+    scheduler.add_job(subscription_monthly_supply_job, 'cron', day=1, hour=3, minute=0,
+                      id='subscription_monthly_supply', replace_existing=True)
     scheduler.add_job(ads_attribution_job, 'cron', hour=4, minute=30, id='ads_attribution', replace_existing=True)
     scheduler.add_job(ads_health_pause_job, 'cron', hour=4, minute=0, id='ads_health_pause', replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
@@ -1570,6 +1597,7 @@ app.include_router(security_router)
 # Глава 9 — Подписка/чат/календарь/документы пациента
 app.include_router(patient_subscription_router)
 app.include_router(admin_subscription_plans_router)
+app.include_router(manager_subscription_cash_router)
 app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
 app.include_router(patient_calendar_router)

@@ -22,9 +22,19 @@ from app.models.user import User, UserRole
 from app.models.subscription import PatientSubscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.services import subscription_plan_service as sps
+from app.services.subscription_module_service import health_plus_module_active
 
 
 router = APIRouter(prefix="/admin/subscription-plans", tags=["admin-subscription-plans"])
+
+
+# ── Module gating ───────────────────────────────────────────────────────────
+async def _require_module(db: AsyncSession, tenant_id) -> None:
+    if not await health_plus_module_active(db, tenant_id):
+        raise HTTPException(
+            402,
+            "Подключите модуль «Здоровье+» в маркетплейсе, чтобы управлять тарифами.",
+        )
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────
@@ -94,12 +104,29 @@ async def list_global(
     return {"plans": [await _serialize_with_count(db, r) for r in rows]}
 
 
+async def _global_plans_exist(db: AsyncSession) -> bool:
+    """Возвращает True если хотя бы один глобальный шаблон уже создан (seeded)."""
+    r = await db.execute(
+        select(func.count()).select_from(SubscriptionPlan)
+        .where(SubscriptionPlan.tenant_id.is_(None))
+    )
+    return int(r.scalar() or 0) > 0
+
+
 @router.post("/global", status_code=201)
 async def create_or_update_global(
     body: PlanCreateIn,
     user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    """Создание глобального шаблона разрешено ТОЛЬКО если seed ещё не был
+    запущен (БД пустая). После seed глобальные шаблоны immutable — управление
+    тарифами переходит к франшизе через override."""
+    if await _global_plans_exist(db):
+        raise HTTPException(
+            403,
+            "Глобальные шаблоны уже созданы и immutable. Используйте override для тенанта."
+        )
     payload = body.model_dump()
     payload["features"] = body.features.model_dump()
     row = await sps.upsert_global(db, payload)
@@ -114,21 +141,12 @@ async def patch_global(
     user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(
-        select(SubscriptionPlan).where(
-            SubscriptionPlan.id == plan_id,
-            SubscriptionPlan.tenant_id.is_(None),
-        )
+    """Глобальные шаблоны immutable — только просмотр.
+    Менять тариф можно только через override на тенант."""
+    raise HTTPException(
+        403,
+        "Глобальные шаблоны immutable. Создайте override на тенант, чтобы изменить тариф."
     )
-    existing = r.scalars().first()
-    if not existing:
-        raise HTTPException(404, "Global plan not found")
-    payload = body.model_dump(exclude_none=True)
-    if "features" in payload and payload["features"] is not None:
-        payload["features"] = body.features.model_dump() if body.features else None
-    row = await sps.update_plan(db, plan_id, payload)
-    await db.commit()
-    return await _serialize_with_count(db, row)
 
 
 @router.delete("/global/{plan_id}", status_code=204)
@@ -137,25 +155,8 @@ async def delete_global(
     user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    r = await db.execute(
-        select(SubscriptionPlan).where(
-            SubscriptionPlan.id == plan_id,
-            SubscriptionPlan.tenant_id.is_(None),
-        )
-    )
-    existing = r.scalars().first()
-    if not existing:
-        raise HTTPException(404, "Global plan not found")
-    cnt = await _count_active(db, existing.plan_key)
-    if cnt > 0:
-        raise HTTPException(
-            409,
-            f"Нельзя удалить: {cnt} активных подписок на план «{existing.plan_key}». "
-            "Сначала переведите пациентов на другой план или дождитесь expiry."
-        )
-    await sps.delete_plan(db, plan_id)
-    await db.commit()
-    return None
+    """Глобальные шаблоны immutable — удаление запрещено."""
+    raise HTTPException(403, "Глобальные шаблоны immutable.")
 
 
 # ── Effective plans (читают все) ───────────────────────────────────────────
@@ -200,6 +201,8 @@ async def upsert_override(
     target = body.tenant_id
     if is_owner and target != user.tenant_id:
         raise HTTPException(403, "Можно править только override своего тенанта")
+    # Module gating: только при активном модуле health_plus_module
+    await _require_module(db, target)
     payload = body.model_dump()
     payload["features"] = body.features.model_dump()
     payload.pop("tenant_id", None)
@@ -227,6 +230,8 @@ async def patch_override(
         raise HTTPException(404, "Override not found")
     if is_owner and existing.tenant_id != user.tenant_id:
         raise HTTPException(403, "Чужой override")
+    # Module gating
+    await _require_module(db, existing.tenant_id)
     payload = body.model_dump(exclude_none=True)
     if "features" in payload and payload["features"] is not None:
         payload["features"] = body.features.model_dump() if body.features else None

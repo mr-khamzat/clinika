@@ -116,6 +116,18 @@ class Appointment(Base):
     )
     payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)  # acquiring/cash/transfer
     price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    # Применённая скидка по подписке пациента (health_module01)
+    applied_subscription_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patient_subscriptions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    discount_percent: Mapped[float] = mapped_column(
+        Numeric(5, 2), nullable=False, default=0, server_default="0",
+    )
+    discount_amount: Mapped[float] = mapped_column(
+        Numeric(10, 2), nullable=False, default=0, server_default="0",
+    )
     qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_code: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True, index=True)
     patient_token: Mapped[str | None] = mapped_column(Text, nullable=True)

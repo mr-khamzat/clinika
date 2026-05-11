@@ -21,6 +21,7 @@ from app.core.tenant import require_feature
 from app.models.user import User
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
 from app.services.scheduling_service import get_available_slots, book_slot
+from app.services import subscription_service as ss
 
 router = APIRouter(tags=["scheduling"])
 
@@ -364,6 +365,31 @@ async def create_appointment(
         notes=data.notes,
         tenant_id=current_user.tenant_id,
     )
+    # ── Применяем скидку по активной подписке пациента (если есть) ─────────
+    try:
+        if appt.price is not None:
+            disc = await ss.compute_discount_for(
+                db, appt.patient_phone,
+                base_price=appt.price,
+                tenant_id=current_user.tenant_id,
+            )
+            if disc.get("applied_subscription_id"):
+                appt.applied_subscription_id = uuid.UUID(disc["applied_subscription_id"])
+                appt.discount_percent = disc.get("discount_percent") or 0
+                appt.discount_amount = disc.get("discount_amount") or 0
+        # Priority booking marker если у пациента priority_booking feature
+        bens = None
+        if appt.applied_subscription_id:
+            sub = await ss.get_active_subscription_by_phone(db, appt.patient_phone)
+            if sub:
+                bens = await ss.benefits_for_db(db, sub.plan,
+                                                  tenant_id=current_user.tenant_id)
+        if bens and bens.get("priority_booking"):
+            if (appt.priority or "normal") == "normal":
+                appt.priority = "high"
+    except Exception:
+        # Не критично — без скидки нельзя ломать запись
+        pass
     await db.commit()
     return {
         "id": str(appt.id),
@@ -372,6 +398,11 @@ async def create_appointment(
         "start_time": appt.start_time.strftime("%H:%M"),
         "end_time": appt.end_time.strftime("%H:%M"),
         "status": appt.status,
+        "price": float(appt.price) if appt.price is not None else None,
+        "applied_subscription_id": str(appt.applied_subscription_id) if appt.applied_subscription_id else None,
+        "discount_percent": float(appt.discount_percent or 0),
+        "discount_amount": float(appt.discount_amount or 0),
+        "priority": appt.priority,
     }
 
 

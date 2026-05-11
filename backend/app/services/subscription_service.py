@@ -326,4 +326,71 @@ async def benefits_for_db(
         "priority_booking": bool(feats.get("priority_booking", False)),
         "family_members_allowed": int(feats.get("family_members_allowed", 1)),
         "telemedicine_unlimited": bool(feats.get("telemedicine_unlimited", False)),
+        "services_access": dict(feats.get("services_access") or {}),
+    }
+
+
+# ── Helpers для интеграции скидки в appointments ────────────────────────────
+async def get_active_subscription_by_phone(
+    db: AsyncSession,
+    patient_phone: str,
+) -> Optional[PatientSubscription]:
+    """Найти active/trial-подписку по телефону пациента (через PatientAccount)."""
+    from app.models.patient_account import PatientAccount
+    pa = (await db.execute(
+        select(PatientAccount).where(PatientAccount.phone == patient_phone)
+    )).scalar_one_or_none()
+    if not pa:
+        return None
+    return await get_active_subscription(db, pa.id)
+
+
+async def compute_discount_for(
+    db: AsyncSession,
+    patient_phone: str,
+    base_price: float | Decimal | None,
+    tenant_id: uuid.UUID | None = None,
+) -> dict:
+    """Считает скидку по активной подписке пациента для цены приёма.
+
+    Возвращает:
+      {
+        applied_subscription_id: UUID | None,
+        discount_percent: float,   # 0..50
+        discount_amount: float,    # >=0
+        price_after: float,
+      }
+    """
+    if base_price is None:
+        return {
+            "applied_subscription_id": None,
+            "discount_percent": 0.0,
+            "discount_amount": 0.0,
+            "price_after": None,
+        }
+    base = Decimal(str(base_price))
+    sub = await get_active_subscription_by_phone(db, patient_phone)
+    if not sub:
+        return {
+            "applied_subscription_id": None,
+            "discount_percent": 0.0,
+            "discount_amount": 0.0,
+            "price_after": float(base),
+        }
+    bens = await benefits_for_db(db, sub.plan, tenant_id=tenant_id or sub.tenant_id)
+    pct = int(bens.get("discount_percent", 0) or 0)
+    if pct <= 0:
+        return {
+            "applied_subscription_id": str(sub.id),
+            "discount_percent": 0.0,
+            "discount_amount": 0.0,
+            "price_after": float(base),
+        }
+    pct = max(0, min(50, pct))
+    disc_amount = (base * Decimal(pct) / Decimal("100")).quantize(Decimal("0.01"))
+    return {
+        "applied_subscription_id": str(sub.id),
+        "discount_percent": float(pct),
+        "discount_amount": float(disc_amount),
+        "price_after": float((base - disc_amount).quantize(Decimal("0.01"))),
     }

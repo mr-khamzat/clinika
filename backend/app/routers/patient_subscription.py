@@ -23,7 +23,9 @@ from app.models.subscription import PatientSubscription
 from app.models.tenant import Tenant
 from app.services import family_service as fs
 from app.services import subscription_service as ss
+from app.services import subscription_benefits_service as sbs
 from app.services.patient_session_service import restore_session
+from app.services.subscription_module_service import health_plus_module_active
 
 
 router = APIRouter(tags=["patient-subscription"])
@@ -91,11 +93,114 @@ async def list_plans(
 
     Принимает tenant через ?slug= или заголовок X-Tenant-Slug.
     Если tenant не задан — возвращает глобальные шаблоны.
-    Если БД пустая — fallback на хардкод PLANS.
+    Если модуль `health_plus_module` не активен у тенанта — возвращает
+    пустой массив с module_active=false (UI должен показать «Не подключено»).
     """
     tenant_id = await _resolve_tenant_from_slug(db, slug or x_tenant_slug)
+    module_active = True
+    if tenant_id is not None:
+        module_active = await health_plus_module_active(db, tenant_id)
+    if tenant_id is not None and not module_active:
+        return {
+            "plans": [],
+            "tenant_id": str(tenant_id),
+            "module_active": False,
+            "module_required": True,
+        }
     plans = await ss.all_plans_db(db, tenant_id=tenant_id)
-    return {"plans": plans, "tenant_id": str(tenant_id) if tenant_id else None}
+    # Добавляем summary_benefits для карточки
+    for p in plans:
+        p["summary_benefits"] = sbs.build_summary_for_card(p)
+        p["module_required"] = False
+    return {
+        "plans": plans,
+        "tenant_id": str(tenant_id) if tenant_id else None,
+        "module_active": module_active,
+        "module_required": False,
+    }
+
+
+@router.get("/patient/subscription/plans/{plan_key}/benefits-detail")
+async def plan_benefits_detail(
+    plan_key: str,
+    slug: Optional[str] = Query(None),
+    x_tenant_slug: Optional[str] = Header(None, alias="X-Tenant-Slug"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Развёрнутая структура привилегий тарифа для UI и чата.
+
+    Возвращает summary (для карточки) + categories_breakdown (с примерами
+    услуг из БД клиники) + full_details_chat_message (готовый текст).
+    """
+    tenant_id = await _resolve_tenant_from_slug(db, slug or x_tenant_slug)
+    if tenant_id is None:
+        # Без tenant — берём дефолтные benefits без category breakdown
+        detail = await sbs.get_benefits_detail(db, plan_key, tenant_id=None)
+    else:
+        detail = await sbs.get_benefits_detail(db, plan_key, tenant_id=tenant_id)
+    if not detail:
+        raise HTTPException(404, f"Plan not found: {plan_key}")
+    detail["tenant_id"] = str(tenant_id) if tenant_id else None
+    return detail
+
+
+class InquireDetailsIn(BaseModel):
+    plan_key: str = Field(min_length=2, max_length=40)
+
+
+@router.post("/patient/subscription/inquire-details")
+async def inquire_details(
+    body: InquireDetailsIn,
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_patient_session: Optional[str] = Header(None, alias="X-Patient-Session"),
+    session_token: Optional[str] = Query(None),
+    t: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Открыть/создать чат-тред «Подробнее о тарифе» с автогенерируемым
+    приветственным сообщением (агрегат услуг + врачи + цены)."""
+    sess = await _get_session(db, request, authorization, x_patient_session,
+                              session_token or t)
+    acc = await _account(db, sess)
+    detail = await sbs.get_benefits_detail(db, body.plan_key,
+                                             tenant_id=sess.tenant_id)
+    if not detail:
+        raise HTTPException(404, f"Plan not found: {body.plan_key}")
+    chat_text = detail.get("full_details_chat_message") or ""
+
+    thread_id = None
+    try:
+        from app.services import chat_service as cs  # type: ignore
+        # Берём первую clinic тенанта (тред привязан к clinic_id)
+        from app.models.clinic import Clinic
+        cl = (await db.execute(
+            select(Clinic).where(Clinic.tenant_id == sess.tenant_id,
+                                  Clinic.is_active.is_(True))
+            .limit(1)
+        )).scalar_one_or_none()
+        if cl:
+            th, _ = await cs.create_thread(
+                db,
+                tenant_id=sess.tenant_id,
+                clinic_id=cl.id,
+                patient_id=acc.id,
+                subject=f"Подробнее о тарифе «{detail.get('title')}»",
+                initial_body=chat_text,
+            )
+            await db.commit()
+            thread_id = str(th.id)
+    except Exception:
+        # Best-effort. Фолбэк — фронту достаточно chat_message чтобы запостить
+        # самому.
+        pass
+    return {
+        "thread_id": thread_id,
+        "plan_key": body.plan_key,
+        "chat_message": chat_text,
+        "summary": detail.get("summary") or [],
+        "categories_breakdown": detail.get("categories_breakdown") or [],
+    }
 
 
 @router.get("/patient/subscription/my")
@@ -133,6 +238,12 @@ async def start_subscription(
     sess = await _get_session(db, request, authorization, x_patient_session,
                               session_token or t)
     acc = await _account(db, sess)
+    # Module gating: нельзя запускать подписку если у тенанта нет модуля
+    if sess.tenant_id and not await health_plus_module_active(db, sess.tenant_id):
+        raise HTTPException(
+            402,
+            "Подписка «Здоровье+» недоступна: клиника не подключила модуль.",
+        )
     # Проверяем, что план существует (в БД или fallback)
     meta = await ss.plan_meta_db(db, body.plan, tenant_id=sess.tenant_id)
     if not meta:
@@ -241,3 +352,29 @@ async def get_benefits(
         "benefits": await ss.benefits_for_db(db, sub.plan,
                                                tenant_id=sess.tenant_id),
     }
+
+
+@router.post("/patient/subscription/supply/generate-now")
+async def generate_supply_now(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_patient_session: Optional[str] = Header(None, alias="X-Patient-Session"),
+    session_token: Optional[str] = Query(None),
+    t: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """On-demand генерация ежемесячного расходника для активной подписки
+    (features.monthly_supply=true). Возвращает путь к PDF."""
+    from app.services import subscription_supply_cron as sup
+    sess = await _get_session(db, request, authorization, x_patient_session,
+                              session_token or t)
+    acc = await _account(db, sess)
+    sub = await ss.get_active_subscription(db, acc.id)
+    if not sub:
+        raise HTTPException(404, "No active subscription")
+    benefits = await ss.benefits_for_db(db, sub.plan, tenant_id=sess.tenant_id)
+    if not benefits.get("monthly_supply"):
+        raise HTTPException(400, "В вашем тарифе нет ежемесячного расходника")
+    res = await sup.generate_for_subscription(db, sub)
+    await db.commit()
+    return res
