@@ -63,8 +63,9 @@ export default defineConfig({
             if (id.includes('xlsx') || id.includes('papaparse')) return 'vendor-sheets'
             return 'vendor-misc'
           }
-          if (id.includes('/sections/Patient') || id.includes('/sections/patient/') || id.includes('/components/patient/') || id.includes('/components/family/') || id.includes('/components/loyalty/') || id.includes('/components/subscription/') || id.includes('/components/calendar/') || id.includes('/components/chat/') || id.includes('/components/documents/')) return 'patient-app'
-          if (id.includes('/sections/Manager') || id.includes('/sections/Franchise') || id.includes('/sections/AdminLoyalty') || id.includes('/sections/AdminLab') || id.includes('/sections/AdminWellness') || id.includes('/sections/AdminAggregator') || id.includes('/sections/AdminSystem') || id.includes('/sections/Regulations') || id.includes('/sections/SuperAdmin') || id.includes('/components/regulations/') || id.includes('/components/aggregator/') || id.includes('/components/system/') || id.includes('/components/subscription-cash/') || id.includes('/components/lab/') || id.includes('/components/wellness/')) return 'staff-app'
+          // BUGFIX 2026-05-11: patient-app/staff-app split вызывал TDZ-error
+          // ("Cannot access 'z' before initialization") из-за циклических импортов между chunks.
+          // Откатили app-split — пусть rollup сам распределит. Vendor split остаётся.
         },
         // Даём фиксированное имя woff2 Material Symbols чтобы preload в index.html работал
         assetFileNames: (assetInfo) => {
