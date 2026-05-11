@@ -51,7 +51,10 @@ export default defineConfig({
         //  • vendor-axios, vendor-state — отдельно для лучшего кеширования
         manualChunks(id) {
           if (id.includes('node_modules')) {
-            if (id.match(/[\\/]node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/)) return 'vendor-react'
+            // BUGFIX 2026-05-11: react-router-dom и @remix-run/router использовали React.createContext,
+            // но попадали в vendor-misc → грузились до vendor-react → "Cannot read properties of undefined (reading 'createContext')".
+            if (id.match(/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|react-is|use-sync-external-store)[\\/]/)) return 'vendor-react'
+            if (id.match(/[\\/]node_modules[\\/]@remix-run[\\/]router[\\/]/)) return 'vendor-react'
             if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-') || id.includes('micromark') || id.includes('mdast') || id.includes('unified') || id.includes('unist')) return 'vendor-markdown'
             if (id.includes('@sentry')) return 'vendor-sentry'
             if (id.includes('axios')) return 'vendor-axios'

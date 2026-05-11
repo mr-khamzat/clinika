@@ -30,7 +30,10 @@ async def run_transcription_dispatch() -> int:
         CallTranscript,
     )
     from app.services.whisper_service import transcribe_recording
-    from app.services.gemini_service import summarize_transcript
+    try:
+        from app.services.gemini_service import summarize_transcript
+    except ImportError:
+        summarize_transcript = None  # AI-summary опционален; джоба продолжит без него
 
     processed = 0
 
@@ -81,7 +84,7 @@ async def run_transcription_dispatch() -> int:
                     )
                 )
             ).scalar_one_or_none()
-            if tr:
+            if tr and summarize_transcript is not None:
                 try:
                     await summarize_transcript(db, tr.id)
                 except Exception as e:
