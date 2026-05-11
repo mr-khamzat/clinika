@@ -12,9 +12,16 @@ from app.utils.phone import mask_phone
 from app.database import get_db
 from app.models.contact_request import ContactRequest
 from app.core.deps import require_super_admin
+from app.utils.rate_limit import rate_limit_dep, check_honeypot
 
 logger = logging.getLogger('contact')
 router = APIRouter(prefix='/contact', tags=['contact'])
+
+# Rate-limit для публичной контакт-формы: 5 запросов / 10 минут / IP
+_contact_rl = rate_limit_dep(
+    'contact', limit=5, window=600,
+    error_message='Слишком много обращений. Попробуйте через 10 минут.',
+)
 
 
 class ContactForm(BaseModel):
@@ -22,10 +29,15 @@ class ContactForm(BaseModel):
     email: str = ''
     message: str
     name: str = ''
+    # ── Honeypot: скрытое поле, видят только боты. Если заполнено → 403.
+    # TODO: после получения ключей hCaptcha/Turnstile — заменить на полноценную капчу.
+    website_url: str = ''
 
 
-@router.post('/')
+@router.post('/', dependencies=[Depends(_contact_rl)])
 async def send_contact(form: ContactForm, db: AsyncSession = Depends(get_db)):
+    # Honeypot — наивных ботов сразу отбрасываем
+    check_honeypot(form.website_url)
     req = ContactRequest(
         name=form.name or None,
         phone=form.phone,

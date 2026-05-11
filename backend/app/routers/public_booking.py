@@ -19,8 +19,15 @@ from app.services.scheduling_service import get_available_slots, book_slot
 from app.services.qr_service import generate_qr_image_base64
 from app.core.security import make_appointment_token
 from app.utils.phone import normalize_phone
+from app.utils.rate_limit import rate_limit_dep, check_honeypot
 
 router = APIRouter(prefix="/public", tags=["public-booking"])
+
+# Rate-limit для публичной брони: 10 попыток / 10 минут / IP
+_book_rl = rate_limit_dep(
+    "public_book", limit=10, window=600,
+    error_message="Слишком много попыток записи. Попробуйте через 10 минут.",
+)
 
 
 async def _get_tenant(slug: str, db: AsyncSession) -> Tenant:
@@ -187,11 +194,16 @@ class BookRequest(BaseModel):
     start_time: str         # "HH:MM"
     patient_name: str
     patient_phone: str
+    # ── Honeypot: скрытое поле, видят только боты. Если не пусто → 403.
+    # TODO: после получения ключей hCaptcha/Turnstile — заменить на полноценную капчу.
+    website_url: Optional[str] = None
 
 
-@router.post("/{slug}/book")
+@router.post("/{slug}/book", dependencies=[Depends(_book_rl)])
 async def public_book(slug: str, body: BookRequest, db: AsyncSession = Depends(get_db)):
     """Создать запись к врачу (без авторизации). Возвращает короткий код и QR."""
+    # Honeypot — отсекаем наивных ботов
+    check_honeypot(body.website_url)
     tenant = await _get_tenant(slug, db)
 
     # Проверяем что врач принадлежит тенанту
