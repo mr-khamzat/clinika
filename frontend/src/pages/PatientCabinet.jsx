@@ -33,7 +33,7 @@ const PatientWellnessSection = lazy(() => import('../sections/PatientWellnessSec
 // UX-редизайн (5-таб Apple HIG): новые компоненты-контейнеры для кабинета пациента
 import PatientBottomNav  from '../components/patient/PatientBottomNav'
 import SubPageNav        from '../components/patient/SubPageNav'
-import PatientChatHub    from '../components/patient/PatientChatHub'
+const PatientChatHub = lazy(() => import("../components/patient/PatientChatHub"))
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
