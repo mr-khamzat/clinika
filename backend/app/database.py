@@ -68,6 +68,11 @@ async def get_db_for_tenant(tenant_id: str):
         AsyncSession: Асинхронная сессия SQLAlchemy с активным RLS-фильтром
     """
     async with AsyncSessionLocal() as session:
-        # SET LOCAL ограничен текущей транзакцией — не утекает в другие сессии из пула
-        await session.execute(text(f"SET LOCAL app.tenant_id = '{tenant_id}'"))
+        # set_config(name, value, is_local=true) эквивалентен SET LOCAL,
+        # но поддерживает bind-параметры → защищён от SQL-injection
+        # (раньше tenant_id вставлялся через f-string — уязвимость P1).
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
         yield session

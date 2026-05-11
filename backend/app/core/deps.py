@@ -162,5 +162,11 @@ async def get_tenant_db(
             ...
     """
     if user.tenant_id:
-        await db.execute(text(f"SET LOCAL app.tenant_id = '{user.tenant_id}'"))
+        # set_config(name, value, is_local=true) эквивалентен SET LOCAL,
+        # но поддерживает bind-параметры → защищён от SQL-injection
+        # (раньше user.tenant_id вставлялся через f-string — уязвимость P1).
+        await db.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(user.tenant_id)},
+        )
     return db

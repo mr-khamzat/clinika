@@ -32,6 +32,82 @@ REFRESH_TOKEN_EXPIRE = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 # Опциональный bearer — не падает если заголовка нет
 _optional_bearer = HTTPBearer(auto_error=False)
 
+# ─── Per-user brute-force lockout (P1 security fix) ───
+# Per-IP rate limit уже есть (fastapi-limiter). Дополнительно блокируем
+# конкретный аккаунт после 5 подряд неудачных попыток — чтобы атакующий
+# не мог распределить попытки по разным IP в supply-chain ботнете.
+LOCKOUT_MAX_ATTEMPTS = 5
+LOCKOUT_TTL_SECONDS = 15 * 60  # 15 минут
+_lockout_redis: "object | None" = None
+
+
+def _get_lockout_redis():
+    """Ленивая инициализация Redis-клиента для lockout-счётчика."""
+    global _lockout_redis
+    if _lockout_redis is None:
+        try:
+            import redis.asyncio as aioredis
+            _lockout_redis = aioredis.from_url(
+                settings.redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+        except Exception as e:
+            logger.warning(f"Lockout Redis недоступен: {e}")
+            _lockout_redis = False  # отключаем lockout если Redis не работает
+    return _lockout_redis or None
+
+
+def _lockout_key(username: str) -> str:
+    return f"login_lockout:{(username or '').strip().lower()}"
+
+
+async def _check_lockout(username: str) -> None:
+    """Бросает 423 если аккаунт временно заблокирован за подбор пароля."""
+    r = _get_lockout_redis()
+    if not r:
+        return
+    try:
+        val = await r.get(_lockout_key(username))
+        if val and int(val) >= LOCKOUT_MAX_ATTEMPTS:
+            ttl = await r.ttl(_lockout_key(username))
+            raise HTTPException(
+                status_code=423,
+                detail=(
+                    f"Аккаунт временно заблокирован после {LOCKOUT_MAX_ATTEMPTS} "
+                    f"неудачных попыток. Повторите через {max(ttl, 0)} сек."
+                ),
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"lockout check failed: {e}")
+
+
+async def _register_failed_login(username: str) -> None:
+    """INCR счётчика неудач + установка TTL при первой неудаче."""
+    r = _get_lockout_redis()
+    if not r:
+        return
+    try:
+        key = _lockout_key(username)
+        n = await r.incr(key)
+        if n == 1:
+            await r.expire(key, LOCKOUT_TTL_SECONDS)
+    except Exception as e:
+        logger.warning(f"lockout incr failed: {e}")
+
+
+async def _clear_lockout(username: str) -> None:
+    """Сбрасываем счётчик после успешного логина."""
+    r = _get_lockout_redis()
+    if not r:
+        return
+    try:
+        await r.delete(_lockout_key(username))
+    except Exception as e:
+        logger.warning(f"lockout clear failed: {e}")
+
 
 def _login_limiter():
     try:
@@ -185,6 +261,11 @@ async def telegram_auth(data: TelegramAuthData, request: Request, db: AsyncSessi
 
 @router.post("/login", dependencies=_login_limiter())
 async def password_login(data: PasswordLoginData, request: Request, db: AsyncSession = Depends(get_db)):
+    # ── Per-user lockout (P1 security): сначала проверяем не заблокирован
+    # ли уже этот логин по счётчику неудач. Per-IP лимит проверяется выше
+    # через _login_limiter() в dependencies.
+    await _check_lockout(data.username)
+
     result = await db.execute(select(User).where(User.username == data.username))
     user = result.scalar_one_or_none()
 
@@ -204,6 +285,10 @@ async def password_login(data: PasswordLoginData, request: Request, db: AsyncSes
             await db.commit()
         except Exception as e:
             logger.warning(f"login_failed audit failed: {e}")
+        # ── Инкрементируем счётчик lockout (используется реальный username
+        # из запроса, не из БД — чтобы даже несуществующие логины не давали
+        # атакующему бесконечный энумеретор).
+        await _register_failed_login(data.username)
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
     if not user.is_active:
         # Тоже security-событие — попытка входа в заблокированный аккаунт.
@@ -218,8 +303,11 @@ async def password_login(data: PasswordLoginData, request: Request, db: AsyncSes
             await db.commit()
         except Exception:
             pass
+        await _register_failed_login(data.username)
         raise HTTPException(status_code=403, detail="Аккаунт заблокирован")
 
+    # ── Успешный вход: сбрасываем счётчик lockout.
+    await _clear_lockout(data.username)
     return await _issue_tokens(user, request, db)
 
 
