@@ -18,6 +18,9 @@ const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab
 const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
 // W6: AI-ассистент пациенту через Gemini — плавающий чат-виджет
 const PatientAiWidget  = lazy(() => import('../sections/patient/PatientAiWidget'))
+// Глава 8: Семейный профиль пациента (новый раздел кабинета)
+const PatientFamilySection = lazy(() => import('../sections/PatientFamilySection'))
+import SwitchContextBanner from '../components/family/SwitchContextBanner'
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
@@ -2450,6 +2453,7 @@ export default function PatientCabinet() {
         { key: 'appointments', icon: 'event_available',     label: 'Записи'     },
         { key: 'referrals',    icon: 'assignment',          label: 'Направления'},
         { key: 'health',       icon: 'health_and_safety',   label: 'Здоровье'   },
+        { key: 'family',       icon: 'family_restroom',     label: 'Семья'      },
         { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
         { key: 'support',      icon: 'chat_bubble',         label: 'Чат'        },
         { key: 'me',           icon: 'account_circle',      label: 'Я'          },
@@ -2466,6 +2470,8 @@ export default function PatientCabinet() {
       token={callToken}
     />
     <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
+      {/* Глава 8: баннер активного контекста семьи (виден когда выбран родственник) */}
+      <SwitchContextBanner />
       <style>{`
         @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
@@ -2991,6 +2997,19 @@ export default function PatientCabinet() {
           <div className="tab-enter">
             <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
               <HealthHub sessionToken={localStorage.getItem(SESSION_KEY)} phone={patient_phone} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── FAMILY — семейный профиль (Глава 8) ── */}
+        {tab === 'family' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientFamilySection
+                sessionToken={localStorage.getItem(SESSION_KEY)}
+                ownerName={patient_name}
+                onContextChanged={() => { /* реактивно — через window event */ }}
+              />
             </Suspense>
           </div>
         )}
