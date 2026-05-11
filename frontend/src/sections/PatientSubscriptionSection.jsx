@@ -1,75 +1,106 @@
 /**
  * ========================================
- * БЛОК: PatientSubscriptionSection — премиум-подписка пациента (Глава 9)
+ * БЛОК: PatientSubscriptionSection — премиум-подписка пациента «Здоровье+» (v2)
  * ========================================
- * Используется внутри PatientCabinet.jsx (вкладка «Подписка»).
+ * Глава 9 v2 — full premium redesign.
+ *
+ * Используется внутри PatientCabinet.jsx (tab=subscription, секция rewards).
  *
  * API:
- *   GET  /patient/subscription/plans         — список тарифов (public)
- *   GET  /patient/subscription/my            — текущая подписка | 404
- *   GET  /patient/subscription/benefits      — привилегии активной подписки
- *   POST /patient/subscription/start         — {plan, trial_days?} → {redirect_url}
- *   POST /patient/subscription/cancel        — {reason, comment?}
- *   POST /patient/subscription/resume        — возобновить
- *   PATCH /patient/subscription/my           — {auto_renew}
+ *   GET  /patient/subscription/plans                          — список тарифов (+ module_active)
+ *   GET  /patient/subscription/my                             — текущая | 404
+ *   GET  /patient/subscription/benefits                       — текущие привилегии
+ *   GET  /patient/subscription/plans/{plan_key}/benefits-detail — детали по категориям
+ *   POST /patient/subscription/start                          — {plan, billing, trial_days?}
+ *   POST /patient/subscription/cancel                         — {reason, comment?}
+ *   POST /patient/subscription/resume
+ *   PATCH /patient/subscription/my                            — {auto_renew}
+ *   POST /patient/subscription/inquire-details                — {plan_key, category} → {thread_id}
  *
  * Состояния:
- *   • Нет подписки → hero + 3 тарифа + toggle monthly/annual + FAQ
- *   • Есть подписка → hero (золотисто-фиолетовый градиент)
- *                     + привилегии + auto-renew toggle
- *                     + история платежей + кнопка отмены
- *   • Отменена (status=cancelled) → можно «возобновить»
+ *   • module_active=false → плашка «Свяжитесь с менеджером клиники» (CTA → чат с клиникой)
+ *   • Нет подписки → hero + 3 PlanCardV2 + toggle monthly/annual + PlanComparisonTable (desktop) + FAQ
+ *   • Есть подписка → hero (золотисто-фиолетовый) + BenefitsList + auto-renew + история + cancel
+ *
+ * Deeplink в чат:
+ *   • При клике «Подробнее» на конкретной категории → POST /inquire-details
+ *     → sessionStorage.setItem('pending_subscription_inquiry', plan_key)
+ *     → window.dispatchEvent('patient:navigate', {tab:'chats', segment:'support', threadId})
  * ========================================
  */
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
+import { useEffect, useState, useCallback, lazy, Suspense, useMemo } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
 import { useToast } from '../design'
 
-const PlanCard     = lazy(() => import('../components/subscription/PlanCard'))
-const CancelModal  = lazy(() => import('../components/subscription/CancelModal'))
-const BenefitsList = lazy(() => import('../components/subscription/BenefitsList'))
+const PlanCardV2                = lazy(() => import('../components/subscription/PlanCardV2'))
+const CancelModal               = lazy(() => import('../components/subscription/CancelModal'))
+const BenefitsList              = lazy(() => import('../components/subscription/BenefitsList'))
+const BenefitsCategoryAccordion = lazy(() => import('../components/subscription/BenefitsCategoryAccordion'))
+const InquireBottomSheet        = lazy(() => import('../components/subscription/InquireBottomSheet'))
+const PlanComparisonTable       = lazy(() => import('../components/subscription/PlanComparisonTable'))
 
 const SESSION_KEY = 'clinika_patient_session'
 
-// Локальный fallback тарифов — если backend ещё не вернул /plans
+// Палитра по тиру (для accent в accordion / bottom-sheet)
+const TIER_ACCENT = {
+  free:        '#64748B',
+  health_plus: '#A855F7',
+  family_plus: '#4F46E5',
+  pro:         '#7C3AED',
+}
+
+// Локальный fallback тарифов с богатой структурой summary_benefits
 const FALLBACK_PLANS = [
   {
-    key: 'free',
-    name: 'Базовый',
-    description: 'Стандартный доступ к кабинету',
-    price_monthly: 0,
-    benefits: [
-      'Запись на приём',
-      'Просмотр медкарты',
-      'История визитов',
-      'Чат — 10 сообщений в месяц',
-    ],
-  },
-  {
     key: 'health_plus',
+    plan_key: 'health_plus',
     name: 'Здоровье+',
+    title: 'Здоровье+',
     description: 'Забота о здоровье круглый год',
     price_monthly: 290,
-    benefits: [
-      'Безлимитный чат с клиникой',
-      'Скидка 10% на приёмы',
-      'Расходник каждый месяц',
-      'Приоритет записи',
-      'Напоминания о приёме лекарств',
+    trial_days: 7,
+    summary_benefits: [
+      { icon: 'chat_bubble',         label: 'Безлимит чата с врачом' },
+      { icon: 'discount',            label: 'Скидка на приёмы',     value: '10%' },
+      { icon: 'science',             label: 'Анализы со скидкой',   value: 'до 20 / мес · −20%', detail_key: 'lab' },
+      { icon: 'stethoscope',         label: 'Консультации врачей',  value: '4 / мес',            detail_key: 'consult' },
+      { icon: 'inventory_2',         label: 'Расходник ежемесячно' },
+      { icon: 'bolt',                label: 'Приоритет записи' },
     ],
   },
   {
     key: 'family_plus',
+    plan_key: 'family_plus',
     name: 'Семья+',
+    title: 'Семья+',
     description: 'Для всей семьи под одним аккаунтом',
     price_monthly: 590,
-    benefits: [
-      'Всё из тарифа «Здоровье+»',
-      'До 5 членов семьи',
-      'Семейный календарь приёмов',
-      'Скидка 15% на семейные приёмы',
-      'Персональный менеджер',
+    trial_days: 7,
+    summary_benefits: [
+      { icon: 'chat_bubble',         label: 'Безлимит чата для всех' },
+      { icon: 'discount',            label: 'Скидка на приёмы',     value: '15%' },
+      { icon: 'science',             label: 'Анализы со скидкой',   value: 'до 40 / мес · −25%', detail_key: 'lab' },
+      { icon: 'diversity_3',         label: 'Семейный аккаунт',     value: 'до 5 чел' },
+      { icon: 'stethoscope',         label: 'Консультации врачей',  value: '8 / мес',            detail_key: 'consult' },
+      { icon: 'video_camera_front',  label: 'Безлимитная телемедицина' },
+    ],
+  },
+  {
+    key: 'pro',
+    plan_key: 'pro',
+    name: 'Pro',
+    title: 'Pro',
+    description: 'Максимум привилегий — для требовательных',
+    price_monthly: 1290,
+    trial_days: 7,
+    summary_benefits: [
+      { icon: 'chat_bubble',         label: 'Безлимит чата с врачом' },
+      { icon: 'discount',            label: 'Скидка на приёмы',     value: '20%' },
+      { icon: 'science',             label: 'Анализы со скидкой',   value: 'до 100 / мес · −30%', detail_key: 'lab' },
+      { icon: 'stethoscope',         label: 'Безлимитные консультации',                          detail_key: 'consult' },
+      { icon: 'monitor_heart',       label: 'Диагностика',          value: '−25%',                detail_key: 'diagnostic' },
+      { icon: 'support_agent',       label: 'Персональный менеджер 24/7' },
     ],
   },
 ]
@@ -84,12 +115,12 @@ const FAQ = [
     a: 'Да, отмена работает в любое время в один клик. Подписка останется активной до конца оплаченного периода — деньги не сгорают.',
   },
   {
-    q: 'Что входит в скидку на приёмы?',
+    q: 'Что входит в скидку на приёмы и анализы?',
     a: 'Скидка действует на все услуги клиники, кроме акционных и операций. Применяется автоматически при оплате через кабинет.',
   },
   {
     q: 'Что такое «расходник»?',
-    a: 'Ежемесячный отчёт о ваших тратах на здоровье — приёмы, анализы, лекарства. Удобно для понимания семейного бюджета и для возврата НДФЛ.',
+    a: 'Ежемесячный отчёт о ваших тратах на здоровье — приёмы, анализы, лекарства. Удобно для семейного бюджета и для возврата НДФЛ.',
   },
   {
     q: 'Подписка действует во всех клиниках сети?',
@@ -112,12 +143,32 @@ function fmtDate(iso) {
   } catch { return iso }
 }
 
-function PageStub({ icon = 'hourglass_empty', title, sub }) {
+function isMobileViewport() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia && window.matchMedia('(max-width: 767px)').matches
+}
+
+function PageStub({ icon = 'hourglass_empty', title, sub, cta }) {
   return (
-    <div className="rounded-2xl p-6 text-center" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
-      <span className="material-symbols-outlined text-3xl mb-2 block" style={{ color: '#92400E' }}>{icon}</span>
-      <p className="text-sm font-semibold" style={{ color: '#92400E' }}>{title}</p>
-      {sub && <p className="text-xs mt-1" style={{ color: '#92400E' }}>{sub}</p>}
+    <div className="rounded-3xl p-6 text-center" style={{ background: '#FEF3C7', border: '1px solid #FDE68A' }}>
+      <div className="w-14 h-14 mx-auto mb-3 rounded-2xl flex items-center justify-center"
+           style={{ background: 'rgba(146,64,14,.08)' }}>
+        <span className="material-symbols-outlined text-3xl" style={{ color: '#92400E', fontVariationSettings: "'FILL' 1" }}>{icon}</span>
+      </div>
+      <p className="text-base font-extrabold" style={{ color: '#92400E' }}>{title}</p>
+      {sub && <p className="text-[13px] mt-1.5 leading-relaxed" style={{ color: '#92400E' }}>{sub}</p>}
+      {cta && (
+        <div className="mt-4">
+          <button
+            onClick={cta.onClick}
+            className="px-5 py-2.5 rounded-xl font-bold text-sm text-white transition-all active:scale-95"
+            style={{ background: '#92400E', boxShadow: '0 6px 16px rgba(146,64,14,.3)' }}
+          >
+            {cta.icon && <span className="material-symbols-outlined text-base align-middle mr-1.5" style={{ fontVariationSettings: "'FILL' 1" }}>{cta.icon}</span>}
+            {cta.label}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -125,19 +176,24 @@ function PageStub({ icon = 'hourglass_empty', title, sub }) {
 function Skeleton() {
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="h-32 rounded-3xl bg-slate-200/60" />
+      <div className="h-36 rounded-3xl bg-slate-200/60" />
+      <div className="h-10 rounded-2xl bg-slate-200/60 w-64 mx-auto" />
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[1,2,3].map(i => <div key={i} className="h-96 rounded-3xl bg-slate-200/60" />)}
+        {[1,2,3].map(i => <div key={i} className="h-[460px] rounded-3xl bg-slate-200/60" />)}
       </div>
     </div>
   )
 }
+
+// Поиск accent-цвета по plan.key
+function accentFor(planKey) { return TIER_ACCENT[planKey] || '#7C3AED' }
 
 export default function PatientSubscriptionSection({ sessionToken: sessionTokenProp }) {
   const sessionToken = sessionTokenProp || (typeof window !== 'undefined' ? localStorage.getItem(SESSION_KEY) : null)
   const { toast } = useToast()
 
   const [plans, setPlans]           = useState(null)
+  const [moduleActive, setModuleActive] = useState(true)
   const [sub, setSub]               = useState(null)
   const [benefits, setBenefits]     = useState(null)
   const [history, setHistory]       = useState([])
@@ -148,16 +204,32 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
   const [showCancel, setShowCancel] = useState(false)
   const [openFaq, setOpenFaq]       = useState(null)
 
+  // Детали привилегий
+  const [detailCache, setDetailCache] = useState({})       // { plan_key: data }
+  const [detailOpen, setDetailOpen]   = useState(null)     // { planKey, categoryKey, mobile }
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError]     = useState(null)
+  const [inquireBusy, setInquireBusy]     = useState(false)
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      // /plans — публичный, без сессии
+      // /plans — публичный; может вернуть либо массив, либо {plans, module_active}
       const plansReq = axios.get(`${API_BASE}/patient/subscription/plans`)
-        .then(r => Array.isArray(r.data) ? r.data : [])
-        .catch(() => FALLBACK_PLANS)
+        .then(r => {
+          const d = r.data
+          if (Array.isArray(d)) return { list: d, module_active: true }
+          return {
+            list: Array.isArray(d?.plans) ? d.plans : FALLBACK_PLANS,
+            module_active: d?.module_active !== false,
+          }
+        })
+        .catch(e => {
+          if (e?.response?.status === 402) return { list: FALLBACK_PLANS, module_active: false }
+          return { list: FALLBACK_PLANS, module_active: true }
+        })
 
-      // /my — может быть 404 (нет подписки)
       const myReq = sessionToken
         ? axios.get(`${API_BASE}/patient/subscription/my`, { params: { t: sessionToken } })
             .then(r => r.data)
@@ -168,14 +240,14 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
         : Promise.resolve(null)
 
       const [plansData, myData] = await Promise.all([plansReq, myReq])
-      setPlans(plansData?.length ? plansData : FALLBACK_PLANS)
+      setPlans(plansData.list?.length ? plansData.list : FALLBACK_PLANS)
+      setModuleActive(plansData.module_active !== false)
       setSub(myData)
 
-      // /benefits и история — только если есть активная подписка
       if (myData && sessionToken) {
         try {
           const b = await axios.get(`${API_BASE}/patient/subscription/benefits`, { params: { t: sessionToken } })
-          setBenefits(b.data || {})
+          setBenefits(b.data?.benefits || b.data || {})
         } catch { setBenefits({}) }
 
         try {
@@ -188,8 +260,13 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
       }
     } catch (e) {
       const status = e?.response?.status
-      if (status === 402) setError('module_off')
-      else setError('load_failed')
+      if (status === 402) {
+        // module off — показываем плашку с CTA
+        setModuleActive(false)
+        setPlans(FALLBACK_PLANS)
+      } else {
+        setError('load_failed')
+      }
     } finally {
       setLoading(false)
     }
@@ -197,9 +274,14 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
 
   useEffect(() => { load() }, [load])
 
+  // ── Plan start ────────────────────────────────────────────────────────────
   const startPlan = async (planKey) => {
     if (!sessionToken) {
       toast('Войдите в кабинет, чтобы оформить подписку', 'error', 3000)
+      return
+    }
+    if (!moduleActive) {
+      openCashInquiry(planKey)
       return
     }
     setBusyPlan(planKey)
@@ -224,6 +306,7 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
     }
   }
 
+  // ── Cancel / Resume / Auto-renew ──────────────────────────────────────────
   const cancelSub = async ({ reason, comment }) => {
     const r = await axios.post(
       `${API_BASE}/patient/subscription/cancel`,
@@ -252,30 +335,113 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
       await axios.patch(`${API_BASE}/patient/subscription/my`, { auto_renew: newVal }, { params: { t: sessionToken } })
       toast(newVal ? 'Авто-продление включено' : 'Авто-продление отключено', 'info', 2500)
     } catch (e) {
-      // откат
       setSub(s => s ? { ...s, auto_renew: !newVal } : s)
       toast('Не удалось сменить настройку', 'error', 3000)
     }
   }
 
+  // ── «Подробнее» → загрузка benefits-detail ────────────────────────────────
+  const openBenefitDetail = useCallback(async (planKey, categoryKey) => {
+    const mobile = isMobileViewport()
+    setDetailOpen({ planKey, categoryKey, mobile })
+    setDetailError(null)
+    if (detailCache[planKey]) return
+    setDetailLoading(true)
+    try {
+      const r = await axios.get(`${API_BASE}/patient/subscription/plans/${planKey}/benefits-detail`)
+      setDetailCache(prev => ({ ...prev, [planKey]: r.data }))
+    } catch (e) {
+      setDetailError(e?.response?.data?.detail || 'Сервер недоступен')
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [detailCache])
+
+  // ── «Открыть в чате» — POST /inquire-details + deeplink ───────────────────
+  const openInquiryInChat = useCallback(async (planKey, category = null) => {
+    if (inquireBusy) return
+    setInquireBusy(true)
+    let threadId = null
+    try {
+      if (sessionToken) {
+        const r = await axios.post(
+          `${API_BASE}/patient/subscription/inquire-details`,
+          { plan_key: planKey, category },
+          { params: { t: sessionToken } }
+        )
+        threadId = r?.data?.thread_id || null
+      }
+    } catch (e) {
+      // даже если сервер ответил 404/501 — всё равно делаем deeplink
+      // PatientChatHub покажет mock/empty fallback
+    } finally {
+      setInquireBusy(false)
+    }
+    // Сохраняем pending в sessionStorage (PatientChatHub подхватит)
+    try {
+      sessionStorage.setItem('pending_subscription_inquiry', JSON.stringify({
+        plan_key: planKey,
+        category,
+        thread_id: threadId,
+        ts: Date.now(),
+      }))
+    } catch {}
+    // Закрываем bottom-sheet / accordion перед навигацией
+    setDetailOpen(null)
+    // Уведомляем родителя
+    try {
+      window.dispatchEvent(new CustomEvent('patient:navigate', {
+        detail: { tab: 'chats-hub', segment: 'support', threadId, planKey, category },
+      }))
+    } catch {}
+  }, [sessionToken, inquireBusy])
+
+  // ── «Связаться с клиникой» (наличный сценарий / module off) ───────────────
+  const openCashInquiry = useCallback((planKey) => {
+    try {
+      sessionStorage.setItem('pending_subscription_inquiry', JSON.stringify({
+        plan_key: planKey || 'health_plus',
+        category: null,
+        cash_mode: true,
+        ts: Date.now(),
+      }))
+    } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('patient:navigate', {
+        detail: { tab: 'chats-hub', segment: 'clinic', planKey, cashMode: true },
+      }))
+    } catch {}
+  }, [])
+
+  // Закрытие detail при resize (mobile ↔ desktop)
+  useEffect(() => {
+    const onResize = () => {
+      if (!detailOpen) return
+      const m = isMobileViewport()
+      if (m !== detailOpen.mobile) setDetailOpen(d => d ? { ...d, mobile: m } : d)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [detailOpen])
+
+  // ── Loading ───────────────────────────────────────────────────────────────
   if (loading) return <Skeleton />
 
-  if (error === 'module_off') {
-    return <PageStub icon="lock" title="Модуль подписок не подключён" sub="Обратитесь к администратору клиники" />
-  }
   if (error === 'load_failed') {
     return <PageStub icon="error" title="Не удалось загрузить данные подписки" sub="Попробуйте обновить страницу" />
   }
 
-  // ===== АКТИВНАЯ ПОДПИСКА =====
+  // ──────────────────────────────────────────────────────────────────────────
+  // АКТИВНАЯ ПОДПИСКА
+  // ──────────────────────────────────────────────────────────────────────────
   if (sub && sub.status !== 'expired') {
     const stMeta = STATUS_LABEL[sub.status] || STATUS_LABEL.active
     const isCancelled = sub.status === 'cancelled'
-    const planName = sub.plan_name || (plans?.find(p => p.key === sub.plan)?.name) || sub.plan
+    const planName = sub.plan_name || (plans?.find(p => (p.key||p.plan_key) === sub.plan)?.title || plans?.find(p => (p.key||p.plan_key) === sub.plan)?.name) || sub.plan
 
     return (
       <div className="flex flex-col gap-5">
-        {/* Hero: золотисто-фиолетовый градиент */}
+        {/* Hero */}
         <div
           className="relative overflow-hidden rounded-3xl p-6 text-white"
           style={{
@@ -283,22 +449,11 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
             boxShadow: '0 16px 48px rgba(124,58,237,.3)',
           }}
         >
-          <div
-            className="absolute -top-10 -right-10 w-40 h-40 rounded-full"
-            style={{ background: 'rgba(255,255,255,.18)', filter: 'blur(40px)' }}
-          />
-          <div
-            className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full"
-            style={{ background: 'rgba(255,255,255,.12)', filter: 'blur(36px)' }}
-          />
+          <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,.18)', filter: 'blur(40px)' }} />
+          <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.12)', filter: 'blur(36px)' }} />
           <div className="relative">
             <div className="flex items-center gap-2 mb-2">
-              <span
-                className="material-symbols-outlined text-2xl"
-                style={{ fontVariationSettings: "'FILL' 1" }}
-              >
-                workspace_premium
-              </span>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
               <span
                 className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
                 style={{ background: 'rgba(255,255,255,.25)' }}
@@ -427,42 +582,70 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
     )
   }
 
-  // ===== НЕТ ПОДПИСКИ — выбор тарифа =====
+  // ──────────────────────────────────────────────────────────────────────────
+  // НЕТ ПОДПИСКИ
+  // ──────────────────────────────────────────────────────────────────────────
   const visiblePlans = (plans || FALLBACK_PLANS)
+  const featuredKey = 'health_plus'
 
+  // module gating — показываем плашку, но карточки остаются (без CTA «Подключить»)
   return (
     <div className="flex flex-col gap-6">
-      {/* Hero */}
+      {/* Hero премиум */}
       <div
-        className="relative overflow-hidden rounded-3xl p-7 text-white"
+        className="relative overflow-hidden rounded-3xl p-6 sm:p-7 text-white"
         style={{
-          background: 'linear-gradient(135deg, #F59E0B 0%, #A855F7 60%, #4F46E5 100%)',
-          boxShadow: '0 16px 48px rgba(124,58,237,.25)',
+          background: 'linear-gradient(135deg, #F59E0B 0%, #A855F7 55%, #4F46E5 100%)',
+          boxShadow: '0 18px 56px rgba(124,58,237,.28)',
         }}
       >
         <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full" style={{ background: 'rgba(255,255,255,.18)', filter: 'blur(50px)' }} />
         <div className="absolute -bottom-10 -left-10 w-36 h-36 rounded-full" style={{ background: 'rgba(255,255,255,.1)', filter: 'blur(36px)' }} />
+        <div className="absolute top-4 right-5 hidden sm:block">
+          <span className="material-symbols-outlined text-[64px] opacity-25" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+        </div>
+
         <div className="relative max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider mb-3"
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider mb-3"
                style={{ background: 'rgba(255,255,255,.22)', backdropFilter: 'blur(8px)' }}>
             <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            ПОДПИСКА
+            ПОДПИСКА ЗДОРОВЬЕ+
           </div>
-          <h1 className="text-3xl font-extrabold leading-tight mb-2">
+          <h1 className="text-2xl sm:text-3xl font-extrabold leading-tight mb-2">
             Подключите «Здоровье+»
           </h1>
-          <p className="text-base opacity-90">
+          <p className="text-[14px] sm:text-base opacity-90 leading-relaxed">
             Забота о здоровье круглый год — безлимит чата с врачом, скидки, приоритет записи и ежемесячный расходник.
           </p>
         </div>
       </div>
 
-      {/* Toggle monthly / annual */}
-      <div className="flex justify-center">
+      {/* Module off banner */}
+      {!moduleActive && (
+        <PageStub
+          icon="lock"
+          title="Online-подписка временно недоступна"
+          sub="Свяжитесь с менеджером клиники — подключим тариф за наличный расчёт"
+          cta={{
+            icon: 'forum',
+            label: 'Связаться с клиникой',
+            onClick: () => openCashInquiry(featuredKey),
+          }}
+        />
+      )}
+
+      {/* Toggle monthly/annual + label */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#94A3B8' }}>Выберите тариф</p>
+          <p className="text-lg font-extrabold" style={{ color: '#0F172A' }}>
+            {visiblePlans.length} {visiblePlans.length === 1 ? 'тариф' : visiblePlans.length < 5 ? 'тарифа' : 'тарифов'} на выбор
+          </p>
+        </div>
         <div className="inline-flex p-1 rounded-2xl" style={{ background: '#F1F5F9' }}>
           {[
             { k: 'monthly', l: 'Ежемесячно' },
-            { k: 'annual',  l: 'Ежегодно · −17%' },
+            { k: 'annual',  l: 'Год · −17%' },
           ].map(opt => (
             <button
               key={opt.k}
@@ -480,27 +663,74 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
         </div>
       </div>
 
-      {/* Plans grid */}
+      {/* Plans — grid (desktop) / horizontal swipe (mobile) */}
       <Suspense fallback={<Skeleton />}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-3">
-          {visiblePlans.map(plan => (
-            <PlanCard
-              key={plan.key}
-              plan={plan}
-              billing={billing}
-              featured={plan.key === 'health_plus'}
-              loading={busyPlan === plan.key}
-              onSelect={() => startPlan(plan.key)}
-            />
-          ))}
+        {/* Desktop: 3 в ряд */}
+        <div className="hidden md:grid md:grid-cols-3 gap-5 pt-3">
+          {visiblePlans.map(plan => {
+            const key = plan.key || plan.plan_key
+            return (
+              <PlanCardV2
+                key={key}
+                plan={plan}
+                billing={billing}
+                featured={key === featuredKey}
+                loading={busyPlan === key}
+                moduleActive={moduleActive}
+                onSelect={() => startPlan(key)}
+                onBenefitDetail={(catKey) => openBenefitDetail(key, catKey)}
+                onInquireCash={() => openCashInquiry(key)}
+              />
+            )
+          })}
+        </div>
+
+        {/* Mobile: горизонтальный swipe + snap */}
+        <div className="md:hidden -mx-3 px-3 overflow-x-auto pb-2"
+             style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+          <div className="flex gap-3 pt-3">
+            {visiblePlans.map(plan => {
+              const key = plan.key || plan.plan_key
+              return (
+                <div key={key} className="flex-shrink-0 w-[88%] max-w-[340px]" style={{ scrollSnapAlign: 'center' }}>
+                  <PlanCardV2
+                    plan={plan}
+                    billing={billing}
+                    featured={key === featuredKey}
+                    loading={busyPlan === key}
+                    moduleActive={moduleActive}
+                    onSelect={() => startPlan(key)}
+                    onBenefitDetail={(catKey) => openBenefitDetail(key, catKey)}
+                    onInquireCash={() => openCashInquiry(key)}
+                  />
+                </div>
+              )
+            })}
+          </div>
         </div>
       </Suspense>
+
+      {/* Details inline (desktop only) — раскрывается под карточками */}
+      {detailOpen && !detailOpen.mobile && (
+        <Suspense fallback={null}>
+          <BenefitsCategoryAccordion
+            planKey={detailOpen.planKey}
+            categoryKey={detailOpen.categoryKey}
+            data={detailCache[detailOpen.planKey]}
+            loading={detailLoading}
+            error={detailError}
+            accent={accentFor(detailOpen.planKey)}
+            onInquireFull={openInquiryInChat}
+            onClose={() => setDetailOpen(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Trust strip */}
       <div className="rounded-2xl bg-white px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-2 justify-center" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
         {[
-          { icon: 'shield', t: 'Безопасные платежи' },
-          { icon: 'sync',  t: 'Отмена в один клик' },
+          { icon: 'shield',   t: 'Безопасные платежи' },
+          { icon: 'sync',     t: 'Отмена в один клик' },
           { icon: 'verified', t: 'Без скрытых платежей' },
         ].map(b => (
           <div key={b.icon} className="flex items-center gap-2 text-xs font-semibold" style={{ color: '#475569' }}>
@@ -510,9 +740,21 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
         ))}
       </div>
 
+      {/* Comparison Table — desktop only */}
+      <div className="hidden md:block">
+        <Suspense fallback={<div className="h-72 rounded-3xl bg-slate-100 animate-pulse" />}>
+          <PlanComparisonTable
+            plans={visiblePlans}
+            recommend={featuredKey}
+            billing={billing}
+            onSelect={moduleActive ? startPlan : openCashInquiry}
+          />
+        </Suspense>
+      </div>
+
       {/* FAQ */}
       <div>
-        <h3 className="text-xl font-extrabold mb-3 mt-4" style={{ color: '#0F172A' }}>Часто спрашивают</h3>
+        <h3 className="text-xl font-extrabold mb-3 mt-2" style={{ color: '#0F172A' }}>Часто спрашивают</h3>
         <div className="flex flex-col gap-2">
           {FAQ.map((f, i) => (
             <div
@@ -541,6 +783,23 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
           ))}
         </div>
       </div>
+
+      {/* Mobile bottom-sheet for detail */}
+      <Suspense fallback={null}>
+        {detailOpen && detailOpen.mobile && (
+          <InquireBottomSheet
+            open={true}
+            planKey={detailOpen.planKey}
+            categoryKey={detailOpen.categoryKey}
+            data={detailCache[detailOpen.planKey]}
+            loading={detailLoading}
+            error={detailError}
+            accent={accentFor(detailOpen.planKey)}
+            onInquireFull={openInquiryInChat}
+            onClose={() => setDetailOpen(null)}
+          />
+        )}
+      </Suspense>
     </div>
   )
 }

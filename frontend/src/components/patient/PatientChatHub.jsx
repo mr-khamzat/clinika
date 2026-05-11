@@ -23,7 +23,7 @@
  *   'clinika_chat_hub_segment' = 'support' | 'clinic' | 'ai'
  * ========================================
  */
-import { useEffect, useState, useRef, lazy, Suspense, useMemo } from 'react'
+import { useEffect, useState, useRef, lazy, Suspense, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../../config'
 import SegmentControl from './SegmentControl'
@@ -45,8 +45,31 @@ const SUPPORT_QUICK = [
 ]
 
 export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug, onGoSubscription }) {
-  const [segment, setSegment] = useState(() => {
+  // Deeplink: если есть pending_subscription_inquiry — стартуем на segment=support
+  //           (или 'clinic' для cash-mode), даже если localStorage хранит другой.
+  const [pendingInquiry, setPendingInquiry] = useState(() => {
     try {
+      const raw = sessionStorage.getItem('pending_subscription_inquiry')
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      // защита от устаревшего pending (>10 мин)
+      if (!parsed?.ts || Date.now() - parsed.ts > 10 * 60 * 1000) {
+        sessionStorage.removeItem('pending_subscription_inquiry')
+        return null
+      }
+      return parsed
+    } catch { return null }
+  })
+
+  const [segment, setSegment] = useState(() => {
+    // Приоритет: pendingInquiry → cash_mode → 'clinic'; иначе → 'support'
+    try {
+      const raw = sessionStorage.getItem('pending_subscription_inquiry')
+      if (raw) {
+        const p = JSON.parse(raw)
+        if (p?.cash_mode) return 'clinic'
+        return 'support'
+      }
       const v = localStorage.getItem(LS_KEY)
       return v === 'support' || v === 'clinic' || v === 'ai' ? v : 'support'
     } catch { return 'support' }
@@ -56,6 +79,12 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, segment) } catch {}
   }, [segment])
+
+  // Очищаем pending после обработки (когда SupportSegment отрисовал сообщение)
+  const consumeInquiry = useCallback(() => {
+    try { sessionStorage.removeItem('pending_subscription_inquiry') } catch {}
+    setPendingInquiry(null)
+  }, [])
 
   const items = useMemo(() => ([
     { key: 'support', label: 'Поддержка', icon: 'support_agent' },
@@ -84,6 +113,9 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
           <SupportSegment
             sessionToken={sessionToken}
             onSwitchToClinic={() => setSegment('clinic')}
+            pendingInquiry={pendingInquiry}
+            onInquiryConsumed={consumeInquiry}
+            onGoSubscription={onGoSubscription}
           />
         )}
         {segment === 'clinic' && (
@@ -100,13 +132,72 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
 }
 
 // ── Сегмент: Поддержка ────────────────────────────────────────────────────────
-function SupportSegment({ sessionToken, onSwitchToClinic }) {
+function SupportSegment({ sessionToken, onSwitchToClinic, pendingInquiry, onInquiryConsumed, onGoSubscription }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [backendAvailable, setBackendAvailable] = useState(null) // null=unknown, true/false
   const [contextHint, setContextHint] = useState(null) // null | 'switch-to-doctor'
+  const [inquiryBanner, setInquiryBanner] = useState(null) // { planKey, planTitle, category }
   const scrollRef = useRef(null)
+
+  // Обработка deeplink из подписки: загружаем full_details_chat_message и
+  // вставляем как сообщение поддержки + ставим баннер сверху.
+  useEffect(() => {
+    if (!pendingInquiry) return
+    const { plan_key, category } = pendingInquiry
+    if (!plan_key) { onInquiryConsumed?.(); return }
+    let alive = true
+    const PLAN_TITLES = { health_plus: 'Здоровье+', family_plus: 'Семья+', pro: 'Pro' }
+    const planTitle = PLAN_TITLES[plan_key] || plan_key
+    setInquiryBanner({ planKey: plan_key, planTitle, category })
+
+    axios.get(`${API_BASE}/patient/subscription/plans/${plan_key}/benefits-detail`)
+      .then(r => {
+        if (!alive) return
+        const text = r.data?.full_details_chat_message
+          || r.data?.message
+          || `Полная информация о тарифе «${planTitle}» — см. ниже:\n\n` +
+             (Array.isArray(r.data?.categories_breakdown)
+               ? r.data.categories_breakdown.map(c =>
+                   `• ${c.category}: ${c.available_count || ''}${c.discount ? ` со скидкой ${c.discount}%` : ''}`
+                 ).join('\n')
+               : '')
+        setMessages(prev => [
+          ...prev,
+          {
+            id: 'inq_' + Date.now(),
+            role: 'support',
+            text,
+            created_at: new Date().toISOString(),
+            kind: 'subscription_inquiry',
+            meta: { plan_key, category },
+          },
+        ])
+      })
+      .catch(() => {
+        if (!alive) return
+        // Fallback message if API unavailable
+        setMessages(prev => [
+          ...prev,
+          {
+            id: 'inq_' + Date.now(),
+            role: 'support',
+            text: `Здравствуйте! Вы запросили подробности по тарифу «${planTitle}». ` +
+                  `Менеджер пришлёт детальный разбор в течение дня. ` +
+                  `Если хотите подключить тариф прямо сейчас — нажмите кнопку «Подключить» выше.`,
+            created_at: new Date().toISOString(),
+            kind: 'subscription_inquiry',
+            meta: { plan_key, category },
+          },
+        ])
+      })
+      .finally(() => {
+        if (alive) onInquiryConsumed?.()
+      })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingInquiry])
 
   useEffect(() => {
     if (!sessionToken) { setBackendAvailable(false); return }
@@ -196,6 +287,45 @@ function SupportSegment({ sessionToken, onSwitchToClinic }) {
           <p className="text-blue-200 text-[11px] mt-0.5">Вопросы по приложению, оплате, регистрации</p>
         </div>
       </div>
+
+      {/* Inquiry banner: «Информация о тарифе» */}
+      {inquiryBanner && (
+        <div
+          className="rounded-2xl p-3.5 mb-3 flex items-center gap-3 relative overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg,#F59E0B 0%,#A855F7 60%,#6366F1 100%)',
+            boxShadow: '0 8px 24px rgba(124,58,237,.25)',
+          }}
+        >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.22)' }}>
+            <span className="material-symbols-outlined text-white text-[22px]" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-extrabold text-[13px] leading-tight">Информация о тарифе «{inquiryBanner.planTitle}»</p>
+            <p className="text-white/85 text-[11px] mt-0.5 leading-snug">Полный разбор привилегий ниже в чате</p>
+          </div>
+          {onGoSubscription && (
+            <button
+              type="button"
+              onClick={onGoSubscription}
+              className="flex-shrink-0 px-3 py-1.5 rounded-xl text-[12px] font-extrabold transition-all active:scale-95"
+              style={{ background: '#fff', color: '#7C3AED', boxShadow: '0 4px 10px rgba(0,0,0,.15)' }}
+            >
+              Подключить
+              <span className="material-symbols-outlined text-[13px] align-middle ml-0.5">arrow_forward</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setInquiryBanner(null)}
+            className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,.18)' }}
+            aria-label="Скрыть"
+          >
+            <span className="material-symbols-outlined text-white text-[16px]">close</span>
+          </button>
+        </div>
+      )}
 
       {showEmptyMock ? (
         <div className="rounded-2xl p-5 text-center" style={{ background: '#fff', border: '1px solid rgba(0,0,0,.06)' }}>
