@@ -57,7 +57,7 @@ function RewardsTab() {
     setError(null)
     try {
       const r = await api.get('/admin/loyalty/rewards')
-      setItems(Array.isArray(r.data) ? r.data : [])
+      setItems(Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.items) ? r.data.items : []))
     } catch (e) {
       if (e?.response?.status === 402) setError('module_off')
       else setError('load')
@@ -125,22 +125,27 @@ function RewardsTab() {
                     {r.description && <div className="text-xs text-gray-500 truncate max-w-xs">{r.description}</div>}
                   </td>
                   <td className="px-3 py-2.5 font-bold" style={{ color: '#0097A7' }}>
-                    {Number(r.points_cost).toLocaleString('ru-RU')}
+                    {Number(r.cost_points ?? r.points_cost ?? 0).toLocaleString('ru-RU')}
                   </td>
                   <td className="px-3 py-2.5">
                     {r.min_tier ? <TierBadge tier={r.min_tier} size="sm" /> : <span className="text-xs text-gray-400">—</span>}
                   </td>
                   <td className="px-3 py-2.5 text-gray-700">{r.stock == null ? '∞' : r.stock}</td>
                   <td className="px-3 py-2.5">
-                    <span
-                      className="text-[11px] font-bold px-2 py-0.5 rounded-full"
-                      style={{
-                        background: r.active ? '#dcfce7' : '#fee2e2',
-                        color: r.active ? '#15803d' : '#991b1b',
-                      }}
-                    >
-                      {r.active ? 'активна' : 'выкл.'}
-                    </span>
+                    {(() => {
+                      const isActive = (r.is_active ?? r.active) !== false
+                      return (
+                        <span
+                          className="text-[11px] font-bold px-2 py-0.5 rounded-full"
+                          style={{
+                            background: isActive ? '#dcfce7' : '#fee2e2',
+                            color: isActive ? '#15803d' : '#991b1b',
+                          }}
+                        >
+                          {isActive ? 'активна' : 'выкл.'}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex gap-1 justify-end">
@@ -181,13 +186,15 @@ function RewardsTab() {
 // ── Модалка создания / редактирования награды ───────────────────────────────
 function RewardFormModal({ initial, onClose, onSaved }) {
   const { toast } = useToast()
+  // Бэкенд использует cost_points / is_active. В UI хранения «points_cost / active»
+  // оставлено для обратной совместимости с initial из GET-ответа (он отдаёт оба варианта).
   const [form, setForm] = useState({
     name: initial?.name || '',
     description: initial?.description || '',
-    points_cost: initial?.points_cost ?? 100,
+    points_cost: initial?.cost_points ?? initial?.points_cost ?? 100,
     min_tier: initial?.min_tier || '',
     stock: initial?.stock ?? '',
-    active: initial?.active ?? true,
+    active: (initial?.is_active ?? initial?.active) ?? true,
   })
   const [saving, setSaving] = useState(false)
 
@@ -198,13 +205,14 @@ function RewardFormModal({ initial, onClose, onSaved }) {
     }
     setSaving(true)
     try {
+      // Глава 9 hotfix: бэкенд требует cost_points + is_active.
       const payload = {
         name: form.name.trim(),
         description: form.description.trim() || null,
-        points_cost: Number(form.points_cost) || 0,
-        min_tier: form.min_tier || null,
+        cost_points: Number(form.points_cost) || 1,
+        min_tier: form.min_tier || 'bronze',
         stock: form.stock === '' ? null : Number(form.stock),
-        active: !!form.active,
+        is_active: !!form.active,
       }
       if (initial?.id) {
         await api.patch(`/admin/loyalty/rewards/${initial.id}`, payload)
@@ -344,7 +352,7 @@ function LeaderboardTab() {
     let alive = true
     setLoading(true)
     api.get('/admin/loyalty/leaderboard')
-      .then(r => { if (alive) { setItems(Array.isArray(r.data) ? r.data : []); setLoading(false) } })
+      .then(r => { if (alive) { setItems(Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.items) ? r.data.items : [])); setLoading(false) } })
       .catch(e => {
         if (!alive) return
         if (e?.response?.status === 402) setError('module_off')
@@ -387,7 +395,7 @@ function LeaderboardTab() {
             {idx + 1}
           </span>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{p.full_name || `Пациент #${p.patient_id}`}</p>
+            <p className="text-sm font-semibold text-gray-900 truncate">{(p.patient_name || p.full_name) || `Пациент #${p.patient_id}`}</p>
             <p className="text-xs text-gray-500">ID: {p.patient_id}</p>
           </div>
           {p.tier && <TierBadge tier={p.tier} size="sm" />}
@@ -413,7 +421,7 @@ function ClaimsTab() {
     setError(null)
     try {
       const r = await api.get('/admin/loyalty/claims', { params: statusFilter ? { status: statusFilter } : {} })
-      setItems(Array.isArray(r.data) ? r.data : [])
+      setItems(Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.items) ? r.data.items : []))
     } catch (e) {
       if (e?.response?.status === 402) setError('module_off')
       else setError('load')
@@ -501,7 +509,7 @@ function ClaimsTab() {
                     </div>
                     <p className="text-xs text-gray-600 mt-0.5">
                       {c.patient_name || `Пациент #${c.patient_id}`}
-                      {c.points_cost != null && <> · <span className="font-bold" style={{ color: '#0097A7' }}>{Number(c.points_cost).toLocaleString('ru-RU')} б</span></>}
+                      {(c.points_spent ?? c.points_cost) != null && <> · <span className="font-bold" style={{ color: '#0097A7' }}>{Number(c.points_spent ?? c.points_cost).toLocaleString('ru-RU')} б</span></>}
                     </p>
                     {c.created_at && (
                       <p className="text-[11px] text-gray-400 mt-0.5">
@@ -559,12 +567,12 @@ function ManualAdjustTab() {
 
   useEffect(() => {
     api.get('/admin/loyalty/leaderboard')
-      .then(r => setLeaderboard(Array.isArray(r.data) ? r.data : []))
+      .then(r => setLeaderboard(Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.items) ? r.data.items : [])))
       .catch(() => setLeaderboard([]))
   }, [])
 
   const filtered = search
-    ? leaderboard.filter(p => (p.full_name || '').toLowerCase().includes(search.toLowerCase()) || String(p.patient_id).includes(search))
+    ? leaderboard.filter(p => ((p.patient_name || p.full_name) || '').toLowerCase().includes(search.toLowerCase()) || String(p.patient_id).includes(search))
     : leaderboard.slice(0, 20)
 
   const submit = async () => {
@@ -574,8 +582,9 @@ function ManualAdjustTab() {
 
     setSaving(true)
     try {
+      // patient_id может быть UUID (из leaderboard) или телефон. Не Number'ить.
       await api.post('/admin/loyalty/manual-adjust', {
-        patient_id: Number(form.patient_id),
+        patient_id: String(form.patient_id).trim(),
         delta: Number(form.delta),
         reason: form.reason.trim(),
         note: form.note.trim() || null,
@@ -688,7 +697,7 @@ function ManualAdjustTab() {
               }}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-gray-900 truncate">{p.full_name || `Пациент #${p.patient_id}`}</p>
+                <p className="text-xs font-bold text-gray-900 truncate">{(p.patient_name || p.full_name) || `Пациент #${p.patient_id}`}</p>
                 <p className="text-[11px] text-gray-500">ID: {p.patient_id}</p>
               </div>
               {p.tier && <TierBadge tier={p.tier} size="sm" />}

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.patient_account import PatientAccount
+from app.models.patient_family import PatientFamilyMember  # Legacy-таблица семьи (до Главы 8)
 from app.models.patient_session import PatientSession
 from app.models.doctor import Appointment, AppointmentStatus
 from app.services import family_service as fs
@@ -86,14 +87,48 @@ class PatchMemberIn(BaseModel):
 @router.get("")
 async def get_family(
     request: Request,
+    format: Optional[str] = Query(default=None, description="legacy → плоский массив для старого FamilyModal"),
+    t: Optional[str] = Query(default=None, description="patient_session_token (legacy alias)"),
     db: AsyncSession = Depends(get_db),
     authorization: Optional[str] = Header(default=None),
     x_patient_session: Optional[str] = Header(default=None),
     session_token: Optional[str] = Query(default=None),
 ):
-    """Вернуть мою семейную группу + список членов. Если группы нет — null."""
+    # Поддерживаем legacy-параметр `?t=` (старый PatientCabinet и PatientFamilySection).
+    if not session_token and t:
+        session_token = t
+    """
+    Вернуть мою семейную группу + список членов.
+
+    Глава 9 hotfix: эндпоинт ДО Главы 8 возвращал плоский array
+    (legacy таблица patient_family_members). После Главы 8 формат стал
+    {group, members, is_owner, my_patient_id}, но старый FamilyModal в
+    PatientCabinet.jsx ожидает старый формат. Поэтому:
+      • Если есть legacy-записи (patient_family_members) — всегда подкладываем
+        их в поле `legacy_members` (формат старого API).
+      • Если ?format=legacy — возвращаем СРАЗУ плоский array (как раньше),
+        склеивая legacy + новые members.
+    """
     sess = await _get_session(db, request, authorization, x_patient_session, session_token)
     acc = await _current_account(db, sess)
+
+    # ── Legacy: patient_family_members (по owner_phone сессии) ─────────────
+    owner_phone_norm = normalize_phone(sess.phone)
+    legacy_rows = (await db.execute(
+        select(PatientFamilyMember)
+        .where(PatientFamilyMember.owner_phone == owner_phone_norm)
+        .order_by(PatientFamilyMember.created_at)
+    )).scalars().all()
+    legacy_members = [
+        {
+            "id": str(m.id),
+            "phone": m.member_phone,
+            "name": m.member_name,
+            "relation": m.relation,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in legacy_rows
+    ]
 
     # Я владелец группы?
     r = await db.execute(
@@ -115,8 +150,17 @@ async def get_family(
             membership_in = row[0]
             grp = row[1]
 
+    # Legacy-режим: вернуть СРАЗУ плоский массив (для старого FamilyModal)
+    if (format or "").lower() == "legacy":
+        return legacy_members
+
     if not grp:
-        return {"group": None, "members": [], "is_owner": False}
+        return {
+            "group": None,
+            "members": [],
+            "legacy_members": legacy_members,
+            "is_owner": False,
+        }
 
     members = await fs.list_members(db, grp.id)
     return {
@@ -127,6 +171,7 @@ async def get_family(
             "created_at": grp.created_at.isoformat(),
         },
         "members": members,
+        "legacy_members": legacy_members,
         "is_owner": grp.owner_patient_id == acc.id,
         "my_patient_id": str(acc.id),
     }

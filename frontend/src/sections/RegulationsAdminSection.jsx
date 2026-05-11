@@ -15,6 +15,9 @@ import './regulations.css'
 
 // Тяжёлый модал статистики — подгружаем по требованию.
 const CompletionsModal = lazy(() => import('../components/regulations/CompletionsModal'))
+// Конструктор регламента — отдельный экран, ленивая загрузка.
+// Открывается при ?reg=<id> или ?reg=new. Возврат: setBuilderId(null) + history.
+const RegulationBuilderSection = lazy(() => import('./RegulationBuilderSection'))
 
 // Преднастройка категорий (синхрон с builder’ом).
 const CATEGORIES = [
@@ -53,9 +56,54 @@ function fmtDate(s) {
   } catch { return s }
 }
 
+// Утилита: id регламента из URL (?reg=...). Возвращает строку id или null.
+function readBuilderIdFromUrl() {
+  if (typeof window === 'undefined') return null
+  try {
+    const u = new URL(window.location.href)
+    const v = u.searchParams.get('reg')
+    return v ? String(v) : null
+  } catch { return null }
+}
+
 export default function RegulationsAdminSection() {
   const { toast } = useToast()
   const { confirm, ConfirmHost } = useConfirm()
+
+  // ── Состояние «открыт конструктор?» ───────────────────────────────
+  // builderId === null  → показываем таблицу
+  // builderId === 'new' → создаём новый регламент в конструкторе
+  // builderId === <uuid> → редактируем существующий
+  const [builderId, setBuilderId] = useState(() => readBuilderIdFromUrl())
+
+  // Синхронизация с popstate (back/forward в браузере)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onPop = () => setBuilderId(readBuilderIdFromUrl())
+    window.addEventListener('popstate', onPop)
+    // Слушаем кастомное событие (для обратной совместимости с openBuilder)
+    const onOpen = (ev) => {
+      const id = ev?.detail?.id
+      setBuilderId(id ? String(id) : 'new')
+    }
+    window.addEventListener('regulations:open-builder', onOpen)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('regulations:open-builder', onOpen)
+    }
+  }, [])
+
+  // Закрыть конструктор: убрать ?reg= и вернуться к таблице
+  const closeBuilder = () => {
+    try {
+      const u = new URL(window.location.href)
+      u.searchParams.delete('reg')
+      window.history.replaceState({}, '', u.toString())
+    } catch {}
+    setBuilderId(null)
+    // Чтобы список обновился (если что-то создали/изменили)
+    setOffset(0)
+  }
 
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -101,15 +149,16 @@ export default function RegulationsAdminSection() {
   }, [q])
 
   // ── Переход в конструктор ────────────────────────────────
-  // Контракт с integration-агентом:
   //   ?reg=<id>  → редактирование существующего
   //   ?reg=new   → новый регламент
+  // Внутренний state переключает рендер: список ↔ RegulationBuilderSection.
   function openBuilder(id) {
-    const url = new URL(window.location.href)
-    url.searchParams.set('reg', id ? String(id) : 'new')
-    // Сохраняем secret active-tab, integration-агент подменит на routerNav.
-    window.history.pushState({}, '', url.toString())
-    window.dispatchEvent(new CustomEvent('regulations:open-builder', { detail: { id } }))
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.set('reg', id ? String(id) : 'new')
+      window.history.pushState({}, '', url.toString())
+    } catch {}
+    setBuilderId(id ? String(id) : 'new')
   }
 
   // ── Архивирование (мягкое удаление) ──────────────────────
@@ -135,6 +184,31 @@ export default function RegulationsAdminSection() {
 
   // ── Категории для фильтра ────────────────────────────────
   const categoryOptions = useMemo(() => CATEGORIES, [])
+
+  // Если открыт конструктор — рендерим Builder вместо таблицы.
+  // Builder сам управляет ?reg=<newId> после успешного POST.
+  if (builderId) {
+    return (
+      <Suspense fallback={<div style={{ padding: 24, color: '#9ca3af' }}>Загрузка конструктора…</div>}>
+        <div style={{ padding: 16 }}>
+          <div style={{ marginBottom: 12 }}>
+            <button
+              className="reg-tool-btn"
+              onClick={closeBuilder}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+              К списку регламентов
+            </button>
+          </div>
+          <RegulationBuilderSection
+            regulationId={builderId === 'new' ? null : builderId}
+            onBack={closeBuilder}
+          />
+        </div>
+      </Suspense>
+    )
+  }
 
   return (
     <div style={{ padding: 16 }}>

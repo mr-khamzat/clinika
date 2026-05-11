@@ -34,14 +34,38 @@ export function ToastProvider({ children }) {
   }, [])
 
   // ===== БЛОК: добавить тост =====
-  // signature: toast(message, level?, duration?)
-  // level: 'info' | 'success' | 'warn' | 'error' (default 'info')
+  // Поддерживаются ДВЕ сигнатуры (для обратной совместимости):
+  //   1) toast(message, level?, duration?)
+  //   2) toast({ kind|level, text|message, duration })  ← старый стиль из секций
+  // level/kind: 'info' | 'success' | 'warn' | 'error' (default 'info')
   // duration: ms (default 4000), 0 — не закрывать автоматически
+  //
+  // Защита от React error #31: message всегда приводится к строке.
   const toast = useCallback(
     (message, level = 'info', duration = 4000) => {
+      // Нормализация объектной сигнатуры { kind, text }
+      if (message && typeof message === 'object' && !Array.isArray(message)) {
+        const obj = message
+        const lvl = obj.level || obj.kind || level || 'info'
+        const dur = typeof obj.duration === 'number' ? obj.duration : duration
+        const txt = obj.text != null
+          ? obj.text
+          : (obj.message != null ? obj.message : '')
+        idRef.current += 1
+        const id = idRef.current
+        setQueue((q) => [
+          ...q,
+          { id, level: String(lvl), message: txt == null ? '' : String(txt), duration: dur },
+        ])
+        return id
+      }
+      // Строковая (или любая примитивная) сигнатура — гарантируем строку
+      const safeMessage = message == null
+        ? ''
+        : (typeof message === 'string' ? message : String(message))
       idRef.current += 1
       const id = idRef.current
-      setQueue((q) => [...q, { id, level, message, duration }])
+      setQueue((q) => [...q, { id, level, message: safeMessage, duration }])
       return id
     },
     []

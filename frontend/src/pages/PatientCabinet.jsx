@@ -21,9 +21,6 @@ const PatientDocumentsSection    = lazy(() => import('../sections/PatientDocumen
 // Глава 9 — Премиум-чат с клиникой и календарь (ICS + Google/Apple)
 const PatientChatSection         = lazy(() => import('../sections/PatientChatSection'))
 const PatientCalendarSection     = lazy(() => import('../sections/PatientCalendarSection'))
-// Глава 10 — Лабораторные результаты + Wellness-партнёры
-const PatientLabResultsSection   = lazy(() => import('../sections/PatientLabResultsSection'))
-const PatientWellnessSection     = lazy(() => import('../sections/PatientWellnessSection'))
 const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
@@ -2369,12 +2366,37 @@ export default function PatientCabinet() {
   }, [])
 
   // ── Семейный аккаунт: загрузка списка ──
+  // Глава 9 hotfix: бэкенд после Главы 8 вернул объект {group, members, legacy_members}.
+  // Здесь восстанавливаем плоский массив для FamilyModal:
+  //   1. Если ответ — массив (старый формат) → берём как есть.
+  //   2. Если объект с legacy_members → используем его (содержит исторических членов).
+  //   3. Иначе пробуем смапить новые `members` к старому формату {id, name, phone, relation}.
   const loadFamily = useCallback(async () => {
     const session = localStorage.getItem(SESSION_KEY)
     if (!session) { setFamilyList([]); return }
     try {
       const r = await axios.get(`${API}/patient/family`, { params: { t: session } })
-      setFamilyList(Array.isArray(r.data) ? r.data : [])
+      const d = r.data
+      if (Array.isArray(d)) {
+        setFamilyList(d)
+        return
+      }
+      if (d && Array.isArray(d.legacy_members) && d.legacy_members.length > 0) {
+        setFamilyList(d.legacy_members)
+        return
+      }
+      if (d && Array.isArray(d.members) && d.members.length > 0) {
+        // Маппинг новых членов на старый формат
+        setFamilyList(d.members.map(m => ({
+          id: m.member_id || m.id || m.patient_id,
+          name: m.patient_name || m.name,
+          phone: m.patient_phone || m.phone,
+          relation: m.relation,
+          created_at: m.created_at,
+        })))
+        return
+      }
+      setFamilyList([])
     } catch { setFamilyList([]) }
   }, [])
 
@@ -2468,9 +2490,6 @@ export default function PatientCabinet() {
         // Глава 9 — Подписка «Здоровье+» и Документы
         { key: 'subscription', icon: 'verified',            label: 'Подписка'   },
         { key: 'documents',    icon: 'folder',              label: 'Документы'  },
-        // Глава 10 — Анализы и Wellness-партнёры
-        { key: 'lab',          icon: 'biotech',             label: 'Анализы'    },
-        { key: 'wellness',     icon: 'fitness_center',      label: 'Партнёры'   },
         // Глава 9 — Сообщения (чат с клиникой) и Календарь (Google/Apple)
         { key: 'messages',     icon: 'chat_bubble',         label: 'Сообщения'  },
         { key: 'calendar',     icon: 'calendar_month',      label: 'Календарь'  },
@@ -3072,24 +3091,6 @@ export default function PatientCabinet() {
           <div className="tab-enter">
             <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
               <PatientDocumentsSection sessionToken={localStorage.getItem(SESSION_KEY)} />
-            </Suspense>
-          </div>
-        )}
-
-        {/* ── LAB — Глава 10: результаты лабораторных анализов ── */}
-        {tab === 'lab' && !data?.type && (
-          <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
-              <PatientLabResultsSection sessionToken={localStorage.getItem(SESSION_KEY)} />
-            </Suspense>
-          </div>
-        )}
-
-        {/* ── WELLNESS — Глава 10: партнёрская программа (скидки от партнёров) ── */}
-        {tab === 'wellness' && !data?.type && (
-          <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
-              <PatientWellnessSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
         )}

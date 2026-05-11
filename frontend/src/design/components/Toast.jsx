@@ -174,7 +174,13 @@ function ToastItem({ item, onDismiss }) {
       >
         <LevelIcon level={level} />
       </span>
-      <div className="ks-toast-text">{message}</div>
+      <div className="ks-toast-text">{
+        /* Защита от React error #31: если message — объект,
+           извлекаем text/message или сериализуем. */
+        (message && typeof message === 'object')
+          ? (message.text || message.message || JSON.stringify(message))
+          : (message == null ? '' : String(message))
+      }</div>
       <button
         type="button"
         className="ks-toast-close"
