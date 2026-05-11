@@ -19,6 +19,8 @@ import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / KpiRow / Chip / EmptyState
 import { Card, KpiCard, KpiRow, Chip, EmptyState } from '../design'
+// Глава 6: Direct billing — счета пациентам, статистика, PDF
+import ExternalDoctorBillingSection from '../components/doctor/ExternalDoctorBillingSection'
 
 const ACCENT = '#1565C0'
 const DARK   = '#0d2040'
@@ -28,6 +30,7 @@ const NAV = [
   { key: 'referrals', label: 'Направления',  icon: 'send'           },
   { key: 'schedule',  label: 'Расписание',   icon: 'calendar_today' },
   { key: 'bonuses',   label: 'Бонусы',       icon: 'payments'       },
+  { key: 'billing',   label: 'Счета',        icon: 'receipt_long'   },
 ]
 
 function fmt(d) {
@@ -212,6 +215,11 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
               </Card>
             ))}
           </div>
+        )}
+
+        {/* Billing (Глава 6) */}
+        {tab === 'billing' && (
+          <ExternalDoctorBillingSection />
         )}
       </div>
 

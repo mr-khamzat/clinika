@@ -167,3 +167,4 @@ from app.models.signup_request import SignupRequest
 # Глава 4 — Manager productivity (Kanban / templates / multi-clinic)
 from app.models.referral_template import ReferralTemplate
 from app.models.manager_clinic_access import ManagerClinicAccess
+from app.models.doctor_ai import TreatmentPlan, AIDoctorLog, DirectBill

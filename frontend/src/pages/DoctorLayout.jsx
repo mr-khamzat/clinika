@@ -47,6 +47,9 @@ import {
   useToast,
 } from '../design'
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
+// Глава 6: AI-инструменты врача
+import DoctorBriefingPanel from '../components/doctor/DoctorBriefingPanel'
+import DoctorTreatmentPlanEditor from '../components/doctor/DoctorTreatmentPlanEditor'
 // Единый хук переключения темы (общий для всех кабинетов)
 import useTheme from '../lib/useTheme'
 // W3: глобальный поиск Cmd+K и центр уведомлений
@@ -91,6 +94,7 @@ const NAV = [
   { id: 'today',        label: 'Сегодня',        icon: 'today',           group: 'work' },
   { id: 'schedule',     label: 'Расписание',     icon: 'calendar_month',  group: 'work' },
   { id: 'appointments', label: 'Записи',         icon: 'event_note',      group: 'work' },
+  { id: 'ai',           label: 'AI-инструменты', icon: 'auto_awesome',    group: 'work' },
   { id: 'patients',     label: 'Мои пациенты',   icon: 'group',           group: 'work' },
   { id: 'referrals',    label: 'Направления',    icon: 'assignment',      group: 'work' },
   { id: 'chat',         label: 'Чат',            icon: 'chat_bubble',     group: 'work' },
@@ -766,6 +770,108 @@ function TimePage() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// AI-инструменты (Глава 6) — выбор приёма + briefing + treatment plan
+// ─────────────────────────────────────────────────────────────────────
+function AIToolsPage({ token, doctorId }) {
+  const [apts, setApts]     = useState([])
+  const [loading, setLoad]  = useState(true)
+  const [aptId, setAptId]   = useState(null)
+  const [showPlan, setShowPlan] = useState(false)
+
+  useEffect(() => {
+    apiFetch('get', `/appointments?doctor_id=${doctorId}&limit=50`, token)
+      .then(r => {
+        const arr = Array.isArray(r.data) ? r.data : (r.data?.appointments || [])
+        // Только активные (pending/confirmed/in_progress) — наиболее частый сценарий
+        const filtered = arr.filter(a =>
+          a.status === 'pending' || a.status === 'confirmed' || a.status === 'in_progress'
+        )
+        setApts(filtered.length > 0 ? filtered : arr)
+      })
+      .catch(() => setApts([]))
+      .finally(() => setLoad(false))
+  }, [token, doctorId])
+
+  const selected = apts.find(a => a.id === aptId) || null
+
+  return (
+    <>
+      <SectionHeader
+        title="AI-инструменты"
+        subtitle="Pre-visit briefing и генерация плана лечения для приёмов"
+        actions={<Chip variant="accent" dot>Глава 6</Chip>}
+      />
+
+      <Card padded={false} className="mb-4">
+        <div style={{ padding: 14, borderBottom: '1px solid var(--line)', fontSize: 12, color: 'var(--fg-3)' }}>
+          Выберите приём, чтобы открыть briefing
+        </div>
+        {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}
+        {!loading && apts.length === 0 && (
+          <div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>
+            Записей нет
+          </div>
+        )}
+        {!loading && apts.map((a, i) => (
+          <div
+            key={a.id}
+            onClick={() => { setAptId(a.id); setShowPlan(false) }}
+            style={{
+              padding: '12px 14px',
+              borderBottom: i === apts.length - 1 ? 'none' : '1px solid var(--line)',
+              cursor: 'pointer',
+              background: aptId === a.id ? 'var(--accent-soft)' : 'transparent',
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+            }}
+          >
+            <Avatar name={a.patient_name || '?'} size="md" />
+            <div className="flex-1 min-w-0">
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--fg)' }}>
+                {a.patient_name || '—'}
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                {a.appointment_date} · {a.appointment_time}
+                {a.service_name ? ` · ${a.service_name}` : ''}
+              </div>
+            </div>
+            {aptId === a.id && <Chip variant="accent">выбран</Chip>}
+          </div>
+        ))}
+      </Card>
+
+      {selected && (
+        <div className="flex flex-col gap-4">
+          <DoctorBriefingPanel appointmentId={selected.id} />
+
+          {!showPlan && (
+            <Card>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex-1">
+                  <Card.Title>План лечения</Card.Title>
+                  <Card.Subtitle>Сгенерировать структурированный план для пациента</Card.Subtitle>
+                </div>
+                <Button onClick={() => setShowPlan(true)}>
+                  Сгенерировать план
+                </Button>
+              </div>
+            </Card>
+          )}
+
+          {showPlan && (
+            <DoctorTreatmentPlanEditor
+              appointmentId={selected.id}
+              onClose={() => setShowPlan(false)}
+            />
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // CHAT
 // ─────────────────────────────────────────────────────────────────────
 function ChatPage() {
@@ -853,6 +959,7 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
       case 'today':        return <TodayPage token={adminToken} doctorId={doctorId} doctorInfo={doctorInfo} />
       case 'schedule':     return <SchedulePage token={adminToken} doctorId={doctorId} doctorName={doctorInfo?.full_name || userName} />
       case 'appointments': return <AppointmentsPage token={adminToken} doctorId={doctorId} />
+      case 'ai':           return <AIToolsPage token={adminToken} doctorId={doctorId} />
       case 'referrals':    return <ReferralsPage token={adminToken} />
       case 'patients':     return <PatientsPage token={adminToken} doctorId={doctorId} />
       case 'earnings':     return <EarningsPage />

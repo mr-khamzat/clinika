@@ -71,6 +71,8 @@ from app.routers.ai import router as ai_router
 from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.visiting_doctor import router as visiting_router
+from app.routers.doctor_ai import router as doctor_ai_router
+from app.routers.external_doctor import router as external_doctor_router
 from app.routers.cms import router as cms_router
 from app.routers.acts import router as acts_router, inter_clinic_router as inter_clinic_acts_router
 from app.routers.system import router as system_router, heartbeat_loop, send_heartbeat
@@ -1476,6 +1478,8 @@ app.include_router(ai_router)
 app.include_router(ai_platform_router)
 app.include_router(recruiter_router)
 app.include_router(visiting_router)
+app.include_router(doctor_ai_router)
+app.include_router(external_doctor_router)
 app.include_router(cms_router)
 app.include_router(acts_router)
 app.include_router(inter_clinic_acts_router)

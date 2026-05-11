@@ -21,14 +21,17 @@ import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / Chip / Button / EmptyState + useToast
 import { Card, KpiCard, Chip, Button, EmptyState, useToast } from '../design'
+// Глава 6: Direct billing — счета пациентам, статистика, PDF
+import ExternalDoctorBillingSection from '../components/doctor/ExternalDoctorBillingSection'
 
 const P  = '#0097A7'
 const D  = '#004D5F'
 
 const NAV = [
-  { key:'queue',   label:'Очередь',  icon:'queue'    },
-  { key:'history', label:'История',  icon:'history'  },
-  { key:'income',  label:'Доход',    icon:'payments' },
+  { key:'queue',   label:'Очередь',  icon:'queue'         },
+  { key:'history', label:'История',  icon:'history'       },
+  { key:'income',  label:'Доход',    icon:'payments'      },
+  { key:'billing', label:'Счета',    icon:'receipt_long'  },
 ]
 
 function fmtDate(d) {
@@ -487,6 +490,11 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
               ))
             )}
           </div>
+        )}
+
+        {/* Billing (Глава 6) */}
+        {tab === 'billing' && (
+          <ExternalDoctorBillingSection />
         )}
       </div>
 
