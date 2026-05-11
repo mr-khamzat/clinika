@@ -1,5 +1,26 @@
 [
   {
+    "slug": "intro-about",
+    "title": "О платформе КлиникСеть",
+    "category": "intro",
+    "order": 1,
+    "summary": "Что такое КлиникСеть, зачем, для кого. Сегменты, тарифы, отличие от классических МИС."
+  },
+  {
+    "slug": "intro-architecture",
+    "title": "Архитектура платформы",
+    "category": "intro",
+    "order": 2,
+    "summary": "Слои приложения, multi-tenancy, стек, развёртывание, производительность, WebRTC, AI стек."
+  },
+  {
+    "slug": "intro-glossary",
+    "title": "Глоссарий терминов",
+    "category": "intro",
+    "order": 3,
+    "summary": "Справочник терминов: тенант, франшиза, клиника, кабинет, модуль, план, бонус, OTP, RBAC, SOP."
+  },
+  {
     "slug": "role-super-admin",
     "title": "Платформа · супер-админ",
     "category": "role",
@@ -63,11 +84,88 @@
     "summary": "Врач, ведущий приём в нескольких клиниках сети по контракту с % split. Direct billing в realtime."
   },
   {
+    "slug": "role-acquisition-manager",
+    "title": "Менеджер по привлечению",
+    "category": "role",
+    "order": 10,
+    "summary": "Привлечение partner_doctor и visiting_doctor в сеть. % attribution от направлений подопечных."
+  },
+  {
     "slug": "role-patient",
     "title": "Пациент",
     "category": "role",
-    "order": 10,
+    "order": 11,
     "summary": "Запись онлайн, медкарта-timeline, показатели здоровья, семья, документы, AI-ассистент, 152-ФЗ права."
+  },
+  {
+    "slug": "chapter-1-platform",
+    "title": "Глава 1. Платформа и super_admin",
+    "category": "chapters",
+    "order": 1,
+    "summary": "Marketplace модулей, Impersonation RFC 8693, audit_log, Tenant API Keys, Public API v1."
+  },
+  {
+    "slug": "chapter-2-onboarding",
+    "title": "Глава 2. Self-service onboarding",
+    "category": "chapters",
+    "order": 2,
+    "summary": "5-шаговый wizard регистрации франшизы, OTP-верификация, 14-дневный trial, welcome email."
+  },
+  {
+    "slug": "chapter-3-franchise-analytics",
+    "title": "Глава 3. Аналитика франшизы",
+    "category": "chapters",
+    "order": 3,
+    "summary": "KPI Dashboard, когорты, bulk plan override, AI insights, cost forecast."
+  },
+  {
+    "slug": "chapter-4-manager",
+    "title": "Глава 4. Продуктивность управляющего",
+    "category": "chapters",
+    "order": 4,
+    "summary": "Kanban расписание, heatmap загрузки врачей, шаблоны направлений, multi-clinic view."
+  },
+  {
+    "slug": "chapter-5-reg",
+    "title": "Глава 5. Скорость регистратора",
+    "category": "chapters",
+    "order": 5,
+    "summary": "Quick-actions с горячими клавишами, печать PDF, Cmd+K поиск, mobile-first форма."
+  },
+  {
+    "slug": "chapter-6-doctor-ai",
+    "title": "Глава 6. Врач + AI",
+    "category": "chapters",
+    "order": 6,
+    "summary": "Pre-visit briefing, AI-план лечения, МКБ-10 подсказка, direct billing для visiting/partner."
+  },
+  {
+    "slug": "chapter-7-regulations",
+    "title": "Глава 7. Регламент-конструктор",
+    "category": "chapters",
+    "order": 7,
+    "summary": "Wizard SOP, версионирование, AI-генератор черновика, e-signature через OTP, tracking."
+  },
+  {
+    "slug": "chapter-8-patient-family",
+    "title": "Глава 8. Пациент: семья, лояльность, расходник",
+    "category": "chapters",
+    "order": 8,
+    "summary": "Семейный профиль, тиры Bronze/Silver/Gold/Platinum, расходник за год PDF, документы."
+  },
+  {
+    "slug": "chapter-9-health-plus",
+    "title": "Глава 9. Подписка Здоровье+ и чат",
+    "category": "chapters",
+    "order": 9,
+    "summary": "Module gating, override тарифа, cash activation, безлимит чата, monthly supply cron."
+  },
+  {
+    "slug": "chapter-10-integrations",
+    "title": "Глава 10. Интеграции и устойчивость",
+    "category": "chapters",
+    "order": 10,
+    "summary": "Лаборатории, wellness партнёры, агрегаторы Public API v1, disaster-mode, webhooks, МИС Renovatio."
   },
   {
     "slug": "concepts-bonuses",
@@ -133,6 +231,27 @@
     "summary": "20 health-check адаптеров, Telegram-алерты, daily digest 09:00 МСК, Uptime-Kuma, Grafana."
   },
   {
+    "slug": "concepts-multi-tenancy",
+    "title": "Multi-tenancy и изоляция данных",
+    "category": "concepts",
+    "order": 10,
+    "summary": "Shared schema, фильтрация по tenant_id, slug-routing, cross-tenant сценарии, тесты изоляции."
+  },
+  {
+    "slug": "concepts-region-lock",
+    "title": "Region Lock — географический контроль",
+    "category": "concepts",
+    "order": 11,
+    "summary": "Алерты + ручная блокировка франшизы + IP allowlist при работе из неразрешённого региона."
+  },
+  {
+    "slug": "concepts-backup",
+    "title": "Резервное копирование и восстановление",
+    "category": "concepts",
+    "order": 12,
+    "summary": "pg_dump каждые 6ч, GPG-шифрование, rclone в удалённый S3, point-in-time recovery, тесты восстановления."
+  },
+  {
     "slug": "setup-first-clinic",
     "title": "Запуск первой клиники",
     "category": "setup",
@@ -162,9 +281,65 @@
   },
   {
     "slug": "setup-payments",
-    "title": "Настройка платежей",
+    "title": "Настройка платежей (общая)",
     "category": "setup",
     "order": 5,
     "summary": "ЮKassa (онлайн-оплата подписок), Платформа ОФД (фискализация чеков 54-ФЗ)."
+  },
+  {
+    "slug": "setup-yookassa",
+    "title": "Настройка ЮKassa для онлайн-оплат",
+    "category": "setup",
+    "order": 6,
+    "summary": "Регистрация магазина, shopId+secret, webhook, тестовый платёж, прод-режим, возвраты."
+  },
+  {
+    "slug": "setup-smtp",
+    "title": "Настройка SMTP для email",
+    "category": "setup",
+    "order": 7,
+    "summary": "Mailgun/SendGrid/Postmark/SES/Yandex 360, DNS (SPF/DKIM/DMARC), тестовое письмо, soft/hard bounces."
+  },
+  {
+    "slug": "setup-telegram",
+    "title": "Настройка Telegram-уведомлений",
+    "category": "setup",
+    "order": 8,
+    "summary": "Создание бота через BotFather, webhook, привязка пользователей, типы уведомлений, white-label."
+  },
+  {
+    "slug": "setup-lab",
+    "title": "Настройка лабораторной интеграции",
+    "category": "setup",
+    "order": 9,
+    "summary": "Gemotest/Invitro/KDL/CitiLab/Custom: договор, API-ключи, импорт price-list, биллинг markup/agent."
+  },
+  {
+    "slug": "api-reference",
+    "title": "API Reference — обзор",
+    "category": "api",
+    "order": 1,
+    "summary": "Сводный обзор REST API: аутентификация, пагинация, error codes, rate limiting, группы endpoints, примеры curl/JS/Python."
+  },
+  {
+    "slug": "api-auth-detailed",
+    "title": "API: Аутентификация — детально",
+    "category": "api",
+    "order": 2,
+    "summary": "JWT с PBKDF2, refresh-rotation, Tenant API Key со scopes, Token Exchange RFC 8693, OTP, brute-force защита."
+  },
+  {
+    "slug": "faq",
+    "title": "Частые вопросы (FAQ)",
+    "category": "faq",
+    "order": 1,
+    "summary": "Общие, онбординг, технические, платежи, роли, безопасность, интеграции, AI, поддержка — 30+ вопросов."
+  },
+  {
+    "slug": "changelog",
+    "title": "Changelog",
+    "category": "changelog",
+    "order": 1,
+    "summary": "История изменений платформы по главам 1-10 + Здоровье+, с датами и roadmap v2."
   }
 ]

@@ -42,6 +42,15 @@ const rawFiles = import.meta.glob('../wiki-content/*.md', {
 // ─── Метаданные категорий: цвета, иконки, описания ───
 const CATEGORIES = [
   {
+    id: 'intro',
+    title: 'Введение',
+    description:
+      'О платформе КлиникСеть: что, зачем, для кого; архитектура и глоссарий.',
+    icon: 'menu_book',
+    accent: 'oklch(0.58 0.18 280)',
+    accentSoft: 'oklch(0.58 0.18 280 / 0.10)',
+  },
+  {
     id: 'role',
     title: 'Роли',
     description:
@@ -51,10 +60,19 @@ const CATEGORIES = [
     accentSoft: 'oklch(0.55 0.16 240 / 0.10)',
   },
   {
+    id: 'chapters',
+    title: 'Главы продукта',
+    description:
+      'Главы 1-10: платформа, онбординг, аналитика, кабинеты, AI, регламенты, пациент, Здоровье+, интеграции.',
+    icon: 'auto_awesome',
+    accent: 'oklch(0.55 0.18 320)',
+    accentSoft: 'oklch(0.55 0.18 320 / 0.10)',
+  },
+  {
     id: 'concepts',
     title: 'Концепты',
     description:
-      'Как устроены ключевые механизмы платформы: бонусы, направления, расписание.',
+      'Как устроены ключевые механизмы платформы: бонусы, направления, расписание, безопасность.',
     icon: 'auto_stories',
     accent: 'oklch(0.55 0.15 150)',
     accentSoft: 'oklch(0.55 0.15 150 / 0.10)',
@@ -63,15 +81,63 @@ const CATEGORIES = [
     id: 'setup',
     title: 'Настройка',
     description:
-      'Пошаговые инструкции по запуску клиники, настройке тенанта и сотрудников.',
+      'Пошаговые инструкции по запуску клиники, настройке тенанта, эквайринга, SMTP, Telegram, лабораторий.',
     icon: 'tune',
     accent: 'oklch(0.62 0.13 75)',
     accentSoft: 'oklch(0.62 0.13 75 / 0.12)',
+  },
+  {
+    id: 'api',
+    title: 'API',
+    description:
+      'REST API платформы: аутентификация, endpoints, error codes, rate limiting, примеры.',
+    icon: 'code',
+    accent: 'oklch(0.58 0.13 200)',
+    accentSoft: 'oklch(0.58 0.13 200 / 0.10)',
+  },
+  {
+    id: 'modules',
+    title: 'Модули',
+    description:
+      'Каталог платных модулей: телемедицина, AI, лояльность, маркетинг и другие.',
+    icon: 'apps',
+    accent: 'oklch(0.62 0.16 50)',
+    accentSoft: 'oklch(0.62 0.16 50 / 0.10)',
+  },
+  {
+    id: 'dev',
+    title: 'Для разработчиков',
+    description:
+      'Технический стек, API, интеграции и внутренняя архитектура для разработчиков.',
+    icon: 'terminal',
+    accent: 'oklch(0.5 0.08 260)',
+    accentSoft: 'oklch(0.5 0.08 260 / 0.10)',
+  },
+  {
+    id: 'faq',
+    title: 'FAQ',
+    description:
+      'Частые вопросы об онбординге, платежах, интеграциях, безопасности, AI.',
+    icon: 'help',
+    accent: 'oklch(0.62 0.13 100)',
+    accentSoft: 'oklch(0.62 0.13 100 / 0.12)',
+  },
+  {
+    id: 'changelog',
+    title: 'Changelog',
+    description:
+      'История изменений платформы по главам и датам.',
+    icon: 'history',
+    accent: 'oklch(0.58 0.10 30)',
+    accentSoft: 'oklch(0.58 0.10 30 / 0.10)',
   },
 ]
 
 // ─── Иконки для конкретных статей по slug ───
 const ARTICLE_ICONS = {
+  'intro-about': 'home',
+  'intro-architecture': 'architecture',
+  'intro-glossary': 'menu_book',
   'role-super-admin': 'admin_panel_settings',
   'role-franchise-owner': 'workspace_premium',
   'role-manager': 'manage_accounts',
@@ -81,18 +147,47 @@ const ARTICLE_ICONS = {
   'role-recruiter': 'person_search',
   'role-partner-doctor': 'handshake',
   'role-visiting-doctor': 'directions_car',
+  'role-acquisition-manager': 'campaign',
   'role-patient': 'person',
+  'chapter-1-platform': 'looks_one',
+  'chapter-2-onboarding': 'looks_two',
+  'chapter-3-franchise-analytics': 'looks_3',
+  'chapter-4-manager': 'looks_4',
+  'chapter-5-reg': 'looks_5',
+  'chapter-6-doctor-ai': 'looks_6',
+  'chapter-7-regulations': 'gavel',
+  'chapter-8-patient-family': 'family_restroom',
+  'chapter-9-health-plus': 'favorite',
+  'chapter-10-integrations': 'hub',
   'concepts-bonuses': 'paid',
   'concepts-referrals': 'share',
   'concepts-appointments': 'event',
   'concepts-qr': 'qr_code_scanner',
   'concepts-modules': 'apps',
+  'concepts-medcard': 'medical_information',
+  'concepts-security': 'security',
+  'concepts-billing': 'receipt_long',
+  'concepts-monitoring': 'monitor_heart',
+  'concepts-multi-tenancy': 'workspaces',
+  'concepts-region-lock': 'lock',
+  'concepts-backup': 'backup',
   'setup-first-clinic': 'rocket_launch',
   'setup-staff': 'group_add',
+  'setup-mis': 'cloud_sync',
+  'setup-modules': 'apps',
+  'setup-payments': 'payments',
+  'setup-yookassa': 'credit_card',
+  'setup-smtp': 'mail',
+  'setup-telegram': 'send',
+  'setup-lab': 'science',
+  'api-reference': 'integration_instructions',
+  'api-auth-detailed': 'vpn_key',
+  'faq': 'help',
+  'changelog': 'history',
 }
 
 // ─── Популярные slug-и для секции «Популярные статьи» ───
-const POPULAR_SLUGS = ['role-manager', 'role-doctor', 'role-reg', 'role-patient', 'concepts-appointments']
+const POPULAR_SLUGS = ['intro-about', 'chapter-1-platform', 'role-manager', 'role-doctor', 'api-reference']
 
 export default function Wiki() {
   const [params, setParams] = useSearchParams()

@@ -1,38 +1,59 @@
 [
   {
+    "slug": "intro-about",
+    "title": "О платформе КлиникСеть",
+    "category": "intro",
+    "order": 1,
+    "summary": "Что такое КлиникСеть, зачем, для кого. Сегменты, тарифы, отличие от классических МИС."
+  },
+  {
+    "slug": "intro-architecture",
+    "title": "Архитектура платформы",
+    "category": "intro",
+    "order": 2,
+    "summary": "Слои приложения, multi-tenancy, стек, развёртывание, производительность, WebRTC, AI стек."
+  },
+  {
+    "slug": "intro-glossary",
+    "title": "Глоссарий терминов",
+    "category": "intro",
+    "order": 3,
+    "summary": "Справочник терминов: тенант, франшиза, клиника, кабинет, модуль, план, бонус, OTP, RBAC, SOP."
+  },
+  {
     "slug": "role-super-admin",
     "title": "Платформа · супер-админ",
     "category": "role",
     "order": 1,
-    "summary": "Управление всей платформой КлиникСеть: тенанты, биллинг, модули, мониторинг."
+    "summary": "Управление всей платформой КлиникСеть: тенанты, биллинг, модули, мониторинг, безопасность, impersonation."
   },
   {
     "slug": "role-franchise-owner",
     "title": "Владелец франшизы",
     "category": "role",
     "order": 2,
-    "summary": "Запуск и управление сетью клиник: подписка, модули, клиники, отчёты."
+    "summary": "Запуск и управление сетью клиник: подписка, модули, клиники, отчёты, реклама, лояльность."
   },
   {
     "slug": "role-manager",
     "title": "Управляющий клиники",
     "category": "role",
     "order": 3,
-    "summary": "Операционное управление клиникой: KPI, сотрудники, расписание, финансы."
+    "summary": "Операционное управление клиникой: KPI, сотрудники, расписание, финансы, бонусы, отмены."
   },
   {
     "slug": "role-doctor",
     "title": "Врач",
     "category": "role",
     "order": 4,
-    "summary": "Приём пациентов: расписание, протоколы, диагнозы, направления, видеозвонки."
+    "summary": "Приём пациентов: расписание, протоколы, диагнозы, направления, видеозвонки, бонусы."
   },
   {
     "slug": "role-reg",
     "title": "Регистратор",
     "category": "role",
     "order": 5,
-    "summary": "Запись пациентов, оформление визитов, оплаты, направления."
+    "summary": "Запись пациентов, направления 3 типов (услуга/врач/анализы), МИС-поиск, бонусы."
   },
   {
     "slug": "role-nurse",
@@ -46,112 +67,189 @@
     "title": "Рекрутер",
     "category": "role",
     "order": 7,
-    "summary": "Привлечение врачей-партнёров и приходящих врачей в сеть."
+    "summary": "Привлечение врачей-партнёров. Бонусы рекрутера = % от направлений партнёров."
   },
   {
     "slug": "role-partner-doctor",
     "title": "Врач-партнёр",
     "category": "role",
     "order": 8,
-    "summary": "Внешний врач, направляющий пациентов в клиники сети за бонус."
+    "summary": "Внешний врач, направляющий пациентов в клиники сети за бонус. Привлекается рекрутером."
   },
   {
     "slug": "role-visiting-doctor",
     "title": "Приходящий врач",
     "category": "role",
     "order": 9,
-    "summary": "Врач, ведущий приём в нескольких клиниках сети по контракту."
+    "summary": "Врач, ведущий приём в нескольких клиниках сети по контракту с % split. Direct billing в realtime."
+  },
+  {
+    "slug": "role-acquisition-manager",
+    "title": "Менеджер по привлечению",
+    "category": "role",
+    "order": 10,
+    "summary": "Привлечение partner_doctor и visiting_doctor в сеть. % attribution от направлений подопечных."
   },
   {
     "slug": "role-patient",
     "title": "Пациент",
     "category": "role",
+    "order": 11,
+    "summary": "Запись онлайн, медкарта-timeline, показатели здоровья, семья, документы, AI-ассистент, 152-ФЗ права."
+  },
+  {
+    "slug": "chapter-1-platform",
+    "title": "Глава 1. Платформа и super_admin",
+    "category": "chapters",
+    "order": 1,
+    "summary": "Marketplace модулей, Impersonation RFC 8693, audit_log, Tenant API Keys, Public API v1."
+  },
+  {
+    "slug": "chapter-2-onboarding",
+    "title": "Глава 2. Self-service onboarding",
+    "category": "chapters",
+    "order": 2,
+    "summary": "5-шаговый wizard регистрации франшизы, OTP-верификация, 14-дневный trial, welcome email."
+  },
+  {
+    "slug": "chapter-3-franchise-analytics",
+    "title": "Глава 3. Аналитика франшизы",
+    "category": "chapters",
+    "order": 3,
+    "summary": "KPI Dashboard, когорты, bulk plan override, AI insights, cost forecast."
+  },
+  {
+    "slug": "chapter-4-manager",
+    "title": "Глава 4. Продуктивность управляющего",
+    "category": "chapters",
+    "order": 4,
+    "summary": "Kanban расписание, heatmap загрузки врачей, шаблоны направлений, multi-clinic view."
+  },
+  {
+    "slug": "chapter-5-reg",
+    "title": "Глава 5. Скорость регистратора",
+    "category": "chapters",
+    "order": 5,
+    "summary": "Quick-actions с горячими клавишами, печать PDF, Cmd+K поиск, mobile-first форма."
+  },
+  {
+    "slug": "chapter-6-doctor-ai",
+    "title": "Глава 6. Врач + AI",
+    "category": "chapters",
+    "order": 6,
+    "summary": "Pre-visit briefing, AI-план лечения, МКБ-10 подсказка, direct billing для visiting/partner."
+  },
+  {
+    "slug": "chapter-7-regulations",
+    "title": "Глава 7. Регламент-конструктор",
+    "category": "chapters",
+    "order": 7,
+    "summary": "Wizard SOP, версионирование, AI-генератор черновика, e-signature через OTP, tracking."
+  },
+  {
+    "slug": "chapter-8-patient-family",
+    "title": "Глава 8. Пациент: семья, лояльность, расходник",
+    "category": "chapters",
+    "order": 8,
+    "summary": "Семейный профиль, тиры Bronze/Silver/Gold/Platinum, расходник за год PDF, документы."
+  },
+  {
+    "slug": "chapter-9-health-plus",
+    "title": "Глава 9. Подписка Здоровье+ и чат",
+    "category": "chapters",
+    "order": 9,
+    "summary": "Module gating, override тарифа, cash activation, безлимит чата, monthly supply cron."
+  },
+  {
+    "slug": "chapter-10-integrations",
+    "title": "Глава 10. Интеграции и устойчивость",
+    "category": "chapters",
     "order": 10,
-    "summary": "Запись онлайн, история приёмов, документы, чат с врачом, AI-ассистент."
+    "summary": "Лаборатории, wellness партнёры, агрегаторы Public API v1, disaster-mode, webhooks, МИС Renovatio."
   },
   {
     "slug": "concepts-bonuses",
-    "title": "Бонусы и как они работают",
+    "title": "Бонусы и каскадный расчёт",
     "category": "concepts",
     "order": 1,
-    "summary": "Жизненный цикл бонусов: начисление, удержание, выплата, налоги."
+    "summary": "Каскад: bonus_total − platform_fee_floor − recruiter_cut = автор. Idempotent с advisory lock."
   },
   {
     "slug": "concepts-referrals",
     "title": "Жизненный цикл направления",
     "category": "concepts",
     "order": 2,
-    "summary": "Как работает направление от партнёра: статусы, QR, валидация, бонус."
+    "summary": "3 типа направлений (услуга/врач/анализы), статусы, QR + 5-значный код, валидация, бонус."
   },
   {
     "slug": "concepts-appointments",
     "title": "Запись и расписание",
     "category": "concepts",
     "order": 3,
-    "summary": "Как устроены слоты, шаблоны расписания, повторные визиты."
+    "summary": "Слоты, шаблоны расписания, повторные визиты, способы оплаты, ОФД-фискализация."
   },
   {
     "slug": "concepts-qr",
     "title": "QR-сканирование пациента",
     "category": "concepts",
     "order": 4,
-    "summary": "Идентификация пациента и направления через QR на ресепшене."
+    "summary": "Идентификация пациента и направления через QR на ресепшене. HMAC-подпись + 5-значный код для бэкапа."
   },
   {
     "slug": "concepts-modules",
     "title": "Каталог платных модулей",
     "category": "concepts",
     "order": 5,
-    "summary": "Видеозвонки, AI, MIS, white-label и другие подключаемые модули."
+    "summary": "20+ модулей: телемед, реклама, инвентарь, лояльность, ОФД, эквайринг, Apple Health. Триал-период."
+  },
+  {
+    "slug": "concepts-medcard",
+    "title": "Медкарта и timeline",
+    "category": "concepts",
+    "order": 6,
+    "summary": "Уровень 1: автоматическая хронология из направлений, приёмов и МИС-визитов. Уровень 2-3 — диагнозы и AI-summary (план)."
+  },
+  {
+    "slug": "concepts-security",
+    "title": "Безопасность и 152-ФЗ",
+    "category": "concepts",
+    "order": 7,
+    "summary": "JWT с ротацией, RBAC, tenant isolation, audit log, Region Lock, GPG-бэкапы, права пациента."
+  },
+  {
+    "slug": "concepts-billing",
+    "title": "Биллинг и финансы",
+    "category": "concepts",
+    "order": 8,
+    "summary": "InterClinicInvoice, FranchiseInvoice, BillingLedger, подписки, ЮKassa, ОФД 54-ФЗ."
+  },
+  {
+    "slug": "concepts-monitoring",
+    "title": "Мониторинг и алерты",
+    "category": "concepts",
+    "order": 9,
+    "summary": "20 health-check адаптеров, Telegram-алерты, daily digest 09:00 МСК, Uptime-Kuma, Grafana."
+  },
+  {
+    "slug": "concepts-multi-tenancy",
+    "title": "Multi-tenancy и изоляция данных",
+    "category": "concepts",
+    "order": 10,
+    "summary": "Shared schema, фильтрация по tenant_id, slug-routing, cross-tenant сценарии, тесты изоляции."
   },
   {
     "slug": "concepts-region-lock",
-    "title": "Region Lock — географический контроль франшиз",
+    "title": "Region Lock — географический контроль",
     "category": "concepts",
-    "order": 6,
-    "summary": "Защита от работы франшизы за пределами разрешённого региона: алерты, ручная блокировка, IP whitelist."
+    "order": 11,
+    "summary": "Алерты + ручная блокировка франшизы + IP allowlist при работе из неразрешённого региона."
   },
   {
-    "slug": "module-telemedicine",
-    "title": "Модуль · Телемедицина (4 990 ₽/мес)",
-    "category": "modules",
-    "order": 1,
-    "summary": "Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров. Чат, назначения, история сессий."
-  },
-  {
-    "slug": "module-call-recording",
-    "title": "Модуль · Запись звонков + Whisper (3 990 ₽/мес)",
-    "category": "modules",
-    "order": 2,
-    "summary": "Авто-запись звонков, транскрипция через OpenAI Whisper, AI-резюме приёма через Gemini."
-  },
-  {
-    "slug": "module-ai-assistant",
-    "title": "Модуль · AI-ассистент пациенту (2 990 ₽/мес)",
-    "category": "modules",
-    "order": 3,
-    "summary": "Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём, эскалация."
-  },
-  {
-    "slug": "module-loyalty",
-    "title": "Модуль · Loyalty Pro (2 990 ₽/мес)",
-    "category": "modules",
-    "order": 4,
-    "summary": "Тиры, акции, начисления баллов, обмен на услуги, реферальная система."
-  },
-  {
-    "slug": "module-sms-marketing",
-    "title": "Модуль · SMS-маркетинг (1 990 ₽/мес)",
-    "category": "modules",
-    "order": 5,
-    "summary": "Массовые рассылки, шаблоны, аудитории спящих, расписание, аналитика конверсий."
-  },
-  {
-    "slug": "module-inventory",
-    "title": "Модуль · Inventory (1 990 ₽/мес)",
-    "category": "modules",
-    "order": 6,
-    "summary": "Учёт расходников, остатки, движения, алерты по низким остаткам, ABC-анализ."
+    "slug": "concepts-backup",
+    "title": "Резервное копирование и восстановление",
+    "category": "concepts",
+    "order": 12,
+    "summary": "pg_dump каждые 6ч, GPG-шифрование, rclone в удалённый S3, point-in-time recovery, тесты восстановления."
   },
   {
     "slug": "setup-first-clinic",
@@ -165,27 +263,83 @@
     "title": "Создание сотрудников",
     "category": "setup",
     "order": 2,
-    "summary": "Приглашение и настройка ролей: врачи, регистраторы, медсёстры."
+    "summary": "Универсальная форма создания сотрудника любой роли. Welcome-email + первый пароль."
   },
   {
-    "slug": "dev-stack",
-    "title": "Технический стек",
-    "category": "dev",
-    "order": 1,
-    "summary": "FastAPI + Postgres + Vite + Docker + coturn + Sentry. Архитектура серверов и сервисов."
-  },
-  {
-    "slug": "dev-api",
-    "title": "API endpoints",
-    "category": "dev",
-    "order": 2,
-    "summary": "REST API, JWT аутентификация, RBAC, основные эндпоинты, webhooks, rate-limit."
-  },
-  {
-    "slug": "dev-integrations",
-    "title": "Интеграции",
-    "category": "dev",
+    "slug": "setup-mis",
+    "title": "Подключение МИС Renovatio",
+    "category": "setup",
     "order": 3,
-    "summary": "Renovatio МИС, Telegram, SMS, эквайринг, OFD, Gemini, Whisper, WebRTC, GeoIP."
+    "summary": "Per-clinic настройки: API URL + key + mis_id. Авто-pull пациентов, услуг, расписаний."
+  },
+  {
+    "slug": "setup-modules",
+    "title": "Активация модулей",
+    "category": "setup",
+    "order": 4,
+    "summary": "Marketplace модулей, триал-период 14 дней, оплата, отписка. Health-check каждые 30 мин."
+  },
+  {
+    "slug": "setup-payments",
+    "title": "Настройка платежей (общая)",
+    "category": "setup",
+    "order": 5,
+    "summary": "ЮKassa (онлайн-оплата подписок), Платформа ОФД (фискализация чеков 54-ФЗ)."
+  },
+  {
+    "slug": "setup-yookassa",
+    "title": "Настройка ЮKassa для онлайн-оплат",
+    "category": "setup",
+    "order": 6,
+    "summary": "Регистрация магазина, shopId+secret, webhook, тестовый платёж, прод-режим, возвраты."
+  },
+  {
+    "slug": "setup-smtp",
+    "title": "Настройка SMTP для email",
+    "category": "setup",
+    "order": 7,
+    "summary": "Mailgun/SendGrid/Postmark/SES/Yandex 360, DNS (SPF/DKIM/DMARC), тестовое письмо, soft/hard bounces."
+  },
+  {
+    "slug": "setup-telegram",
+    "title": "Настройка Telegram-уведомлений",
+    "category": "setup",
+    "order": 8,
+    "summary": "Создание бота через BotFather, webhook, привязка пользователей, типы уведомлений, white-label."
+  },
+  {
+    "slug": "setup-lab",
+    "title": "Настройка лабораторной интеграции",
+    "category": "setup",
+    "order": 9,
+    "summary": "Gemotest/Invitro/KDL/CitiLab/Custom: договор, API-ключи, импорт price-list, биллинг markup/agent."
+  },
+  {
+    "slug": "api-reference",
+    "title": "API Reference — обзор",
+    "category": "api",
+    "order": 1,
+    "summary": "Сводный обзор REST API: аутентификация, пагинация, error codes, rate limiting, группы endpoints, примеры curl/JS/Python."
+  },
+  {
+    "slug": "api-auth-detailed",
+    "title": "API: Аутентификация — детально",
+    "category": "api",
+    "order": 2,
+    "summary": "JWT с PBKDF2, refresh-rotation, Tenant API Key со scopes, Token Exchange RFC 8693, OTP, brute-force защита."
+  },
+  {
+    "slug": "faq",
+    "title": "Частые вопросы (FAQ)",
+    "category": "faq",
+    "order": 1,
+    "summary": "Общие, онбординг, технические, платежи, роли, безопасность, интеграции, AI, поддержка — 30+ вопросов."
+  },
+  {
+    "slug": "changelog",
+    "title": "Changelog",
+    "category": "changelog",
+    "order": 1,
+    "summary": "История изменений платформы по главам 1-10 + Здоровье+, с датами и roadmap v2."
   }
 ]
