@@ -57,6 +57,8 @@ import CommandPalette from '../components/CommandPalette'
 import NotificationsBell from '../components/NotificationsBell'
 // Глава 7: Мои регламенты (читатель)
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
+// Глава 9: Документы пациента — контекстная панель в карточке приёма (lazy)
+const DoctorPatientDocumentsSection = lazy(() => import('../sections/DoctorPatientDocumentsSection'))
 
 // ─────────────────────────────────────────────────────────────────────
 // Утилиты
@@ -378,6 +380,8 @@ function AppointmentsPage({ token, doctorId }) {
   const [apts, setApts] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  // Глава 9: раскрытие панели «Документы пациента» по конкретному приёму
+  const [expandedAptId, setExpandedAptId] = useState(null)
 
   useEffect(() => {
     apiFetch('get', `/appointments?doctor_id=${doctorId}&limit=100`, token)
@@ -432,33 +436,67 @@ function AppointmentsPage({ token, doctorId }) {
           <div className="flex flex-col">
             {filtered.map((a, i) => {
               const st = STATUS[a.status] || { l: a.status, v: 'default' }
+              const isOpen = expandedAptId === a.id
+              const pid = a.patient_id || a.patient?.id || a.patient_mis_id
               return (
                 <div
                   key={a.id}
-                  className="flex items-center gap-3"
                   style={{
-                    padding: '14px 16px',
                     borderBottom: i === filtered.length - 1 ? 'none' : '1px solid var(--line)',
                   }}
                 >
-                  <Avatar name={a.patient_name || '?'} size="md" />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate" style={{ fontSize: 13.5, color: 'var(--fg)' }}>
-                      {a.patient_name || '—'}
+                  <div
+                    onClick={() => setExpandedAptId(isOpen ? null : a.id)}
+                    className="flex items-center gap-3 cursor-pointer transition-colors"
+                    style={{
+                      padding: '14px 16px',
+                      background: isOpen ? 'var(--accent-soft)' : 'transparent',
+                    }}
+                  >
+                    <Avatar name={a.patient_name || '?'} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate" style={{ fontSize: 13.5, color: 'var(--fg)' }}>
+                        {a.patient_name || '—'}
+                      </div>
+                      <div className="truncate" style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
+                        {[a.service_name, a.patient_phone].filter(Boolean).join(' · ')}
+                      </div>
                     </div>
-                    <div className="truncate" style={{ fontSize: 11.5, color: 'var(--fg-3)', marginTop: 2 }}>
-                      {[a.service_name, a.patient_phone].filter(Boolean).join(' · ')}
+                    <div className="text-right flex-shrink-0 hidden sm:block">
+                      <div style={{ fontSize: 12, color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums' }}>
+                        {a.appointment_date}
+                      </div>
+                      <div className="font-semibold" style={{ fontSize: 13, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
+                        {a.appointment_time}
+                      </div>
                     </div>
+                    <Chip variant={st.v} className="flex-shrink-0">{st.l}</Chip>
+                    <MIcon
+                      name="expand_more"
+                      size={18}
+                      color="var(--fg-3)"
+                      // visual chevron rotated by isOpen
+                    />
                   </div>
-                  <div className="text-right flex-shrink-0 hidden sm:block">
-                    <div style={{ fontSize: 12, color: 'var(--fg-2)', fontVariantNumeric: 'tabular-nums' }}>
-                      {a.appointment_date}
+
+                  {/* Глава 9: контекстная панель «Документы пациента» */}
+                  {isOpen && (
+                    <div style={{ padding: '4px 16px 16px', background: 'var(--accent-soft)' }}>
+                      <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--fg-2)' }}>
+                        <MIcon name="folder_shared" size={16} />
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>Документы пациента</span>
+                      </div>
+                      {pid ? (
+                        <Suspense fallback={<div style={{ padding: 12, color: 'var(--fg-3)', fontSize: 12 }}>Загрузка документов…</div>}>
+                          <DoctorPatientDocumentsSection patientId={pid} compact />
+                        </Suspense>
+                      ) : (
+                        <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+                          ID пациента недоступен — документы появятся после привязки карты.
+                        </div>
+                      )}
                     </div>
-                    <div className="font-semibold" style={{ fontSize: 13, color: 'var(--fg)', fontVariantNumeric: 'tabular-nums' }}>
-                      {a.appointment_time}
-                    </div>
-                  </div>
-                  <Chip variant={st.v} className="flex-shrink-0">{st.l}</Chip>
+                  )}
                 </div>
               )
             })}
