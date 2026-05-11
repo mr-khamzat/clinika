@@ -34,6 +34,8 @@ export const MGR_NAV = [
   { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices' },
   // svcfin01: финансовая модель платформы — счета платформе/сети/сотрудникам
   { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance' },
+  // Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
+  { key:'subscription_cash', label:'Подписки (наличные)', icon:'payments', path:'/manager/subscription-cash' },
   { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors' },
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },

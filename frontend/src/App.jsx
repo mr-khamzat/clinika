@@ -61,6 +61,8 @@ const ManagerChatPage       = lazy(() => import('./pages/ManagerChatPage'))
 const ManagerLab            = lazy(() => import('./pages/ManagerLab'))
 // Глава 10 — Агрегаторы лидов: входящие заявки от DocDoc/ПроДокторов/Yandex Health
 const ManagerAggregator     = lazy(() => import('./pages/ManagerAggregator'))
+// Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
+const ManagerSubscriptionCash = lazy(() => import('./pages/ManagerSubscriptionCash'))
 import ClinicSchedules from './pages/ClinicSchedules'
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 import AdminRoot from './pages/AdminRoot'
@@ -289,6 +291,8 @@ function MiniApp() {
               <Route path="manager/lab"          element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLab /></Suspense>} />
               {/* Глава 10 — Агрегаторы лидов: DocDoc/ПроДокторов/Yandex Health */}
               <Route path="manager/aggregator"   element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerAggregator /></Suspense>} />
+              {/* Наличная активация подписки «Здоровье+» — касса клиники */}
+              <Route path="manager/subscription-cash" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSubscriptionCash /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}
