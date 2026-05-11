@@ -270,6 +270,12 @@ async def complete_visit(
 
     appointment.status = AppointmentStatus.COMPLETED
     appointment.updated_at = datetime.utcnow()
+    # Глава 8: начисление баллов лояльности (+50) при завершении визита
+    try:
+        from app.services import loyalty_ext_service as _ls
+        await _ls.award_appointment(db, appointment.tenant_id, appointment.patient_phone, appointment.id, appointment.price)
+    except Exception:
+        pass
 
     # Найти doctor_record и определить тип доктора (internal/visiting/external)
     from app.models.doctor import Doctor

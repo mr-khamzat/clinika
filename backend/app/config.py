@@ -96,8 +96,12 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = True       # включить TLS (STARTTLS либо implicit SSL)
     smtp_starttls: bool = True      # True = STARTTLS (587), False = implicit SSL (465)
 
+    # Глава 8: режим окружения (production|development|staging)
+    environment: str = "production"
+
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
     def get_manager_ids(self) -> List[str]:
         """Возвращает список Telegram ID менеджеров.

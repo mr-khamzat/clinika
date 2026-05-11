@@ -157,9 +157,21 @@ async def upsert_outcome(
         db.add(outcome)
 
     # Если приём ещё не помечен как состоявшийся — переводим в COMPLETED
+    was_just_completed = False
     if appt.status in (AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED):
         appt.status = AppointmentStatus.COMPLETED
         appt.updated_at = datetime.utcnow()
+        was_just_completed = True
+
+    # Глава 8: начисление баллов лояльности (+50) при закрытии приёма
+    if was_just_completed and appt.tenant_id:
+        try:
+            from app.services import loyalty_ext_service as _ls
+            await _ls.award_appointment(
+                db, appt.tenant_id, appt.patient_phone, appt.id, appt.price,
+            )
+        except Exception:
+            pass  # лояльность не должна ломать закрытие приёма
 
     await db.commit()
     await db.refresh(outcome)

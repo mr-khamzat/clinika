@@ -146,5 +146,9 @@ class LoyaltyReward(Base):
     icon: Mapped[str | None] = mapped_column(String(40), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Глава 8: фильтр по тиру (bronze/silver/gold/platinum) и stock (NULL = безлимит)
+    min_tier: Mapped[str] = mapped_column(String(20), nullable=False, default="bronze", server_default="bronze")
+    stock: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)

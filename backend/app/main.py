@@ -88,6 +88,10 @@ from app.routers.patient_documents import router as patient_documents_router
 from app.routers.prescriptions import router as prescriptions_router
 from app.routers.vitals import router as vitals_router
 from app.routers.loyalty import router as loyalty_router
+from app.routers.patient_family import router as patient_family_router
+from app.routers.patient_loyalty import router as patient_loyalty_router
+from app.routers.admin_loyalty import router as admin_loyalty_router
+from app.routers.patient_spending import router as patient_spending_router
 from app.routers.permissions import router as permissions_router
 from app.routers.ltv import router as ltv_router
 # Платёжный каркас (online_payments_pro + fiscal_54fz_pro)
@@ -1442,6 +1446,7 @@ app.include_router(system_router)
 app.include_router(wiki_router)
 app.include_router(reviews_router)
 app.include_router(ici_router)
+app.include_router(patient_family_router)
 app.include_router(patient_router)
 app.include_router(patient_chat_router)
 app.include_router(ai_knowledge_router)
@@ -1494,6 +1499,9 @@ app.include_router(patient_documents_router)
 app.include_router(prescriptions_router)
 app.include_router(vitals_router)
 app.include_router(loyalty_router)
+app.include_router(patient_loyalty_router)
+app.include_router(admin_loyalty_router)
+app.include_router(patient_spending_router)
 app.include_router(permissions_router)
 app.include_router(ltv_router)
 # Платёжный каркас (online_payments_pro + fiscal_54fz_pro)

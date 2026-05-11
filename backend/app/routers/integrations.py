@@ -98,6 +98,14 @@ async def mis_webhook(
             referral.status = ReferralStatus.CONFIRMED
             referral.confirmed_at = datetime.utcnow()
             # confirmed_by_admin_id остаётся NULL (авто-подтверждение системой)
+
+            # Глава 8: начисление баллов лояльности (+100) автору направления
+            try:
+                from app.services import loyalty_ext_service as _ls
+                await _ls.award_referral(db, referral.tenant_id, referral.patient_phone, referral.id)
+            except Exception:
+                pass
+
             await db.commit()
             await db.execute(sql_text(
                 "INSERT INTO mis_integration_log (event_type, status, detail) VALUES ('webhook_in', 'ok', :d)"

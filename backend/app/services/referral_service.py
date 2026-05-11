@@ -212,6 +212,13 @@ async def _apply_confirmation(
     # в общий helper _finalize_bonus_and_ledger.
     await _finalize_bonus_and_ledger(db, referral, confirmed_by_admin_id=confirmed_by_admin_id)
 
+    # Глава 8: начисление баллов лояльности (+100) пациенту за приведённого
+    try:
+        from app.services import loyalty_ext_service as _ls
+        await _ls.award_referral(db, referral.tenant_id, referral.patient_phone, referral.id)
+    except Exception:
+        pass
+
     await db.commit()
     await db.refresh(referral)
 
