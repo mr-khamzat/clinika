@@ -168,3 +168,13 @@ from app.models.signup_request import SignupRequest
 from app.models.referral_template import ReferralTemplate
 from app.models.manager_clinic_access import ManagerClinicAccess
 from app.models.doctor_ai import TreatmentPlan, AIDoctorLog, DirectBill
+
+# Глава 7 — Регламент-конструктор (SOP для франшиз)
+from app.models.regulation import (
+    Regulation,
+    RegulationVersion,
+    RegulationAssignment,
+    RegulationCompletion,
+    RegulationStatus,
+    RegulationStepType,
+)
