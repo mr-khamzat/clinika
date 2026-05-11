@@ -27,6 +27,13 @@ const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab
 const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
 // W6: AI-ассистент пациенту через Gemini — плавающий чат-виджет
 const PatientAiWidget  = lazy(() => import('../sections/patient/PatientAiWidget'))
+// Глава 8/10 — Семья и Wellness-партнёры
+const PatientFamilySection   = lazy(() => import('../sections/PatientFamilySection'))
+const PatientWellnessSection = lazy(() => import('../sections/PatientWellnessSection'))
+// UX-редизайн (5-таб Apple HIG): новые компоненты-контейнеры для кабинета пациента
+import PatientBottomNav  from '../components/patient/PatientBottomNav'
+import SubPageNav        from '../components/patient/SubPageNav'
+import PatientChatHub    from '../components/patient/PatientChatHub'
 
 const API = API_BASE
 const TOKEN_KEY   = 'clinika_patient_token'
@@ -2176,7 +2183,62 @@ export default function PatientCabinet() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showLogin, setShowLogin] = useState(false)
+  // UX-редизайн (Apple HIG 5-tab):
+  //   section — один из 5 верхнеуровневых табов: home | health | chats | rewards | profile
+  //   tab     — текущая «sub-page» внутри секции (legacy-имена сохранены, чтобы не
+  //             переписывать существующие условные рендеринги по 14 значениям).
+  //             tab === null|undefined → показываем МЕНЮ секции (SubPageNav)
+  //             tab === 'home' для секции home → главный экран
+  const [section, setSection] = useState('home')
   const [tab, setTab] = useState('home')
+  const [onboardSeen, setOnboardSeen] = useState(() => {
+    try { return localStorage.getItem('clinika_patient_onboard') === '1' } catch { return true }
+  })
+  // Карта: tab → section (для обратного маппинга, когда setTab вызывается из старого кода)
+  const TAB_TO_SECTION = useMemo(() => ({
+    home:         'home',
+    appointments: 'home',
+    referrals:    'home',
+    history:      'home',
+    // Здоровье (health hub)
+    health:       'health',
+    medcard:      'health',
+    vitals:       'health',
+    documents:    'health',
+    calendar:     'health',
+    // Чаты
+    messages:     'chats',
+    support:      'chats',
+    // Бонусы
+    loyalty:      'rewards',
+    spending:     'rewards',
+    subscription: 'rewards',
+    wellness:     'rewards',
+    // Профиль
+    me:           'profile',
+    family:       'profile',
+    doctors:      'profile', // «Врачи» — в профиле как «Мои врачи» (можно перенести)
+  }), [])
+  // Helper: переход с обновлением section + tab + scroll-to-top
+  const goTo = useCallback((nextTab) => {
+    setTab(nextTab)
+    const s = TAB_TO_SECTION[nextTab] || 'home'
+    setSection(s)
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
+  }, [TAB_TO_SECTION])
+  // Переключение секции через bottom-nav: открываем «root» секции
+  const SECTION_ROOTS = useMemo(() => ({
+    home:    'home',
+    health:  null,   // null → показать МЕНЮ секции
+    chats:   'chats-hub',
+    rewards: null,
+    profile: null,
+  }), [])
+  const switchSection = useCallback((nextSection) => {
+    setSection(nextSection)
+    setTab(SECTION_ROOTS[nextSection] ?? null)
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
+  }, [SECTION_ROOTS])
   const [fullscreenQr, setFullscreenQr] = useState(null)
   const [pushEnabled, setPushEnabled] = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
@@ -2474,29 +2536,43 @@ export default function PatientCabinet() {
   const activeRefs = allRefs.filter(r => r.status === 'created' || r.status === 'confirmed')
   const searchedRefs = searchQ ? allRefs.filter(r => (r.to_clinic_name + r.service_name + (r.short_code||'')).toLowerCase().includes(searchQ.toLowerCase())) : allRefs
 
-  const TABS = isApt
+  // ── UX-редизайн: 5-табовая нижняя навигация (Apple HIG) ──
+  // Для legacy-режима «по короткому коду на 1 запись» (isApt=true) — оставляем
+  // упрощённые 2 таба, как было раньше.
+  const SECTIONS = isApt
     ? [
-        { key: 'home',    icon: 'home',       label: 'Запись'  },
-        { key: 'support', icon: 'chat_bubble', label: 'Чат'    },
+        { key: 'home',  icon: 'home',         label: 'Запись' },
+        { key: 'chats', icon: 'chat_bubble',  label: 'Чат'    },
       ]
     : [
-        { key: 'home',         icon: 'home',                label: 'Главная'    },
-        { key: 'appointments', icon: 'event_available',     label: 'Записи'     },
-        { key: 'referrals',    icon: 'assignment',          label: 'Направления'},
-        { key: 'health',       icon: 'health_and_safety',   label: 'Здоровье'   },
-        // Глава 8 — Программа лояльности и расходник
-        { key: 'loyalty',      icon: 'workspace_premium',   label: 'Бонусы'     },
-        { key: 'spending',     icon: 'receipt_long',        label: 'Расходник'  },
-        // Глава 9 — Подписка «Здоровье+» и Документы
-        { key: 'subscription', icon: 'verified',            label: 'Подписка'   },
-        { key: 'documents',    icon: 'folder',              label: 'Документы'  },
-        // Глава 9 — Сообщения (чат с клиникой) и Календарь (Google/Apple)
-        { key: 'messages',     icon: 'chat_bubble',         label: 'Сообщения'  },
-        { key: 'calendar',     icon: 'calendar_month',      label: 'Календарь'  },
-        { key: 'doctors',      icon: 'stethoscope',         label: 'Врачи'      },
-        { key: 'support',      icon: 'support_agent',       label: 'Поддержка'  },
-        { key: 'me',           icon: 'account_circle',      label: 'Я'          },
+        { key: 'home',    icon: 'home',           label: 'Главная' },
+        { key: 'health',  icon: 'favorite',       label: 'Здоровье' },
+        { key: 'chats',   icon: 'chat',           label: 'Чаты' },
+        { key: 'rewards', icon: 'card_giftcard',  label: 'Бонусы' },
+        { key: 'profile', icon: 'person',         label: 'Профиль' },
       ]
+
+  // ── Меню sub-page внутри секций (для тех, что показывают список) ──
+  const HEALTH_MENU = [
+    { key: 'medcard',  icon: 'medical_information', label: 'Медкарта',         hint: 'История записей, диагнозы',           color: { bg: '#E0F2FE', fg: '#075985' } },
+    { key: 'vitals',   icon: 'monitoring',          label: 'Показатели',       hint: 'Вес, рост, давление, пульс',          color: { bg: '#FCE7F3', fg: '#9D174D' } },
+    { key: 'documents',icon: 'description',         label: 'Анализы и документы', hint: 'Загруженные файлы и результаты',   color: { bg: '#E0F7FA', fg: '#00838F' } },
+    { key: 'calendar', icon: 'calendar_month',      label: 'Календарь приёмов',hint: 'Предстоящие визиты + ICS',            color: { bg: '#FEF3C7', fg: '#92400E' } },
+    { key: 'appointments', icon: 'event_available', label: 'Мои записи',       hint: 'Все записи к врачам',                 color: { bg: '#E0F7FA', fg: '#0097A7' } },
+  ]
+  const REWARDS_MENU = [
+    { key: 'subscription', icon: 'verified',         label: 'Подписка «Здоровье+»', hint: 'Привилегии и срок действия',     color: { bg: '#EDE9FE', fg: '#5B21B6' } },
+    { key: 'loyalty',      icon: 'workspace_premium',label: 'Программа лояльности', hint: 'Баллы, тиры, награды',           color: { bg: '#FEF3C7', fg: '#92400E' } },
+    { key: 'wellness',     icon: 'spa',              label: 'Wellness партнёры',    hint: 'Скидки у партнёров',             color: { bg: '#DCFCE7', fg: '#15803D' } },
+    { key: 'spending',     icon: 'receipt_long',     label: 'Расходник за год',     hint: 'Траты по категориям и клиникам', color: { bg: '#E0E7FF', fg: '#3730A3' } },
+  ]
+  const PROFILE_MENU = [
+    { key: 'me',      icon: 'account_circle', label: 'Личные данные',      hint: 'Телефон, e-mail, фото',                color: { bg: '#E0F2FE', fg: '#0369A1' } },
+    { key: 'family',  icon: 'group',          label: 'Семья',              hint: familyList.length ? `${familyList.length} участников` : 'Подключите членов семьи', color: { bg: '#FCE7F3', fg: '#9D174D' } },
+    { key: 'doctors', icon: 'stethoscope',    label: 'Мои врачи',          hint: 'Запись и контакты',                    color: { bg: '#E0F7FA', fg: '#00838F' } },
+    { key: 'referrals', icon: 'assignment',   label: 'Направления',        hint: `${allRefs.length} всего`,              color: { bg: '#E0E7FF', fg: '#3730A3' } },
+    { key: 'history', icon: 'history',        label: 'История визитов',    hint: `${mis_visits.length} визитов`,         color: { bg: '#FEF3C7', fg: '#92400E' } },
+  ]
 
   const initials = (patient_name || patient_phone || 'П').split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase()
 
@@ -2518,7 +2594,49 @@ export default function PatientCabinet() {
         @keyframes adGlow { 0%,100%{opacity:.7} 50%{opacity:1} }
       `}</style>
 
-      {/* ── Hero Header ── */}
+      {/* ── Hero Header — только на «Главной» (UX-редизайн), на остальных секциях
+              показываем компактный sticky-header (44px) с названием раздела ── */}
+      {section !== 'home' && !isApt && (
+        <div
+          className="sticky top-0 z-30 flex items-center justify-between px-3"
+          style={{
+            height: 44,
+            paddingTop: 'env(safe-area-inset-top,0px)',
+            background: 'rgba(255,255,255,.96)',
+            WebkitBackdropFilter: 'blur(20px)',
+            backdropFilter: 'blur(20px)',
+            borderBottom: '1px solid rgba(0,0,0,.06)',
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'linear-gradient(135deg,#0097A7,#0A2342)' }}>
+              <span className="material-symbols-outlined text-white" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>
+                {SECTIONS.find(s => s.key === section)?.icon || 'home'}
+              </span>
+            </div>
+            <h1 className="font-bold text-[16px] truncate" style={{ color: 'var(--fg, #0A2342)' }}>
+              {SECTIONS.find(s => s.key === section)?.label || 'Кабинет'}
+            </h1>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {(typeof window !== 'undefined' && localStorage.getItem(SESSION_KEY)) && (
+              <button onClick={() => setFamilyOpen(true)} title="Семья"
+                className="w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-95 relative"
+                style={{ background: 'rgba(0,151,167,.10)', minWidth: 44, minHeight: 44 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#00838F' }}>group</span>
+                {familyList.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center"
+                    style={{ background:'#10B981', color:'#fff', border: '1.5px solid #fff' }}>
+                    {familyList.length}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {/* ── Hero Header (только в Home-секции) ── */}
+      {(section === 'home' || isApt) && (
       <div className="relative overflow-hidden" style={{ background: 'linear-gradient(145deg,#0A2342 0%,#1565C0 70%,#0097A7 100%)', paddingBottom: 32 }}>
         {/* Decorative blobs */}
         <div className="absolute top-0 right-0 w-40 h-40 rounded-full" style={{ background: 'rgba(0,151,167,.2)', filter: 'blur(40px)', transform: 'translate(30%,-30%)' }} />
@@ -2603,7 +2721,7 @@ export default function PatientCabinet() {
               { val: mis_visits.length, label: 'Визитов',     tab: 'history',   icon: 'history',     color: '#6EE7B7' },
               { val: activeRefs.length, label: 'Активных',    tab: 'referrals', icon: 'radio_button_checked', color: '#FCA5A5' },
             ].map(s => (
-              <button key={s.tab + s.label} onClick={() => setTab(s.tab)}
+              <button key={s.tab + s.label} onClick={() => goTo(s.tab)}
                 className="rounded-2xl py-3 px-2 text-center transition-all active:scale-95"
                 style={{ background: 'rgba(255,255,255,.12)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,.12)' }}>
                 <span className="material-symbols-outlined text-sm mb-1 block" style={{ color: s.color, fontVariationSettings:"'FILL' 1" }}>{s.icon}</span>
@@ -2614,6 +2732,7 @@ export default function PatientCabinet() {
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Ad Banner (top) ── */}
       {bannerAds.length > 0 && (
@@ -2656,6 +2775,98 @@ export default function PatientCabinet() {
               <button onClick={() => { setShowIosHint(false); localStorage.setItem('clinika_ios_hint_ts', String(Date.now())) }}
                 className="text-white/50 text-2xl leading-none flex-shrink-0">×</button>
             </div>
+          </div>
+        )}
+
+        {/* ── Sub-page header (back-кнопка) для разделов внутри секций ── */}
+        {(() => {
+          if (isApt) return null
+          const isSubPage = (
+            (section === 'health'  && tab && tab !== null && tab !== undefined && HEALTH_MENU.some(i => i.key === tab))  ||
+            (section === 'rewards' && tab && REWARDS_MENU.some(i => i.key === tab)) ||
+            (section === 'profile' && tab && PROFILE_MENU.some(i => i.key === tab))
+          )
+          if (!isSubPage) return null
+          const allItems = [...HEALTH_MENU, ...REWARDS_MENU, ...PROFILE_MENU]
+          const cur = allItems.find(i => i.key === tab)
+          return (
+            <div className="flex items-center gap-2 -mt-1 mb-3 tab-enter">
+              <button
+                onClick={() => setTab(null)}
+                aria-label="Назад"
+                className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95"
+                style={{ background: '#fff', border: '1px solid rgba(0,0,0,.06)', minWidth: 44, minHeight: 44 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: '#0A2342' }}>arrow_back_ios_new</span>
+              </button>
+              <h2 className="text-[16px] font-bold truncate" style={{ color: 'var(--fg, #0A2342)' }}>{cur?.label || ''}</h2>
+            </div>
+          )
+        })()}
+
+        {/* ── СЕКЦИЯ: Здоровье → меню (если sub-page не выбрана) ── */}
+        {section === 'health' && tab === null && !isApt && (
+          <div className="tab-enter">
+            <SubPageNav items={HEALTH_MENU} onOpen={(k) => setTab(k)} title="Здоровье" />
+          </div>
+        )}
+
+        {/* ── СЕКЦИЯ: Бонусы → меню ── */}
+        {section === 'rewards' && tab === null && !isApt && (
+          <div className="tab-enter">
+            <SubPageNav items={REWARDS_MENU} onOpen={(k) => setTab(k)} title="Привилегии и бонусы" />
+          </div>
+        )}
+
+        {/* ── СЕКЦИЯ: Профиль → меню + Тема + Выход ── */}
+        {section === 'profile' && tab === null && !isApt && (
+          <div className="tab-enter space-y-4">
+            <SubPageNav items={PROFILE_MENU} onOpen={(k) => setTab(k)} title="Личный кабинет" />
+            <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 2px 12px rgba(0,0,0,.04)', border: '1px solid rgba(0,0,0,.05)' }}>
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50"
+                style={{ minHeight: 56, paddingTop: 10, paddingBottom: 10 }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EDE9FE' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#5B21B6', fontVariationSettings: "'FILL' 1" }}>
+                    {isDark ? 'light_mode' : 'dark_mode'}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold" style={{ color: 'var(--fg, #0A2342)' }}>{isDark ? 'Светлая тема' : 'Тёмная тема'}</p>
+                  <p className="text-[12px] mt-0.5" style={{ color: 'var(--fg-3, #6B7280)' }}>Переключить оформление</p>
+                </div>
+                <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: 20, color: '#9CA3AF' }}>chevron_right</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50"
+                style={{ minHeight: 56, paddingTop: 10, paddingBottom: 10, borderTop: '1px solid rgba(0,0,0,.05)' }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FEE2E2' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#B91C1C', fontVariationSettings: "'FILL' 1" }}>logout</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[14px] font-semibold" style={{ color: '#B91C1C' }}>Выйти из кабинета</p>
+                  <p className="text-[12px] mt-0.5" style={{ color: 'var(--fg-3, #6B7280)' }}>Понадобится повторный вход</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── СЕКЦИЯ: Чаты → унифицированный hub ── */}
+        {section === 'chats' && !isApt && (
+          <div className="tab-enter -mx-1">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientChatHub
+                sessionToken={localStorage.getItem(SESSION_KEY)}
+                patientPhone={patient_phone}
+                tenantSlug={SLUG}
+                onGoSubscription={() => goTo('subscription')}
+              />
+            </Suspense>
           </div>
         )}
 
@@ -2878,7 +3089,7 @@ export default function PatientCabinet() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="font-bold text-gray-800">Активные направления</h2>
-                  <button onClick={() => setTab('referrals')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
+                  <button onClick={() => goTo('referrals')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
                     Все <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
                 </div>
@@ -2910,7 +3121,7 @@ export default function PatientCabinet() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="font-bold text-gray-800">Последний визит</h2>
-                  <button onClick={() => setTab('history')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
+                  <button onClick={() => goTo('history')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
                     История <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
                 </div>
@@ -3023,7 +3234,7 @@ export default function PatientCabinet() {
             <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
               <PatientChatSection
                 sessionToken={localStorage.getItem(SESSION_KEY)}
-                onGoSubscription={() => setTab('subscription')}
+                onGoSubscription={() => goTo('subscription')}
               />
             </Suspense>
           </div>
@@ -3104,29 +3315,80 @@ export default function PatientCabinet() {
             onLogout={handleLogout}
           />
         )}
+
+        {/* ── MEDCARD — медкарта (история, диагнозы) ── */}
+        {tab === 'medcard' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <MedCardTab primary="#0097A7" mis={mis_info} visits={mis_visits} patientName={patient_name} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── VITALS — показатели (вес/рост/давление/пульс) ── */}
+        {tab === 'vitals' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <VitalsTab primary="#0097A7" phone={patient_phone} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── WELLNESS — партнёры скидок (Глава 10) ── */}
+        {tab === 'wellness' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientWellnessSection sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── FAMILY — семейный профиль (Глава 8) ── */}
+        {tab === 'family' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientFamilySection
+                sessionToken={localStorage.getItem(SESSION_KEY)}
+                ownerName={patient_name}
+                onContextChanged={reloadCabinet}
+              />
+            </Suspense>
+          </div>
+        )}
       </div>
 
-      {/* ── Bottom Navigation ── */}
-      {/* Глава 8: с добавлением «Бонусы» и «Расходник» вкладок стало 9 — включаем overflow-x-auto */}
-      <div className="fixed bottom-0 left-0 right-0 z-40" style={{ background: 'rgba(255,255,255,.95)', backdropFilter: 'blur(20px)', borderTop: '1px solid rgba(0,0,0,.07)', paddingBottom: 'env(safe-area-inset-bottom,0px)' }}>
-        <div className="max-w-lg mx-auto flex items-center justify-around px-2 py-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-          {TABS.map(t => {
-            const isActive = tab === t.key
-            return (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-2xl transition-all flex-shrink-0"
-                style={{ color: isActive ? '#1565C0' : '#9CA3AF', background: isActive ? 'rgba(21,101,192,.08)' : 'transparent' }}>
-                <span className="material-symbols-outlined text-2xl leading-none transition-all"
-                  style={{ fontVariationSettings: isActive ? "'FILL' 1" : "'FILL' 0", transform: isActive ? 'scale(1.1)' : 'scale(1)' }}>
-                  {t.icon}
-                </span>
-                <span className="text-[10px] font-semibold">{t.label}</span>
-                {isActive && <span className="w-1 h-1 rounded-full" style={{ background: '#1565C0' }} />}
-              </button>
-            )
-          })}
+      {/* ── Bottom Navigation (UX-редизайн: 5-таб Apple HIG) ── */}
+      {/* iPhone SE-оптимизация: ровно 5 секций, высота 56px + safe-area.
+          Каждая секция содержит sub-pages (см. SubPageNav). */}
+      <PatientBottomNav
+        items={SECTIONS}
+        value={section}
+        onChange={switchSection}
+      />
+
+      {/* Onboarding-тур (показывается при первом входе) — нативная подсказка,
+          без npm-зависимостей. Tooltip над активной секцией. */}
+      {!onboardSeen && !isApt && (
+        <div
+          className="fixed left-0 right-0 z-50 px-4"
+          style={{ bottom: 'calc(56px + env(safe-area-inset-bottom,0px) + 12px)' }}
+          onClick={() => { setOnboardSeen(true); try { localStorage.setItem('clinika_patient_onboard','1') } catch {} }}
+        >
+          <div className="max-w-lg mx-auto rounded-2xl p-4 flex items-start gap-3 cursor-pointer"
+            style={{ background: 'linear-gradient(135deg,#0A2342,#1565C0)', boxShadow: '0 8px 32px rgba(10,35,66,.4)' }}>
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.15)' }}>
+              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>tips_and_updates</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-white font-bold text-sm">Добро пожаловать в кабинет</p>
+              <p className="text-blue-200 text-[12px] mt-1 leading-snug">
+                Внизу 5 разделов: <b className="text-white">Главная</b>, <b className="text-white">Здоровье</b>, <b className="text-white">Чаты</b>, <b className="text-white">Бонусы</b>, <b className="text-white">Профиль</b>. Внутри каждого — подробные пункты с иконками.
+              </p>
+              <p className="text-blue-300 text-[11px] mt-2">Нажмите, чтобы закрыть</p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Перенос записи */}
       {reschedAptId && (
