@@ -81,11 +81,12 @@ async def reset_doctor_credentials(
     """Сменить логин и/или пароль врача (только менеджер франшизы)."""
     doctor = await db.get(User, doctor_id)
     if not doctor:
-        raise HTTPException(status_code=404, detail="Врач не найден")
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
     if doctor.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-    if doctor.role != UserRole.DOCTOR:
-        raise HTTPException(status_code=400, detail="Пользователь не является врачом")
+    # Защита: super_admin не сбрасывается через этот эндпоинт (только сам super_admin меняет себе).
+    if doctor.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Нельзя менять данные super_admin через этот endpoint")
 
     if not body.username and not body.password:
         raise HTTPException(status_code=400, detail="Укажите логин или пароль")
