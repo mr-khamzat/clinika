@@ -412,6 +412,7 @@ export default function ManagerRecruitDoctors() {
   const [resetDoc, setResetDoc] = useState(null)
   const [qrResult, setQrResult] = useState(null)
   const [toggling, setToggling] = useState(null)
+  const [deleting, setDeleting] = useState(null)
 
   const load = () => {
     setLoading(true)
@@ -431,6 +432,21 @@ export default function ManagerRecruitDoctors() {
     await apiFetch(token, `/manager/recruiter-doctors/${doc.id}/toggle-active`, { method: 'PATCH' })
     load()
     setToggling(null)
+  }
+
+  const deleteStaff = async (doc) => {
+    if (!window.confirm(`Удалить сотрудника «${doc.full_name}»?\n\nВход будет заблокирован, история записей и аудит сохранятся.`)) return
+    setDeleting(doc.id)
+    try {
+      const r = await apiFetch(token, `/manager/users/${doc.id}`, { method: 'DELETE' })
+      if (!r.ok && r.status !== 204) {
+        const d = await r.json().catch(() => ({}))
+        window.alert(d.detail || 'Не удалось удалить сотрудника')
+      }
+      load()
+    } finally {
+      setDeleting(null)
+    }
   }
 
   const filtered = doctors.filter(d => {
@@ -588,6 +604,14 @@ export default function ManagerRecruitDoctors() {
                   onClick={() => toggleActive(doc)} disabled={toggling === doc.id}
                 >
                   {toggling === doc.id ? '…' : (doc.is_active ? 'Заблокировать' : 'Активировать')}
+                </Button>
+                <Button
+                  variant="danger" size="sm"
+                  onClick={() => deleteStaff(doc)} disabled={deleting === doc.id}
+                  title="Удалить сотрудника (soft-delete)"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+                  {deleting === doc.id ? '…' : 'Удалить'}
                 </Button>
                 <span className="ml-auto text-[11px]" style={{ color: 'var(--fg-4)' }}>
                   {new Date(doc.created_at).toLocaleDateString('ru-RU')}

@@ -476,3 +476,30 @@ async def create_staff_universal(
         "qr_code": qr_base64,
         "message": f"Сотрудник {new_user.full_name} ({role_str}) создан",
     }
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_staff_universal(
+    user_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete сотрудника: is_active=false + is_suspended=true.
+
+    Запись остаётся в БД для сохранения связей (audit_log, appointments,
+    ledger_entries и т.п.), но вход блокирован. Удалить hard можно из
+    SuperAdminUsersSection (только super_admin).
+    """
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if target.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Нет доступа")
+    if target.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Нельзя удалить super_admin")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+    target.is_active = False
+    target.is_suspended = True
+    await db.commit()
+    return None
