@@ -51,8 +51,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="КлиникСеть" />
-  <!-- Material Symbols (3.3 MB) НЕ preload — иначе блокирует первый рендер.
-       CSS @font-face с font-display: swap покажет UI без иконок, шрифт догрузится в фоне. -->
+  <!-- Material Symbols: preload (rel=preload as=font не блокирует first paint).
+       Имя файла фиксировано через vite.config.assetFileNames. -->
+  <link rel="preload" as="font" type="font/woff2" href="/assets/material-symbols-outlined.woff2" crossorigin="anonymous" />
   <!-- Telegram Web App SDK подключается динамически только в PatientCabinet (/p/) — см. lib/tg.js loadTelegramSDK() -->
 </head>
 <body>

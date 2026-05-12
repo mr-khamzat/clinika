@@ -8,6 +8,13 @@ const fontDisplaySwap = {
   postcssPlugin: 'font-display-swap',
   AtRule: {
     'font-face'(node) {
+      // Material Symbols — иконочный шрифт. font-display: block (стандарт для
+      // иконок) предотвращает FOIT с показом имени иконки текстом ("lock", "shield").
+      let isIconFont = false
+      node.walkDecls('font-family', decl => {
+        if (/Material Symbols/i.test(decl.value)) isIconFont = true
+      })
+      if (isIconFont) return
       node.walkDecls('font-display', decl => {
         if (decl.value === 'block') decl.value = 'swap'
       })
