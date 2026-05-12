@@ -329,6 +329,174 @@
     "summary": "JWT с PBKDF2, refresh-rotation, Tenant API Key со scopes, Token Exchange RFC 8693, OTP, brute-force защита."
   },
   {
+    "slug": "module-telemedicine",
+    "title": "Модуль · Телемедицина",
+    "category": "modules",
+    "order": 1,
+    "summary": "Видеоприём врач ↔ пациент через WebRTC. 4 990 ₽/мес. WebRTC + coturn + WebSocket signaling."
+  },
+  {
+    "slug": "module-ai-assistant",
+    "title": "Модуль · AI-ассистент пациенту",
+    "category": "modules",
+    "order": 2,
+    "summary": "Чат-бот в личном кабинете пациента: FAQ + free-chat. Google Gemini. 2 990 ₽/мес."
+  },
+  {
+    "slug": "module-call-recording",
+    "title": "Модуль · Запись звонков + Whisper",
+    "category": "modules",
+    "order": 3,
+    "summary": "Автоматическая запись звонков и видеоприёмов, транскрипция Whisper, AI-резюме Gemini. 3 990 ₽/мес."
+  },
+  {
+    "slug": "module-loyalty",
+    "title": "Модуль · Loyalty Pro",
+    "category": "modules",
+    "order": 4,
+    "summary": "Полная программа лояльности: тиры, акции, баллы, рефералы, кэшбэк. 2 990 ₽/мес."
+  },
+  {
+    "slug": "module-inventory",
+    "title": "Модуль · Учёт инвентаря",
+    "category": "modules",
+    "order": 5,
+    "summary": "Расходники, оборудование, остатки, движения между клиниками, алерты, инвентаризация. 1 990 ₽/мес."
+  },
+  {
+    "slug": "module-sms-marketing",
+    "title": "Модуль · SMS-маркетинг",
+    "category": "modules",
+    "order": 6,
+    "summary": "Массовые рассылки с шаблонами, A/B-тесты, сегментация, аналитика. 1 990 ₽/мес."
+  },
+  {
+    "slug": "module-health-plus",
+    "title": "Модуль · Здоровье+ (пациентские подписки)",
+    "category": "modules",
+    "order": 7,
+    "summary": "Месячные и годовые подписки пациентов: чат, скидки, витамины, осмотр. 1 990 ₽/мес."
+  },
+  {
+    "slug": "module-cms",
+    "title": "Модуль · CMS — страницы тенанта",
+    "category": "modules",
+    "order": 8,
+    "summary": "Встроенный движок страниц для каждого тенанта. Меню, тема, публичные страницы. Бесплатно (CRUD — через white_label)."
+  },
+  {
+    "slug": "module-acts",
+    "title": "Модуль · Акты и документы",
+    "category": "modules",
+    "order": 9,
+    "summary": "Акты, инвойсы, согласия, договоры. PDF через WeasyPrint, OTP-подпись, overdue cron. Бесплатно."
+  },
+  {
+    "slug": "module-aggregators",
+    "title": "Модуль · Агрегаторы (DocDoc, ПроДокторов)",
+    "category": "modules",
+    "order": 10,
+    "summary": "Public API v1 для приёма лидов от агрегаторов. Атрибуция, статусы, аналитика. Бесплатно."
+  },
+  {
+    "slug": "module-external-doctors",
+    "title": "Модуль · Внешние врачи",
+    "category": "modules",
+    "order": 11,
+    "summary": "partner_doctor + visiting_doctor + acquisition_manager. DirectBill, каскадные бонусы. Бесплатно."
+  },
+  {
+    "slug": "module-region-lock",
+    "title": "Модуль · Region Lock",
+    "category": "modules",
+    "order": 12,
+    "summary": "Географический контроль франшиз: GeoIP, audit-violation, ручная блокировка, IP allowlist. Бесплатно."
+  },
+  {
+    "slug": "module-white-label",
+    "title": "Модуль · White-Label брендинг",
+    "category": "modules",
+    "order": 13,
+    "summary": "Кастомизация бренда: тема, домен, шаблоны email/SMS/PDF, CMS CRUD. 3 990 ₽/мес."
+  },
+  {
+    "slug": "dev-stack",
+    "title": "Dev · Технический стек",
+    "category": "dev",
+    "order": 1,
+    "summary": "FastAPI 0.115, SQLAlchemy 2.0 async, PG 16, Redis 7, React 18 + Vite, Tailwind, Electron Calls, Docker."
+  },
+  {
+    "slug": "dev-architecture",
+    "title": "Dev · Архитектура платформы",
+    "category": "dev",
+    "order": 2,
+    "summary": "Слои приложения, multi-tenancy, поток запроса, WebRTC, AI-стек, развёртывание."
+  },
+  {
+    "slug": "dev-api",
+    "title": "Dev · API endpoints",
+    "category": "dev",
+    "order": 3,
+    "summary": "REST API: JWT auth, частые endpoints (patients, referrals, telemedicine), webhooks, rate-limits."
+  },
+  {
+    "slug": "dev-api-design",
+    "title": "Dev · Соглашения REST API",
+    "category": "dev",
+    "order": 4,
+    "summary": "Префиксы, HTTP-методы, коды ответов, JWT/API-key, пагинация, ошибки, идемпотентность, OpenAPI."
+  },
+  {
+    "slug": "dev-database",
+    "title": "Dev · База данных и миграции",
+    "category": "dev",
+    "order": 5,
+    "summary": "PG 16, SQLAlchemy 2.0 async, 98+ миграций Alembic, multi-tenant изоляция через tenant_id + set_config."
+  },
+  {
+    "slug": "dev-frontend",
+    "title": "Dev · Frontend (React + Vite)",
+    "category": "dev",
+    "order": 6,
+    "summary": "React 18, Vite 5, Tailwind, Zustand, lazy()-страницы, design tokens oklch, axios + JWT interceptor."
+  },
+  {
+    "slug": "dev-deployment",
+    "title": "Dev · Деплой и DevOps",
+    "category": "dev",
+    "order": 7,
+    "summary": "Docker Compose, healthchecks, rolling deploy, миграции, pg_dump backup, мониторинг Grafana + Uptime-Kuma."
+  },
+  {
+    "slug": "dev-security",
+    "title": "Dev · Безопасность",
+    "category": "dev",
+    "order": 8,
+    "summary": "JWT, RBAC, tenant isolation, audit log, rate-limit, DOMPurify, honeypot, 152-ФЗ. Чек-лист безопасности."
+  },
+  {
+    "slug": "dev-testing",
+    "title": "Dev · Тестирование",
+    "category": "dev",
+    "order": 9,
+    "summary": "pytest 112+ тестов (RBAC, isolation, bonus race, billing). conftest фикстуры, factories, моки. CI на GitHub."
+  },
+  {
+    "slug": "dev-integrations",
+    "title": "Dev · Интеграции",
+    "category": "dev",
+    "order": 10,
+    "summary": "МИС Renovatio, ЮKassa, ОФД, SMS-провайдеры, Telegram-бот, Whisper, Gemini, Apple Health, Google Fit."
+  },
+  {
+    "slug": "dev-contributing",
+    "title": "Dev · Contributing",
+    "category": "dev",
+    "order": 11,
+    "summary": "Клонирование, локальный запуск, git flow, code style, review checklist, релиз."
+  },
+  {
     "slug": "faq",
     "title": "Частые вопросы (FAQ)",
     "category": "faq",
