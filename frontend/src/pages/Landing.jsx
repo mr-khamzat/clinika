@@ -943,21 +943,6 @@ export default function Landing() {
             <p className="ks-footer-tagline">
               SaaS-платформа для медицинских сетей. Запись, ЭМК, биллинг, аналитика и кабинеты для всех ролей.
             </p>
-            <div className="ks-footer-social" aria-label="Соцсети">
-              <a href="https://t.me/klinikset" target="_blank" rel="noopener noreferrer" aria-label="Telegram" title="Telegram">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.24 3.64 11.95c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
-              </a>
-              <a href="https://vk.com/klinikset" target="_blank" rel="noopener noreferrer" aria-label="VK" title="VK">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.78 17.5h1.2s.36-.04.55-.24c.17-.18.17-.52.17-.52s-.02-1.6.72-1.84c.73-.23 1.66 1.55 2.66 2.23.74.52 1.31.4 1.31.4l2.62-.04s1.37-.08.72-1.16c-.05-.09-.38-.81-1.96-2.28-1.66-1.54-1.44-1.29.56-3.96 1.22-1.62 1.7-2.61 1.55-3.04-.14-.41-1.05-.3-1.05-.3l-2.94.02s-.22-.03-.38.07c-.16.09-.26.31-.26.31s-.47 1.27-1.1 2.34c-1.33 2.27-1.86 2.4-2.07 2.26-.5-.32-.38-1.3-.38-2-.01-2.18.33-3.09-.64-3.32-.32-.08-.56-.13-1.39-.14-1.07-.01-1.97.01-2.49.26-.34.17-.61.55-.45.57.2.03.65.13.89.46.31.41.3 1.34.3 1.34s.18 2.61-.42 2.93c-.41.22-.97-.23-2.16-2.29-.61-1.05-1.07-2.22-1.07-2.22s-.09-.21-.25-.33c-.19-.14-.46-.18-.46-.18l-2.79.02s-.42.01-.57.19c-.14.16-.01.5-.01.5s2.18 5.1 4.65 7.67c2.27 2.36 4.85 2.21 4.85 2.21z"/></svg>
-              </a>
-              <a href="https://youtube.com/@klinikset" target="_blank" rel="noopener noreferrer" aria-label="YouTube" title="YouTube">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58zM10 15.5v-7l5.5 3.5z"/></svg>
-              </a>
-            </div>
-            <div style={{ marginTop: 12, fontSize: 12, color: 'var(--fg-3)', lineHeight: 1.5 }}>
-              <div>тел.: +7 (800) 555-12-34</div>
-              <div>email: hello@клиниксеть.рф</div>
-            </div>
           </div>
           <div className="ks-footer-col">
             <h6>Продукт</h6>
