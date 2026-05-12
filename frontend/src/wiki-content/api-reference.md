@@ -112,6 +112,7 @@ GET /appointments?status=completed&from=2026-05-01&to=2026-05-31&sort=-start_tim
 | 404 | Not Found | Ресурс не найден или фильтр тенанта вырезал |
 | 409 | Conflict | Дубликат (slug, email) |
 | 422 | Unprocessable Entity | Pydantic ошибка валидации |
+| 423 | Locked | Аккаунт заблокирован после 5 неудачных логинов |
 | 429 | Too Many Requests | Rate limit |
 | 500 | Internal Server Error | Ошибка сервера |
 | 503 | Service Unavailable | Disaster mode или maintenance |
@@ -138,6 +139,8 @@ GET /appointments?status=completed&from=2026-05-01&to=2026-05-31&sort=-start_tim
 
 ## Rate Limiting
 
+Общие per-IP / per-key лимиты:
+
 | Endpoint group | Limit |
 |---|---|
 | `/auth/*` | 5 req/sec per IP |
@@ -145,7 +148,28 @@ GET /appointments?status=completed&from=2026-05-01&to=2026-05-31&sort=-start_tim
 | `/api/v1/*` | 100 req/sec per API key |
 | `/api/*` (auth) | 50 req/sec per user |
 
-При превышении — 429 с заголовком `Retry-After: 30`.
+При превышении — `429 Too Many Requests` с заголовком `Retry-After: 30`.
+
+### Точечные лимиты на публичных формах (с 2026-05-12)
+
+Sliding-window rate-limit на Redis (in-memory fallback), bucket-based:
+
+| Endpoint | Лимит | Назначение |
+|---|---|---|
+| `POST /contact/` | **5 запросов / 10 мин / IP** | Контактная форма, подписка на рассылку, заявка на франшизу |
+| `POST /public/{slug}/book` | **10 запросов / 10 мин / IP** | Онлайн-запись пациента (анонимная) |
+
+Превышение → `429` + `Retry-After: 600`.
+
+### Honeypot защита публичных форм
+
+Все публичные формы принимают необязательное поле `website_url`. Это **honeypot**: оно скрыто в DOM (display:none, tabindex=-1, aria-hidden) — реальный пользователь его не заполняет. Если backend получает непустое значение — возвращает `403 Forbidden`. Тривиальные боты ловятся без капчи.
+
+Если вы интегрируете публичные формы программно — **не передавайте** поле `website_url` или передавайте пустую строку.
+
+### Per-user lockout на `/auth/login`
+
+После **5 подряд неудачных** попыток входа в одну учётку — `423 Locked` на 15 минут (даже если попытки шли с разных IP). См. [API: Аутентификация](/wiki/api-auth-detailed).
 
 ## Группы endpoints
 

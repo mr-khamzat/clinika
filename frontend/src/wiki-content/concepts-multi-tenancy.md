@@ -29,18 +29,23 @@ Shared-схема даёт простой ORM-код, дешёвые мигра�
 
 ## Механика фильтрации
 
-Все запросы к данным проходят через зависимость `get_db_for_tenant`. Внутри SQLAlchemy session ставится «tenant scope»:
+Все запросы к данным проходят через зависимость `get_db_for_tenant`. Внутри SQLAlchemy session устанавливается PG-параметр `app.tenant_id` через **параметризованный** `set_config()` — это база для PostgreSQL RLS:
 
 ```python
-@asynccontextmanager
-async def get_db_for_tenant(user: User):
-    async with AsyncSessionLocal() as db:
-        if user.role != "super_admin":
-            db.info["tenant_id"] = user.tenant_id
-        yield db
+async def get_db_for_tenant(tenant_id: str):
+    async with AsyncSessionLocal() as session:
+        # set_config(name, value, is_local=true) эквивалентен SET LOCAL,
+        # но поддерживает bind-параметры → защищён от SQL-injection.
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :tid, true)"),
+            {"tid": str(tenant_id)},
+        )
+        yield session
 ```
 
-При выполнении запроса хук `before_execute` модифицирует SQL, добавляя `WHERE tenant_id = :tenant_id`:
+> **История (2026-05-12).** Раньше `tenant_id` подставлялся в `SET LOCAL` через f-string, что давало теоретическую SQL-injection-поверхность, если бы значение когда-либо просочилось из user-input. Параметризация через `set_config()` функционально эквивалентна `SET LOCAL`, но безопасна. См. [Безопасность](/wiki/concepts-security#tenant-isolation).
+
+RLS-политики читают `current_setting('app.tenant_id', true)` и фильтруют строки. Дополнительно хук `before_execute` модифицирует SQL, добавляя `WHERE tenant_id = :tenant_id` (defense-in-depth):
 
 ```sql
 -- Было

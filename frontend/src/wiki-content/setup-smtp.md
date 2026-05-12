@@ -137,6 +137,21 @@ Response:
 
 **Что если кончился баланс у провайдера?** Disaster mode: письма ставятся в очередь, шлются после пополнения. Алерт super_admin приходит в Telegram при первом fail.
 
+## Production readiness checklist
+
+Перед запуском боевого тенанта проверьте по чеклисту:
+
+- [ ] Провайдер выбран и оплачен (Mailgun / Postmark / SES — рекомендованы для RU-доставляемости).
+- [ ] SPF, DKIM, DMARC записи добавлены в DNS отправляющего домена и видны через `dig`/mxtoolbox.
+- [ ] `from_email` использует **подтверждённый домен** (не gmail.com / mail.ru).
+- [ ] `mail-tester.com` показывает оценку ≥ 8/10.
+- [ ] Webhook bounces настроен на `/webhooks/email/bounce` — иначе hard-bounce адреса не блокируются.
+- [ ] `reply_to` указывает на реальный support inbox.
+- [ ] Limit 100 писем/час на email — оставлен включённым (защита от петель).
+- [ ] Шаблоны протестированы: welcome, password_reset, subscription_charged — отправлены тестово на свою почту.
+- [ ] White-label: логотип + цвета загружены, если активирован модуль `white_label`.
+- [ ] Алерт в Telegram super_admin настроен на массовый bounce / отказ провайдера.
+
 ## Связанные статьи
 
 - [Настройка платежей](/wiki/setup-payments)

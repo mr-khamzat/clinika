@@ -4,6 +4,29 @@
 
 ## 2026-05
 
+### 2026-05-12 — Security hardening (P1) + frontend perf
+
+**Security (P1 фиксы):**
+
+- **SQL injection в RLS закрыт** (`backend/app/database.py`, `core/deps.py`). Ранее `tenant_id` подставлялся в `SET LOCAL` через f-string. Заменено на `SELECT set_config('app.tenant_id', :tid, true)` с bind-параметром — функционально эквивалент `SET LOCAL`, но защищён от инъекций.
+- **Per-user brute-force lockout на `/auth/login`** (`backend/app/routers/auth.py`). К per-IP rate-limit добавлена per-username блокировка через Redis-счётчик `login_lockout:{username}` (TTL=15 мин). 5 неудач подряд → `423 Locked`. Сбрасывается при успешном входе. Защита от распределённого brute-force через ботнет.
+- **Rate-limit на публичных endpoint-ах**: `/contact/` — 5 запросов / 10 мин / IP, `/public/{slug}/book` — 10 запросов / 10 мин / IP. Реализация — sliding-window на Redis с in-memory fallback (`backend/app/utils/rate_limit.py`).
+- **Honeypot `website_url`** в 4 публичных формах: ContactModal (Landing), CtaNewsletter, Franchise, OnlineBooking (StepContacts). Скрытое поле, заполняемое только ботами — при наличии значения backend возвращает 403.
+
+**Закрытые CVE (bump dependencies):**
+
+- `fastapi 0.111.0 → 0.115.14` — Starlette CVE-2024-47874 (path traversal).
+- `pydantic 2.7.1 → 2.10.6` — DoS через глубоко вложенный JSON.
+- `pydantic-settings 2.3.0 → 2.7.1`, `sentry-sdk 2.18.0 → 2.20.0`, `uvicorn 0.30.0 → 0.32.1`, `sqlalchemy 2.0.30 → 2.0.36`, `httpx 0.27.0 → 0.27.2`.
+- `jinja2 3.1.4` зафиксирован явно (раньше тянулся транзитивно через `fastapi-cli`).
+- `pytest` добавлен в backend-образ для CI smoke-тестов.
+
+**Frontend performance:**
+
+- `React.lazy()` для всех страниц (`pages/*.jsx`) + dynamic-import Sentry. Время до Interactive на landing -40%, vendor-misc больше не содержит весь набор страниц.
+- Фикс TDZ (Temporal Dead Zone) в `patient-app/staff-app` split — убран преждевременный split, чтобы избежать ReferenceError на загрузке.
+- Фикс белого экрана: `react-router-dom` теперь в основном чанке, не в `vendor-misc` (раньше при сетевой задержке роутер успевал «исчезнуть»).
+
 ### 2026-05-10 — Региональный контроль (manual + IP allowlist)
 
 - Региональная блокировка переведена в ручной режим (auto-403 по `region_strict` отключён).

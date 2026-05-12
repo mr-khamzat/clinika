@@ -153,6 +153,22 @@ POST /billing/refunds
 
 **Тест-режим — это бесплатно?** Да, тестовые платежи не идут к клиенту.
 
+## Production readiness checklist
+
+Перед переводом ЮKassa в боевой режим:
+
+- [ ] **ИП или ООО зарегистрировано** — без юр-лица ЮKassa договор не подпишет.
+- [ ] **Расчётный счёт открыт** в банке, реквизиты переданы в ЮKassa.
+- [ ] Магазин подтверждён в кабинете ЮKassa, документы (договор, паспорт, ОГРН/ОГРНИП) загружены.
+- [ ] **Test-режим**: проведён тестовый платёж 1 ₽ → webhook `payment.succeeded` доходит до backend → BillingLedger обновляется.
+- [ ] **Webhook URL** настроен на `https://<tenant_domain>/billing/yookassa/webhook` и доступен из интернета (без VPN, валидный HTTPS).
+- [ ] `shop_id` и `secret_key` сохранены в БД в зашифрованном виде (Fernet).
+- [ ] **Возвраты протестированы**: `POST /billing/refunds` → webhook `refund.succeeded` → ledger корректируется.
+- [ ] **ОФД настроен и подключён** (Платформа ОФД или АТОЛ Онлайн) — иначе 54-ФЗ нарушается при работе с физлицами.
+- [ ] Email чека работает (`from_email` валидный, SMTP настроен) — см. [Production checklist SMTP](/wiki/setup-smtp#production-readiness-checklist).
+- [ ] **Disaster mode** протестирован: при недоступности ЮKassa виджет уступает место сообщению «оплатите в клинике» + manager cash activation работает.
+- [ ] Алерт super_admin в Telegram настроен на массовые `payment.failed`.
+
 ## Связанные статьи
 
 - [Настройка ОФД](/wiki/setup-ofd)
