@@ -2,10 +2,11 @@
 Контакт-форма с сайта.
 Обращения сохраняются в БД и доступны в /admin.
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+import html as _html
 import logging
 from app.utils.phone import mask_phone
 
@@ -13,6 +14,7 @@ from app.database import get_db
 from app.models.contact_request import ContactRequest
 from app.core.deps import require_super_admin
 from app.utils.rate_limit import rate_limit_dep, check_honeypot
+from app.services.alert_service import notify_admin
 
 logger = logging.getLogger('contact')
 router = APIRouter(prefix='/contact', tags=['contact'])
@@ -35,7 +37,11 @@ class ContactForm(BaseModel):
 
 
 @router.post('/', dependencies=[Depends(_contact_rl)])
-async def send_contact(form: ContactForm, db: AsyncSession = Depends(get_db)):
+async def send_contact(
+    form: ContactForm,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     # Honeypot — наивных ботов сразу отбрасываем
     check_honeypot(form.website_url)
     req = ContactRequest(
@@ -47,6 +53,17 @@ async def send_contact(form: ContactForm, db: AsyncSession = Depends(get_db)):
     db.add(req)
     await db.commit()
     logger.info(f"[CONTACT] saved phone={mask_phone(form.phone)}")
+
+    # Дублируем в Telegram админу (через прокси, см. alert_service).
+    # BackgroundTask — чтобы ответ /contact/ не блокировался сетевым вызовом.
+    msg = (
+        "📩 <b>Новое обращение с сайта</b>\n"
+        f"<b>Имя:</b> {_html.escape(form.name or '—')}\n"
+        f"<b>Телефон:</b> {_html.escape(form.phone)}\n"
+        f"<b>Email:</b> {_html.escape(form.email or '—')}\n"
+        f"<b>Сообщение:</b>\n{_html.escape(form.message)[:1500]}"
+    )
+    background_tasks.add_task(notify_admin, msg, dedup_key=None, bypass_switch=True)
     return {'ok': True}
 
 
