@@ -77,8 +77,33 @@ export const LANDING_EXTRAS_CSS = `
 }
 .ks-fs-pill-accent { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
 
+/* мок-карточки: лёгкий 3D-tilt + sheen при hover */
+.ks-fs-visual { position: relative; perspective: 1200px; }
+.ks-fs-visual .ks-fs-mock {
+  transform: translateZ(0) rotateX(0) rotateY(0);
+  transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.5s ease;
+  will-change: transform;
+}
+.ks-fs-visual:hover .ks-fs-mock {
+  transform: translateY(-6px) rotateX(2deg) rotateY(-3deg);
+  box-shadow:
+    0 30px 70px oklch(0.18 0.014 220 / 0.18),
+    0 8px 22px oklch(0.18 0.014 220 / 0.10);
+}
+.ks-fs-visual .ks-fs-mock::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(135deg, oklch(1 0 0 / 0) 30%, oklch(1 0 0 / 0.22) 50%, oklch(1 0 0 / 0) 70%);
+  opacity: 0; transition: opacity 0.4s ease; mix-blend-mode: overlay;
+  border-radius: inherit;
+}
+.ks-fs-visual:hover .ks-fs-mock::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .ks-fs-visual .ks-fs-mock,
+  .ks-fs-visual:hover .ks-fs-mock { transform: none; transition: none; }
+  .ks-fs-visual:hover .ks-fs-mock::after { opacity: 0; }
+}
+
 /* мок-карточки */
-.ks-fs-visual { position: relative; }
 .ks-fs-mock {
   position: relative;
   background: var(--surface);
@@ -226,6 +251,18 @@ export const LANDING_EXTRAS_CSS = `
 }
 .ks-tm-author { font-size: 14px; font-weight: 600; color: var(--fg); }
 .ks-tm-role { font-size: 12px; color: var(--fg-3); }
+.ks-tm-top {
+  position: relative;
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; min-height: 22px; margin-bottom: 6px;
+}
+.ks-tm-company {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  padding: 4px 10px; border-radius: 999px;
+  border: 1px solid currentColor; opacity: 0.85;
+  background: oklch(1 0 0 / 0.5); backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
 
 /* === FAQ === */
 .ks-faq { padding-top: 80px; padding-bottom: 80px; }
@@ -339,6 +376,63 @@ export const LANDING_EXTRAS_CSS = `
 }
 .ks-footer-social a:hover { background: var(--accent); color: #fff; border-color: var(--accent); transform: translateY(-1px); }
 
+/* === Footer Trust Pillars === */
+.ks-footer-pillars {
+  max-width: 1240px; margin: 28px auto 0;
+  padding: 18px 24px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px;
+  background: oklch(1 0 0 / 0.55); backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.ks-footer-pillar {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--fg-2);
+}
+.ks-footer-pillar-mark {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent-soft); color: var(--accent);
+  font-weight: 700; font-size: 13px;
+  border: 1px solid var(--accent-line);
+}
+.ks-footer-pillar strong { color: var(--fg); font-weight: 600; }
+.ks-footer-pillar small { color: var(--fg-3); font-size: 11px; display: block; margin-top: 1px; }
+
+/* === Hero trust chips (premium-полировка) === */
+.ks-hero-trust-chips {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px;
+}
+.ks-hero-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: oklch(1 0 0 / 0.6); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--fg-2);
+  backdrop-filter: blur(6px);
+  transition: transform 0.15s, border-color 0.15s, color 0.15s;
+}
+.ks-hero-chip:hover { transform: translateY(-1px); border-color: var(--accent-line); color: var(--accent); }
+.ks-hero-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); }
+
+/* === Focus-visible премиум-кольца (a11y) === */
+.ks-btn-primary:focus-visible,
+.ks-btn-secondary:focus-visible,
+.ks-btn-ghost:focus-visible,
+.ks-btn-cta-primary:focus-visible,
+.ks-btn-cta-secondary:focus-visible,
+.ks-price-cta:focus-visible,
+.ks-nav-cta:focus-visible,
+.ks-nav-link:focus-visible,
+.ks-roles-tab:focus-visible,
+.ks-faq-q:focus-visible,
+.ks-cta-news-btn:focus-visible,
+.ks-cta-news-input:focus-visible,
+.ks-footer-social a:focus-visible,
+.ks-sp-item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent);
+}
+
 /* === Mobile === */
 @media (max-width: 900px) {
   .ks-fs-row-wrap { grid-template-columns: 1fr; gap: 28px; }
@@ -356,5 +450,7 @@ export const LANDING_EXTRAS_CSS = `
   .ks-fs-ai-grid { grid-template-columns: 1fr; }
   .ks-fs-int-grid { grid-template-columns: 1fr; }
   .ks-sp-grid { grid-template-columns: repeat(2, 1fr); }
+  .ks-footer-pillars { padding: 14px 16px; gap: 12px; }
+  .ks-footer-pillar { font-size: 12px; }
 }
 `

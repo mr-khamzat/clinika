@@ -48,10 +48,10 @@ export default function CtaNewsletter() {
             Поможем перенести данные и обучим команду.
           </p>
           <div className="ks-cta-actions">
-            <a href="/signup" className="ks-btn-cta-primary">
+            <a href="/signup" className="ks-btn-cta-primary" aria-label="Создать кабинет — регистрация займёт около 5 минут">
               Создать кабинет за 5 минут →
             </a>
-            <a href="#pricing" className="ks-btn-cta-secondary">
+            <a href="#pricing" className="ks-btn-cta-secondary" aria-label="Перейти к сравнению тарифов">
               Сравнить тарифы
             </a>
           </div>

@@ -1,8 +1,9 @@
 /**
  * ========================================
- * БЛОК: Testimonials — 3 цитаты-плейсхолдера
+ * БЛОК: Testimonials — 6 цитат-плейсхолдеров + company-mark
  * ========================================
- * Когда появятся реальные клиенты — заменить цитаты и подписи.
+ * Каждая карточка содержит логотип-плейсхолдер компании (текстовый mark).
+ * Когда появятся реальные клиенты — заменить цитаты, подписи и логотипы.
  * ========================================
  */
 import { useEffect, useRef, useState } from 'react'
@@ -14,6 +15,8 @@ const QUOTES = [
     role: 'Владелец сети из 5 клиник',
     avatar: 'ИИ',
     color: 'oklch(0.55 0.16 240)',
+    company: 'АРКТИКА',
+    companyTone: 'oklch(0.55 0.16 240)',
   },
   {
     text: 'Регистраторы стали обрабатывать в 2× больше пациентов. AI-подсказки в чате сократили время ответа в три раза.',
@@ -21,6 +24,8 @@ const QUOTES = [
     role: 'Главный администратор',
     avatar: 'АП',
     color: 'oklch(0.62 0.15 220)',
+    company: 'МЕДПЛЮС',
+    companyTone: 'oklch(0.62 0.15 220)',
   },
   {
     text: 'AI-инсайты по выручке окупились за неделю. Раньше я собирал отчёты в Excel по выходным, теперь дашборд показывает всё сам.',
@@ -28,6 +33,35 @@ const QUOTES = [
     role: 'Финансовый директор',
     avatar: 'СС',
     color: 'oklch(0.58 0.16 285)',
+    company: 'ВИТАКОМ',
+    companyTone: 'oklch(0.58 0.16 285)',
+  },
+  {
+    text: 'Внедрили за 21 день вместо обещанных 28 — команда вела нас за руку. Миграция 47 000 карт прошла без потерь, мы поставили рекорд по NPS.',
+    author: 'Магомедова З.',
+    role: 'Директор по операциям',
+    avatar: 'МЗ',
+    color: 'oklch(0.65 0.16 200)',
+    company: 'АЛЬФАМЕД',
+    companyTone: 'oklch(0.65 0.16 200)',
+  },
+  {
+    text: 'Семейные подписки за полгода дали +38% к LTV. Раньше пациент приходил раз в год — теперь приводит всю семью и привязан к нашей клинике.',
+    author: 'Левченко О.',
+    role: 'Маркетинг-директор сети',
+    avatar: 'ОЛ',
+    color: 'oklch(0.62 0.13 75)',
+    company: 'ДОБРОМЕД',
+    companyTone: 'oklch(0.62 0.13 75)',
+  },
+  {
+    text: 'Биллинг между филиалами раньше занимал у бухгалтерии 4 дня в конце месяца. Теперь — час. Аудит-лог 152-ФЗ закрыл претензии Роскомнадзора.',
+    author: 'Карпов Д.',
+    role: 'ИТ-директор',
+    avatar: 'КД',
+    color: 'oklch(0.58 0.18 145)',
+    company: 'ЭНДОКРИН+',
+    companyTone: 'oklch(0.58 0.18 145)',
   },
 ]
 
@@ -53,10 +87,21 @@ function Quote({ q, delay }) {
         transition: `opacity 600ms ease ${delay}ms, transform 600ms ease ${delay}ms`,
       }}
     >
-      <span className="ks-tm-mark" aria-hidden>“</span>
+      <div className="ks-tm-top">
+        <span className="ks-tm-mark" aria-hidden>“</span>
+        {q.company && (
+          <span
+            className="ks-tm-company"
+            style={{ color: q.companyTone, borderColor: q.companyTone }}
+            aria-label={`Логотип ${q.company}`}
+          >
+            {q.company}
+          </span>
+        )}
+      </div>
       <blockquote className="ks-tm-text">{q.text}</blockquote>
       <div className="ks-tm-foot">
-        <span className="ks-tm-avatar" style={{ background: q.color }}>{q.avatar}</span>
+        <span className="ks-tm-avatar" style={{ background: q.color }} aria-hidden>{q.avatar}</span>
         <div>
           <div className="ks-tm-author">{q.author}</div>
           <div className="ks-tm-role">{q.role}</div>

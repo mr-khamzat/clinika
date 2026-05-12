@@ -116,7 +116,7 @@ function LoginModal({ onClose }) {
     <div className="ks-modal-root" role="dialog" aria-modal="true">
       <div className="ks-modal-back" onClick={onClose} />
       <div className="ks-modal-card">
-        <button onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
+        <button type="button" onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
         <div className="ks-modal-head">
           <div className="ks-modal-mark"><BrandLogo size={56} /></div>
           <h2>Войти в систему</h2>
@@ -174,13 +174,13 @@ function ContactModal({ onClose }) {
     <div className="ks-modal-root" role="dialog" aria-modal="true">
       <div className="ks-modal-back" onClick={onClose} />
       <div className="ks-modal-card">
-        <button onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
+        <button type="button" onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
         {sent ? (
           <div className="ks-modal-success">
             <div className="ks-success-mark">{ICONS.check}</div>
             <h3>Заявка отправлена</h3>
             <p>Мы свяжемся с вами в течение одного рабочего дня.</p>
-            <button onClick={onClose} className="ks-btn-primary">Закрыть</button>
+            <button type="button" onClick={onClose} className="ks-btn-primary">Закрыть</button>
           </div>
         ) : (
           <>
@@ -262,7 +262,7 @@ function PriceCalculator({ onClose }) {
     <div className="ks-modal-root" role="dialog" aria-modal="true">
       <div className="ks-modal-back" onClick={onClose} />
       <div className="ks-modal-card">
-        <button onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
+        <button type="button" onClick={onClose} className="ks-modal-close" aria-label="Закрыть">{ICONS.close}</button>
         <div className="ks-modal-head">
           <h2>Калькулятор тарифа</h2>
           <p>Подсчитайте стоимость для вашей сети</p>
@@ -296,7 +296,7 @@ function PriceCalculator({ onClose }) {
               <strong>{Math.round(totalAnnual).toLocaleString('ru-RU')} ₽</strong>
             </div>
           </div>
-          <button onClick={onClose} className="ks-btn-primary ks-btn-block">
+          <button type="button" onClick={onClose} className="ks-btn-primary ks-btn-block">
             Закрыть
           </button>
         </div>
@@ -439,15 +439,15 @@ export default function Landing() {
               ['testimonials', 'Отзывы'],
               ['faq', 'FAQ'],
             ].map(([id, label]) => (
-              <button key={id} onClick={() => scrollTo(id)} className="ks-nav-link">{label}</button>
+              <button type="button" key={id} onClick={() => scrollTo(id)} className="ks-nav-link">{label}</button>
             ))}
             <a href="/wiki" className="ks-nav-link">Wiki</a>
           </div>
           <div className="ks-nav-actions">
-            <button onClick={() => setShowLogin(true)} className="ks-nav-link ks-nav-link-strong">Войти</button>
+            <button type="button" onClick={() => setShowLogin(true)} className="ks-nav-link ks-nav-link-strong">Войти</button>
             <a href="/signup" className="ks-nav-cta">Начать бесплатно</a>
           </div>
-          <button className="ks-nav-burger" onClick={() => setMenuOpen(m => !m)} aria-label="Меню">
+          <button type="button" className="ks-nav-burger" onClick={() => setMenuOpen(m => !m)} aria-label="Меню">
             {menuOpen ? ICONS.close : ICONS.menu}
           </button>
         </div>
@@ -460,11 +460,11 @@ export default function Landing() {
               ['testimonials', 'Отзывы'],
               ['faq', 'FAQ'],
             ].map(([id, label]) => (
-              <button key={id} onClick={() => scrollTo(id)} className="ks-nav-mobile-link">{label}</button>
+              <button type="button" key={id} onClick={() => scrollTo(id)} className="ks-nav-mobile-link">{label}</button>
             ))}
             <a href="/wiki" className="ks-nav-mobile-link">Wiki</a>
             <a href="/franchise" className="ks-nav-mobile-link">Франчайзи</a>
-            <button onClick={() => { setShowLogin(true); setMenuOpen(false) }} className="ks-nav-mobile-link">Войти</button>
+            <button type="button" onClick={() => { setShowLogin(true); setMenuOpen(false) }} className="ks-nav-mobile-link">Войти</button>
             <a href="/signup" className="ks-btn-primary ks-btn-block" style={{ marginTop: 8, textAlign: 'center' }}>
               Начать бесплатно
             </a>
@@ -496,10 +496,10 @@ export default function Landing() {
               ежемесячных счетов от 7 разных вендоров.
             </p>
             <div className="ks-hero-actions">
-              <button onClick={() => setShowContact(true)} className="ks-btn-primary">
+              <button type="button" onClick={() => setShowContact(true)} className="ks-btn-primary">
                 Запустить за 28 дней <span aria-hidden>{ICONS.arrow}</span>
               </button>
-              <button onClick={() => setShowCalc(true)} className="ks-btn-secondary">
+              <button type="button" onClick={() => setShowCalc(true)} className="ks-btn-secondary">
                 Калькулятор тарифа
               </button>
             </div>
@@ -515,6 +515,24 @@ export default function Landing() {
               <span className="ks-hero-stars">★★★★★</span>
               <span>152-ФЗ · УЗ-1 · SLA 99.9% · 27 статей в Wiki · <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>обзор платформы</a></span>
             </div>
+            {/* Trust chips: краткие бейджи доверия (152-ФЗ, SSL, EU-DPA, ISO) */}
+            <div className="ks-hero-trust-chips" aria-label="Бейджи доверия и сертификации">
+              <span className="ks-hero-chip" title="Соответствует Федеральному закону №152-ФЗ о персональных данных">
+                <span className="ks-hero-chip-dot" aria-hidden /> 152-ФЗ · УЗ-1
+              </span>
+              <span className="ks-hero-chip" title="TLS 1.3 · HSTS · сертификат SSL Let's Encrypt + резерв">
+                <span className="ks-hero-chip-dot" aria-hidden /> SSL TLS 1.3
+              </span>
+              <span className="ks-hero-chip" title="GDPR-ready: совместимость с EU Data Processing Agreement для франшиз">
+                <span className="ks-hero-chip-dot" aria-hidden /> EU-DPA / GDPR
+              </span>
+              <span className="ks-hero-chip" title="ISO 27001 · процессы информационной безопасности">
+                <span className="ks-hero-chip-dot" aria-hidden /> ISO 27001
+              </span>
+              <span className="ks-hero-chip" title="Гарантированная доступность платформы 99.9% (≤ 43 мин/мес)">
+                <span className="ks-hero-chip-dot" aria-hidden /> SLA 99.9%
+              </span>
+            </div>
           </FadeIn>
 
           {/* Hero side — премиум AI-визуал из дизайна Stitch klinikset.html */}
@@ -528,7 +546,7 @@ export default function Landing() {
               <div className="ks-ai-card-content">
                 <div className="ks-ai-card-tag"><span className="ks-ai-card-tag-dot" />AI · работает 24/7</div>
                 <div className="ks-ai-card-emblem">
-                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
                     <defs>
                       <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="oklch(0.85 0.12 240)" />
@@ -622,7 +640,7 @@ export default function Landing() {
           {/* Табы */}
           <div className="ks-roles-tabs" role="tablist">
             {Object.entries(ROLES).map(([k, v]) => (
-              <button key={k} role="tab" aria-selected={activeRole === k}
+              <button type="button" key={k} role="tab" aria-selected={activeRole === k}
                 onClick={() => setActiveRole(k)} className="ks-roles-tab"
                 data-active={activeRole === k}>
                 <span className="ks-roles-tab-dot" style={{ background: v.dot }} />
@@ -646,7 +664,7 @@ export default function Landing() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => setShowContact(true)} className="ks-btn-secondary">
+              <button type="button" onClick={() => setShowContact(true)} className="ks-btn-secondary">
                 Посмотреть тур {ICONS.arrow}
               </button>
             </div>
@@ -733,13 +751,13 @@ export default function Landing() {
             </p>
             <div className="ks-billing-toggle" role="tablist">
               <button
-                role="tab"
+                type="button" role="tab"
                 aria-selected={billingPeriod === 'monthly'}
                 onClick={() => setBillingPeriod('monthly')}
                 className={billingPeriod === 'monthly' ? 'is-active' : ''}
               >Помесячно</button>
               <button
-                role="tab"
+                type="button" role="tab"
                 aria-selected={billingPeriod === 'annual'}
                 onClick={() => setBillingPeriod('annual')}
                 className={billingPeriod === 'annual' ? 'is-active' : ''}
@@ -770,7 +788,7 @@ export default function Landing() {
                   <ul className="ks-price-list">
                     {p.list.map(l => <li key={l}>{l}</li>)}
                   </ul>
-                  <button onClick={() => setShowContact(true)} className="ks-price-cta">{p.cta}</button>
+                  <button type="button" onClick={() => setShowContact(true)} className="ks-price-cta">{p.cta}</button>
                 </article>
               )
             })}
@@ -780,7 +798,7 @@ export default function Landing() {
               Все тарифы включают <b>14 дней бесплатного теста</b> · отказ в любой момент · без скрытых комиссий.
               Дополнительные модули (Telemedicine, AI-ассистент, Запись звонков) подключаются <a href="#modules">отдельно</a>.
             </p>
-            <button onClick={() => setShowCalc(true)} className="ks-btn-secondary">
+            <button type="button" onClick={() => setShowCalc(true)} className="ks-btn-secondary">
               Открыть калькулятор тарифа {ICONS.arrow}
             </button>
           </div>
@@ -903,7 +921,7 @@ export default function Landing() {
                     <div style={{ fontSize: 12, color: 'var(--fg-3)', marginBottom: 4 }}>Идёт приём · 14:32</div>
                     <div style={{ fontWeight: 600 }}>Кардиолог · Иванов А.С.</div>
                   </div>
-                  <button className="ks-btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}>Подключиться</button>
+                  <button type="button" className="ks-btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}>Подключиться</button>
                 </div>
               </div>
             </div>
@@ -926,13 +944,13 @@ export default function Landing() {
               SaaS-платформа для медицинских сетей. Запись, ЭМК, биллинг, аналитика и кабинеты для всех ролей.
             </p>
             <div className="ks-footer-social" aria-label="Соцсети">
-              <a href="https://t.me/klinikset" target="_blank" rel="noreferrer" aria-label="Telegram" title="Telegram">
+              <a href="https://t.me/klinikset" target="_blank" rel="noopener noreferrer" aria-label="Telegram" title="Telegram">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.24 3.64 11.95c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
               </a>
-              <a href="https://vk.com/klinikset" target="_blank" rel="noreferrer" aria-label="VK" title="VK">
+              <a href="https://vk.com/klinikset" target="_blank" rel="noopener noreferrer" aria-label="VK" title="VK">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.78 17.5h1.2s.36-.04.55-.24c.17-.18.17-.52.17-.52s-.02-1.6.72-1.84c.73-.23 1.66 1.55 2.66 2.23.74.52 1.31.4 1.31.4l2.62-.04s1.37-.08.72-1.16c-.05-.09-.38-.81-1.96-2.28-1.66-1.54-1.44-1.29.56-3.96 1.22-1.62 1.7-2.61 1.55-3.04-.14-.41-1.05-.3-1.05-.3l-2.94.02s-.22-.03-.38.07c-.16.09-.26.31-.26.31s-.47 1.27-1.1 2.34c-1.33 2.27-1.86 2.4-2.07 2.26-.5-.32-.38-1.3-.38-2-.01-2.18.33-3.09-.64-3.32-.32-.08-.56-.13-1.39-.14-1.07-.01-1.97.01-2.49.26-.34.17-.61.55-.45.57.2.03.65.13.89.46.31.41.3 1.34.3 1.34s.18 2.61-.42 2.93c-.41.22-.97-.23-2.16-2.29-.61-1.05-1.07-2.22-1.07-2.22s-.09-.21-.25-.33c-.19-.14-.46-.18-.46-.18l-2.79.02s-.42.01-.57.19c-.14.16-.01.5-.01.5s2.18 5.1 4.65 7.67c2.27 2.36 4.85 2.21 4.85 2.21z"/></svg>
               </a>
-              <a href="https://youtube.com/@klinikset" target="_blank" rel="noreferrer" aria-label="YouTube" title="YouTube">
+              <a href="https://youtube.com/@klinikset" target="_blank" rel="noopener noreferrer" aria-label="YouTube" title="YouTube">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58 2.78 2.78 0 0 0 1.94 2C5.12 20 12 20 12 20s6.88 0 8.6-.42a2.78 2.78 0 0 0 1.94-2A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58zM10 15.5v-7l5.5 3.5z"/></svg>
               </a>
             </div>
@@ -943,19 +961,19 @@ export default function Landing() {
           </div>
           <div className="ks-footer-col">
             <h6>Продукт</h6>
-            <button onClick={() => scrollTo('features')}>Возможности</button>
-            <button onClick={() => scrollTo('roles')}>Кабинеты</button>
-            <button onClick={() => scrollTo('pricing')}>Тарифы</button>
-            <button onClick={() => scrollTo('modules')}>Модули</button>
-            <button onClick={() => scrollTo('calls')}>Calls</button>
+            <button type="button" onClick={() => scrollTo('features')}>Возможности</button>
+            <button type="button" onClick={() => scrollTo('roles')}>Кабинеты</button>
+            <button type="button" onClick={() => scrollTo('pricing')}>Тарифы</button>
+            <button type="button" onClick={() => scrollTo('modules')}>Модули</button>
+            <button type="button" onClick={() => scrollTo('calls')}>Calls</button>
             <a href="/wiki">База знаний</a>
           </div>
           <div className="ks-footer-col">
             <h6>Компания</h6>
             <a href="/franchise">Франчайзи</a>
-            <button onClick={() => setShowContact(true)}>Связаться</button>
-            <a href="https://github.com/mr-khamzat/clinika" target="_blank" rel="noreferrer">GitHub</a>
-            <button onClick={() => setShowContact(true)}>Стать партнёром</button>
+            <button type="button" onClick={() => setShowContact(true)}>Связаться</button>
+            <a href="https://github.com/mr-khamzat/clinika" target="_blank" rel="noopener noreferrer">GitHub</a>
+            <button type="button" onClick={() => setShowContact(true)}>Стать партнёром</button>
           </div>
           <div className="ks-footer-col">
             <h6>Право</h6>
@@ -964,6 +982,24 @@ export default function Landing() {
             <a href="/consent">Согласие на обработку ПДн</a>
             <span style={{ marginTop: 8, fontSize: 12, color: 'var(--fg-3)' }}>152-ФЗ · УЗ-1 · Аудит-лог</span>
           </div>
+        </div>
+        {/* Trust Pillars: ключевые гарантии доверия для корпоративных клиентов */}
+        <div className="ks-footer-pillars" aria-label="Сертификации и гарантии">
+          {[
+            ['152', '152-ФЗ', 'УЗ-1 · хостинг в РФ'],
+            ['EU', 'GDPR-ready', 'EU Data Processing Agreement'],
+            ['ISO', 'ISO 27001', 'информационная безопасность'],
+            ['SLA', 'SLA 99.9%', 'до 43 минут даунтайма в месяц'],
+            ['24/7', 'Поддержка 24/7', 'дежурная команда Enterprise'],
+          ].map(([mark, title, sub]) => (
+            <div key={title} className="ks-footer-pillar">
+              <span className="ks-footer-pillar-mark" aria-hidden>{mark}</span>
+              <div>
+                <strong>{title}</strong>
+                <small>{sub}</small>
+              </div>
+            </div>
+          ))}
         </div>
         <div className="ks-footer-bottom">
           <span>© 2026 КлиникСеть</span>
