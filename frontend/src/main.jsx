@@ -6,29 +6,14 @@ import './index.css'
 // Загружаются глобально один раз; CSS-переменные используются в /src/design/ и tailwind.
 import './design/tokens.css'
 
-// ─── Инициализация Sentry — отключена если DSN не задан ───
-// VITE_SENTRY_DSN читается из .env во время сборки Vite (build-time ARG).
-// Без DSN — Sentry полностью отключён, ErrorBoundary продолжает работать локально.
-import * as Sentry from '@sentry/react'
+// ─── Sentry — полностью dynamic import (Optim 2026-05-11) ───
+// Раньше: import * as Sentry грузился даже без DSN (~120KB в main).
+// Теперь: загружаем Sentry chunk только если DSN задан, и асинхронно
+// (не блокирует первый рендер). Локальный ErrorBoundary стартует мгновенно.
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
-if (SENTRY_DSN) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE,
-    tracesSampleRate: 0.1,
-    // Session Replay — записываем только сессии с ошибками, чтобы экономить квоту.
-    // maskAllText / blockAllMedia — PII-защита для медицинского ПО (152-ФЗ).
-    replaysSessionSampleRate: 0.0,
-    replaysOnErrorSampleRate: 0.1,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
-    ],
-  })
-}
 
-// Локальный фолбэк ErrorBoundary — показывается, если Sentry не настроен
-// (Sentry.ErrorBoundary без DSN тоже работает, но без отправки наверх).
+// Локальный фолбэк ErrorBoundary — показывается всегда (мгновенно),
+// если Sentry успеет загрузиться — он перехватит будущие ошибки сам.
 class LocalErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
@@ -55,35 +40,42 @@ class LocalErrorBoundary extends React.Component {
   }
 }
 
-// Если DSN задан — используем Sentry.ErrorBoundary (отправка ошибок наверх + UI).
-// Без DSN — обычный локальный ErrorBoundary без сети.
-const SentryFallback = ({ error, resetError }) => (
-  <div style={{ padding: '24px', fontFamily: 'monospace', background: '#fff', minHeight: '100vh' }}>
-    <h2 style={{ color: '#c00', marginBottom: '12px' }}>Ошибка приложения</h2>
-    <pre style={{ background: '#fee', padding: '12px', borderRadius: '8px', overflowX: 'auto', color: '#900', fontSize: '13px' }}>
-      {error?.message || String(error)}
-    </pre>
-    <button
-      onClick={resetError}
-      style={{ marginTop: '12px', padding: '8px 16px', background: '#0066cc', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-    >
-      Попробовать снова
-    </button>
-  </div>
-)
-
-const Boundary = SENTRY_DSN
-  ? ({ children }) => (
-      <Sentry.ErrorBoundary fallback={SentryFallback} showDialog={false}>
-        {children}
-      </Sentry.ErrorBoundary>
-    )
-  : LocalErrorBoundary
-
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Boundary>
+    <LocalErrorBoundary>
       <App />
-    </Boundary>
+    </LocalErrorBoundary>
   </React.StrictMode>
 )
+
+// ─── Sentry — отложенная инициализация после первого рендера ───
+// requestIdleCallback (fallback setTimeout 2s) — гарантия что Sentry не блокирует TTI.
+if (SENTRY_DSN) {
+  const initSentry = () => {
+    import('@sentry/react').then((Sentry) => {
+      try {
+        Sentry.init({
+          dsn: SENTRY_DSN,
+          environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || import.meta.env.MODE,
+          tracesSampleRate: 0.1,
+          // Session Replay — записываем только сессии с ошибками, чтобы экономить квоту.
+          // maskAllText / blockAllMedia — PII-защита для медицинского ПО (152-ФЗ).
+          replaysSessionSampleRate: 0.0,
+          replaysOnErrorSampleRate: 0.1,
+          integrations: [
+            Sentry.browserTracingIntegration(),
+            Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
+          ],
+        })
+      } catch (e) {
+        // Sentry не должен ломать приложение — глотаем ошибки инициализации.
+        console.error('[Sentry init failed]', e)
+      }
+    }).catch(() => {})
+  }
+  if (typeof window.requestIdleCallback === 'function') {
+    window.requestIdleCallback(initSentry, { timeout: 3000 })
+  } else {
+    setTimeout(initSentry, 2000)
+  }
+}

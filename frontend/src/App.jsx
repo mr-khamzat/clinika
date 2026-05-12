@@ -16,34 +16,38 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import useAuthStore from './store/auth'
 import { authTelegram, getMe } from './api'
 import Layout from './components/Layout'
-import Dashboard from './pages/Dashboard'
-import CreateReferral from './pages/CreateReferral'
+// Optim 2026-05-11: переводим ВСЕ страницы кроме лёгких на lazy.
+// Цель — уменьшить index.js с 1.17 MB → <500 KB. Каждый кабинет/роль
+// загружает только свои страницы; PatientCabinet больше не тащит Manager*.
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const CreateReferral = lazy(() => import('./pages/CreateReferral'))
 // PartnerCreateReferral удалён в Этапе 3 ROADMAP — partner_doctor больше не имеет отдельной страницы.
-import QRScreen from './pages/QRScreen'
+const QRScreen = lazy(() => import('./pages/QRScreen'))
 // ScanScreen — lazy. Тянет за собой html5-qrcode (~250KB), нужен только при сканировании QR.
 const ScanScreen = lazy(() => import('./pages/ScanScreen'))
-import History from './pages/History'
-import Bonuses from './pages/Bonuses'
+const History = lazy(() => import('./pages/History'))
+const Bonuses = lazy(() => import('./pages/Bonuses'))
 // Landing — lazy. Большая страница лендинга платформы (не нужна авторизованным пользователям).
 const Landing = lazy(() => import('./pages/Landing'))
-import Franchise from './pages/Franchise'
-import ProfileSetup from './pages/ProfileSetup'
+const Franchise = lazy(() => import('./pages/Franchise'))
+const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
+// InviteRegister/InviteAccept — eager: маленькие, на критическом пути регистрации.
 import InviteRegister from './pages/InviteRegister'
 import InviteAccept from './pages/InviteAccept'
-import ManagerDashboard from './pages/ManagerDashboard'
-import ManagerHistory from './pages/ManagerHistory'
-import ManagerBonuses from './pages/ManagerBonuses'
-import ManagerAnalytics from './pages/ManagerAnalytics'
-import ManagerKPI from './pages/ManagerKPI'
-import ManagerActivity from './pages/ManagerActivity'
-import ManagerRecruitDoctors from './pages/ManagerRecruitDoctors'
-import ManagerVisitingDoctors from './pages/ManagerVisitingDoctors'
-import ManagerPartnerDoctors from './pages/ManagerPartnerDoctors'
-import ManagerSettings from './pages/ManagerSettings'
-import ManagerInvoices from './pages/ManagerInvoices'
+const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'))
+const ManagerHistory = lazy(() => import('./pages/ManagerHistory'))
+const ManagerBonuses = lazy(() => import('./pages/ManagerBonuses'))
+const ManagerAnalytics = lazy(() => import('./pages/ManagerAnalytics'))
+const ManagerKPI = lazy(() => import('./pages/ManagerKPI'))
+const ManagerActivity = lazy(() => import('./pages/ManagerActivity'))
+const ManagerRecruitDoctors = lazy(() => import('./pages/ManagerRecruitDoctors'))
+const ManagerVisitingDoctors = lazy(() => import('./pages/ManagerVisitingDoctors'))
+const ManagerPartnerDoctors = lazy(() => import('./pages/ManagerPartnerDoctors'))
+const ManagerSettings = lazy(() => import('./pages/ManagerSettings'))
+const ManagerInvoices = lazy(() => import('./pages/ManagerInvoices'))
 // svcfin01: финансовая модель платформы — 3 таба (Платформе/Сети/Сотрудникам)
-import ManagerFinance from './pages/ManagerFinance'
-import ManagerAppointments from './pages/ManagerAppointments'
+const ManagerFinance = lazy(() => import('./pages/ManagerFinance'))
+const ManagerAppointments = lazy(() => import('./pages/ManagerAppointments'))
 // Глава 4 — Manager productivity (lazy load)
 // (reused lazy from top import)
 const ManagerKanban         = lazy(() => import('./pages/ManagerKanban'))
@@ -63,17 +67,17 @@ const ManagerLab            = lazy(() => import('./pages/ManagerLab'))
 const ManagerAggregator     = lazy(() => import('./pages/ManagerAggregator'))
 // Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
 const ManagerSubscriptionCash = lazy(() => import('./pages/ManagerSubscriptionCash'))
-import ClinicSchedules from './pages/ClinicSchedules'
+const ClinicSchedules = lazy(() => import('./pages/ClinicSchedules'))
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
-import AdminRoot from './pages/AdminRoot'
+const AdminRoot = lazy(() => import('./pages/AdminRoot'))
 import { PLATFORM_MODE } from './config'
 // PatientCabinet — lazy. Один из самых тяжёлых модулей (3000+ строк, AI-виджет, секции пациента).
 // Грузим только при заходе на /{slug}/p — для остальных кабинетов экономим bundle.
 const PatientCabinet = lazy(() => import('./pages/PatientCabinet'))
-import OnlineBooking from './pages/OnlineBooking'
-import ClinicPage from './pages/ClinicPage'
+const OnlineBooking = lazy(() => import('./pages/OnlineBooking'))
+const ClinicPage = lazy(() => import('./pages/ClinicPage'))
 // DesignPreview (v1) удалён — используем только DesignPreview2 (актуальный)
-import DesignPreview2 from './pages/DesignPreview2'
+const DesignPreview2 = lazy(() => import('./pages/DesignPreview2'))
 // ─── Новый этап: дизайн-токены + базовые компоненты (Этап 4 ROADMAP) ───
 // Lazy: бандл с компонентами и tokens.css не грузится для обычных пользователей.
 const DesignSystem = lazy(() => import('./pages/DesignSystem'))
@@ -204,7 +208,11 @@ function MiniApp() {
 
   // ─── ProfileSetup только для новых сотрудников клиники (без аккаунта) ───
   if (user && !user.clinic_id && user.telegram_id && !user.username) {
-    return <ProfileSetup />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <ProfileSetup />
+      </Suspense>
+    )
   }
 
   // ─── Приезжий и партнёрский врач → только /admin (PartnerDoctorCabinet/VisitingDoctorCabinet) ───
@@ -216,6 +224,7 @@ function MiniApp() {
   // ─── Основные маршруты приложения ───
   return (
     <BrowserRouter basename={"/" + SLUG}>
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
       <Routes>
         <Route path="/" element={<Layout />}>
 
@@ -299,6 +308,7 @@ function MiniApp() {
 
         </Route>
       </Routes>
+      </Suspense>
     </BrowserRouter>
   )
 }
@@ -363,7 +373,11 @@ function AppRouter() {
   // ─── Публичная страница франшизы (/franchise) — без auth ───
   // Этап 6 ROADMAP: отдельный лендинг для будущих франчайзи.
   if (path === '/franchise' || path === '/franchise/') {
-    return <Franchise />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <Franchise />
+      </Suspense>
+    )
   }
 
   // ─── Self-service регистрация франшизы (/signup) — без auth ───
@@ -432,28 +446,48 @@ function AppRouter() {
   // Поддерживаем deep-link секций /admin/<section> — AdminLayout сам
   // синхронизирует URL ↔ activeSection (см. useEffect в AdminLayout.jsx).
   if (PLATFORM_MODE || path === '/admin' || path === '/admin/' || path.startsWith('/admin/')) {
-    return <AdminRoot />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <AdminRoot />
+      </Suspense>
+    )
   }
 
   // Панель управления тенанта: /{slug}/admin
   if (SLUG && path.startsWith('/' + SLUG + '/admin')) {
-    return <AdminRoot />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <AdminRoot />
+      </Suspense>
+    )
   }
 
   // Онлайн-запись пациентов
   if (SLUG && (path.startsWith('/' + SLUG + '/book') || path === '/' + SLUG + '/book')) {
-    return <OnlineBooking />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <OnlineBooking />
+      </Suspense>
+    )
   }
 
   // Публичная страница клиники (рейтинг врачей)
   if (SLUG && path.startsWith('/' + SLUG + '/clinic')) {
-    return <ClinicPage />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <ClinicPage />
+      </Suspense>
+    )
   }
 
   // Бандл актуального дизайна — /{slug}/design-preview-2 (HTML-прототипы из Claude Design)
   // (старый /design-preview удалён вместе с DesignPreview.jsx)
   if (SLUG && (path === '/' + SLUG + '/design-preview-2' || path.startsWith('/' + SLUG + '/design-preview-2/'))) {
-    return <DesignPreview2 />
+    return (
+      <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
+        <DesignPreview2 />
+      </Suspense>
+    )
   }
 
   // Preview-версия кабинета пациента (новый премиум-дизайн) — параллельный URL /p-new
