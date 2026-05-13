@@ -129,7 +129,7 @@ async def setup_test_db():
 
 ## Mocks
 
-- HTTPX-запросы к внешним API (ЮKassa, OpenAI Whisper, Gemini) — через `respx`.
+- HTTPX-запросы к внешним API (ЮKassa, AI-транскрипция, AI) — через `respx`.
 - SMS-провайдер — `pytest-mock` для патча `send_sms`.
 - Telegram-бот — патч `_send_telegram_message`.
 

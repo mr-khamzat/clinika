@@ -340,14 +340,14 @@
     "title": "Модуль · AI-ассистент пациенту",
     "category": "modules",
     "order": 2,
-    "summary": "Чат-бот в личном кабинете пациента: FAQ + free-chat. Google Gemini. 2 990 ₽/мес."
+    "summary": "Чат-бот в личном кабинете пациента: FAQ + free-chat. AI-провайдер. 2 990 ₽/мес."
   },
   {
     "slug": "module-call-recording",
-    "title": "Модуль · Запись звонков + Whisper",
+    "title": "Модуль · Запись звонков + AI-транскрипция",
     "category": "modules",
     "order": 3,
-    "summary": "Автоматическая запись звонков и видеоприёмов, транскрипция Whisper, AI-резюме Gemini. 3 990 ₽/мес."
+    "summary": "Автоматическая запись звонков и видеоприёмов, AI-транскрипция, AI-резюме. 3 990 ₽/мес."
   },
   {
     "slug": "module-loyalty",
@@ -487,7 +487,7 @@
     "title": "Dev · Интеграции",
     "category": "dev",
     "order": 10,
-    "summary": "МИС Renovatio, ЮKassa, ОФД, SMS-провайдеры, Telegram-бот, Whisper, Gemini, Apple Health, Google Fit."
+    "summary": "МИС Renovatio, ЮKassa, ОФД, SMS-провайдеры, Telegram-бот, AI-транскрипция, AI, Apple Health, Google Fit."
   },
   {
     "slug": "dev-contributing",

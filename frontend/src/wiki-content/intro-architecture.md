@@ -20,7 +20,7 @@ nginx (TLS, sub.клиниксеть.рф)
             ├─▶ Redis 7 (cache, pub/sub, presence)
             ├─▶ APScheduler (cron jobs)
             ├─▶ coturn (TURN/STUN для WebRTC)
-            └─▶ Внешние API (ЮKassa, ОФД, Gemini, лаборатории)
+            └─▶ Внешние API (ЮKassa, ОФД, AI, лаборатории)
 ```
 
 ## Слои приложения
@@ -78,8 +78,8 @@ coturn слушает 3478 (TURN/STUN) + 5349 (TLS). ICE-конфиг отдаё
 
 ### 7. AI инфраструктура
 
-- **Gemini 2.0 Flash** — основной LLM для чата, summarisation, экстракции.
-- **OpenAI Whisper** — транскрипция аудио (модуль `call_recording`).
+- **AI-модель** — основной LLM для чата, summarisation, экстракции.
+- **AI-транскрипция** — транскрипция аудио (модуль `call_recording`).
 - **Embeddings** — пока не используется, но скаффолд в `app/services/embeddings.py`.
 
 Запросы к AI прокси-роутятся через `app/services/llm_router.py`, который умеет fallback и кэширование одинаковых промптов.

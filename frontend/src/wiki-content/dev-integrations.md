@@ -51,10 +51,10 @@ Stub режим по умолчанию (логи без отправки). Ре
 
 Адаптеры в `app/services/ofd/`: Атол, Эвотор, Платформа ОФД. Сейчас все три — stub возвращают 501.
 
-## AI (Gemini, Whisper)
+## AI (AI, AI-транскрипция)
 
-- **Google Gemini** — для AI-ассистента и резюме звонков. `GOOGLE_AI_API_KEY` в .env.
-- **OpenAI Whisper** — транскрипция звонков. `OPENAI_API_KEY` в .env (или прокси через GigaChat).
+- **AI-провайдер** — для AI-ассистента и резюме звонков. `GOOGLE_AI_API_KEY` в .env.
+- **AI-транскрипция** — транскрипция звонков. `AI_TRANSCRIPTION_KEY` в .env (или прокси через GigaChat).
 
 ## WebRTC
 

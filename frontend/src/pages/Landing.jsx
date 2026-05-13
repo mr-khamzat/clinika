@@ -901,13 +901,13 @@ export default function Landing() {
                 ),
               },
               {
-                title: 'Запись звонков + Whisper',
+                title: 'Запись звонков и AI-расшифровка',
                 price: 3990,
                 slug: 'module-call-recording',
                 badge: 'AI',
                 accent: 'oklch(0.6 0.2 290)',
-                desc: 'Авто-запись приёмов и звонков, транскрипция Whisper, резюме Gemini.',
-                bullets: ['Whisper STT локально', 'Gemini-резюме приёма', '54-ФЗ ready'],
+                desc: 'Авто-запись приёмов и звонков, AI-транскрипция, краткое AI-резюме разговора.',
+                bullets: ['Точная транскрипция RU', 'AI-резюме приёма', '54-ФЗ ready'],
                 icon: (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0"/><path d="M12 18v3"/><path d="M8 21h8"/>
@@ -920,7 +920,7 @@ export default function Landing() {
                 slug: 'module-ai-assistant',
                 badge: 'AI',
                 accent: 'oklch(0.62 0.2 290)',
-                desc: 'Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, эскалация.',
+                desc: 'AI-чат в кабинете пациента: FAQ, расшифровка анализов, эскалация.',
                 bullets: ['FAQ и навигация', 'Расшифровка PDF анализов', 'Эскалация в чат с клиникой'],
                 icon: (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

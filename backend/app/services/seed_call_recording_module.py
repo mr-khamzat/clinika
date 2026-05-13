@@ -20,7 +20,7 @@ KEY = "call_recording"
 PAYLOAD = {
     "name": "Запись звонков",
     "description": (
-        "Запись аудио/видео звонков, расшифровка через Whisper, "
+        "Запись аудио/видео звонков, AI-расшифровка, "
         "AI-summary, поиск по транскриптам"
     ),
     "category": "telephony",

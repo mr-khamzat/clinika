@@ -100,7 +100,7 @@ GeoIP-based мониторинг попыток работы вне разреш
 ## Secrets Management
 
 - Все секреты в `/opt/clinika/.env` (не в git).
-- `JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `GOOGLE_GEMINI_API_KEY`, `OPENAI_API_KEY`, `YOOKASSA_SECRET`, ...
+- `JWT_SECRET`, `DATABASE_URL`, `REDIS_URL`, `AI_API_KEY`, `AI_TRANSCRIPTION_KEY`, `YOOKASSA_SECRET`, ...
 - Backup-копия `.env` хранится в зашифрованном виде у владельца платформы.
 - Ротация секретов раз в год (manually).
 

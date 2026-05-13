@@ -9,7 +9,7 @@
 - **KPI-Dashboard сети** с фильтром по периоду и клиникам.
 - **Когортный анализ** — пациенты по месяцу первого визита, удержание, средний чек.
 - **Bulk-настройка тарифов** — массовое назначение plan override для клиник.
-- **AI insights (multi-tenant рекомендации)** — Gemini формирует короткие текстовые подсказки на основе цифр.
+- **AI insights (multi-tenant рекомендации)** — AI формирует короткие текстовые подсказки на основе цифр.
 - **Cost forecast** — прогноз расходов клиник на следующие 1-3 месяца.
 
 ## Ключевые метрики
@@ -131,13 +131,13 @@ Response:
 - **Гл. 5: Биллинг** — данные о revenue.
 - **Гл. 4: Manager** — данные о расписании и загрузке.
 - **Гл. 6: Врач** — данные о приёмах.
-- **AI инфраструктура** — Gemini для insights.
+- **AI инфраструктура** — AI для insights.
 
 ## Настройки администратора
 
 - `FRANCHISE_DASHBOARD_TTL_SECONDS` — TTL кеша dashboard (default 3600).
 - `FRANCHISE_COHORT_REBUILD_CRON` — расписание пересчёта когорт (default `0 3 * * *`).
-- `AI_INSIGHTS_PROVIDER` — `gemini` или `disabled`.
+- `AI_INSIGHTS_PROVIDER` — `enabled` или `disabled`.
 - `AI_INSIGHTS_MIN_DATA_DAYS` — минимум данных для генерации insights (default 30).
 
 ## FAQ

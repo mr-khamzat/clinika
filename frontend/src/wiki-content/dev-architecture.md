@@ -99,8 +99,8 @@ frontend/src/
 
 ## AI стек
 
-- **Google Gemini** — для AI-ассистента пациента, генерации treatment plan, summary.
-- **OpenAI Whisper** — транскрипция звонков и видеоприёмов.
+- **AI-провайдер** — для AI-ассистента пациента, генерации treatment plan, summary.
+- **AI-транскрипция** — транскрипция звонков и видеоприёмов.
 - **Knowledge Base** — `AIKnowledgeEntry` (RAG над FAQ тенанта).
 - **AI-аналитика** (`ai_analytics_basic` / `ai_analytics_pro`) — отчёты с инсайтами.
 

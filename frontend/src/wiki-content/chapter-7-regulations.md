@@ -8,7 +8,7 @@
 
 - **Wizard SOP** — шаги: тип, цель, шаги, проверка, аудитория.
 - **Версионирование** — каждая правка создаёт новую версию, старые читабельны.
-- **AI-генератор** — Gemini на основе пары пунктов делает черновик регламента.
+- **AI-генератор** — AI на основе пары пунктов делает черновик регламента.
 - **E-signature** — простая электронная подпись через OTP по SMS.
 - **Tracking прочтения** — кто из сотрудников открыл, прокрутил, подписал.
 
@@ -130,7 +130,7 @@ GET /regulations/{id}/acknowledgements
 ## Настройки администратора
 
 - `REGULATIONS_REQUIRE_OTP` — обязательно ли OTP для подписи (default true).
-- `REGULATIONS_AI_PROVIDER` — `gemini` / `disabled`.
+- `REGULATIONS_AI_PROVIDER` — `enabled` / `disabled`.
 - `REGULATIONS_REMIND_AFTER_HOURS` — через сколько часов напомнить, если не подписан (default 48).
 
 ## FAQ

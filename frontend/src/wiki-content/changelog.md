@@ -60,13 +60,13 @@
 ### 2026-02-25 — Регламент-конструктор (Гл. 7)
 
 - Wizard SOP с версионированием.
-- AI-генератор черновика через Gemini.
+- AI-генератор черновика регламентов.
 - E-signature через OTP по SMS.
 - Tracking прочтения и подписей.
 
 ### 2026-02-10 — Доктор + AI (Гл. 6)
 
-- Pre-visit briefing — Gemini готовит резюме пациента.
+- Pre-visit briefing — AI готовит резюме пациента.
 - Treatment plan generator с проверкой аллергий.
 - МКБ-10 подсказка top-3.
 - Direct billing для visiting/partner врачей.
@@ -94,7 +94,7 @@
 - KPI Dashboard с фильтрами.
 - Когортный анализ удержания.
 - Bulk plan override для клиник.
-- AI insights через Gemini.
+- AI insights с обезличенным контекстом.
 
 ## 2025-11 — Гл. 1-2: Платформа и онбординг
 

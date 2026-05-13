@@ -6,7 +6,7 @@
 
 ## Что реализовано
 
-- **Pre-visit briefing** — Gemini готовит краткое резюме пациента перед приёмом.
+- **Pre-visit briefing** — AI готовит краткое резюме пациента перед приёмом.
 - **AI-генератор плана лечения** — после ввода диагноза предлагает план с дозировками и контролем.
 - **Direct billing для visiting / partner врачей** — мгновенный расчёт после завершения приёма.
 - **Голосовой ввод протокола** — Web Speech API в браузере, без отправки наружу.
@@ -138,13 +138,13 @@ POST /visiting/appointments/{id}/complete
 
 ## Безопасность AI
 
-- Все промпты к Gemini обезличиваются: ФИО → токены, телефон → маскируется.
+- Все промпты к AI обезличиваются: ФИО → токены, телефон → маскируется.
 - В audit log пишется хеш промпта (не сам промпт) для отслеживания.
 - Пациент имеет право запросить запрет на AI-обработку (флаг `consent.ai_processing=false`).
 
 ## Настройки администратора
 
-- `AI_PROVIDER` — `gemini` / `disabled`.
+- `AI_PROVIDER` — `enabled` / `disabled`.
 - `AI_PRE_VISIT_AUTO_GENERATE_MIN` — за сколько минут до приёма генерировать (default 5).
 - `AI_TREATMENT_PLAN_REQUIRE_DIAGNOSIS` — требовать диагноз для генерации (default true).
 - `DIRECT_BILLING_AUTO_PAYOUT` — авто-выплата instant (default false, нужен модуль).
