@@ -110,6 +110,14 @@ export default function StaffChat() {
   const [draft, setDraft] = useState('')
   const [showNewChat, setShowNewChat] = useState(false)
   const [searchContact, setSearchContact] = useState('')
+  const [plusMenuOpen, setPlusMenuOpen] = useState(false)
+  const [createGroupOpen, setCreateGroupOpen] = useState(false)
+  const [createBroadcastOpen, setCreateBroadcastOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [convMenuOpen, setConvMenuOpen] = useState(false)
+  const [addMembersOpen, setAddMembersOpen] = useState(false)
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false)
+  const [ctxMenu, setCtxMenu] = useState(null) // { x, y, items: [{label, onClick, danger}] }
   const [onlineUsers, setOnlineUsers] = useState(new Set())
   const [typingUsers, setTypingUsers] = useState({}) // {room_id: Set<user_id>}
   const [me, setMe] = useState(null)
@@ -279,6 +287,82 @@ export default function StaffChat() {
     }
   }
 
+
+  // ── Context menus (Telegram-style ПКМ) ──────────────────────────────────
+  function openMsgContextMenu(e, msg, isMine) {
+    const items = []
+    if (msg.body) {
+      items.push({ label: 'Копировать', icon: '📋', onClick: () => { navigator.clipboard?.writeText(msg.body) } })
+    }
+    if (isMine && !msg.deleted_at) {
+      items.push({ label: 'Удалить', icon: '🗑', danger: true, onClick: async () => {
+        if (!confirm('Удалить сообщение?')) return
+        try { await api.delete(`/staff-chat/messages/${msg.id}`) } catch (er) { alert('Не удалось удалить') }
+      }})
+    }
+    if (items.length === 0) return
+    setCtxMenu({ x: e.clientX, y: e.clientY, items })
+  }
+  function openRoomContextMenu(e, room) {
+    const peerId = room.type === 'direct' ? room.members.find((m) => me && m.id !== me.id)?.id : null
+    const isMyAdmin = (room.type === 'group' || room.type === 'broadcast') &&
+      room.members?.some((m) => me && m.id === me.id && m.member_role === 'admin')
+    const items = [
+      { label: 'Открыть', icon: '💬', onClick: () => openRoom(room.id) },
+    ]
+    if (isMyAdmin) {
+      items.push({ label: 'Переименовать', icon: '✏️', onClick: () => renameRoom(room) })
+      items.push({ label: 'Удалить группу', icon: '🗑', danger: true, onClick: () => deleteRoom(room) })
+    }
+    setCtxMenu({ x: e.clientX, y: e.clientY, items })
+  }
+
+  // ── Group management actions ──────────────────────────────────────────────
+  async function createGroup({ name, member_ids, broadcast }) {
+    try {
+      await api.post('/admin/chat/groups', { name, member_ids, broadcast })
+      setCreateGroupOpen(false); setCreateBroadcastOpen(false)
+      const { data } = await api.get('/staff-chat/rooms')
+      setRooms(data.rooms || [])
+    } catch (e) {
+      alert('Ошибка создания: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  async function renameRoom(room) {
+    const newName = prompt('Новое название:', room.name || '')
+    if (!newName || newName.trim() === room.name) return
+    try {
+      await api.patch(`/admin/chat/groups/${room.id}`, { name: newName.trim() })
+      setRooms((prev) => prev.map((r) => r.id === room.id ? { ...r, name: newName.trim() } : r))
+    } catch (e) {
+      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  async function deleteRoom(room) {
+    if (!confirm(`Удалить «${room.name}» полностью?\nВсе сообщения и файлы будут удалены безвозвратно.`)) return
+    try {
+      await api.delete(`/admin/chat/groups/${room.id}`)
+      setRooms((prev) => prev.filter((r) => r.id !== room.id))
+      if (activeRoomId === room.id) { setActiveRoomId(null); setMessages([]); setMembers([]) }
+      setConvMenuOpen(false)
+    } catch (e) {
+      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  async function addRoomMembers(room, user_ids) {
+    try {
+      await api.post(`/admin/chat/groups/${room.id}/members`, { user_ids })
+      setAddMembersOpen(false)
+      const { data: details } = await api.get(`/staff-chat/rooms/${room.id}`)
+      setMembers(details.members || [])
+    } catch (e) {
+      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
   function scrollToBottom() {
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ block: 'end' })
@@ -409,9 +493,35 @@ export default function StaffChat() {
       <aside className="sc-sidebar">
         <header className="sc-side-header">
           <div className="sc-side-title">Чаты</div>
-          <button className="sc-icon-btn" title="Новый чат" onClick={() => setShowNewChat(true)}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          </button>
+          <div className="sc-header-actions">
+            <button className="sc-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen(true)}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3h.1a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8v.1a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/>
+              </svg>
+            </button>
+            <div className="sc-plus-wrap">
+              <button className="sc-icon-btn" title="Новый чат / группа" onClick={() => setPlusMenuOpen(!plusMenuOpen)}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+              </button>
+              {plusMenuOpen && (
+                <>
+                  <div className="sc-menu-overlay" onClick={() => setPlusMenuOpen(false)} />
+                  <div className="sc-menu">
+                    <button className="sc-menu-item" onClick={() => { setPlusMenuOpen(false); setShowNewChat(true) }}>
+                      <span>💬</span> Новый чат
+                    </button>
+                    <button className="sc-menu-item" onClick={() => { setPlusMenuOpen(false); setCreateGroupOpen(true) }}>
+                      <span>👥</span> Новая группа
+                    </button>
+                    <button className="sc-menu-item" onClick={() => { setPlusMenuOpen(false); setCreateBroadcastOpen(true) }}>
+                      <span>📢</span> Broadcast-канал
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
         <div className="sc-rooms">
@@ -430,6 +540,7 @@ export default function StaffChat() {
               <button
                 key={r.id}
                 onClick={() => openRoom(r.id)}
+                onContextMenu={(e) => { e.preventDefault(); openRoomContextMenu(e, r) }}
                 className={'sc-room' + (isActive ? ' is-active' : '')}
               >
                 <Avatar name={r.name} id={peerId || r.id} size={42} online={isOnline} />
@@ -471,7 +582,10 @@ export default function StaffChat() {
           </div>
         ) : (
           <>
-            <header className="sc-conv-header">
+            <header className="sc-conv-header sc-conv-header-clickable"
+              onClick={() => setGroupInfoOpen(true)}
+              title="Открыть информацию"
+            >
               <Avatar name={activeRoom.name} id={peer?.id || activeRoom.id} size={40} online={peerOnline} />
               <div className="sc-conv-head-body">
                 <div className="sc-conv-head-name">{activeRoom.name}</div>
@@ -481,6 +595,7 @@ export default function StaffChat() {
                     : (peer ? (peerOnline ? <span style={{ color: 'oklch(0.55 0.18 145)' }}>● в сети</span> : 'был(а) недавно') : `Участников: ${members.length}`)}
                 </div>
               </div>
+              <svg className="sc-conv-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
             </header>
 
             <div className="sc-messages">
@@ -495,7 +610,7 @@ export default function StaffChat() {
                         {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} /> : <div style={{ width: 32 }} />}
                       </div>
                     )}
-                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '')}>
+                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
                       {showSender && !mine && <div className="sc-msg-sender">{sender?.name || 'Сотрудник'}</div>}
                       {m.deleted_at ? (
                         <div className="sc-msg-deleted"><em>сообщение удалено</em></div>
@@ -582,6 +697,70 @@ export default function StaffChat() {
         )}
       </main>
 
+      {/* GROUP INFO panel (Telegram-style slide-in) */}
+      {groupInfoOpen && activeRoom && (
+        <GroupInfoPanel
+          room={activeRoom}
+          members={members}
+          me={me}
+          onlineUsers={onlineUsers}
+          onClose={() => setGroupInfoOpen(false)}
+          onRename={() => renameRoom(activeRoom)}
+          onAddMembers={() => { setGroupInfoOpen(false); setAddMembersOpen(true) }}
+          onDelete={() => { deleteRoom(activeRoom); setGroupInfoOpen(false) }}
+          onRemoveMember={async (memberId) => {
+            if (!confirm('Удалить участника из группы?')) return
+            try {
+              await api.delete(`/admin/chat/groups/${activeRoom.id}/members/${memberId}`)
+              const { data } = await api.get(`/staff-chat/rooms/${activeRoom.id}`)
+              setMembers(data.members || [])
+            } catch (e) { alert('Ошибка: ' + (e?.response?.data?.detail || e.message)) }
+          }}
+        />
+      )}
+
+      {/* CONTEXT MENU */}
+      {ctxMenu && (
+        <>
+          <div className="sc-ctx-overlay" onClick={() => setCtxMenu(null)} onContextMenu={(e) => { e.preventDefault(); setCtxMenu(null) }} />
+          <div className="sc-ctx-menu" style={{ left: Math.min(ctxMenu.x, window.innerWidth - 220), top: Math.min(ctxMenu.y, window.innerHeight - 60 - ctxMenu.items.length * 38) }}>
+            {ctxMenu.items.map((it, idx) => (
+              <button key={idx} className={'sc-ctx-item' + (it.danger ? ' is-danger' : '')}
+                onClick={() => { setCtxMenu(null); it.onClick() }}>
+                <span className="sc-ctx-icon">{it.icon}</span>
+                <span>{it.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* SETTINGS MODAL */}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* CREATE GROUP / BROADCAST MODAL */}
+      {(createGroupOpen || createBroadcastOpen) && (
+        <CreateGroupModal
+          broadcast={createBroadcastOpen}
+          contacts={contacts}
+          onlineUsers={onlineUsers}
+          onClose={() => { setCreateGroupOpen(false); setCreateBroadcastOpen(false) }}
+          onSubmit={createGroup}
+        />
+      )}
+
+      {/* ADD MEMBERS MODAL */}
+      {addMembersOpen && activeRoom && (
+        <AddMembersModal
+          room={activeRoom}
+          members={members}
+          contacts={contacts}
+          onlineUsers={onlineUsers}
+          onClose={() => setAddMembersOpen(false)}
+          onSubmit={(ids) => addRoomMembers(activeRoom, ids)}
+        />
+      )}
+
       {/* NEW CHAT MODAL */}
       {showNewChat && (
         <div className="sc-modal-backdrop" onClick={() => setShowNewChat(false)}>
@@ -629,6 +808,282 @@ export default function StaffChat() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function GroupInfoPanel({ room, members, me, onlineUsers, onClose, onRename, onAddMembers, onDelete, onRemoveMember }) {
+  const myMember = members.find((m) => me && m.id === me.id)
+  const isAdmin = myMember?.member_role === 'admin'
+  const isGroup = room.type === 'group' || room.type === 'broadcast'
+  const peer = !isGroup ? members.find((m) => me && m.id !== me.id) : null
+  return (
+    <>
+      <div className="sc-panel-overlay" onClick={onClose} />
+      <aside className="sc-info-panel">
+        <header className="sc-info-head">
+          <button className="sc-icon-btn" onClick={onClose} title="Закрыть">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+          </button>
+          <div className="sc-info-head-title">{isGroup ? 'Информация о группе' : 'Профиль'}</div>
+        </header>
+        <div className="sc-info-hero">
+          <Avatar name={room.name} id={peer?.id || room.id} size={104} online={peer ? onlineUsers.has(peer.id) : false} />
+          <div className="sc-info-title">{room.name}</div>
+          <div className="sc-info-sub">
+            {isGroup
+              ? `${members.length} участник(а) · ${room.type === 'broadcast' ? 'broadcast-канал' : 'групповой чат'}`
+              : (peer && onlineUsers.has(peer.id) ? <span style={{ color: 'oklch(0.55 0.18 145)' }}>● в сети</span> : 'был(а) недавно')}
+          </div>
+        </div>
+
+        {isGroup && isAdmin && (
+          <div className="sc-info-actions">
+            <button className="sc-info-action" onClick={onRename}>
+              <span className="sc-info-action-ic">✏️</span>
+              <span>Переименовать</span>
+            </button>
+            <button className="sc-info-action" onClick={onAddMembers}>
+              <span className="sc-info-action-ic">➕</span>
+              <span>Добавить участников</span>
+            </button>
+          </div>
+        )}
+
+        {isGroup && (
+          <div className="sc-info-members">
+            <div className="sc-info-section-title">{members.length} участник(а)</div>
+            {members.map((m) => (
+              <div key={m.id} className="sc-info-member">
+                <Avatar name={m.name} id={m.id} size={40} online={onlineUsers.has(m.id)} />
+                <div className="sc-info-member-body">
+                  <div className="sc-info-member-name">{m.name}</div>
+                  <div className="sc-info-member-role">
+                    {m.member_role === 'admin' && <span className="sc-info-tag">admin</span>}
+                    {ROLE_LABELS[m.role] || m.role}
+                  </div>
+                </div>
+                {isAdmin && m.id !== me?.id && m.member_role !== 'admin' && (
+                  <button className="sc-info-rm" onClick={() => onRemoveMember(m.id)} title="Удалить">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {isGroup && isAdmin && (
+          <button className="sc-info-danger" onClick={onDelete}>
+            🗑 Удалить группу
+          </button>
+        )}
+      </aside>
+    </>
+  )
+}
+
+function SettingsModal({ onClose }) {
+  const [s, setS] = useState(null)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    api.get('/admin/chat-settings').then((r) => setS(r.data)).catch(() => setS({ _err: true }))
+  }, [])
+  async function update(field, value) {
+    setSaving(true)
+    try {
+      const { data } = await api.put('/admin/chat-settings', { [field]: value })
+      setS(data)
+    } catch (e) {
+      alert('Не удалось сохранить: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <div className="sc-modal-backdrop" onClick={onClose}>
+      <div className="sc-modal sc-modal-wide" onClick={(e) => e.stopPropagation()}>
+        <header className="sc-modal-head">
+          <div className="sc-modal-title">⚙️ Настройки чата</div>
+          <button className="sc-icon-btn" onClick={onClose}>×</button>
+        </header>
+        <div className="sc-modal-body">
+          {!s && <div style={{ padding: 24, textAlign: 'center', color: 'var(--sc-fg-3)' }}>Загрузка…</div>}
+          {s && s._err && <div style={{ padding: 24, textAlign: 'center', color: '#dc2626' }}>Нет доступа к настройкам</div>}
+          {s && !s._err && (
+            <>
+              <div className="sc-set-section">
+                <h4>📎 Файлы</h4>
+                <div className="sc-set-row">
+                  <div>
+                    <div className="sc-set-label">Срок хранения файлов</div>
+                    <div className="sc-set-hint">Через сколько часов файлы автоматически удаляются</div>
+                  </div>
+                  <select disabled={saving} value={s.file_ttl_hours} onChange={(e) => update('file_ttl_hours', Number(e.target.value))} className="sc-select">
+                    <option value={24}>24 часа</option>
+                    <option value={48}>48 часов</option>
+                    <option value={72}>72 часа (3 дня)</option>
+                    <option value={168}>7 дней</option>
+                    <option value={720}>30 дней</option>
+                  </select>
+                </div>
+                <div className="sc-set-row">
+                  <div>
+                    <div className="sc-set-label">Максимальный размер</div>
+                    <div className="sc-set-hint">Лимит на один файл</div>
+                  </div>
+                  <select disabled={saving} value={s.max_file_mb} onChange={(e) => update('max_file_mb', Number(e.target.value))} className="sc-select">
+                    <option value={10}>10 МБ</option>
+                    <option value={25}>25 МБ</option>
+                    <option value={50}>50 МБ</option>
+                    <option value={100}>100 МБ</option>
+                    <option value={500}>500 МБ</option>
+                  </select>
+                </div>
+              </div>
+              <div className="sc-set-section">
+                <h4>🌐 Inter-clinic</h4>
+                <ToggleRow label="Чат между клиниками одной франшизы" value={s.inter_clinic_allowed}
+                  onChange={(v) => update('inter_clinic_allowed', v)} disabled={saving} />
+              </div>
+              <div className="sc-set-section">
+                <h4>📲 Telegram-уведомления</h4>
+                <ToggleRow label="Главный switch" hint="Без этого никаких TG-нотификаций" value={s.tg_notifications_enabled}
+                  onChange={(v) => update('tg_notifications_enabled', v)} disabled={saving} />
+                <ToggleRow label="Уведомлять super_admin" value={s.tg_notify_super_admin}
+                  onChange={(v) => update('tg_notify_super_admin', v)} disabled={saving || !s.tg_notifications_enabled} />
+                <ToggleRow label="Уведомлять владельца сети" value={s.tg_notify_franchise_owner}
+                  onChange={(v) => update('tg_notify_franchise_owner', v)} disabled={saving || !s.tg_notifications_enabled} />
+                <ToggleRow label="Пациентские чаты в TG" value={s.patient_chat_tg_enabled}
+                  onChange={(v) => update('patient_chat_tg_enabled', v)} disabled={saving || !s.tg_notifications_enabled} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ToggleRow({ label, hint, value, onChange, disabled }) {
+  return (
+    <div className={'sc-set-row sc-toggle-row' + (disabled ? ' is-disabled' : '')}>
+      <div>
+        <div className="sc-set-label">{label}</div>
+        {hint && <div className="sc-set-hint">{hint}</div>}
+      </div>
+      <button type="button" disabled={disabled} onClick={() => onChange(!value)}
+        className={'sc-tg ' + (value ? 'is-on' : '')}>
+        <span className="sc-tg-thumb" />
+      </button>
+    </div>
+  )
+}
+
+function CreateGroupModal({ broadcast, contacts, onlineUsers, onClose, onSubmit }) {
+  const [name, setName] = useState('')
+  const [selected, setSelected] = useState(new Set())
+  const [search, setSearch] = useState('')
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    return contacts.groups
+      .map((g) => ({ ...g, users: g.users.filter((u) => !q || (u.name || '').toLowerCase().includes(q)) }))
+      .filter((g) => g.users.length > 0)
+  }, [contacts.groups, search])
+  function toggle(id) {
+    const s = new Set(selected)
+    if (s.has(id)) s.delete(id); else s.add(id)
+    setSelected(s)
+  }
+  return (
+    <div className="sc-modal-backdrop" onClick={onClose}>
+      <div className="sc-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="sc-modal-head">
+          <div className="sc-modal-title">{broadcast ? '📢 Новый broadcast-канал' : '👥 Новая группа'}</div>
+          <button className="sc-icon-btn" onClick={onClose}>×</button>
+        </header>
+        <input className="sc-input sc-search" placeholder="Название" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        <input className="sc-input sc-search" placeholder="Поиск участников…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="sc-modal-body">
+          {filtered.map((g) => (
+            <div key={g.clinic_id || g.label} className="sc-contact-group">
+              <div className="sc-contact-group-label">{g.label}</div>
+              {g.users.map((u) => (
+                <label key={u.id} className={'sc-contact-row sc-pick ' + (selected.has(u.id) ? 'is-picked' : '')}
+                  onClick={(e) => { if (e.target.tagName !== 'INPUT') toggle(u.id) }}>
+                  <input type="checkbox" checked={selected.has(u.id)} readOnly />
+                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} />
+                  <div className="sc-contact-body">
+                    <div className="sc-contact-name">{u.name}</div>
+                    <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+        <footer className="sc-modal-foot">
+          <span style={{ fontSize: 12, color: 'var(--sc-fg-3)', marginRight: 'auto' }}>{selected.size} выбрано</span>
+          <button className="sc-btn-ghost" onClick={onClose}>Отмена</button>
+          <button className="sc-btn-primary" disabled={!name.trim() || selected.size === 0}
+            onClick={() => onSubmit({ name: name.trim(), member_ids: Array.from(selected), broadcast })}>
+            Создать
+          </button>
+        </footer>
+      </div>
+    </div>
+  )
+}
+
+function AddMembersModal({ room, members, contacts, onlineUsers, onClose, onSubmit }) {
+  const existingIds = useMemo(() => new Set(members.map((m) => m.id)), [members])
+  const [selected, setSelected] = useState(new Set())
+  const [search, setSearch] = useState('')
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    return contacts.groups
+      .map((g) => ({ ...g, users: g.users.filter((u) => !existingIds.has(u.id) && (!q || (u.name || '').toLowerCase().includes(q))) }))
+      .filter((g) => g.users.length > 0)
+  }, [contacts.groups, search, existingIds])
+  function toggle(id) {
+    const s = new Set(selected)
+    if (s.has(id)) s.delete(id); else s.add(id)
+    setSelected(s)
+  }
+  return (
+    <div className="sc-modal-backdrop" onClick={onClose}>
+      <div className="sc-modal" onClick={(e) => e.stopPropagation()}>
+        <header className="sc-modal-head">
+          <div className="sc-modal-title">Добавить в «{room.name}»</div>
+          <button className="sc-icon-btn" onClick={onClose}>×</button>
+        </header>
+        <input className="sc-input sc-search" placeholder="Поиск…" value={search} onChange={(e) => setSearch(e.target.value)} autoFocus />
+        <div className="sc-modal-body">
+          {filtered.map((g) => (
+            <div key={g.clinic_id || g.label} className="sc-contact-group">
+              <div className="sc-contact-group-label">{g.label}</div>
+              {g.users.map((u) => (
+                <label key={u.id} className={'sc-contact-row sc-pick ' + (selected.has(u.id) ? 'is-picked' : '')}
+                  onClick={(e) => { if (e.target.tagName !== 'INPUT') toggle(u.id) }}>
+                  <input type="checkbox" checked={selected.has(u.id)} readOnly />
+                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} />
+                  <div className="sc-contact-body">
+                    <div className="sc-contact-name">{u.name}</div>
+                    <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+        <footer className="sc-modal-foot">
+          <button className="sc-btn-ghost" onClick={onClose}>Отмена</button>
+          <button className="sc-btn-primary" disabled={selected.size === 0}
+            onClick={() => onSubmit(Array.from(selected))}>
+            Добавить {selected.size}
+          </button>
+        </footer>
+      </div>
     </div>
   )
 }
@@ -901,6 +1356,160 @@ const STAFF_CHAT_CSS = `
   transition: background 0.15s;
 }
 .sc-contact-row:hover { background: var(--sc-bg); }
+.sc-header-actions { display: flex; gap: 4px; }
+.sc-plus-wrap { position: relative; }
+.sc-menu-overlay { position: fixed; inset: 0; z-index: 1; }
+.sc-menu {
+  position: absolute; top: 100%; right: 0; margin-top: 4px;
+  background: var(--sc-bg-alt); border: 1px solid var(--sc-border);
+  border-radius: 12px; box-shadow: 0 12px 32px -8px oklch(0.2 0.02 250 / 0.2);
+  min-width: 220px; padding: 6px; z-index: 2;
+  animation: scFadeIn 0.12s ease;
+}
+.sc-menu-right { right: 0; left: auto; }
+.sc-menu-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 9px 12px; border-radius: 8px;
+  background: transparent; border: none; cursor: pointer;
+  font: inherit; font-size: 14px; color: var(--sc-fg); text-align: left;
+}
+.sc-menu-item:hover { background: var(--sc-bg); }
+.sc-menu-item.sc-menu-danger { color: oklch(0.55 0.2 25); }
+.sc-menu-item.sc-menu-danger:hover { background: oklch(0.95 0.04 25); }
+.sc-modal-wide { width: min(620px, 95vw); }
+.sc-btn-primary {
+  padding: 9px 16px; background: var(--sc-accent); color: white;
+  border: none; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.sc-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.sc-btn-ghost {
+  padding: 9px 16px; background: transparent; color: var(--sc-fg-2);
+  border: 1px solid var(--sc-border); border-radius: 10px;
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.sc-modal-foot { padding: 12px 18px 16px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; border-top: 1px solid var(--sc-border); }
+.sc-pick.is-picked { background: var(--sc-accent-soft); }
+.sc-set-section { padding: 16px 20px 8px; border-bottom: 1px solid var(--sc-border); }
+.sc-set-section:last-child { border-bottom: none; }
+.sc-set-section h4 { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--sc-fg-2); }
+.sc-set-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; gap: 16px; }
+.sc-set-label { font-size: 14px; font-weight: 500; color: var(--sc-fg); }
+.sc-set-hint { font-size: 12px; color: var(--sc-fg-3); margin-top: 2px; }
+.sc-select {
+  padding: 6px 12px; border: 1px solid var(--sc-border); border-radius: 8px;
+  background: var(--sc-bg-alt); color: var(--sc-fg); font: inherit; font-size: 13px;
+  cursor: pointer;
+}
+.sc-toggle-row.is-disabled { opacity: 0.5; }
+.sc-tg {
+  width: 44px; height: 24px; border-radius: 999px;
+  border: none; background: var(--sc-border); cursor: pointer; position: relative;
+  transition: background 0.2s; flex-shrink: 0;
+}
+.sc-tg.is-on { background: var(--sc-accent); }
+.sc-tg-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%; background: white;
+  transition: transform 0.2s;
+}
+.sc-tg.is-on .sc-tg-thumb { transform: translateX(20px); }
+
+/* GROUP INFO PANEL (Telegram-style slide-in) */
+.sc-conv-header-clickable { cursor: pointer; transition: background 0.15s; }
+.sc-conv-header-clickable:hover { background: var(--sc-bg); }
+.sc-conv-chevron { color: var(--sc-fg-3); margin-left: 4px; flex-shrink: 0; opacity: 0.6; }
+.sc-panel-overlay {
+  position: fixed; inset: 0; background: oklch(0.2 0.02 250 / 0.25);
+  z-index: 50; backdrop-filter: blur(2px);
+  animation: scFadeIn 0.15s ease;
+}
+.sc-info-panel {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: 380px; max-width: 100vw;
+  background: var(--sc-bg-alt);
+  z-index: 51; display: flex; flex-direction: column;
+  box-shadow: -20px 0 60px -20px oklch(0.2 0.02 250 / 0.3);
+  animation: scSlideInRight 0.22s ease;
+  overflow-y: auto;
+}
+@keyframes scSlideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.sc-info-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--sc-border);
+  position: sticky; top: 0; background: var(--sc-bg-alt); z-index: 1;
+}
+.sc-info-head-title { font-size: 15px; font-weight: 600; }
+.sc-info-hero {
+  padding: 28px 24px 20px;
+  display: flex; flex-direction: column; align-items: center;
+  border-bottom: 1px solid var(--sc-border);
+}
+.sc-info-title { font-size: 20px; font-weight: 600; margin-top: 14px; text-align: center; letter-spacing: -0.01em; }
+.sc-info-sub { font-size: 13px; color: var(--sc-fg-3); margin-top: 4px; }
+.sc-info-actions {
+  display: flex; gap: 8px; padding: 12px 16px;
+  border-bottom: 1px solid var(--sc-border);
+}
+.sc-info-action {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 8px; border-radius: 12px;
+  background: var(--sc-bg); border: 1px solid var(--sc-border); cursor: pointer;
+  font: inherit; font-size: 12px; color: var(--sc-fg);
+  transition: background 0.15s, border-color 0.15s;
+}
+.sc-info-action:hover { background: var(--sc-accent-soft); border-color: var(--sc-accent); color: var(--sc-accent); }
+.sc-info-action-ic { font-size: 22px; }
+.sc-info-section-title { padding: 12px 20px 8px; font-size: 12px; font-weight: 600; color: var(--sc-fg-3); text-transform: uppercase; letter-spacing: 0.05em; }
+.sc-info-members { padding: 4px 8px 16px; }
+.sc-info-member {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 12px; border-radius: 12px;
+}
+.sc-info-member:hover { background: var(--sc-bg); }
+.sc-info-member-body { flex: 1; min-width: 0; }
+.sc-info-member-name { font-size: 14px; font-weight: 500; }
+.sc-info-member-role { font-size: 12px; color: var(--sc-fg-3); margin-top: 2px; display: flex; gap: 6px; align-items: center; }
+.sc-info-tag {
+  background: var(--sc-accent); color: white;
+  padding: 1px 6px; border-radius: 4px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.sc-info-rm {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: transparent; border: 1px solid var(--sc-border); color: var(--sc-fg-3);
+  cursor: pointer; display: grid; place-items: center;
+}
+.sc-info-rm:hover { background: oklch(0.95 0.04 25); color: oklch(0.55 0.2 25); border-color: oklch(0.85 0.12 25); }
+.sc-info-danger {
+  margin: 16px; padding: 12px 16px;
+  background: oklch(0.95 0.04 25); color: oklch(0.55 0.2 25);
+  border: 1px solid oklch(0.88 0.08 25);
+  border-radius: 12px; font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+}
+.sc-info-danger:hover { background: oklch(0.92 0.06 25); }
+
+/* CONTEXT MENU (right-click) */
+.sc-ctx-overlay { position: fixed; inset: 0; z-index: 60; }
+.sc-ctx-menu {
+  position: fixed; z-index: 61;
+  background: var(--sc-bg-alt); border: 1px solid var(--sc-border);
+  border-radius: 12px; padding: 6px; min-width: 180px;
+  box-shadow: 0 12px 32px -8px oklch(0.2 0.02 250 / 0.25);
+  animation: scFadeIn 0.1s ease;
+}
+.sc-ctx-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 8px 12px; border-radius: 8px;
+  background: transparent; border: none; cursor: pointer;
+  font: inherit; font-size: 13.5px; color: var(--sc-fg); text-align: left;
+}
+.sc-ctx-item:hover { background: var(--sc-bg); }
+.sc-ctx-item.is-danger { color: oklch(0.55 0.2 25); }
+.sc-ctx-item.is-danger:hover { background: oklch(0.95 0.04 25); }
+.sc-ctx-icon { width: 18px; display: inline-grid; place-items: center; }
 .sc-contact-body { flex: 1; min-width: 0; }
 .sc-contact-name { font-size: 14.5px; font-weight: 500; color: var(--sc-fg); }
 .sc-contact-role { font-size: 12px; color: var(--sc-fg-3); margin-top: 1px; }
