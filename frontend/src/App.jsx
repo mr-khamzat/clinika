@@ -201,7 +201,9 @@ function MiniApp() {
   }
 
   // ─── Auth-гейт: нет user → стартовая страница с единым входом ───
-  if (!user) return (
+  // Исключение: /staff-chat сам обрабатывает auth через URL hash (см. _bootstrap_staff_chat.js)
+  const _isStaffChatRoute = (typeof window !== 'undefined') && (window.location.pathname === '/staff-chat' || window.location.pathname.startsWith('/staff-chat/'))
+  if (!user && !_isStaffChatRoute) return (
     <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
       <Landing />
     </Suspense>

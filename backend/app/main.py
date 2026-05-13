@@ -135,6 +135,7 @@ from app.routers.manager_subscription_cash import router as manager_subscription
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.staff_chat import router as staff_chat_router
+from app.routers.owner_bot_webhook import router as owner_bot_webhook_router
 from app.services.staff_chat_cleanup_job import cleanup_staff_chat_files_job
 from app.routers.patient_calendar import router as patient_calendar_router
 from app.routers.patient_documents_v2 import router as patient_health_documents_router
@@ -1604,6 +1605,7 @@ app.include_router(manager_subscription_cash_router)
 app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
 app.include_router(staff_chat_router)
+app.include_router(owner_bot_webhook_router)
 app.include_router(patient_calendar_router)
 app.include_router(patient_health_documents_router)
 app.include_router(doctor_patient_documents_router)

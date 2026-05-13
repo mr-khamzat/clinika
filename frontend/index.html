@@ -58,6 +58,31 @@
 </head>
 <body>
   <div id="root"></div>
+  <!-- /staff-chat: парсим JWT из URL hash ДО загрузки React-бандла -->
+  <script>
+  (function(){
+    try {
+      var p = window.location.pathname;
+      if (p !== "/staff-chat" && p.indexOf("/staff-chat/") !== 0) return;
+      if (!window.location.hash || window.location.hash.length < 2) return;
+      var params = new URLSearchParams(window.location.hash.slice(1));
+      var at = params.get("access_token");
+      var rt = params.get("refresh_token");
+      if (!at) return;
+      var ROOT = ["admin","staff-chat","design-preview-2","design-preview"];
+      var parts = p.split("/").filter(Boolean);
+      var slug = (parts[0] && ROOT.indexOf(parts[0]) === -1) ? parts[0] : "";
+      localStorage.setItem("clinika_admin_token_" + slug, at);
+      localStorage.setItem("clinika_token_" + slug, at);
+      if (rt) {
+        localStorage.setItem("clinika_admin_refresh_token_" + slug, rt);
+        localStorage.setItem("clinika_refresh_token_" + slug, rt);
+      }
+      history.replaceState(null, "", p + window.location.search);
+      window.__STAFFCHAT_TOKEN_INJECTED__ = true;
+    } catch(e) { console.error("staff-chat bootstrap:", e); }
+  })();
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

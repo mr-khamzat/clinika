@@ -125,6 +125,25 @@ export default function StaffChat() {
   useEffect(() => {
     if (embed) document.documentElement.style.background = 'var(--sc-bg, #0f1115)'
     document.title = 'Чаты КлиникСеть'
+    // Принимаем JWT из URL hash (Calls пробрасывает токен из electron-store).
+    // Hash не уходит в логи сервера; сразу очищаем адресную строку для безопасности.
+    try {
+      if (window.location.hash && window.location.hash.length > 1) {
+        const params = new URLSearchParams(window.location.hash.slice(1))
+        const at = params.get('access_token')
+        const rt = params.get('refresh_token')
+        if (at) {
+          // SLUG = '' для /staff-chat — пишем оба ключа на случай разных ролей
+          localStorage.setItem('clinika_admin_token_' + SLUG, at)
+          localStorage.setItem('clinika_token_' + SLUG, at)
+          if (rt) {
+            localStorage.setItem('clinika_admin_refresh_token_' + SLUG, rt)
+            localStorage.setItem('clinika_refresh_token_' + SLUG, rt)
+          }
+          history.replaceState(null, '', window.location.pathname + window.location.search)
+        }
+      }
+    } catch {}
     ;(async () => {
       try {
         const [meRes, roomsRes, contactsRes, polRes] = await Promise.all([

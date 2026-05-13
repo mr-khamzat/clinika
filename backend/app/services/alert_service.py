@@ -65,6 +65,41 @@ def _signature() -> str:
     return f"\n\n<i>КлиникСеть · {msk.strftime('%Y-%m-%d %H:%M')} МСК</i>"
 
 
+async def send_to_owner(text: str, parse_mode: str = "HTML") -> bool:
+    """Отправка адресного сообщения в owner-бот владельца сети.
+
+    Используется для: новых сообщений в /staff-chat адресованных
+    super_admin/franchise_owner, заявок с /contact, входящих звонков и т.п.
+    Отличается от системного _send_telegram тем, что НЕ дедуплицируется и
+    идёт через отдельный токен (OWNER_BOT_TOKEN) на конкретный chat_id
+    (OWNER_TELEGRAM_ID), чтобы не смешиваться с системными алертами.
+    """
+    token = (settings.owner_bot_token or "").strip()
+    target = (settings.owner_telegram_id or "").strip()
+    if not token or not target:
+        log.debug("owner-bot not configured (token/chat_id missing)")
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    proxy_url = os.environ.get(
+        "TELEGRAM_PROXY_URL",
+        "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15, proxy=proxy_url) as client:
+            r = await client.post(url, json={
+                "chat_id": target,
+                "text": text,
+                "parse_mode": parse_mode,
+                "disable_web_page_preview": True,
+            })
+            if r.status_code != 200:
+                log.warning(f"owner-bot {r.status_code}: {r.text[:200]}")
+            return r.status_code == 200
+    except Exception as e:
+        log.error(f"owner-bot send error: {e}")
+        return False
+
+
 async def _send_telegram(text: str, chat_id: str | None = None) -> bool:
     """Шлём через ADMIN_BOT_TOKEN если задан, иначе через TELEGRAM_BOT_TOKEN.
 

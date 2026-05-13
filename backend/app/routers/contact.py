@@ -63,6 +63,10 @@ async def send_contact(
         f"<b>Email:</b> {_html.escape(form.email or '—')}\n"
         f"<b>Сообщение:</b>\n{_html.escape(form.message)[:1500]}"
     )
+    # Owner-бот (адресные сообщения владельцу). Параллельно — системному админу
+    # через notify_admin, на случай если owner-бот не настроен.
+    from app.services.alert_service import send_to_owner as _send_to_owner
+    background_tasks.add_task(_send_to_owner, msg)
     background_tasks.add_task(notify_admin, msg, dedup_key=None, bypass_switch=True)
     return {'ok': True}
 

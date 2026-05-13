@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     qr_secret: str
     telegram_bot_token: str = ""
     admin_bot_token: str = ""  # Telegram admin notification bot (stclinik_addmin_bot)
+    owner_bot_token: str = ""  # Owner-bot — для адресных сообщений (chat→admin, /contact)
+    owner_telegram_id: str = ""  # chat_id владельца для owner-bot
     gemini_api_key: str = ""  # Google Gemini AI API key (GET /ai/insights)
     mini_app_url: str = "http://localhost:8901"
     backend_url: str = "http://localhost:8900"

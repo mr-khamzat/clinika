@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.23 NSIS installer + AWG VPN, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.24 NSIS installer + AWG VPN + чат сотрудников, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -508,8 +508,8 @@ export default function Landing() {
               </button>
             </div>
             <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Windows · 1.0.23 (с AWG VPN)
+              <a href="/downloads/KliniknetCalls-Setup-1.0.27.exe" download className="ks-btn-ghost">
+                {ICONS.download} Calls Windows · 1.0.27 (с AWG VPN + чат)
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls macOS · Apple Silicon
@@ -1024,11 +1024,11 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версия 1.0.23 — встроенный AWG VPN (обход блокировок), окно «Диагностика», WhatsApp Web в боковой панели.
+                Версия 1.0.27 — встроенный AWG VPN, внутренний чат сотрудников (отдельное окно), WhatsApp Web в боковой панели, окно «Диагностика».
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.23.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.23 (AWG VPN)
+                <a href="/downloads/KliniknetCalls-Setup-1.0.27.exe" download className="ks-btn-primary">
+                  {ICONS.download} Windows · 1.0.27 (AWG VPN + чат)
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ

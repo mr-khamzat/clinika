@@ -266,6 +266,73 @@ async def post_room_message(
     payload_event = svc.serialize_message(msg)
     # Бродкаст всем участникам через WS hub
     await ws_hub.broadcast_to_room(room.id, {"type": "message:new", "data": payload_event})
+    # Telegram-нотификация владельцу: если в комнате есть super_admin/franchise_owner —
+    # отправляем им сообщение в owner-бот (можно ответить прямо из Telegram через Reply).
+    try:
+        from app.services.alert_service import send_to_owner
+        import asyncio as _asyncio, html as _html
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        from app.models.clinic import Clinic as _Clinic
+        members = await svc.list_room_members(db, room.id)
+        other_member_ids = [m.user_id for m in members if m.user_id != user.id]
+        if other_member_ids:
+            r_users = await db.execute(select(User).where(User.id.in_(other_member_ids)))
+            recipients = list(r_users.scalars().all())
+            needs_owner = any(
+                (u.role.value if hasattr(u.role, "value") else str(u.role)) in ("super_admin", "franchise_owner")
+                for u in recipients
+            )
+            if needs_owner:
+                # Имя и роль отправителя
+                sender_brief = svc.serialize_user_brief(user)
+                sender_name = _html.escape(sender_brief["name"])
+                role_labels = {
+                    "super_admin": "Платформа", "franchise_owner": "Владелец сети",
+                    "manager": "Управляющий", "admin": "Управляющий клиники",
+                    "doctor": "Врач", "reg": "Регистратор", "nurse": "Медсестра",
+                    "recruiter": "Рекрутер",
+                    "partner_doctor": "Партнёрский врач",
+                    "visiting_doctor": "Приглашённый врач",
+                }
+                role_label = role_labels.get(sender_brief["role"], sender_brief["role"])
+                # Клиника отправителя
+                clinic_name = "—"
+                if getattr(user, "clinic_id", None):
+                    rc = await db.execute(select(_Clinic).where(_Clinic.id == user.clinic_id))
+                    c = rc.scalar_one_or_none()
+                    if c:
+                        clinic_name = c.name
+                # Тип чата
+                if room.type == "direct":
+                    chat_label = "личный с вами"
+                elif room.type == "clinic":
+                    chat_label = f"общий чат клиники"
+                elif room.type == "group":
+                    chat_label = "группа «" + (room.name or "без названия") + "»"
+                else:
+                    chat_label = room.type
+                # Тело
+                body_text = (msg.body or "").strip()
+                body_preview = _html.escape(body_text[:1500])
+                if msg.attachments:
+                    body_preview += "\n📎 <i>файл во вложении</i>"
+                # Время МСК
+                msk = _dt.now(_tz.utc).astimezone(_tz(_td(hours=3)))
+                stamp = msk.strftime("%d.%m.%Y %H:%M МСК")
+                tg_text = (
+                    f"💬 <b>Новое сообщение в КлиникСеть</b>\n\n"
+                    f"👤 <b>От:</b> {sender_name} ({_html.escape(role_label)})\n"
+                    f"🏥 <b>Клиника:</b> {_html.escape(clinic_name)}\n"
+                    f"💭 <b>Чат:</b> {_html.escape(chat_label)}\n\n"
+                    f"«{body_preview}»\n\n"
+                    f"⏰ {stamp}\n"
+                    f"🔗 <a href=https://клиниксеть.рф/staff-chat>Открыть в браузере</a>\n\n"
+                    f"<i>↩️ Ответьте на это сообщение в Telegram — текст уйдёт в чат</i>\n"
+                    f"<code>room:{room.id}</code>"
+                )
+                _asyncio.create_task(send_to_owner(tg_text))
+    except Exception as _e:
+        pass  # нотификация не должна ломать основной flow
     return payload_event
 
 

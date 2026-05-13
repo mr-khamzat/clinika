@@ -1,7 +1,10 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import './_bootstrap_staff_chat'
 import App from './App'
 import './index.css'
+
+
 // ─── Дизайн-токены КлиникСеть (design-preview-2) ───
 // Загружаются глобально один раз; CSS-переменные используются в /src/design/ и tailwind.
 import './design/tokens.css'
