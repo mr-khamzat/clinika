@@ -64,6 +64,29 @@ export default function ChatRoles() {
     }
   }
 
+  async function deleteGroup(room) {
+    if (!confirm(`Удалить группу «${room.name}» полностью?\nВсе сообщения и файлы будут удалены.`)) return
+    try {
+      await api.delete(`/admin/chat/groups/${room.id}`)
+      flash('Группа удалена')
+      await loadAll()
+    } catch (e) {
+      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  async function renameGroup(room) {
+    const newName = prompt('Новое название группы:', room.name)
+    if (!newName || newName.trim() === room.name) return
+    try {
+      await api.patch(`/admin/chat/groups/${room.id}`, { name: newName.trim() })
+      flash('Группа переименована')
+      await loadAll()
+    } catch (e) {
+      alert('Ошибка: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
   async function removeMember(room, user_id) {
     if (!confirm('Удалить участника из группы?')) return
     try {
@@ -111,7 +134,17 @@ export default function ChatRoles() {
                 <div className="cr-group-meta">{g.members_count} участников · {g.type === 'broadcast' ? 'канал (только админ пишет)' : 'групповой чат'}</div>
               </div>
               {g.is_admin && (
-                <button className="cr-btn-ghost" onClick={() => setShowAdd(g)} title="Добавить участников">+</button>
+                <div className="cr-actions">
+                  <button className="cr-btn-icon" onClick={() => renameGroup(g)} title="Переименовать">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  </button>
+                  <button className="cr-btn-icon" onClick={() => setShowAdd(g)} title="Добавить участников">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  </button>
+                  <button className="cr-btn-icon cr-btn-danger" onClick={() => deleteGroup(g)} title="Удалить группу">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+                  </button>
+                </div>
               )}
             </div>
             <div className="cr-members">
@@ -319,6 +352,16 @@ const CR_CSS = `
 }
 .cr-btn-ghost:hover { background: var(--cr-bg); }
 .cr-icon-btn { background: transparent; border: none; font-size: 22px; cursor: pointer; color: var(--cr-fg-3); }
+.cr-actions { display: flex; gap: 4px; }
+.cr-btn-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: var(--cr-bg); color: var(--cr-fg-2);
+  border: 1px solid var(--cr-border); cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cr-btn-icon:hover { background: var(--cr-accent-soft); color: var(--cr-accent); border-color: var(--cr-accent); }
+.cr-btn-icon.cr-btn-danger:hover { background: oklch(0.95 0.06 25); color: oklch(0.55 0.2 25); border-color: oklch(0.85 0.12 25); }
 .cr-modal-bg { position: fixed; inset: 0; background: oklch(0.2 0.02 250 / 0.4); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 100; }
 .cr-modal {
   background: var(--cr-surface); border-radius: 16px; width: min(560px, 92vw); max-height: 85vh;

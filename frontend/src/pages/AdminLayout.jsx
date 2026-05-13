@@ -19,6 +19,8 @@ const ReviewsSection = lazy(() => import('../sections/ReviewsSection'))
 const ContactsSection = lazy(() => import('../sections/ContactsSection'))
 const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 const PatientChatsSection = lazy(() => import('../sections/PatientChatsSection'))
+const ChatSettings  = lazy(() => import('./ChatSettings'))
+const ChatRoles     = lazy(() => import('./ChatRoles'))
 const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 // W6: AI-ассистент пациенту через Gemini — список и история диалогов
 const AiAssistantSection = lazy(() => import('../sections/AiAssistantSection'))
@@ -165,6 +167,8 @@ const NAV = [
   { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
   { key: 'doctors',        label: 'Врачи',        icon: 'stethoscope' },
   { key: 'patient_chats',  label: 'Чаты пациентов', icon: 'chat_bubble' },
+  { key: 'chat_groups',   label: 'Группы чатов',   icon: 'groups' },
+  { key: 'chat_settings', label: 'Настройки чата', icon: 'tune' },
   { key: 'calls_cfg',      label: 'Звонки/SMS',   icon: 'settings_phone' },
   { key: 'calls_log',      label: 'Звонки',       icon: 'call' },
   { key: 'cross_dir',      label: 'Сотрудники сети', icon: 'group' },
@@ -227,6 +231,8 @@ const NAV_GROUP_OF = {
   reviews:            'CONTENT',
   contacts:           'CONTENT',
   patient_chats:      'CONTENT',
+  chat_groups:        'CONTENT',
+  chat_settings:      'CONTENT',
   cms:                'CONTENT',
   branding:           'CONTENT',
   ads:                'CONTENT',
@@ -270,6 +276,8 @@ const PAGE_TITLES = {
   platform_modules:   { title: 'Модули по тенантам',    subtitle: 'Heatmap состояния платных модулей всех тенантов' },
   roles:              { title: 'Роли и права',         subtitle: 'Матрица RBAC: переопределение прав по ролям тенанта' },
   reviews:            { title: 'Отзывы',               subtitle: 'Модерация публичных отзывов' },
+  chat_groups:        { title: 'Группы чатов',          subtitle: 'Кастомные групповые чаты и broadcast-каналы' },
+  chat_settings:      { title: 'Настройки чата',        subtitle: 'TTL файлов, размер, Telegram-уведомления, inter-clinic' },
   contacts:           { title: 'Обращения',            subtitle: 'Входящие сообщения от посетителей лендингов' },
   // plugins удалён — старая plugin_*-система выпилена
   mis_sync:           { title: 'МИС Sync',             subtitle: 'Синхронизация с медицинскими информационными системами' },
@@ -8165,6 +8173,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'inventory':          return <Suspense fallback={<SectionLoader />}><InventorySection token={adminToken} /></Suspense>
       case 'subscription_plans': return <Suspense fallback={<SectionLoader />}><SuperAdminSubscriptionPlansSection token={adminToken} /></Suspense>
       case 'platform_modules':   return <Suspense fallback={<SectionLoader />}><PlatformModulesSection token={adminToken} /></Suspense>
+      case 'chat_settings':  return <Suspense fallback={<SectionLoader />}><ChatSettings /></Suspense>
+      case 'chat_groups':    return <Suspense fallback={<SectionLoader />}><ChatRoles /></Suspense>
       default:               return null
     }
   }

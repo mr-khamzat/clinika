@@ -185,11 +185,21 @@ async def list_groups(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    _ensure_admin(user)
+    # Видят группу ТОЛЬКО участники (creator → автоматически member).
+    # super_admin/franchise_owner bypass'ов нет — изоляция важнее.
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    if role == "patient":
+        raise HTTPException(403, "Пациентам недоступно")
+    r_member = await db.execute(
+        select(StaffChatMember.room_id).where(StaffChatMember.user_id == user.id)
+    )
+    my_room_ids = [row[0] for row in r_member.all()]
+    if not my_room_ids:
+        return {"groups": []}
     # Группы и broadcast-каналы тенанта (только те где user — admin)
     r = await db.execute(
         select(StaffChatRoom)
-        .where(StaffChatRoom.tenant_id == user.tenant_id)
+        .where(StaffChatRoom.id.in_(my_room_ids))
         .where(StaffChatRoom.type.in_([ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST]))
         .order_by(StaffChatRoom.created_at.desc())
     )
@@ -197,10 +207,7 @@ async def list_groups(
     result = []
     for room in rooms:
         members = await svc.list_room_members(db, room.id)
-        # Доступ к управлению — только если user — admin этой группы
         is_admin_of_group = any(m.user_id == user.id and m.member_role == "admin" for m in members)
-        if not is_admin_of_group and (user.role.value if hasattr(user.role, "value") else str(user.role)) not in ("super_admin", "franchise_owner"):
-            continue
         ru = await db.execute(select(User).where(User.id.in_([m.user_id for m in members])))
         umap = {u.id: u for u in ru.scalars().all()}
         result.append({
@@ -235,9 +242,7 @@ async def add_members(
     members = await svc.list_room_members(db, room_id)
     me = next((m for m in members if m.user_id == user.id), None)
     if not me or me.member_role != "admin":
-        role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
-        if role_str not in ("super_admin", "franchise_owner"):
-            raise HTTPException(403, "Только admin группы может добавлять участников")
+        raise HTTPException(403, "Только admin группы может добавлять участников")
     visible = await svc.visible_users_for(db, user)
     visible_ids = {u.id for u in visible}
     existing_ids = {m.user_id for m in members}
@@ -268,13 +273,56 @@ async def remove_member(
     members = await svc.list_room_members(db, room_id)
     me = next((m for m in members if m.user_id == user.id), None)
     if not me or me.member_role != "admin":
-        role_str = user.role.value if hasattr(user.role, "value") else str(user.role)
-        if role_str not in ("super_admin", "franchise_owner"):
-            raise HTTPException(403, "Только admin группы может удалять")
+        raise HTTPException(403, "Только admin группы может удалять")
     await db.execute(
         delete(StaffChatMember).where(and_(
             StaffChatMember.room_id == room_id,
             StaffChatMember.user_id == user_id,
         ))
     )
+    await db.commit()
+
+
+class GroupUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+@router.patch("/chat/groups/{room_id}")
+async def update_group(
+    room_id: uuid.UUID,
+    payload: GroupUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Переименовать группу. Только admin группы."""
+    _ensure_admin(user)
+    room = await svc.get_room(db, room_id)
+    if not room or room.type not in (ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST):
+        raise HTTPException(404, "Группа не найдена")
+    members = await svc.list_room_members(db, room_id)
+    me = next((m for m in members if m.user_id == user.id), None)
+    if not me or me.member_role != "admin":
+        raise HTTPException(403, "Только admin группы может редактировать")
+    room.name = payload.name.strip()
+    await db.commit()
+    return {"id": str(room.id), "name": room.name}
+
+
+@router.delete("/chat/groups/{room_id}", status_code=204)
+async def delete_group(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удалить группу полностью (включая все сообщения и файлы). Только admin группы."""
+    _ensure_admin(user)
+    room = await svc.get_room(db, room_id)
+    if not room or room.type not in (ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST):
+        raise HTTPException(404, "Группа не найдена")
+    members = await svc.list_room_members(db, room_id)
+    me = next((m for m in members if m.user_id == user.id), None)
+    if not me or me.member_role != "admin":
+        raise HTTPException(403, "Только admin группы может удалить")
+    # CASCADE удалит staff_chat_members + staff_chat_messages + staff_chat_files
+    await db.execute(delete(StaffChatRoom).where(StaffChatRoom.id == room_id))
     await db.commit()
