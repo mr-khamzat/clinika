@@ -373,8 +373,12 @@ export default function Landing() {
     ['franchise_owner', 'Франчайзи', 'Владелец сети клиник: дашборд + биллинг по своим клиникам'],
     ['manager', 'Управляющий', 'Руководитель клиники: KPI, расписание, премии, отчёты'],
     ['doctor', 'Врач', 'ЭМК, расписание, протоколы, голосовой ввод, премии по KPI'],
-    ['reg', 'Администратор', 'Регистратура: запись, оплаты, направления, кассовый контроль'],
-    ['recruiter', 'Рекрутер', 'Подбор врачей, инвайты, KPI рекрутинга, воронка'],
+    ['reg', 'Регистратор', 'Запись, оплаты, направления, кассовый контроль, чат с пациентом'],
+    ['nurse', 'Медсестра', 'Назначения, расходники, ассистирование врачу, обработка анализов'],
+    ['recruiter', 'Рекрутер', 'Подбор врачей, инвайты, KPI рекрутинга, воронка кандидатов'],
+    ['partner_doctor', 'Партнёрский врач', 'Внешний врач-рекомендатель: реферралы, бонусы за конверсию'],
+    ['visiting_doctor', 'Приглашённый врач', 'Совместители из других клиник: ограниченный доступ к расписанию'],
+    ['patient', 'Пациент', 'Запись, ЭМК, бонусы, чат с клиникой, мобильный кабинет'],
   ]
 
   const r = ROLES[activeRole]
@@ -598,42 +602,103 @@ export default function Landing() {
       <SocialProof />
 
       {/* ===== БЛОК: PROBLEMS — то с чем сталкиваются клиники ===== */}
-      <section className="ks-section" style={{ paddingTop: 64, paddingBottom: 32 }}>
+      <section className="ks-section ks-problems" style={{ paddingTop: 72, paddingBottom: 56 }}>
         <div className="ks-section-inner">
           <header className="ks-section-head">
             <div className="ks-section-eyebrow">Знакомо?</div>
             <h2 className="ks-section-title">Что обычно тормозит сеть клиник</h2>
+            <p className="ks-section-sub">Шесть болей, которые управляющий узнаёт с первой строки. Каждую мы закрываем штатным модулем — без интеграций «на потом».</p>
           </header>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginTop: 32 }}>
+          <div className="ks-problems-grid">
             {[
-              ['7 разных систем', 'МИС, CRM, Excel расписаний, мессенджеры, бухгалтерия, IP-телефония, Google Forms — данные в каждой по-своему. Никто не считает реальный LTV.'],
-              ['Регистратор не видит МИС', 'Пациент звонит, регистратор переключается между системами, теряет контекст. Очередь стоит, NPS падает.'],
-              ['Нет единого аудита', 'Кто отменил приём? Кто изменил цену услуги? Когда удалена запись? Узнаёте по жалобе пациента, а не из системы.'],
-              ['Франшизу не отследить', 'Купили право на регион — а они тайком работают в соседнем. Узнаёте через год, когда уже потеряли деньги.'],
-              ['Бонусы — на бумаге', 'Партнёрский трафик есть, но кто кому сколько должен — считаете в Excel вечером в субботу.'],
-              ['Пациенты теряются', 'Не пришёл повторно через 6 месяцев — значит, ушёл к конкуренту. Реактивации нет, рассылок нет.'],
-            ].map(([title, desc]) => (
-              <div key={title} className="ks-feature" style={{ background: 'oklch(0.98 0.02 25)', borderColor: 'oklch(0.92 0.05 25)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <span style={{ fontSize: 18, lineHeight: 1, color: 'oklch(0.55 0.18 25)' }}>✕</span>
-                  <h3 className="ks-feature-title" style={{ margin: 0 }}>{title}</h3>
+              {
+                stat: '7×',
+                title: '7 разных систем',
+                desc: 'МИС, CRM, Excel расписаний, мессенджеры, бухгалтерия, IP-телефония, Google Forms — данные в каждой по-своему. Никто не считает реальный LTV.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+                  </svg>
+                ),
+              },
+              {
+                stat: '−NPS',
+                title: 'Регистратор не видит МИС',
+                desc: 'Пациент звонит, регистратор переключается между системами, теряет контекст. Очередь стоит, NPS падает.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 3l18 18"/><path d="M10.6 6.1A10 10 0 0112 6c6.5 0 10 6 10 6a13.8 13.8 0 01-3.5 4.1"/>
+                    <path d="M6.1 6.1A13.6 13.6 0 002 12s3.5 6 10 6a9.7 9.7 0 005.3-1.5"/><circle cx="12" cy="12" r="3"/>
+                  </svg>
+                ),
+              },
+              {
+                stat: '0 audit',
+                title: 'Нет единого аудита',
+                desc: 'Кто отменил приём? Кто изменил цену услуги? Когда удалена запись? Узнаёте по жалобе пациента, а не из системы.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M4 4h12l4 4v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/>
+                    <path d="M16 4v4h4"/><path d="M9 13l2 2 4-4"/>
+                  </svg>
+                ),
+              },
+              {
+                stat: '12 мес',
+                title: 'Франшизу не отследить',
+                desc: 'Купили право на регион — а они тайком работают в соседнем. Узнаёте через год, когда уже потеряли деньги.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 22s-8-6-8-13a8 8 0 0116 0c0 7-8 13-8 13z"/><circle cx="12" cy="9" r="3"/>
+                  </svg>
+                ),
+              },
+              {
+                stat: 'XLS',
+                title: 'Бонусы — на бумаге',
+                desc: 'Партнёрский трафик есть, но кто кому сколько должен — считаете в Excel вечером в субботу.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M9 4v16"/>
+                  </svg>
+                ),
+              },
+              {
+                stat: '−60%',
+                title: 'Пациенты теряются',
+                desc: 'Не пришёл повторно через 6 месяцев — значит, ушёл к конкуренту. Реактивации нет, рассылок нет.',
+                icon: (
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8 1.4 0 2.8.4 4 1"/>
+                    <path d="M17 16l4 4"/><path d="M21 16l-4 4"/>
+                  </svg>
+                ),
+              },
+            ].map((p, i) => (
+              <FadeIn key={p.title} delay={i * 40}>
+                <div className="ks-problem-card">
+                  <div className="ks-problem-num">{String(i + 1).padStart(2, '0')}</div>
+                  <div className="ks-problem-icon">{p.icon}</div>
+                  <div className="ks-problem-stat">{p.stat}</div>
+                  <h3 className="ks-problem-title">{p.title}</h3>
+                  <p className="ks-problem-desc">{p.desc}</p>
                 </div>
-                <p className="ks-feature-desc">{desc}</p>
-              </div>
+              </FadeIn>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== БЛОК: ROLES (табы 3 ключевых + grid из 6 ролей) ===== */}
+      {/* ===== БЛОК: ROLES (табы 3 ключевых + grid из 10 ролей) ===== */}
       <section id="roles" className="ks-section ks-roles">
         <div className="ks-section-inner">
           <header className="ks-section-head">
-            <div className="ks-section-eyebrow">Кабинеты под каждую роль</div>
-            <h2 className="ks-section-title">Один продукт — три рабочих места</h2>
+            <div className="ks-section-eyebrow">Кабинет для каждой роли</div>
+            <h2 className="ks-section-title">Один продукт — 10 рабочих мест</h2>
             <p className="ks-section-sub">
-              Пациент, врач и управляющий работают с разными представлениями одних и тех же данных.
-              Без переключения систем и двойного ввода.
+              От пациента до владельца сети — у каждой роли свой интерфейс и права на одни и те же данные.
+              Без переключения систем, двойного ввода и «единого админа на всё».
             </p>
           </header>
 
@@ -679,7 +744,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Grid из 6 ролей под основным табом */}
+          {/* Grid из 10 ролей под основным табом */}
           <div className="ks-roles-all" style={{ marginTop: 56 }}>
             {ALL_ROLES.map(([k, label, desc], i) => (
               <FadeIn key={k} delay={i * 30}>
@@ -809,69 +874,144 @@ export default function Landing() {
       <Testimonials />
 
       {/* ===== БЛОК: MODULES (подключаемые модули с реальными ценами из БД) ===== */}
-      <section id="modules" className="ks-section">
+      <section id="modules" className="ks-section ks-modules">
         <div className="ks-section-inner">
           <header className="ks-section-head">
             <div className="ks-section-eyebrow">Дополнительно к тарифу</div>
-            <h2 className="ks-section-title">Подключаемые модули</h2>
+            <h2 className="ks-section-title">Платные модули — растёте по мере необходимости</h2>
             <p className="ks-section-sub">
-              Включайте только то, что нужно конкретной клинике или сети. Без переплат за лишний функционал. Подробности — в <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>Wiki</a>.
+              Шесть платных модулей, которые включаются в один клик из кабинета владельца. Без интеграторов, без long-term контрактов — отключить можно так же быстро. Подробности — в <a href="/wiki" style={{ color: 'inherit', textDecoration: 'underline' }}>Wiki</a>.
             </p>
           </header>
 
-          <div className="ks-features" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+          <div className="ks-modules-grid">
             {[
               {
                 title: 'Телемедицина',
-                price: '4 990 ₽/мес',
+                price: 4990,
                 slug: 'module-telemedicine',
-                desc: 'Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров. Чат, назначения, история сессий.',
+                badge: 'Хит',
+                accent: 'oklch(0.62 0.18 200)',
+                desc: 'Видеоприём врач↔пациент через WebRTC. Без сторонних провайдеров.',
+                bullets: ['Прямой WebRTC, TURN наш', 'Чат и история сессий', 'Назначения в ЭМК'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3z"/>
+                  </svg>
+                ),
               },
               {
                 title: 'Запись звонков + Whisper',
-                price: '3 990 ₽/мес',
+                price: 3990,
                 slug: 'module-call-recording',
-                desc: 'Авто-запись звонков и видеоприёмов. Транскрипция через Whisper, AI-резюме приёма через Gemini.',
+                badge: 'AI',
+                accent: 'oklch(0.6 0.2 290)',
+                desc: 'Авто-запись приёмов и звонков, транскрипция Whisper, резюме Gemini.',
+                bullets: ['Whisper STT локально', 'Gemini-резюме приёма', '54-ФЗ ready'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0014 0"/><path d="M12 18v3"/><path d="M8 21h8"/>
+                  </svg>
+                ),
               },
               {
                 title: 'AI-ассистент пациенту',
-                price: '2 990 ₽/мес',
+                price: 2990,
                 slug: 'module-ai-assistant',
-                desc: 'Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, запись на приём, эскалация.',
+                badge: 'AI',
+                accent: 'oklch(0.62 0.2 290)',
+                desc: 'Gemini-чат в кабинете пациента: FAQ, расшифровка анализов, эскалация.',
+                bullets: ['FAQ и навигация', 'Расшифровка PDF анализов', 'Эскалация в чат с клиникой'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 11.5a8.4 8.4 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.5 8.5 0 1116.1-3.8z"/>
+                    <circle cx="9" cy="11" r="0.8" fill="currentColor"/><circle cx="13" cy="11" r="0.8" fill="currentColor"/><circle cx="17" cy="11" r="0.8" fill="currentColor"/>
+                  </svg>
+                ),
               },
               {
                 title: 'Loyalty Pro',
-                price: '2 990 ₽/мес',
+                price: 2990,
                 slug: 'module-loyalty',
-                desc: 'Тиры, акции, начисления баллов, обмен на услуги, реферальная программа.',
+                badge: null,
+                accent: 'oklch(0.65 0.18 50)',
+                desc: 'Тиры, акции, баллы, обмен на услуги, реферальная программа.',
+                bullets: ['4 уровня тиров', 'Реферальные линки', 'Сгорание и pre-expiry SMS'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 2l3 6.5 7 1-5 5 1.2 7L12 18l-6.2 3.5L7 14.5 2 9.5l7-1z"/>
+                  </svg>
+                ),
               },
               {
                 title: 'SMS-маркетинг',
-                price: '1 990 ₽/мес',
+                price: 1990,
                 slug: 'module-sms-marketing',
-                desc: 'Массовые рассылки спящим пациентам, шаблоны, аудитории, расписание, аналитика конверсий.',
+                badge: null,
+                accent: 'oklch(0.62 0.18 145)',
+                desc: 'Массовые рассылки спящим, шаблоны, аудитории, расписание, конверсии.',
+                bullets: ['Сегменты по LTV', 'A/B-тесты шаблонов', 'Webhook → SMSC.ru / Smsaero'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H8l-5 4z"/>
+                    <path d="M8 9h8"/><path d="M8 13h5"/>
+                  </svg>
+                ),
               },
               {
                 title: 'Inventory',
-                price: '1 990 ₽/мес',
+                price: 1990,
                 slug: 'module-inventory',
-                desc: 'Учёт расходников, остатки, движения, алерты по низким остаткам, ABC-анализ.',
+                badge: null,
+                accent: 'oklch(0.6 0.16 220)',
+                desc: 'Учёт расходников, остатки, движения, ABC-анализ, low-stock алерты.',
+                bullets: ['Движения по клиникам', 'Алерты в Telegram', 'ABC + срок годности'],
+                icon: (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>
+                  </svg>
+                ),
               },
-            ].map(m => (
-              <a key={m.slug} href={`/wiki/${m.slug}`} className="ks-feature" style={{ textDecoration: 'none', color: 'inherit', display: 'block', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <h3 className="ks-feature-title" style={{ margin: 0 }}>{m.title}</h3>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent, #0097A7)', whiteSpace: 'nowrap' }}>{m.price}</span>
-                </div>
-                <p className="ks-feature-desc" style={{ marginTop: 8 }}>{m.desc}</p>
-                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--fg-3)' }}>Подробнее →</div>
-              </a>
+            ].map((m, i) => (
+              <FadeIn key={m.slug} delay={i * 40}>
+                <a href={`/wiki/${m.slug}`} className="ks-module-card" style={{ '--mod-accent': m.accent }}>
+                  {m.badge && (
+                    <span className={`ks-module-badge ks-module-badge-${m.badge === 'AI' ? 'ai' : 'hit'}`}>{m.badge}</span>
+                  )}
+                  <div className="ks-module-icon">{m.icon}</div>
+                  <h3 className="ks-module-title">{m.title}</h3>
+                  <div className="ks-module-price">
+                    <span className="ks-module-price-num">{m.price.toLocaleString('ru-RU')} ₽</span>
+                    <span className="ks-module-price-period">/мес</span>
+                  </div>
+                  <p className="ks-module-desc">{m.desc}</p>
+                  <ul className="ks-module-bullets">
+                    {m.bullets.map(b => (
+                      <li key={b}>
+                        <span className="ks-module-check" aria-hidden="true">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l4 4 10-10"/></svg>
+                        </span>
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="ks-module-link">
+                    Подробнее
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M13 5l7 7-7 7"/></svg>
+                  </div>
+                </a>
+              </FadeIn>
             ))}
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--fg-3)' }}>
-            Полный каталог из 20+ модулей: White-Label, AI-аналитика, видеоконференции, эквайринг, 54-ФЗ — в <a href="/wiki/concepts-modules" style={{ color: 'inherit' }}>Wiki: Каталог модулей</a>.
-          </p>
+          <div className="ks-modules-footer">
+            <div className="ks-modules-footer-text">
+              <strong>20+ модулей в каталоге.</strong> White-Label, AI-аналитика, видеоконференции, эквайринг, 54-ФЗ, региональные блокировки франшиз — все в <a href="/wiki/concepts-modules">Wiki: Каталог модулей</a>.
+            </div>
+            <button type="button" className="ks-btn-secondary" onClick={() => setShowContact(true)}>
+              Подобрать модули под вашу сеть {ICONS.arrow}
+            </button>
+          </div>
         </div>
       </section>
 
@@ -1544,7 +1684,7 @@ a { color: inherit; text-decoration: none; }
 .ks-preview-body { background: var(--bg); }
 
 .ks-roles-all {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px;
 }
 .ks-role-card {
   display: flex; gap: 14px; align-items: flex-start;
@@ -1953,9 +2093,15 @@ a { color: inherit; text-decoration: none; }
 .ks-calc-row-mute strong { font-size: 14px; color: var(--fg-2); }
 
 /* === RESPONSIVE === */
+@media (max-width: 1240px) {
+  .ks-roles-all { grid-template-columns: repeat(4, 1fr); }
+}
 @media (max-width: 1100px) {
   .ks-features-grid { grid-template-columns: repeat(2, 1fr); }
   .ks-flow-grid { grid-template-columns: repeat(2, 1fr); }
+  .ks-roles-all { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 760px) {
   .ks-roles-all { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 900px) {
@@ -1980,4 +2126,179 @@ a { color: inherit; text-decoration: none; }
   .ks-roles-all { grid-template-columns: 1fr; }
   .ks-roles-tabs { width: 100%; overflow-x: auto; }
 }
+
+/* === PROBLEMS (что тормозит сеть клиник) === */
+.ks-problems-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 36px;
+}
+.ks-problem-card {
+  position: relative;
+  padding: 28px 24px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  overflow: hidden;
+  height: 100%;
+}
+.ks-problem-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, oklch(0.62 0.2 25), oklch(0.72 0.16 35));
+  opacity: 0.9;
+}
+.ks-problem-card:hover {
+  border-color: oklch(0.86 0.1 25);
+  box-shadow: 0 12px 32px -16px oklch(0.6 0.2 25 / 0.35);
+  transform: translateY(-2px);
+}
+.ks-problem-num {
+  position: absolute; top: 16px; right: 20px;
+  font-size: 40px; font-weight: 800;
+  color: oklch(0.94 0.04 25);
+  letter-spacing: -0.05em; line-height: 1;
+  font-feature-settings: 'tnum' 1;
+  user-select: none;
+}
+.ks-problem-icon {
+  width: 46px; height: 46px; border-radius: 12px;
+  background: oklch(0.96 0.04 25);
+  color: oklch(0.55 0.2 25);
+  display: grid; place-items: center;
+  margin-bottom: 16px;
+  position: relative; z-index: 1;
+}
+.ks-problem-stat {
+  display: inline-block;
+  padding: 3px 10px; border-radius: 999px;
+  background: oklch(0.96 0.04 25); color: oklch(0.5 0.2 25);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.ks-problem-title {
+  font-size: 17px; font-weight: 650; letter-spacing: -0.01em;
+  margin: 0 0 8px; color: var(--fg);
+}
+.ks-problem-desc { font-size: 14px; color: var(--fg-2); line-height: 1.55; margin: 0; }
+@media (max-width: 980px) { .ks-problems-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .ks-problems-grid { grid-template-columns: 1fr; } }
+
+/* === MODULES (подключаемые модули) === */
+.ks-modules { background: linear-gradient(180deg, var(--bg) 0%, var(--bg-1) 100%); }
+.ks-modules-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 36px;
+}
+.ks-module-card {
+  position: relative;
+  display: flex; flex-direction: column;
+  padding: 28px 24px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.25s, box-shadow 0.25s, transform 0.25s;
+  overflow: hidden;
+  height: 100%;
+  --mod-accent: var(--accent);
+}
+.ks-module-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--mod-accent), color-mix(in oklch, var(--mod-accent) 60%, white));
+  opacity: 0.9;
+}
+.ks-module-card::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at top right, color-mix(in oklch, var(--mod-accent) 18%, transparent), transparent 55%);
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+}
+.ks-module-card:hover {
+  border-color: color-mix(in oklch, var(--mod-accent) 35%, var(--border));
+  box-shadow: 0 20px 48px -24px color-mix(in oklch, var(--mod-accent) 40%, transparent);
+  transform: translateY(-3px);
+}
+.ks-module-card:hover::after { opacity: 1; }
+.ks-module-card:hover .ks-module-link { color: var(--mod-accent); transform: translateX(2px); }
+.ks-module-badge {
+  position: absolute; top: 16px; right: 16px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; z-index: 2;
+}
+.ks-module-badge-hit {
+  background: oklch(0.94 0.1 60); color: oklch(0.45 0.18 50);
+  border: 1px solid oklch(0.88 0.13 60);
+}
+.ks-module-badge-ai {
+  background: oklch(0.95 0.06 290); color: oklch(0.45 0.2 290);
+  border: 1px solid oklch(0.88 0.1 290);
+}
+.ks-module-icon {
+  width: 52px; height: 52px; border-radius: 14px;
+  background: color-mix(in oklch, var(--mod-accent) 14%, var(--surface));
+  color: var(--mod-accent);
+  display: grid; place-items: center;
+  margin-bottom: 18px;
+  position: relative; z-index: 1;
+}
+.ks-module-title {
+  font-size: 19px; font-weight: 650; letter-spacing: -0.01em;
+  margin: 0 0 8px; color: var(--fg);
+  position: relative; z-index: 1;
+}
+.ks-module-price {
+  display: flex; align-items: baseline; gap: 4px;
+  margin-bottom: 14px;
+  position: relative; z-index: 1;
+}
+.ks-module-price-num {
+  font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--mod-accent);
+  font-feature-settings: 'tnum' 1;
+}
+.ks-module-price-period { font-size: 13px; color: var(--fg-3); font-weight: 500; }
+.ks-module-desc {
+  font-size: 14px; color: var(--fg-2); line-height: 1.55; margin: 0 0 16px;
+  position: relative; z-index: 1;
+}
+.ks-module-bullets {
+  list-style: none; padding: 0; margin: 0 0 18px;
+  display: flex; flex-direction: column; gap: 8px;
+  position: relative; z-index: 1;
+}
+.ks-module-bullets li {
+  display: flex; align-items: flex-start; gap: 9px;
+  font-size: 13px; color: var(--fg-2);
+}
+.ks-module-check {
+  flex-shrink: 0; width: 16px; height: 16px; border-radius: 6px;
+  background: color-mix(in oklch, var(--mod-accent) 16%, var(--surface));
+  color: var(--mod-accent);
+  display: grid; place-items: center;
+  margin-top: 1px;
+}
+.ks-module-link {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--fg-2);
+  transition: color 0.2s, transform 0.2s;
+  position: relative; z-index: 1;
+}
+.ks-modules-footer {
+  margin-top: 36px; padding: 24px 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap;
+}
+.ks-modules-footer-text { font-size: 14px; color: var(--fg-2); line-height: 1.55; max-width: 640px; }
+.ks-modules-footer-text strong { color: var(--fg); }
+.ks-modules-footer-text a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.ks-modules-footer-text a:hover { text-decoration: underline; }
+@media (max-width: 1100px) { .ks-modules-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 700px) { .ks-modules-grid { grid-template-columns: 1fr; } .ks-modules-footer { flex-direction: column; align-items: flex-start; } }
 `
