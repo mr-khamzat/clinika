@@ -1,95 +1,90 @@
+"""Long-polling owner-бота через getUpdates.
+
+Telegram webhook не может достучаться до нашего сервера (Connection timeout),
+поэтому переключаемся на pull-модель: бэкенд сам вызывает getUpdates каждые
+~5 секунд (long-poll с timeout=20 на стороне Telegram).
+
+State (last update_id) хранится в /opt/clinika/data/tg_owner_offset.txt.
+
+Запускается через APScheduler `interval=5, max_instances=1`.
 """
-Webhook owner-бота (@stclinika_bot) — двусторонний обмен между Telegram и /staff-chat.
-
-Поддерживается:
-- Reply на текстовое уведомление → текстовое сообщение в чат
-- Отправка файла (document/photo/video/audio) в Reply → файл скачивается с
-  Telegram-серверов и кладётся в /staff-chat как attachment с TTL 48 часов
-
-Принцип room-маркера:
-1. При отправке нотификации (см. staff_chat.post_room_message) мы добавляем
-   к caption/тексту маркер `room:<UUID>` в <code>.
-2. Telegram присылает webhook POST → /api/owner-bot/webhook.
-3. Если update.message.reply_to_message содержит маркер → извлекаем room_id,
-   проверяем что owner является участником, создаём сообщение
-   (текст и/или attachments) и бродкастим через WS.
-
-Безопасность:
-- OWNER_BOT_WEBHOOK_SECRET (если задан) проверяется через
-  X-Telegram-Bot-Api-Secret-Token (Telegram отправляет его в каждом запросе).
-- Доверяем только сообщениям от OWNER_TELEGRAM_ID.
-"""
+import json
+import logging
 import os
 import re
 import uuid
-import logging
 import mimetypes
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Request, HTTPException, Header
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.user import User, UserRole
 from app.models.staff_chat import StaffChatFile
 from app.services import staff_chat_service as svc
-from app.config import settings
 
 
-log = logging.getLogger("owner_bot_webhook")
-router = APIRouter(prefix="/owner-bot", tags=["owner-bot"])
-
-# Маркер в тексте нотификации: room:<uuid>
-ROOM_MARKER_RE = re.compile(r"room:([0-9a-fA-F-]{36})")
-
-# Storage для входящих TG-файлов — тот же что и для /staff-chat вложений
+log = logging.getLogger("tg_owner_poll")
+OFFSET_FILE = Path("/opt/clinika/data/tg_owner_offset.txt")
 STORAGE_ROOT = Path("/opt/clinika/data/staff_chat_files")
 FILE_TTL_HOURS = 48
+ROOM_MARKER_RE = re.compile(r"room:([0-9a-fA-F-]{36})")
 
 
-async def _download_telegram_file(file_id: str, suggested_name: str = "file") -> Optional[dict]:
-    """Скачивает файл с Telegram-серверов.
-    Возвращает dict {storage_path, filename, size, mime} или None при ошибке.
-
-    Последовательность:
-    1. getFile → file_path
-    2. GET https://api.telegram.org/file/bot{TOKEN}/{file_path} → байты
-    3. Сохраняем в /opt/clinika/data/staff_chat_files/<date>/<uuid>_<filename>
-    """
-    token = (settings.owner_bot_token or "").strip()
-    if not token:
-        return None
-    proxy_url = os.environ.get(
+def _proxy_url() -> str:
+    return os.environ.get(
         "TELEGRAM_PROXY_URL",
         "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
     )
+
+
+def _load_offset() -> int:
+    try:
+        if OFFSET_FILE.exists():
+            return int(OFFSET_FILE.read_text().strip() or "0")
+    except Exception:
+        pass
+    return 0
+
+
+def _save_offset(offset: int) -> None:
+    try:
+        OFFSET_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OFFSET_FILE.write_text(str(offset))
+    except Exception as e:
+        log.warning(f"failed to save offset: {e}")
+
+
+async def _download_telegram_file(file_id: str, suggested_name: str = "file") -> Optional[dict]:
+    """Скачивает файл с Telegram-серверов через bot/getFile + bot/file/<path>."""
+    token = (settings.owner_bot_token or "").strip()
+    if not token:
+        return None
+    proxy = _proxy_url()
     api_get = f"https://api.telegram.org/bot{token}/getFile"
     try:
-        async with httpx.AsyncClient(timeout=30, proxy=proxy_url) as client:
+        async with httpx.AsyncClient(timeout=30, proxy=proxy) as client:
             r = await client.post(api_get, data={"file_id": file_id})
             if r.status_code != 200:
-                log.warning(f"getFile failed {r.status_code}: {r.text[:200]}")
+                log.warning(f"getFile failed: {r.status_code} {r.text[:200]}")
                 return None
             j = r.json()
             if not j.get("ok"):
-                log.warning(f"getFile not ok: {j}")
                 return None
             file_path = j["result"]["file_path"]
             file_size = j["result"].get("file_size") or 0
-            # Скачиваем сам файл
             file_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
             r2 = await client.get(file_url)
             if r2.status_code != 200:
-                log.warning(f"file download failed {r2.status_code}")
+                log.warning(f"file dl failed: {r2.status_code}")
                 return None
             content = r2.content
 
-        # Сохраняем на диск
         base_name = Path(file_path).name
-        # Если suggested_name содержит "осмысленное" имя — используем его
         safe_name = suggested_name if suggested_name and "." in suggested_name else base_name
         safe_name = safe_name.replace("/", "_").replace("\\", "_")[:200]
         day_dir = STORAGE_ROOT / datetime.utcnow().strftime("%Y-%m-%d")
@@ -111,91 +106,66 @@ async def _download_telegram_file(file_id: str, suggested_name: str = "file") ->
         return None
 
 
-@router.post("/webhook")
-async def telegram_webhook(
-    request: Request,
-    x_telegram_bot_api_secret_token: Optional[str] = Header(None),
-):
-    # Опциональный secret-токен
-    secret = (getattr(settings, "owner_bot_webhook_secret", "") or "").strip()
-    if secret and x_telegram_bot_api_secret_token != secret:
-        raise HTTPException(403, "invalid webhook secret")
-
-    try:
-        update = await request.json()
-    except Exception:
-        raise HTTPException(400, "bad JSON")
-
+async def _process_update(update: dict) -> None:
     msg = update.get("message") or update.get("edited_message")
     if not msg:
-        return {"ok": True, "skip": "no message"}
-
+        return
     reply_to = msg.get("reply_to_message")
     if not reply_to:
-        return {"ok": True, "skip": "not a reply"}
+        return
 
     from_user = msg.get("from") or {}
     from_id = str(from_user.get("id") or "")
     owner_tg = (settings.owner_telegram_id or "").strip()
     if owner_tg and from_id != owner_tg:
-        return {"ok": True, "skip": "not from owner"}
+        return
 
-    # Маркер room:<uuid> ищем в text+caption original notification (наш bot caption под документом)
     orig_text = (reply_to.get("text") or "") + " " + (reply_to.get("caption") or "")
     m = ROOM_MARKER_RE.search(orig_text)
     if not m:
-        return {"ok": True, "skip": "no room marker"}
+        return
     try:
         room_id = uuid.UUID(m.group(1))
     except Exception:
-        return {"ok": True, "skip": "bad room_id"}
+        return
 
-    # Текст: либо обычный text, либо caption под медиа
     body = (msg.get("text") or msg.get("caption") or "").strip()
 
-    # Файлы: document / photo / video / audio / voice
-    attachments_to_save: list[dict] = []  # raw (file_id, filename, mime hint)
+    attachments_to_save: list[dict] = []
     if msg.get("document"):
         d = msg["document"]
         attachments_to_save.append({
             "file_id": d["file_id"],
             "filename": d.get("file_name") or "document",
-            "size_hint": d.get("file_size"),
         })
     elif msg.get("photo"):
-        # photo — массив размеров, берём самый большой (последний)
         p = msg["photo"][-1]
         attachments_to_save.append({
             "file_id": p["file_id"],
             "filename": f"photo_{p['file_id'][-8:]}.jpg",
-            "size_hint": p.get("file_size"),
         })
     elif msg.get("video"):
         v = msg["video"]
         attachments_to_save.append({
             "file_id": v["file_id"],
             "filename": v.get("file_name") or f"video_{v['file_id'][-8:]}.mp4",
-            "size_hint": v.get("file_size"),
         })
     elif msg.get("audio"):
         a = msg["audio"]
         attachments_to_save.append({
             "file_id": a["file_id"],
             "filename": a.get("file_name") or f"audio_{a['file_id'][-8:]}.mp3",
-            "size_hint": a.get("file_size"),
         })
     elif msg.get("voice"):
         vo = msg["voice"]
         attachments_to_save.append({
             "file_id": vo["file_id"],
             "filename": f"voice_{vo['file_id'][-8:]}.ogg",
-            "size_hint": vo.get("file_size"),
         })
 
     if not body and not attachments_to_save:
-        return {"ok": True, "skip": "empty body and no attachments"}
+        return
 
-    # Найти отправителя в БД
     async with AsyncSessionLocal() as db:
         r = await db.execute(select(User).where(User.telegram_id == from_id))
         sender = r.scalar_one_or_none()
@@ -205,27 +175,26 @@ async def telegram_webhook(
             )
             sender = r.scalar_one_or_none()
         if not sender:
-            return {"ok": False, "error": "owner user not found"}
+            return
 
         if not await svc.is_member(db, room_id, sender.id):
-            return {"ok": False, "error": "owner is not a member of this room"}
+            log.warning(f"tg poll: owner not member of room {room_id}")
+            return
 
         room = await svc.get_room(db, room_id)
         if not room:
-            return {"ok": False, "error": "room not found"}
+            return
 
-        # Скачиваем файлы с Telegram (вне БД-транзакции — может занять секунды)
-    saved_files_meta: list[dict] = []
+    # Скачиваем файлы вне транзакции
+    saved: list[dict] = []
     for att in attachments_to_save:
         meta = await _download_telegram_file(att["file_id"], att["filename"])
-        if not meta:
-            continue
-        saved_files_meta.append(meta)
+        if meta:
+            saved.append(meta)
 
-    # Создаём DB-записи файлов и сообщение
     async with AsyncSessionLocal() as db:
-        attachments_for_msg: list[dict] = []
-        for meta in saved_files_meta:
+        atts: list[dict] = []
+        for meta in saved:
             f = StaffChatFile(
                 id=meta["id"],
                 room_id=room_id,
@@ -237,7 +206,7 @@ async def telegram_webhook(
                 expires_at=datetime.utcnow() + timedelta(hours=FILE_TTL_HOURS),
             )
             db.add(f)
-            attachments_for_msg.append({
+            atts.append({
                 "id": str(meta["id"]),
                 "filename": meta["filename"],
                 "mime": meta["mime"],
@@ -245,22 +214,20 @@ async def telegram_webhook(
                 "url": f"/staff-chat/files/{meta['id']}/download",
             })
 
-        # Если body пустое и есть файлы — добавим placeholder, чтобы сообщение не было совсем пустым
-        if not body and attachments_for_msg:
+        if not body and atts:
             body = "📎 файл из Telegram"
 
         try:
             new_msg = await svc.send_message(
-                db, room, sender,
-                body=body,
-                attachments=attachments_for_msg if attachments_for_msg else None,
+                db, room, sender, body=body, attachments=atts or None,
             )
             await db.commit()
+            log.info(f"tg poll: created msg {new_msg.id} in room {room_id} ({len(atts)} files)")
         except ValueError as e:
             await db.rollback()
-            return {"ok": False, "error": str(e)}
+            log.warning(f"send_message failed: {e}")
+            return
 
-    # Бродкаст всем участникам через WS
     try:
         from app.routers.staff_chat import ws_hub
         await ws_hub.broadcast_to_room(
@@ -269,8 +236,37 @@ async def telegram_webhook(
     except Exception as e:
         log.warning(f"WS broadcast failed: {e}")
 
-    return {
-        "ok": True,
-        "message_id": str(new_msg.id),
-        "attachments_received": len(attachments_for_msg),
-    }
+
+async def tg_owner_bot_poll_job() -> None:
+    """Один цикл long-poll: getUpdates → обработать каждый update."""
+    token = (settings.owner_bot_token or "").strip()
+    if not token:
+        return
+    offset = _load_offset()
+    proxy = _proxy_url()
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    params = {"timeout": 20, "allowed_updates": json.dumps(["message", "edited_message"])}
+    if offset:
+        params["offset"] = offset
+    try:
+        async with httpx.AsyncClient(timeout=30, proxy=proxy) as client:
+            r = await client.get(url, params=params)
+            if r.status_code != 200:
+                log.warning(f"getUpdates {r.status_code}: {r.text[:200]}")
+                return
+            j = r.json()
+            if not j.get("ok"):
+                return
+            updates = j.get("result") or []
+            if not updates:
+                return
+            log.info(f"tg poll: got {len(updates)} updates")
+            for upd in updates:
+                try:
+                    await _process_update(upd)
+                except Exception as e:
+                    log.error(f"process_update error: {e}")
+                offset = max(offset, int(upd.get("update_id", 0)) + 1)
+            _save_offset(offset)
+    except Exception as e:
+        log.warning(f"tg poll error: {e}")

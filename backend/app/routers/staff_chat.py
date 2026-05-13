@@ -282,11 +282,10 @@ async def post_room_message(
                 (u.role.value if hasattr(u.role, "value") else str(u.role)) in ("super_admin", "franchise_owner")
                 for u in recipients
             )
-            # Список получателей с telegram_id среди super_admin/franchise_owner
+            # Получатели — super_admin/franchise_owner (не отправитель)
             owner_recipients = [
                 u for u in recipients
                 if (u.role.value if hasattr(u.role, "value") else str(u.role)) in ("super_admin", "franchise_owner")
-                and getattr(u, "telegram_id", None)
             ]
             if owner_recipients:
                 # Имя и роль отправителя
@@ -338,11 +337,23 @@ async def post_room_message(
                 )
                 # Если есть файлы — отправляем как документы с caption=tg_text;
                 # иначе обычный текст.
-                # Шлём каждому получателю с TG отдельно (используя его telegram_id как chat_id).
+                # Собираем целевые chat_id: главный админ (OWNER_TELEGRAM_ID) ВСЕГДА получает
+                # копию + каждый получатель-super_admin/franchise_owner с собственным telegram_id.
+                # Дедуп: одна и та же telegram_id шлётся один раз.
+                from app.config import settings as _settings
+                _target_chat_ids: set[str] = set()
+                _main_owner = (_settings.owner_telegram_id or "").strip()
+                if _main_owner:
+                    _target_chat_ids.add(_main_owner)
                 for _orec in owner_recipients:
-                    _chat_id = str(_orec.telegram_id).strip()
-                    if not _chat_id:
-                        continue
+                    _ot = (getattr(_orec, "telegram_id", None) or "").strip()
+                    if _ot:
+                        _target_chat_ids.add(_ot)
+                # Не шлём отправителю самому себе (он же = главный owner)
+                _sender_tg = (getattr(user, "telegram_id", None) or "").strip()
+                if _sender_tg:
+                    _target_chat_ids.discard(_sender_tg)
+                for _chat_id in _target_chat_ids:
                     if msg.attachments:
                         from app.services.alert_service import send_document_to_owner_to, send_to_owner_to
                         from app.models.staff_chat import StaffChatFile as _SCF
@@ -657,7 +668,7 @@ async def upload_file(
         "filename": safe_name,
         "mime": mime,
         "size": size,
-        "url": f"/api/staff-chat/files/{file_id}/download",
+        "url": f"/staff-chat/files/{file_id}/download",
         "expires_at": expires_at.isoformat(),
         "ttl_hours": FILE_TTL_HOURS,
     }

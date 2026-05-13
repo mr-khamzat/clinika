@@ -137,6 +137,7 @@ from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.staff_chat import router as staff_chat_router
 from app.routers.owner_bot_webhook import router as owner_bot_webhook_router
 from app.services.staff_chat_cleanup_job import cleanup_staff_chat_files_job
+from app.services.tg_owner_bot_poll import tg_owner_bot_poll_job
 from app.routers.patient_calendar import router as patient_calendar_router
 from app.routers.patient_documents_v2 import router as patient_health_documents_router
 from app.routers.doctor_patient_documents import router as doctor_patient_documents_router
@@ -1042,6 +1043,7 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(ads_attribution_job, 'cron', hour=4, minute=30, id='ads_attribution', replace_existing=True)
     scheduler.add_job(ads_health_pause_job, 'cron', hour=4, minute=0, id='ads_health_pause', replace_existing=True)
     scheduler.add_job(cleanup_staff_chat_files_job, 'interval', minutes=30, id='staff_chat_files_cleanup', replace_existing=True)
+    scheduler.add_job(tg_owner_bot_poll_job, 'interval', seconds=2, id='tg_owner_bot_poll', max_instances=1, replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
     scheduler.add_job(referral_reminder_author_job, 'interval', hours=1, id='referral_reminder_author', replace_existing=True)
