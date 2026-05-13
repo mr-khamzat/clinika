@@ -282,7 +282,13 @@ async def post_room_message(
                 (u.role.value if hasattr(u.role, "value") else str(u.role)) in ("super_admin", "franchise_owner")
                 for u in recipients
             )
-            if needs_owner:
+            # Список получателей с telegram_id среди super_admin/franchise_owner
+            owner_recipients = [
+                u for u in recipients
+                if (u.role.value if hasattr(u.role, "value") else str(u.role)) in ("super_admin", "franchise_owner")
+                and getattr(u, "telegram_id", None)
+            ]
+            if owner_recipients:
                 # Имя и роль отправителя
                 sender_brief = svc.serialize_user_brief(user)
                 sender_name = _html.escape(sender_brief["name"])
@@ -326,11 +332,39 @@ async def post_room_message(
                     f"💭 <b>Чат:</b> {_html.escape(chat_label)}\n\n"
                     f"«{body_preview}»\n\n"
                     f"⏰ {stamp}\n"
-                    f"🔗 <a href=https://клиниксеть.рф/staff-chat>Открыть в браузере</a>\n\n"
+                    f"🔗 <a href=\"https://xn--e1afagcdp8ak4h.xn--p1ai/staff-chat\">Открыть в браузере</a>\n\n"
                     f"<i>↩️ Ответьте на это сообщение в Telegram — текст уйдёт в чат</i>\n"
                     f"<code>room:{room.id}</code>"
                 )
-                _asyncio.create_task(send_to_owner(tg_text))
+                # Если есть файлы — отправляем как документы с caption=tg_text;
+                # иначе обычный текст.
+                # Шлём каждому получателю с TG отдельно (используя его telegram_id как chat_id).
+                for _orec in owner_recipients:
+                    _chat_id = str(_orec.telegram_id).strip()
+                    if not _chat_id:
+                        continue
+                    if msg.attachments:
+                        from app.services.alert_service import send_document_to_owner_to, send_to_owner_to
+                        from app.models.staff_chat import StaffChatFile as _SCF
+                        file_ids = [a.get("id") for a in msg.attachments if a.get("id")]
+                        if file_ids:
+                            import uuid as _uuid
+                            try:
+                                ids = [_uuid.UUID(str(fid)) for fid in file_ids]
+                                rf = await db.execute(select(_SCF).where(_SCF.id.in_(ids)))
+                                files = list(rf.scalars().all())
+                                for i, f in enumerate(files):
+                                    cap = tg_text if i == 0 else ""
+                                    _asyncio.create_task(send_document_to_owner_to(_chat_id, f.storage_path, f.filename, cap))
+                                if not files:
+                                    _asyncio.create_task(send_to_owner_to(_chat_id, tg_text))
+                            except Exception:
+                                _asyncio.create_task(send_to_owner_to(_chat_id, tg_text))
+                        else:
+                            _asyncio.create_task(send_to_owner_to(_chat_id, tg_text))
+                    else:
+                        from app.services.alert_service import send_to_owner_to
+                        _asyncio.create_task(send_to_owner_to(_chat_id, tg_text))
     except Exception as _e:
         pass  # нотификация не должна ломать основной flow
     return payload_event
@@ -623,7 +657,7 @@ async def upload_file(
         "filename": safe_name,
         "mime": mime,
         "size": size,
-        "url": f"/staff-chat/files/{file_id}/download",
+        "url": f"/api/staff-chat/files/{file_id}/download",
         "expires_at": expires_at.isoformat(),
         "ttl_hours": FILE_TTL_HOURS,
     }
@@ -641,7 +675,7 @@ async def download_file(
     rec = r.scalar_one_or_none()
     if not rec or rec.deleted_at:
         raise HTTPException(404, "Файл не найден или удалён")
-    if rec.expires_at < datetime.utcnow():
+    if rec.expires_at.replace(tzinfo=None) < datetime.utcnow():
         raise HTTPException(410, "Срок хранения файла истёк (48 часов)")
     if not await svc.is_member(db, rec.room_id, user.id):
         raise HTTPException(403, "Нет доступа к этому файлу")

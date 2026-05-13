@@ -262,6 +262,23 @@ export default function StaffChat() {
     }
   }, [activeRoomId])
 
+  async function downloadAttachment(a) {
+    try {
+      const resp = await api.get(a.url, { responseType: 'blob' })
+      const blob = new Blob([resp.data], { type: a.mime || 'application/octet-stream' })
+      const objUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objUrl
+      link.download = a.filename || 'file'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1500)
+    } catch (e) {
+      alert('Не удалось скачать файл: ' + (e?.response?.status === 410 ? 'срок хранения истёк (48 ч)' : 'нет доступа или сервер недоступен'))
+    }
+  }
+
   function scrollToBottom() {
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({ block: 'end' })
@@ -483,7 +500,7 @@ export default function StaffChat() {
                         <>
                           {m.body && <div className="sc-msg-body">{m.body}</div>}
                           {m.attachments?.map((a) => (
-                            <a key={a.id || a.url} href={a.url} target="_blank" rel="noreferrer" className="sc-attach">
+                            <a key={a.id || a.url} href={a.url} onClick={(e) => { e.preventDefault(); downloadAttachment(a) }} className="sc-attach" role="button" title="Кликните чтобы скачать файл на ПК">
                               <span className="sc-attach-icon">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/>
@@ -492,6 +509,13 @@ export default function StaffChat() {
                               <span className="sc-attach-meta">
                                 <span className="sc-attach-name">{a.filename}</span>
                                 <span className="sc-attach-size">{formatBytes(a.size)} · TTL 48ч</span>
+                              </span>
+                              <span className="sc-attach-dl" aria-hidden="true" title="Скачать">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                                  <polyline points="7 10 12 15 17 10"/>
+                                  <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
                               </span>
                             </a>
                           ))}
@@ -782,6 +806,16 @@ const STAFF_CHAT_CSS = `
 .sc-attach-meta { display: flex; flex-direction: column; min-width: 0; }
 .sc-attach-name { font-size: 13.5px; font-weight: 500; color: var(--sc-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
 .sc-attach-size { font-size: 11px; color: var(--sc-fg-3); margin-top: 1px; }
+.sc-attach-dl {
+  margin-left: auto;
+  width: 32px; height: 32px; border-radius: 8px;
+  background: var(--sc-accent); color: white;
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  transition: transform 0.15s, background 0.15s;
+}
+.sc-attach:hover .sc-attach-dl { transform: scale(1.08); background: color-mix(in oklch, var(--sc-accent) 90%, black); }
+.sc-attach { cursor: pointer; }
 
 /* COMPOSER */
 .sc-composer {

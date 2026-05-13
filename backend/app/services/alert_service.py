@@ -100,6 +100,108 @@ async def send_to_owner(text: str, parse_mode: str = "HTML") -> bool:
         return False
 
 
+async def send_document_to_owner(file_path: str, filename: str, caption: str = "", parse_mode: str = "HTML") -> bool:
+    """Отправка файла в owner-бот (для вложений из staff-chat).
+
+    Использует sendDocument с multipart-uploadом байтов файла. caption
+    поддерживает HTML (то же, что и send_to_owner).
+    """
+    token = (settings.owner_bot_token or "").strip()
+    target = (settings.owner_telegram_id or "").strip()
+    if not token or not target:
+        log.debug("owner-bot not configured for document send")
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    proxy_url = os.environ.get(
+        "TELEGRAM_PROXY_URL",
+        "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
+    )
+    try:
+        import os.path as _osp
+        if not _osp.exists(file_path):
+            log.warning(f"owner-bot doc: file not found {file_path}")
+            return False
+        with open(file_path, "rb") as fh:
+            files = {"document": (filename, fh, "application/octet-stream")}
+            data = {
+                "chat_id": target,
+                "caption": caption[:1020] if caption else "",
+                "parse_mode": parse_mode,
+            }
+            async with httpx.AsyncClient(timeout=60, proxy=proxy_url) as client:
+                r = await client.post(url, data=data, files=files)
+                if r.status_code != 200:
+                    log.warning(f"owner-bot doc {r.status_code}: {r.text[:200]}")
+                return r.status_code == 200
+    except Exception as e:
+        log.error(f"owner-bot send document error: {e}")
+        return False
+
+
+async def send_to_owner_to(chat_id: str, text: str, parse_mode: str = "HTML") -> bool:
+    """Аналог send_to_owner, но шлёт на явно заданный chat_id.
+
+    Использует owner_bot_token. chat_id берётся из аргумента,
+    OWNER_TELEGRAM_ID игнорируется. Применяется когда нужно нотифицировать
+    конкретного user.telegram_id (а не глобального владельца).
+    """
+    token = (settings.owner_bot_token or "").strip()
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    proxy_url = os.environ.get(
+        "TELEGRAM_PROXY_URL",
+        "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
+    )
+    try:
+        async with httpx.AsyncClient(timeout=15, proxy=proxy_url) as client:
+            r = await client.post(url, json={
+                "chat_id": str(chat_id),
+                "text": text,
+                "parse_mode": parse_mode,
+                "disable_web_page_preview": True,
+            })
+            if r.status_code != 200:
+                log.warning(f"owner-bot to {chat_id}: {r.status_code} {r.text[:200]}")
+            return r.status_code == 200
+    except Exception as e:
+        log.error(f"owner-bot send to {chat_id} error: {e}")
+        return False
+
+
+async def send_document_to_owner_to(chat_id: str, file_path: str, filename: str, caption: str = "", parse_mode: str = "HTML") -> bool:
+    """Аналог send_document_to_owner на явно заданный chat_id."""
+    token = (settings.owner_bot_token or "").strip()
+    if not token or not chat_id:
+        return False
+    url = f"https://api.telegram.org/bot{token}/sendDocument"
+    proxy_url = os.environ.get(
+        "TELEGRAM_PROXY_URL",
+        "http://clinikabot:lT9k2Pq8mNxF5jB3@144.31.89.167:8080",
+    )
+    try:
+        import os.path as _osp
+        if not _osp.exists(file_path):
+            log.warning(f"owner-bot doc to {chat_id}: file not found {file_path}")
+            return False
+        with open(file_path, "rb") as fh:
+            files = {"document": (filename, fh, "application/octet-stream")}
+            data = {
+                "chat_id": str(chat_id),
+                "caption": caption[:1020] if caption else "",
+                "parse_mode": parse_mode,
+            }
+            async with httpx.AsyncClient(timeout=60, proxy=proxy_url) as client:
+                r = await client.post(url, data=data, files=files)
+                if r.status_code != 200:
+                    log.warning(f"owner-bot doc to {chat_id}: {r.status_code} {r.text[:200]}")
+                return r.status_code == 200
+    except Exception as e:
+        log.error(f"owner-bot send doc to {chat_id} error: {e}")
+        return False
+
+
+
 async def _send_telegram(text: str, chat_id: str | None = None) -> bool:
     """Шлём через ADMIN_BOT_TOKEN если задан, иначе через TELEGRAM_BOT_TOKEN.
 
