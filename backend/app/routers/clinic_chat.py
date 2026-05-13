@@ -112,10 +112,33 @@ async def list_threads(
     else:
         target_ids = allowed
     threads = await cs.list_clinic_threads(db, target_ids, status=status)
+    # Batch-load клиник и пациентов для enriched-вывода (имена в UI)
+    from app.models.clinic import Clinic
+    try:
+        from app.models.patient_account import PatientAccount
+    except ImportError:
+        PatientAccount = None
+    clinic_ids_set = {th.clinic_id for th in threads}
+    patient_ids_set = {th.patient_id for th in threads}
+    clinic_map: dict = {}
+    patient_map: dict = {}
+    if clinic_ids_set:
+        rc = await db.execute(select(Clinic).where(Clinic.id.in_(clinic_ids_set)))
+        clinic_map = {c.id: c for c in rc.scalars().all()}
+    if patient_ids_set and PatientAccount is not None:
+        rp = await db.execute(select(PatientAccount).where(PatientAccount.id.in_(patient_ids_set)))
+        patient_map = {p.id: p for p in rp.scalars().all()}
     out = []
     for th in threads:
         last = await cs.last_message(db, th.id)
-        out.append(cs.serialize_thread(th, last))
+        c = clinic_map.get(th.clinic_id)
+        p = patient_map.get(th.patient_id)
+        out.append(cs.serialize_thread(
+            th, last,
+            clinic_name=(c.name if c else None),
+            patient_name=(getattr(p, "name", None) if p else None),
+            patient_phone=(getattr(p, "phone", None) if p else None),
+        ))
     return {"threads": out}
 
 

@@ -20,8 +20,14 @@ from app.services import subscription_service as subs_service
 PATIENT_MONTHLY_FREE_LIMIT = 3
 
 
-def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None) -> dict:
+def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
+                      clinic_name: str | None = None,
+                      patient_name: str | None = None,
+                      patient_phone: str | None = None) -> dict:
     return {
+        "clinic_name": clinic_name,
+        "patient_name": patient_name,
+        "patient_phone": patient_phone,
         "id": str(t.id),
         "tenant_id": str(t.tenant_id) if t.tenant_id else None,
         "clinic_id": str(t.clinic_id),
