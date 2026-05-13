@@ -33,6 +33,7 @@ const StaffChat = lazy(() => import('./pages/StaffChat'))
 const ChatSettings = lazy(() => import('./pages/ChatSettings'))
 const ChatRoles = lazy(() => import('./pages/ChatRoles'))
 const FranchiseModules = lazy(() => import('./pages/FranchiseModules'))
+const FranchiseRevenue = lazy(() => import('./pages/FranchiseRevenue'))
 const Franchise = lazy(() => import('./pages/Franchise'))
 const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
 // InviteRegister/InviteAccept — eager: маленькие, на критическом пути регистрации.
@@ -315,6 +316,7 @@ function MiniApp() {
         </Route>
         {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}
         <Route path="/admin/chat-settings" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatSettings /></Suspense>} />
+        <Route path="/admin/franchise-revenue" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseRevenue /></Suspense>} />
         <Route path="/admin/franchise-modules" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseModules /></Suspense>} />
         <Route path="/admin/chat-roles" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatRoles /></Suspense>} />
         <Route path="/staff-chat" element={<Suspense fallback={<div style={{minHeight:"100vh",background:"#0f1115"}}/>}><StaffChat /></Suspense>} />

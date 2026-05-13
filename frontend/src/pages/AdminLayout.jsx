@@ -22,6 +22,7 @@ const PatientChatsSection = lazy(() => import('../sections/PatientChatsSection')
 const ChatSettings  = lazy(() => import('./ChatSettings'))
 const ChatRoles     = lazy(() => import('./ChatRoles'))
 const FranchiseModules = lazy(() => import('./FranchiseModules'))
+const FranchiseRevenue = lazy(() => import('./FranchiseRevenue'))
 const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 // W6: AI-ассистент пациенту через Gemini — список и история диалогов
 const AiAssistantSection = lazy(() => import('../sections/AiAssistantSection'))
@@ -191,6 +192,7 @@ const NAV = [
   { key: 'inventory',          label: 'Инвентарь',             icon: 'inventory_2' },
   { key: 'subscription_plans', label: 'Тарифы платформы',  icon: 'workspace_premium' },
   { key: 'franchise_modules', label: 'Модули по клиникам', icon: 'apps' },
+  { key: 'franchise_revenue', label: 'Доходы франшизы', icon: 'paid' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -257,6 +259,7 @@ const NAV_GROUP_OF = {
   inventory:          'TENANT',
   subscription_plans: 'PLATFORM',
   franchise_modules:  'PLATFORM',
+  franchise_revenue:  'PLATFORM',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETING', 'SYSTEM', 'TENANT']
 
@@ -307,6 +310,7 @@ const PAGE_TITLES = {
   telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   sms_marketing:      { title: 'SMS-маркетинг',         subtitle: 'Шаблоны, рассылки спящим пациентам, история отправок и аналитика' },
   inventory:          { title: 'Учёт инвентаря',         subtitle: 'Расходные материалы, оборудование, медикаменты — остатки, движения и алерты' },
+  franchise_revenue:  { title: 'Доходы франшизы',          subtitle: 'Комиссия с бонусов клиник сети' },
   franchise_modules:  { title: 'Модули по клиникам',   subtitle: 'Распределение коммерческих модулей по подтенантам и внутренний биллинг' },
   subscription_plans: { title: 'Тарифы подписки', subtitle: 'Каталог планов «Здоровье+»: глобальные шаблоны и override-ы по тенантам' },
 }
@@ -8182,6 +8186,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'subscription_plans': return <Suspense fallback={<SectionLoader />}><SuperAdminSubscriptionPlansSection token={adminToken} /></Suspense>
       case 'platform_modules':   return <Suspense fallback={<SectionLoader />}><PlatformModulesSection token={adminToken} /></Suspense>
       case 'franchise_modules': return <Suspense fallback={<SectionLoader />}><FranchiseModules /></Suspense>
+      case 'franchise_revenue':  return <Suspense fallback={<SectionLoader />}><FranchiseRevenue /></Suspense>
       case 'chat_settings':  return <Suspense fallback={<SectionLoader />}><ChatSettings /></Suspense>
       case 'chat_groups':    return <Suspense fallback={<SectionLoader />}><ChatRoles /></Suspense>
       default:               return null

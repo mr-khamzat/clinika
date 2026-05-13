@@ -46,6 +46,7 @@ class Franchise(Base):
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Биллинг платформы: % с бонусов франшизы
+    fee_per_bonus_from_clinic: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal('100'), server_default='100')
     platform_fee_per_bonus: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("100"))
     min_bonus_amount:       Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("300"))
     refund_fee_on_cancel:   Mapped[bool]    = mapped_column(Boolean, nullable=False, default=False)
