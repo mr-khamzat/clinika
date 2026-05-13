@@ -196,3 +196,5 @@ from app.models.aggregator import AggregatorPartnership, AggregatorLead
 
 from app.models.staff_chat import StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatFile
 from app.models.chat_global_settings import ChatGlobalSettings
+
+from app.models.franchise_module_grant import FranchiseModuleGrant, FranchiseInternalAct

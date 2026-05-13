@@ -21,6 +21,7 @@ const DoctorsSection = lazy(() => import('../sections/DoctorsSection'))
 const PatientChatsSection = lazy(() => import('../sections/PatientChatsSection'))
 const ChatSettings  = lazy(() => import('./ChatSettings'))
 const ChatRoles     = lazy(() => import('./ChatRoles'))
+const FranchiseModules = lazy(() => import('./FranchiseModules'))
 const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 // W6: AI-ассистент пациенту через Gemini — список и история диалогов
 const AiAssistantSection = lazy(() => import('../sections/AiAssistantSection'))
@@ -166,6 +167,7 @@ const NAV = [
   // 'plugins' пункт удалён — старая plugin_*-система выпилена (используется ModulesCatalogSection)
   { key: 'mis_sync',       label: 'МИС Sync',     icon: 'sync_alt' },
   { key: 'doctors',        label: 'Врачи',        icon: 'stethoscope' },
+  { key: 'clinics',        label: 'Клиники',       icon: 'local_hospital' },
   { key: 'patient_chats',  label: 'Чаты пациентов', icon: 'chat_bubble' },
   { key: 'chat_groups',   label: 'Группы чатов',   icon: 'groups' },
   { key: 'chat_settings', label: 'Настройки чата', icon: 'tune' },
@@ -188,6 +190,7 @@ const NAV = [
   { key: 'sms_marketing',      label: 'SMS-маркетинг',         icon: 'sms' },
   { key: 'inventory',          label: 'Инвентарь',             icon: 'inventory_2' },
   { key: 'subscription_plans', label: 'Тарифы платформы',  icon: 'workspace_premium' },
+  { key: 'franchise_modules', label: 'Модули по клиникам', icon: 'apps' },
 ]
 
 // ── Группировка nav-item'ов по секциям сайдбара (premium-стиль) ────────────
@@ -246,12 +249,14 @@ const NAV_GROUP_OF = {
   calls_cfg:          'SYSTEM',
   settings:           'SYSTEM',
   doctors:            'TENANT',
+  clinics:            'TENANT',
   loyalty:            'TENANT',
   recordings:         'TENANT',
   telemedicine:       'TENANT',
   sms_marketing:      'MARKETING',
   inventory:          'TENANT',
   subscription_plans: 'PLATFORM',
+  franchise_modules:  'PLATFORM',
 }
 const NAV_GROUP_ORDER = ['PLATFORM', 'FINANCE', 'ANALYTICS', 'CONTENT', 'MARKETING', 'SYSTEM', 'TENANT']
 
@@ -281,6 +286,7 @@ const PAGE_TITLES = {
   contacts:           { title: 'Обращения',            subtitle: 'Входящие сообщения от посетителей лендингов' },
   // plugins удалён — старая plugin_*-система выпилена
   mis_sync:           { title: 'МИС Sync',             subtitle: 'Синхронизация с медицинскими информационными системами' },
+  clinics:            { title: 'Клиники',                subtitle: 'Управление клиниками сети и руководителями' },
   doctors:            { title: 'Врачи',                subtitle: 'Управление врачебным составом' },
   patient_chats:      { title: 'Чаты пациентов',       subtitle: 'Все чаты пациентов на платформе' },
   calls_cfg:          { title: 'Звонки и SMS',         subtitle: 'Правила обзвонов и подключение шлюзов' },
@@ -301,6 +307,7 @@ const PAGE_TITLES = {
   telemedicine:       { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   sms_marketing:      { title: 'SMS-маркетинг',         subtitle: 'Шаблоны, рассылки спящим пациентам, история отправок и аналитика' },
   inventory:          { title: 'Учёт инвентаря',         subtitle: 'Расходные материалы, оборудование, медикаменты — остатки, движения и алерты' },
+  franchise_modules:  { title: 'Модули по клиникам',   subtitle: 'Распределение коммерческих модулей по подтенантам и внутренний биллинг' },
   subscription_plans: { title: 'Тарифы подписки', subtitle: 'Каталог планов «Здоровье+»: глобальные шаблоны и override-ы по тенантам' },
 }
 
@@ -8141,6 +8148,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'roles':          return <Suspense fallback={<SectionLoader />}><PermissionsMatrixSection token={adminToken} mode={isSuperAdmin ? 'admin' : undefined} /></Suspense>
       // case 'plugins' удалён — старая plugin_*-система выпилена (заменена ModulesCatalogSection)
       case 'mis_sync':       return <MisSyncSection token={adminToken} />
+      case 'clinics':        return <ClinicsSection token={adminToken} isClinicManager={user?.role === 'manager' && !!user?.clinic_id} />
       case 'doctors':        return <Suspense fallback={<SectionLoader />}><DoctorsSection token={adminToken} /></Suspense>
       case 'patient_chats':  return <Suspense fallback={<SectionLoader />}><PatientChatsSection token={adminToken} /></Suspense>
       case 'calls_cfg':      return <CallsConfigSection token={adminToken} />
@@ -8173,6 +8181,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'inventory':          return <Suspense fallback={<SectionLoader />}><InventorySection token={adminToken} /></Suspense>
       case 'subscription_plans': return <Suspense fallback={<SectionLoader />}><SuperAdminSubscriptionPlansSection token={adminToken} /></Suspense>
       case 'platform_modules':   return <Suspense fallback={<SectionLoader />}><PlatformModulesSection token={adminToken} /></Suspense>
+      case 'franchise_modules': return <Suspense fallback={<SectionLoader />}><FranchiseModules /></Suspense>
       case 'chat_settings':  return <Suspense fallback={<SectionLoader />}><ChatSettings /></Suspense>
       case 'chat_groups':    return <Suspense fallback={<SectionLoader />}><ChatRoles /></Suspense>
       default:               return null
