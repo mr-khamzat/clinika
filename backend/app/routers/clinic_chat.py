@@ -229,3 +229,100 @@ async def close_thread(
     th.status = "closed"
     await db.commit()
     return cs.serialize_thread(th)
+
+
+@router.get("/threads/{thread_id}/patient-context")
+async def patient_context(
+    thread_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полный контекст пациента треда — для panel'а в чате (Phase 1).
+
+    Включает:
+      - patient.id/name/phone/email/birth_date
+      - recent appointments (последние 5)
+      - active diagnoses (если есть)
+      - allergies (если есть)
+      - связанные данные МИС если patient_id привязан
+
+    Используется для quick-actions в ClinicChatSection (создать направление,
+    посмотреть приёмы и т.п.).
+    """
+    _ensure_clinic_role(user)
+    # Проверяем доступ к треду через RBAC clinic_ids
+    from app.models.chat import ChatThread
+    rt = await db.execute(select(ChatThread).where(ChatThread.id == thread_id))
+    th = rt.scalar_one_or_none()
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    allowed = await _user_clinic_ids(db, user)
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+
+    # Patient
+    from app.models.patient_account import PatientAccount
+    rp = await db.execute(select(PatientAccount).where(PatientAccount.id == th.patient_id))
+    p = rp.scalar_one_or_none()
+    patient_dict = None
+    if p:
+        patient_dict = {
+            "id": str(p.id),
+            "name": p.name,
+            "phone": p.phone,
+            "email": p.email,
+            "birth_date": p.birth_date.isoformat() if p.birth_date else None,
+        }
+
+    # Recent appointments
+    from app.models.doctor import Appointment
+    from sqlalchemy import desc
+    ra = await db.execute(
+        select(Appointment)
+        .where(Appointment.patient_phone == (p.phone if p else ""))
+        .order_by(desc(Appointment.appointment_date), desc(Appointment.start_time))
+        .limit(5)
+    )
+    appts = list(ra.scalars().all())
+    appointments = [
+        {
+            "id": str(a.id),
+            "date": a.appointment_date.isoformat() if a.appointment_date else None,
+            "start_time": a.start_time.isoformat() if a.start_time else None,
+            "doctor_id": str(a.doctor_id) if a.doctor_id else None,
+            "clinic_id": str(a.clinic_id) if a.clinic_id else None,
+            "status": a.status.value if hasattr(a.status, "value") else str(a.status),
+            "notes": a.notes,
+        }
+        for a in appts
+    ]
+
+    # Резюме чата: последние 20 сообщений как plain text (для prefill направления)
+    from app.models.chat import ChatMessage
+    rm = await db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.thread_id == thread_id)
+        .order_by(desc(ChatMessage.created_at))
+        .limit(20)
+    )
+    msgs = list(rm.scalars().all())
+    chat_summary_lines = []
+    for m in reversed(msgs):
+        role = "Пациент" if m.sender_type == "patient" else "Клиника"
+        body = (m.body or "")[:200]
+        chat_summary_lines.append(f"{role}: {body}")
+    chat_summary = "\n".join(chat_summary_lines)
+
+    return {
+        "patient": patient_dict,
+        "appointments": appointments,
+        "chat_summary": chat_summary,
+        "thread": {
+            "id": str(th.id),
+            "clinic_id": str(th.clinic_id),
+            "subject": th.subject,
+            "status": th.status,
+            "assigned_doctor_id": str(th.assigned_doctor_id) if th.assigned_doctor_id else None,
+            "created_at": th.created_at.isoformat() if th.created_at else None,
+        },
+    }

@@ -436,7 +436,10 @@ export default function StaffChat() {
                 <div className="sc-room-body">
                   <div className="sc-room-row">
                     <span className="sc-room-name">{r.name || 'Без названия'}</span>
-                    <span className="sc-room-time">{formatTime(r.last_message_at)}</span>
+                    <span className="sc-room-time">
+                      {peerId && onlineUsers.has(peerId) && <span className="sc-room-online" title="В сети">●</span>}
+                      {formatTime(r.last_message_at)}
+                    </span>
                   </div>
                   <div className="sc-room-row">
                     <span className="sc-room-preview">
@@ -610,7 +613,13 @@ export default function StaffChat() {
                       <Avatar name={u.name} id={u.id} size={36} online={onlineUsers.has(u.id)} />
                       <div className="sc-contact-body">
                         <div className="sc-contact-name">{u.name}</div>
-                        <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
+                        <div className="sc-contact-meta">
+                          <span className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</span>
+                          <span className={'sc-status-pill ' + (onlineUsers.has(u.id) ? 'is-online' : 'is-offline')}>
+                            <span className="sc-status-dot" />
+                            {onlineUsers.has(u.id) ? 'В сети' : 'Не в сети'}
+                          </span>
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -895,6 +904,36 @@ const STAFF_CHAT_CSS = `
 .sc-contact-body { flex: 1; min-width: 0; }
 .sc-contact-name { font-size: 14.5px; font-weight: 500; color: var(--sc-fg); }
 .sc-contact-role { font-size: 12px; color: var(--sc-fg-3); margin-top: 1px; }
+.sc-contact-meta {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+.sc-status-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.sc-status-pill.is-online {
+  background: color-mix(in oklch, oklch(0.65 0.18 145) 14%, transparent);
+  color: oklch(0.55 0.18 145);
+}
+.sc-status-pill.is-offline {
+  background: var(--sc-bg);
+  color: var(--sc-fg-3);
+}
+.sc-status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.sc-room-online {
+  color: oklch(0.55 0.18 145);
+  font-size: 10px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
 
 /* Mobile */
 @media (max-width: 760px) {
