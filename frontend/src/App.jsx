@@ -29,6 +29,7 @@ const History = lazy(() => import('./pages/History'))
 const Bonuses = lazy(() => import('./pages/Bonuses'))
 // Landing — lazy. Большая страница лендинга платформы (не нужна авторизованным пользователям).
 const Landing = lazy(() => import('./pages/Landing'))
+const StaffChat = lazy(() => import('./pages/StaffChat'))
 const Franchise = lazy(() => import('./pages/Franchise'))
 const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
 // InviteRegister/InviteAccept — eager: маленькие, на критическом пути регистрации.
@@ -307,6 +308,8 @@ function MiniApp() {
           )}
 
         </Route>
+        {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}
+        <Route path="/staff-chat" element={<Suspense fallback={<div style={{minHeight:"100vh",background:"#0f1115"}}/>}><StaffChat /></Suspense>} />
       </Routes>
       </Suspense>
     </BrowserRouter>

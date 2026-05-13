@@ -193,3 +193,5 @@ from app.models.calendar import PatientCalendarToken
 from app.models.lab import LabProvider, LabOrder, LabResult
 from app.models.wellness import WellnessPartner, WellnessPartnerClick
 from app.models.aggregator import AggregatorPartnership, AggregatorLead
+
+from app.models.staff_chat import StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatFile

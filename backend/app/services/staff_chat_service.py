@@ -1,0 +1,376 @@
+"""
+Сервис для чата сотрудник↔сотрудник.
+
+Содержит:
+  - visible_users_for(user) — RBAC: каких пользователей видит данный
+  - user_room_ids(user) — список room_id где пользователь состоит
+  - get_or_create_direct_room(a, b) — создать/найти 1-1 комнату между двумя
+  - ensure_member(room, user) — проверка членства
+  - serialize_room, serialize_message, serialize_user_brief
+  - send_message(room, sender, body, attachments) — добавить + обновить last_message_at
+  - mark_read(room, user) — установить last_read_at
+
+RBAC видимости:
+  super_admin / franchise_owner / admin / manager / recruiter → все в тенанте
+  doctor → свои клиники (DoctorClinicAccess) + менеджеры/админы тенанта
+  reg / nurse / partner_doctor / visiting_doctor → своя(и) клиника(и)
+  patient → запрещено
+
+Inter-clinic чат: только в рамках одного tenant_id (изоляция).
+"""
+import uuid
+from datetime import datetime
+from typing import Optional, Sequence
+
+from sqlalchemy import select, and_, or_, func, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.user import User, UserRole
+from app.models.clinic import Clinic
+from app.models.staff_chat import (
+    StaffChatRoom, StaffChatMember, StaffChatMessage,
+    ROOM_TYPE_DIRECT, ROOM_TYPE_CLINIC, ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST,
+)
+
+
+# ── RBAC: какие clinic_id видит пользователь ──────────────────────────────────
+async def user_clinic_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
+    """Возвращает список clinic_id, доступных пользователю в рамках его тенанта.
+
+    super_admin без tenant → все клиники глобально.
+    Иначе ограничено tenant_id пользователя.
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    # Глобальный super_admin без tenant — видит все клиники
+    if role == "super_admin" and not user.tenant_id:
+        r = await db.execute(select(Clinic.id))
+        return [row[0] for row in r.all()]
+    # Роли с tenant-wide доступом
+    if role in ("super_admin", "franchise_owner", "admin", "manager", "recruiter"):
+        if not user.tenant_id:
+            return []
+        r = await db.execute(
+            select(Clinic.id).where(Clinic.tenant_id == user.tenant_id)
+        )
+        return [row[0] for row in r.all()]
+    # Doctor — через DoctorClinicAccess
+    if role == "doctor":
+        try:
+            from app.models.doctor_clinic_access import DoctorClinicAccess
+            r = await db.execute(
+                select(DoctorClinicAccess.clinic_id).where(
+                    DoctorClinicAccess.doctor_id == user.id,
+                )
+            )
+            ids = [row[0] for row in r.all()]
+            if ids:
+                return ids
+        except Exception:
+            pass
+        if getattr(user, "clinic_id", None):
+            return [user.clinic_id]
+        return []
+    # Все остальные — только своя клиника
+    if getattr(user, "clinic_id", None):
+        return [user.clinic_id]
+    return []
+
+
+# ── RBAC: каких пользователей видит данный ────────────────────────────────────
+async def visible_users_for(
+    db: AsyncSession, user: User
+) -> Sequence[User]:
+    """
+    Возвращает список пользователей, с которыми данный сотрудник может
+    начать чат. Изоляция по tenant. Дополнительные ограничения по клиникам
+    для рядовых ролей.
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    if role == "patient":
+        return []
+
+    # Базовый фильтр: только активные не-пациенты в том же тенанте
+    base_conditions = [
+        User.id != user.id,
+        User.role != UserRole.PATIENT,
+        getattr(User, "is_active", User.id == User.id),  # safe fallback
+    ]
+    if user.tenant_id:
+        base_conditions.append(User.tenant_id == user.tenant_id)
+    elif role != "super_admin":
+        # Не super_admin и без tenant — никого не видит
+        return []
+
+    # Tenant-wide роли — видят всех в тенанте
+    if role in ("super_admin", "franchise_owner", "admin", "manager", "recruiter"):
+        r = await db.execute(select(User).where(and_(*base_conditions)))
+        return r.scalars().all()
+
+    # Doctor / reg / nurse / partner_doctor / visiting_doctor —
+    # ограничены своими клиниками + tenant-wide роли (для эскалации)
+    own_clinics = await user_clinic_ids(db, user)
+    if not own_clinics:
+        return []
+
+    # Кандидаты: либо принадлежат своей клинике, либо tenant-wide роль
+    tenant_wide_roles = (
+        UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER,
+        UserRole.MANAGER, UserRole.RECRUITER,
+    )
+    # Подзапрос: user-ы из тех же клиник через DoctorClinicAccess
+    same_clinic_user_ids: set[uuid.UUID] = set()
+    # 1) direct clinic_id matches
+    r = await db.execute(
+        select(User.id).where(and_(
+            *base_conditions,
+            User.clinic_id.in_(own_clinics),
+        ))
+    )
+    same_clinic_user_ids.update(row[0] for row in r.all())
+    # 2) DoctorClinicAccess linked
+    try:
+        from app.models.doctor_clinic_access import DoctorClinicAccess
+        r = await db.execute(
+            select(DoctorClinicAccess.doctor_id).where(
+                DoctorClinicAccess.clinic_id.in_(own_clinics),
+            )
+        )
+        same_clinic_user_ids.update(row[0] for row in r.all())
+    except Exception:
+        pass
+
+    # Финальный запрос: same-clinic OR tenant-wide role
+    cond = or_(
+        User.id.in_(same_clinic_user_ids) if same_clinic_user_ids else (User.id == None),  # noqa: E711
+        User.role.in_(tenant_wide_roles),
+    )
+    r = await db.execute(select(User).where(and_(*base_conditions, cond)))
+    return r.scalars().all()
+
+
+# ── Membership + queries ──────────────────────────────────────────────────────
+async def user_room_ids(db: AsyncSession, user_id: uuid.UUID) -> list[uuid.UUID]:
+    r = await db.execute(
+        select(StaffChatMember.room_id).where(StaffChatMember.user_id == user_id)
+    )
+    return [row[0] for row in r.all()]
+
+
+async def get_room(db: AsyncSession, room_id: uuid.UUID) -> StaffChatRoom | None:
+    r = await db.execute(select(StaffChatRoom).where(StaffChatRoom.id == room_id))
+    return r.scalar_one_or_none()
+
+
+async def is_member(db: AsyncSession, room_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+    r = await db.execute(
+        select(func.count()).select_from(StaffChatMember).where(and_(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user_id,
+        ))
+    )
+    return (r.scalar() or 0) > 0
+
+
+async def list_room_members(db: AsyncSession, room_id: uuid.UUID) -> list[StaffChatMember]:
+    r = await db.execute(
+        select(StaffChatMember).where(StaffChatMember.room_id == room_id)
+    )
+    return list(r.scalars().all())
+
+
+async def get_or_create_direct_room(
+    db: AsyncSession, user_a: User, user_b: User
+) -> StaffChatRoom:
+    """Находит или создаёт 1-1 direct-комнату между двумя пользователями.
+
+    Tenant: должен совпадать. Если разные — поднимаем ValueError.
+    """
+    if user_a.id == user_b.id:
+        raise ValueError("cannot create direct chat with self")
+    if user_a.tenant_id != user_b.tenant_id:
+        # Inter-tenant запрещён по политике (см. memory: feedback_no_intertenant)
+        raise ValueError("inter-tenant direct chat not allowed")
+    tenant_id = user_a.tenant_id or user_b.tenant_id
+    if tenant_id is None:
+        raise ValueError("both users must have tenant_id")
+    # Ищем существующую direct-комнату с этими двумя
+    subq = (
+        select(StaffChatMember.room_id)
+        .where(StaffChatMember.user_id.in_([user_a.id, user_b.id]))
+        .group_by(StaffChatMember.room_id)
+        .having(func.count(StaffChatMember.user_id) == 2)
+    )
+    r = await db.execute(
+        select(StaffChatRoom).where(and_(
+            StaffChatRoom.id.in_(subq),
+            StaffChatRoom.type == ROOM_TYPE_DIRECT,
+        ))
+    )
+    existing = r.scalars().first()
+    if existing:
+        return existing
+    # Создаём
+    room = StaffChatRoom(
+        tenant_id=tenant_id,
+        type=ROOM_TYPE_DIRECT,
+        name=None,
+        created_by_id=user_a.id,
+    )
+    db.add(room)
+    await db.flush()
+    db.add(StaffChatMember(room_id=room.id, user_id=user_a.id, member_role="admin"))
+    db.add(StaffChatMember(room_id=room.id, user_id=user_b.id, member_role="member"))
+    await db.flush()
+    return room
+
+
+# ── Send / read ───────────────────────────────────────────────────────────────
+async def send_message(
+    db: AsyncSession,
+    room: StaffChatRoom,
+    sender: User,
+    body: str,
+    attachments: list[dict] | None = None,
+    reply_to_id: uuid.UUID | None = None,
+) -> StaffChatMessage:
+    body_trimmed = (body or "").strip()
+    if not body_trimmed and not attachments:
+        raise ValueError("empty message")
+    msg = StaffChatMessage(
+        room_id=room.id,
+        sender_id=sender.id,
+        body=body_trimmed,
+        attachments=attachments or None,
+        reply_to_id=reply_to_id,
+    )
+    db.add(msg)
+    room.last_message_at = datetime.utcnow()
+    await db.flush()
+    # Автоматически помечаем прочитанным для отправителя
+    await db.execute(
+        update(StaffChatMember)
+        .where(and_(
+            StaffChatMember.room_id == room.id,
+            StaffChatMember.user_id == sender.id,
+        ))
+        .values(last_read_at=msg.created_at)
+    )
+    return msg
+
+
+async def mark_read(
+    db: AsyncSession,
+    room: StaffChatRoom,
+    user: User,
+    until: datetime | None = None,
+) -> None:
+    await db.execute(
+        update(StaffChatMember)
+        .where(and_(
+            StaffChatMember.room_id == room.id,
+            StaffChatMember.user_id == user.id,
+        ))
+        .values(last_read_at=until or datetime.utcnow())
+    )
+
+
+async def list_messages(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    before: datetime | None = None,
+    limit: int = 50,
+) -> list[StaffChatMessage]:
+    q = select(StaffChatMessage).where(StaffChatMessage.room_id == room_id)
+    if before:
+        q = q.where(StaffChatMessage.created_at < before)
+    q = q.order_by(StaffChatMessage.created_at.desc()).limit(min(max(limit, 1), 200))
+    r = await db.execute(q)
+    return list(r.scalars().all())
+
+
+async def last_message(
+    db: AsyncSession, room_id: uuid.UUID
+) -> StaffChatMessage | None:
+    r = await db.execute(
+        select(StaffChatMessage)
+        .where(StaffChatMessage.room_id == room_id)
+        .order_by(StaffChatMessage.created_at.desc())
+        .limit(1)
+    )
+    return r.scalar_one_or_none()
+
+
+async def count_unread(
+    db: AsyncSession,
+    room_id: uuid.UUID,
+    user_id: uuid.UUID,
+    last_read_at: datetime | None,
+) -> int:
+    q = select(func.count()).select_from(StaffChatMessage).where(and_(
+        StaffChatMessage.room_id == room_id,
+        StaffChatMessage.sender_id != user_id,
+    ))
+    if last_read_at:
+        q = q.where(StaffChatMessage.created_at > last_read_at)
+    r = await db.execute(q)
+    return int(r.scalar() or 0)
+
+
+# ── Serialization ─────────────────────────────────────────────────────────────
+def serialize_user_brief(u: User) -> dict:
+    role_val = u.role.value if hasattr(u.role, "value") else str(u.role)
+    return {
+        "id": str(u.id),
+        "name": (getattr(u, "full_name", None) or u.email or u.username or "Сотрудник").strip(),
+        "role": role_val,
+        "clinic_id": str(u.clinic_id) if getattr(u, "clinic_id", None) else None,
+        "avatar_url": getattr(u, "avatar_url", None),
+    }
+
+
+def serialize_message(m: StaffChatMessage) -> dict:
+    return {
+        "id": str(m.id),
+        "room_id": str(m.room_id),
+        "sender_id": str(m.sender_id) if m.sender_id else None,
+        "body": m.body,
+        "attachments": m.attachments,
+        "reply_to_id": str(m.reply_to_id) if m.reply_to_id else None,
+        "edited_at": m.edited_at.isoformat() if m.edited_at else None,
+        "deleted_at": m.deleted_at.isoformat() if m.deleted_at else None,
+        "created_at": m.created_at.isoformat(),
+    }
+
+
+def serialize_room(
+    r: StaffChatRoom,
+    *,
+    members: list[StaffChatMember] | None = None,
+    member_users: dict[uuid.UUID, User] | None = None,
+    last_msg: StaffChatMessage | None = None,
+    unread: int = 0,
+    title_override: str | None = None,
+) -> dict:
+    members_list = []
+    if members and member_users is not None:
+        for m in members:
+            u = member_users.get(m.user_id)
+            if not u:
+                continue
+            d = serialize_user_brief(u)
+            d["member_role"] = m.member_role
+            d["last_read_at"] = m.last_read_at.isoformat() if m.last_read_at else None
+            d["muted"] = bool(m.muted)
+            members_list.append(d)
+    return {
+        "id": str(r.id),
+        "tenant_id": str(r.tenant_id),
+        "type": r.type,
+        "name": title_override or r.name,
+        "clinic_id": str(r.clinic_id) if r.clinic_id else None,
+        "created_at": r.created_at.isoformat(),
+        "last_message_at": r.last_message_at.isoformat() if r.last_message_at else None,
+        "members": members_list,
+        "last_message": serialize_message(last_msg) if last_msg else None,
+        "unread": unread,
+    }
