@@ -129,18 +129,18 @@ export default function AdminSystemStatusSection() {
             <HealthCard
               icon="database"
               title="База данных"
-              okStatus={!!health.database?.ok}
-              value={health.database?.latency_ms != null ? Number(health.database.latency_ms).toFixed(0) : null}
+              okStatus={!!(health.db?.status === 'ok')}
+              value={null}
               unit="ms"
-              hint={health.database?.ok ? 'PostgreSQL отвечает' : 'Нет соединения'}
+              hint={(health.db?.status === 'ok') ? 'PostgreSQL отвечает' : 'Нет соединения'}
             />
             <HealthCard
               icon="bolt"
               title="Redis"
-              okStatus={!!health.redis?.ok}
-              value={health.redis?.latency_ms != null ? Number(health.redis.latency_ms).toFixed(0) : null}
+              okStatus={!!(health.redis?.status === 'ok')}
+              value={null}
               unit="ms"
-              hint={health.redis?.ok ? 'Cache работает' : 'Нет соединения'}
+              hint={(health.redis?.status === 'ok') ? 'Cache работает' : 'Нет соединения'}
             />
             <HealthCard
               icon="hard_drive"

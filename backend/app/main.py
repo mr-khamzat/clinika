@@ -1724,6 +1724,7 @@ async def health_full():
     return result
 
 
+
 @app.get("/_test_alert_500", include_in_schema=False)
 async def _test_alert_500():
     """Тестовый endpoint — намеренно бросает исключение, чтобы проверить
