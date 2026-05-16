@@ -310,6 +310,51 @@ async def patch_channel(
     return {"id": str(room.id), "name": room.name, "description": room.description}
 
 
+# ── Reactions ─────────────────────────────────────────────────────────────────
+async def _toggle_reaction_logic(db, user, message, emoji: str) -> str:
+    """Toggle: добавляет если нет, удаляет если есть. Returns 'added' | 'removed'."""
+    existing = (await db.execute(
+        select(StaffChatMessageReaction).where(
+            StaffChatMessageReaction.message_id == message.id,
+            StaffChatMessageReaction.user_id == user.id,
+            StaffChatMessageReaction.emoji == emoji,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        await db.delete(existing)
+        return "removed"
+    db.add(StaffChatMessageReaction(
+        message_id=message.id, user_id=user.id, emoji=emoji,
+    ))
+    return "added"
+
+
+@router.post("/messages/{message_id}/reactions")
+async def react_to_message(
+    message_id: uuid.UUID,
+    body: ReactionIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    msg = (await db.execute(
+        select(StaffChatMessage).where(StaffChatMessage.id == message_id)
+    )).scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404, "Сообщение не найдено")
+    member = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == msg.room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not member:
+        raise HTTPException(403, "Не участник этой комнаты")
+    action = await _toggle_reaction_logic(db, user, msg, body.emoji)
+    await db.commit()
+    return {"action": action, "emoji": body.emoji, "message_id": str(msg.id)}
+
+
 # ── /me — текущий пользователь (краткая инфа для UI) ─────────────────────────
 @router.get("/me")
 async def staff_chat_me(

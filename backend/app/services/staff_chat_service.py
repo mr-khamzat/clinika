@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.user import User, UserRole
 from app.models.clinic import Clinic
 from app.models.staff_chat import (
-    StaffChatRoom, StaffChatMember, StaffChatMessage,
+    StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatMessageReaction,
     ROOM_TYPE_DIRECT, ROOM_TYPE_CLINIC, ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST,
 )
 
@@ -328,7 +328,40 @@ def serialize_user_brief(u: User) -> dict:
     }
 
 
-def serialize_message(m: StaffChatMessage) -> dict:
+def _aggregate_reactions(rows, current_user_id) -> list[dict]:
+    """Агрегирует список StaffChatMessageReaction → [{emoji, count, by_me}].
+
+    rows: iterable объектов с полями .emoji и .user_id.
+    Сортировка: по count DESC (популярные сверху), затем emoji asc.
+    """
+    from collections import defaultdict
+    counts: dict[str, int] = defaultdict(int)
+    mine: set[str] = set()
+    cur = str(current_user_id) if current_user_id else None
+    for r in rows:
+        counts[r.emoji] += 1
+        if cur and str(r.user_id) == cur:
+            mine.add(r.emoji)
+    return [
+        {"emoji": e, "count": c, "by_me": (e in mine)}
+        for e, c in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+    ]
+
+
+def serialize_message(
+    m: StaffChatMessage,
+    *,
+    reactions: list | None = None,
+    current_user_id: uuid.UUID | None = None,
+) -> dict:
+    """Сериализатор сообщения.
+
+    Backward-compat: при вызове без kwargs reactions/mentions/pin поля
+    добавляются с дефолтами ([]/None), что не ломает существующие clients.
+
+    reactions: список StaffChatMessageReaction (или None — тогда вернётся [])
+    current_user_id: для расчёта by_me в reactions
+    """
     return {
         "id": str(m.id),
         "room_id": str(m.room_id),
@@ -339,7 +372,29 @@ def serialize_message(m: StaffChatMessage) -> dict:
         "edited_at": m.edited_at.isoformat() if m.edited_at else None,
         "deleted_at": m.deleted_at.isoformat() if m.deleted_at else None,
         "created_at": m.created_at.isoformat(),
+        # Slack-fundament поля:
+        "reactions": _aggregate_reactions(reactions or [], current_user_id),
+        "mentioned_user_ids": list(getattr(m, "mentioned_user_ids", None) or []),
+        "pinned_at": m.pinned_at.isoformat() if getattr(m, "pinned_at", None) else None,
+        "pinned_by_user_id": str(m.pinned_by_user_id) if getattr(m, "pinned_by_user_id", None) else None,
     }
+
+
+async def load_reactions_for_messages(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[StaffChatMessageReaction]]:
+    """Грузит реакции для списка сообщений батчем. Returns {message_id: [reactions]}."""
+    if not message_ids:
+        return {}
+    r = await db.execute(
+        select(StaffChatMessageReaction).where(
+            StaffChatMessageReaction.message_id.in_(message_ids),
+        )
+    )
+    out: dict[uuid.UUID, list[StaffChatMessageReaction]] = {}
+    for row in r.scalars().all():
+        out.setdefault(row.message_id, []).append(row)
+    return out
 
 
 def serialize_room(
