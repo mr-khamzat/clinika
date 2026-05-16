@@ -72,6 +72,19 @@ class TestClassifyEndpoint(unittest.TestCase):
         calls = [{"file": "y.jsx", "method": "GET", "path": "/x/items"}]
         self.assertNotEqual(classify_endpoint(ep, calls, ""), "alive")
 
+    def test_known_alive_prefix(self):
+        # Служебные/webhook'и не считаем мёртвыми, даже без фронт-вызова.
+        ep = {"file": "x.py", "method": "GET", "path": "/health/full"}
+        self.assertEqual(classify_endpoint(ep, [], ""), "alive")
+        ep2 = {"file": "x.py", "method": "POST", "path": "/mis/webhook"}
+        self.assertEqual(classify_endpoint(ep2, [], ""), "alive")
+
+    def test_prefix_match_handles_concat(self):
+        # Фронт пишет: api.get('/admin/tenants/' + id), backend ждёт `/admin/tenants/{tenant_id}`
+        ep = {"file": "x.py", "method": "GET", "path": "/admin/tenants/{tenant_id}"}
+        calls = [{"file": "y.jsx", "method": "GET", "path": "/admin/tenants/"}]
+        self.assertEqual(classify_endpoint(ep, calls, ""), "alive")
+
 
 if __name__ == "__main__":
     unittest.main()

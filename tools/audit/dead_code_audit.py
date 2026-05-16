@@ -59,19 +59,60 @@ def _normalize_path_for_match(p: str) -> str:
     return re.sub(r"\{[^}]+\}", "{var}", p)
 
 
+# Префиксы и точные пути endpoint'ов, которые дёргаются НЕ из фронта
+# (служебные FastAPI, webhooks от МИС/ботов, OpenAPI и т.п.) — не считаем мёртвыми.
+KNOWN_ALIVE_PREFIXES = (
+    "/health",           # health-check probes
+    "/metrics",          # prometheus
+    "/docs", "/redoc",   # FastAPI swagger/redoc
+    "/openapi",
+    "/.well-known",      # ACME / sub-domain verification
+    "/auth/refresh",     # дёргается interceptor'ом, не явным вызовом
+    "/mis/",             # МИС webhooks (внешний потребитель)
+    "/webhooks/",        # любые внешние webhook'и
+    "/_test_",           # служебные тестовые
+    "/presence/ws",      # WebSocket (другой протокол, не api.get)
+    "/staff-chat/ws",
+    "/staff-chat/uploads",
+)
+# Endpoint'ы дёргаемые конкатенацией пути или иначе нестандартно — known-alive.
+KNOWN_ALIVE_EXACT = {
+    # FastAPI default
+    "/",
+}
+
+
+def _is_known_alive(path: str) -> bool:
+    if path in KNOWN_ALIVE_EXACT:
+        return True
+    return any(path.startswith(p) for p in KNOWN_ALIVE_PREFIXES)
+
+
 def classify_endpoint(endpoint: dict, calls: list[dict], text_corpus: str) -> str:
     """Возвращает один из: alive | review | safe.
 
-    alive  — есть фронт-вызов с тем же method и нормализованным path
+    alive  — есть фронт-вызов ИЛИ путь в KNOWN_ALIVE_PREFIXES (внешние потребители)
     review — нет вызова, но путь упоминается в репо (в комментах/строках)
     safe   — путь нигде не встречается
     """
+    if _is_known_alive(endpoint["path"]):
+        return "alive"
     target = _normalize_path_for_match(endpoint["path"])
+    target_prefix = target.split("{var}", 1)[0]  # часть до первого path-параметра
     for c in calls:
         if c["method"] != endpoint["method"]:
             continue
-        if _normalize_path_for_match(c["path"]) == target:
+        call_norm = _normalize_path_for_match(c["path"])
+        # 1) точное совпадение
+        if call_norm == target:
             return "alive"
+        # 2) prefix-match: фронт писал конкатенацию (api.get('/a/b/' + id))
+        # Если есть backend `/a/b/{param}/...` и фронт зовёт `/a/b/` или `/a/b` — считаем alive.
+        if target_prefix and len(target_prefix) >= 4:
+            cp = call_norm.rstrip("/")
+            tp = target_prefix.rstrip("/")
+            if cp == tp:
+                return "alive"
     if endpoint["path"] in text_corpus:
         return "review"
     return "safe"
