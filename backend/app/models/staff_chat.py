@@ -63,6 +63,8 @@ class StaffChatRoom(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # Описание канала (для type=channel/group). Только для каналов.
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_message_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True,
     )
@@ -168,10 +170,46 @@ class StaffChatMessage(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Список user_id (как строки) — кого упомянули через @username (резолв уже сделан)
+    mentioned_user_ids: Mapped[Any] = mapped_column(
+        JSONB, default=list, server_default='[]', nullable=False
+    )
+    # Закрепление (Slack-pin). pinned_at IS NOT NULL → сообщение закреплено
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pinned_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True
     )
 
     __table_args__ = (
         Index("ix_staff_chat_messages_room_created", "room_id", "created_at"),
+    )
+
+
+class StaffChatMessageReaction(Base):
+    """Реакция (emoji) пользователя на сообщение. Уникальный ключ
+    (message_id, user_id, emoji) — один user может оставить только одну
+    реакцию каждого emoji на одно сообщение."""
+    __tablename__ = "staff_chat_message_reactions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("staff_chat_messages.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
     )
