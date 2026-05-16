@@ -4,8 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.telephony import TelephonyConfig
+from app.services import encryption_service as enc
 from .base import TelephonyProvider
 from .null import NullProvider
+from .sipuni import SipuniProvider
 
 
 async def get_provider(db: AsyncSession, tenant_id: uuid.UUID) -> TelephonyProvider:
@@ -17,5 +19,11 @@ async def get_provider(db: AsyncSession, tenant_id: uuid.UUID) -> TelephonyProvi
     )).scalar_one_or_none()
     if not cfg or not cfg.is_active or cfg.provider in ("null", ""):
         return NullProvider()
-    # TODO: реальные провайдеры — отдельные сессии (mango.py, zadarma.py, sipuni.py)
+    if cfg.provider == "sipuni":
+        sipuni_id = enc.decrypt(cfg.api_key_encrypted) if cfg.api_key_encrypted else ""
+        secret = enc.decrypt(cfg.api_secret_encrypted) if cfg.api_secret_encrypted else ""
+        if not sipuni_id or not secret:
+            return NullProvider()
+        return SipuniProvider(sipuni_id, secret)
+    # Другие провайдеры (mango/zadarma/...) — отдельной сессией
     return NullProvider()

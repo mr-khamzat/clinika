@@ -339,3 +339,36 @@ async def list_calls(
         ],
         "page": page,
     }
+
+
+# ── Sipuni webhook (no auth — Sipuni не подписывает) ──────────────────────────
+
+@router.post("/telephony/webhook/sipuni")
+async def sipuni_webhook(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Принимает уведомления от Sipuni о статусах звонков.
+
+    Sipuni не подписывает webhook'и — публичный endpoint. Логика:
+    1. Найти PhoneCall по provider_call_id
+    2. Обновить status, duration, ended_at, recording_url
+    """
+    from app.services.telephony.sipuni import SipuniProvider
+    # Используем парсер из SipuniProvider (без credentials — public-static logic)
+    parsed = await SipuniProvider("", "").handle_incoming_webhook(payload)
+    if not parsed.get("ok") or not parsed.get("provider_call_id"):
+        return {"ok": False}
+    call = (await db.execute(
+        select(PhoneCall).where(PhoneCall.provider_call_id == parsed["provider_call_id"])
+    )).scalar_one_or_none()
+    if not call:
+        return {"ok": False, "reason": "call_not_found"}
+    call.status = parsed["status"]
+    if parsed.get("duration_sec"):
+        call.duration_sec = parsed["duration_sec"]
+        call.ended_at = datetime.utcnow()
+    if parsed.get("recording_url"):
+        call.recording_url = parsed["recording_url"]
+    await db.commit()
+    return {"ok": True}
