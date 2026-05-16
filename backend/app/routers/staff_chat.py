@@ -410,6 +410,36 @@ async def toggle_pin(
             "pinned_at": msg.pinned_at.isoformat() if msg.pinned_at else None}
 
 
+@router.get("/mentions/unread")
+async def unread_mentions(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список room_id где меня упомянули после моего last_read_at."""
+    _ensure_not_patient(user)
+    my_id = str(user.id)
+    rows = (await db.execute(
+        select(StaffChatMember).where(StaffChatMember.user_id == user.id)
+    )).scalars().all()
+    out: list[dict] = []
+    epoch = datetime(1970, 1, 1)
+    for m in rows:
+        last_read = m.last_read_at or epoch
+        msgs = (await db.execute(
+            select(StaffChatMessage).where(
+                StaffChatMessage.room_id == m.room_id,
+                StaffChatMessage.created_at > last_read,
+            )
+        )).scalars().all()
+        cnt = sum(
+            1 for msg in msgs
+            if my_id in (msg.mentioned_user_ids or [])
+        )
+        if cnt > 0:
+            out.append({"room_id": str(m.room_id), "mention_count": cnt})
+    return {"rooms": out}
+
+
 @router.get("/rooms/{room_id}/pinned")
 async def list_pinned(
     room_id: uuid.UUID,
@@ -631,11 +661,37 @@ async def post_room_message(
             attachments=payload.attachments,
             reply_to_id=payload.reply_to_id,
         )
+        # @mentions: parse → resolve (tenant-scope) → сохранить в msg.mentioned_user_ids
+        try:
+            from app.services.staff_chat_mentions import (
+                parse_mention_strings, resolve_mentions,
+            )
+            usernames = parse_mention_strings(msg.body or "")
+            mention_ids: list[str] = []
+            if usernames and user.tenant_id:
+                mention_ids = await resolve_mentions(
+                    db, usernames, tenant_id=user.tenant_id,
+                )
+            msg.mentioned_user_ids = mention_ids
+        except Exception:
+            # парсинг не должен ломать отправку
+            mention_ids = []
         await db.commit()
     except ValueError as e:
         await db.rollback()
         raise HTTPException(400, str(e))
     payload_event = svc.serialize_message(msg)
+    # TG-нотификация upmentioned user'ам — fire-and-forget, после commit'а
+    try:
+        if mention_ids:
+            from app.services.staff_chat_mentions import notify_mentions
+            await notify_mentions(
+                db, sender=user, room=room,
+                mention_ids=mention_ids,
+                text_preview=(msg.body or "")[:200],
+            )
+    except Exception:
+        pass
     # Бродкаст всем участникам через WS hub
     await ws_hub.broadcast_to_room(room.id, {"type": "message:new", "data": payload_event})
     # Telegram-нотификация владельцу: если в комнате есть super_admin/franchise_owner —
