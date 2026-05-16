@@ -355,6 +355,95 @@ async def react_to_message(
     return {"action": action, "emoji": body.emoji, "message_id": str(msg.id)}
 
 
+# ── Pin / Unpin сообщений ─────────────────────────────────────────────────────
+async def _toggle_pin_logic(db, user, msg, member) -> str:
+    """Toggle pin. Returns 'pinned' | 'unpinned'. Raises PinLimitError если >=20."""
+    if msg.pinned_at is not None:
+        msg.pinned_at = None
+        msg.pinned_by_user_id = None
+        return "unpinned"
+    cnt = (await db.execute(
+        select(func.count()).select_from(StaffChatMessage).where(
+            StaffChatMessage.room_id == msg.room_id,
+            StaffChatMessage.pinned_at.is_not(None),
+        )
+    )).scalar()
+    if (cnt or 0) >= 20:
+        raise PinLimitError("Лимит 20 закреплённых сообщений на канал")
+    msg.pinned_at = datetime.utcnow()
+    msg.pinned_by_user_id = user.id
+    return "pinned"
+
+
+@router.post("/messages/{message_id}/pin")
+async def toggle_pin(
+    message_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    msg = (await db.execute(
+        select(StaffChatMessage).where(StaffChatMessage.id == message_id)
+    )).scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404, "Сообщение не найдено")
+    member = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == msg.room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    role_val = user.role.value if hasattr(user.role, "value") else str(user.role)
+    is_admin_or_higher = (
+        (member is not None and member.member_role == "admin")
+        or role_val in ("manager", "franchise_owner", "super_admin")
+    )
+    if not is_admin_or_higher:
+        raise HTTPException(403, "Только admin room'а или manager+ может пинить")
+    try:
+        action = await _toggle_pin_logic(db, user, msg, member)
+    except PinLimitError as e:
+        await db.rollback()
+        raise HTTPException(409, str(e))
+    await db.commit()
+    return {"action": action, "message_id": str(msg.id),
+            "pinned_at": msg.pinned_at.isoformat() if msg.pinned_at else None}
+
+
+@router.get("/rooms/{room_id}/pinned")
+async def list_pinned(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    member = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not member:
+        raise HTTPException(403, "Не участник")
+    rows = (await db.execute(
+        select(StaffChatMessage).where(
+            StaffChatMessage.room_id == room_id,
+            StaffChatMessage.pinned_at.is_not(None),
+        ).order_by(desc(StaffChatMessage.pinned_at))
+    )).scalars().all()
+    return {"messages": [
+        {
+            "id": str(m.id),
+            "body": m.body,
+            "sender_id": str(m.sender_id) if m.sender_id else None,
+            "pinned_at": m.pinned_at.isoformat() if m.pinned_at else None,
+            "pinned_by_user_id": str(m.pinned_by_user_id) if m.pinned_by_user_id else None,
+            "created_at": m.created_at.isoformat(),
+        }
+        for m in rows
+    ]}
+
+
 # ── /me — текущий пользователь (краткая инфа для UI) ─────────────────────────
 @router.get("/me")
 async def staff_chat_me(
