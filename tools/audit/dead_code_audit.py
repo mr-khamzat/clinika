@@ -295,6 +295,104 @@ def render_report(data: dict, raw: dict) -> str:
     return "\n".join(parts)
 
 
+# ── Telegram ────────────────────────────────────────────────────────────────
+
+TG_LIMIT = 4000  # запас от лимита 4096
+
+
+def _html_escape(s: str) -> str:
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def build_tg_text(data: dict) -> list[str]:
+    """Сборка короткой сводки в нескольких сообщениях (≤ TG_LIMIT)."""
+    eps = data["endpoints"]
+    safe   = [e for e in eps if e["risk"] == "safe"]
+    review = [e for e in eps if e["risk"] == "review"]
+    orphans = data["orphan_components"]
+    totals = data["totals"]
+
+    def _rel(p: str) -> str:
+        return p.replace(str(REPO_ROOT) + "/", "")
+
+    lines: list[str] = [
+        "🔍 <b>Dead-code audit Клиники</b>",
+        f"📅 {TODAY}",
+        "",
+        f"<b>Backend</b> ({totals['py_files']} файлов, {totals['endpoints_total']} endpoint'ов)",
+        f" 🟢 {len(safe)} без потребителя",
+        f" 🟡 {len(review)} нужно решение",
+        "",
+        f"<b>Frontend</b> ({totals['js_files']} файлов)",
+        f" 🟢 {len(orphans)} orphan компонентов",
+        "",
+        "<b>Топ-10 безопасных backend:</b>",
+    ]
+    for e in safe[:10]:
+        lines.append(
+            f"• <code>{_html_escape(e['method'])} {_html_escape(e['path'])}</code>"
+        )
+        lines.append(f"   {_html_escape(_rel(e['file']))}")
+    lines.append("")
+    lines.append("<b>Топ-10 orphan компонентов:</b>")
+    for o in orphans[:10]:
+        lines.append(
+            f"• <code>{_html_escape(o['name'])}</code> — {_html_escape(_rel(o['file']))}"
+        )
+    lines.append("")
+    lines.append(
+        f"Полный отчёт: <code>tools/audit/report-{TODAY}.md</code>"
+    )
+
+    # Нарезаем по TG_LIMIT с учётом строк
+    chunks: list[str] = []
+    buf: list[str] = []
+    size = 0
+    for line in lines:
+        ln = len(line) + 1
+        if size + ln > TG_LIMIT and buf:
+            chunks.append("\n".join(buf))
+            buf, size = [], 0
+        buf.append(line)
+        size += ln
+    if buf:
+        chunks.append("\n".join(buf))
+    return chunks
+
+
+def _install_proxy_if_configured() -> None:
+    """Подхватывает HTTPS_PROXY/HTTP_PROXY из env (urllib не делает это сам)."""
+    proxy_url = (
+        os.environ.get("HTTPS_PROXY")
+        or os.environ.get("https_proxy")
+        or os.environ.get("HTTP_PROXY")
+        or os.environ.get("http_proxy")
+    )
+    if not proxy_url:
+        return
+    handler = urllib.request.ProxyHandler({"https": proxy_url, "http": proxy_url})
+    opener = urllib.request.build_opener(handler)
+    urllib.request.install_opener(opener)
+
+
+def send_telegram(token: str, chat_id: str, messages: list[str]) -> None:
+    _install_proxy_if_configured()
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    for msg in messages:
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": msg,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": "true",
+        }).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = resp.read().decode("utf-8")
+        r = json.loads(body)
+        if not r.get("ok"):
+            raise RuntimeError(f"TG sendMessage failed: {body}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Dead-code audit Клиники")
     ap.add_argument("--no-telegram", action="store_true",
@@ -314,7 +412,14 @@ def main() -> int:
     if args.no_telegram:
         print("[audit] --no-telegram — пропускаю отправку")
         return 0
-    # TG отправка в T7
+    if not args.bot_token:
+        print("[audit] нет --bot-token / TG_BOT_TOKEN — пропускаю отправку",
+              file=sys.stderr)
+        return 0
+    msgs = build_tg_text(data)
+    print(f"[audit] TG: {len(msgs)} сообщений → chat {args.chat_id}")
+    send_telegram(args.bot_token, args.chat_id, msgs)
+    print("[audit] TG: доставлено")
     return 0
 
 
