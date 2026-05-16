@@ -8,10 +8,12 @@
   POST   /clinic/chat/threads/{id}/assign
   POST   /clinic/chat/threads/{id}/close
 """
+import os
 import uuid
+from pathlib import Path
 from typing import Optional, List, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,9 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User, UserRole
-from app.models.chat import ChatThread
+from app.models.chat import ChatThread, ChatMessage
 from app.models.clinic import Clinic
 from app.services import chat_service as cs
+
+# Quick Wins хвосты: лимит размера и каталог для drag&drop файлов чата.
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+UPLOAD_DIR = Path("/app/uploads/clinic-chat")
 # Workflow batch — reassign треда другому пользователю (того же тенанта)
 from app.services.chat_workflow_service import reassign_thread, CrossTenantError
 
@@ -88,6 +94,9 @@ async def _user_clinic_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
 class SendMessageIn(BaseModel):
     body: str = Field(min_length=1, max_length=4000)
     attachments: Optional[List[Any]] = None
+    # Quick Wins хвосты: цитирование (reply). uuid существующего сообщения
+    # в этом же треде или None.
+    reply_to_id: Optional[uuid.UUID] = None
 
 
 class AssignIn(BaseModel):
@@ -193,12 +202,69 @@ async def post_message(
         raise HTTPException(404, "Thread not found")
     if th.clinic_id not in allowed:
         raise HTTPException(403, "Нет доступа к этому треду")
+    # Quick Wins хвосты: валидируем reply_to_id — оригинал обязан быть в том же треде.
+    if body.reply_to_id is not None:
+        ro = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.id == body.reply_to_id,
+                ChatMessage.thread_id == thread_id,
+            )
+        )
+        if ro.scalar_one_or_none() is None:
+            raise HTTPException(400, "Оригинал ответа не найден или из другого треда")
     sender_type = _sender_type_for(user)
     msg = await cs.add_staff_message(
-        db, th, user.id, sender_type, body.body, body.attachments
+        db, th, user.id, sender_type, body.body, body.attachments,
+        reply_to_id=body.reply_to_id,
     )
     await db.commit()
     return cs.serialize_message(msg)
+
+
+@router.post("/threads/{thread_id}/files", status_code=201)
+async def upload_thread_file(
+    thread_id: uuid.UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins хвосты: drag&drop загрузка файла в тред чата клиники.
+
+    Возвращает {url, name, mime, size}, далее фронт прикрепляет это к
+    payload-у POST /messages в поле attachments.
+    """
+    _ensure_clinic_role(user)
+    rt = await db.execute(select(ChatThread).where(ChatThread.id == thread_id))
+    th = rt.scalar_one_or_none()
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    allowed = await _user_clinic_ids(db, user)
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            413,
+            f"Файл слишком большой (макс. {MAX_UPLOAD_SIZE // 1024 // 1024} МБ)",
+        )
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    thread_dir = UPLOAD_DIR / str(thread_id)
+    thread_dir.mkdir(exist_ok=True)
+    safe_name = (file.filename or "file").replace("/", "_").replace("\\", "_")[:200]
+    ext = Path(safe_name).suffix
+    file_id = uuid.uuid4().hex
+    path = thread_dir / f"{file_id}{ext}"
+    path.write_bytes(data)
+
+    public_url = f"/uploads/clinic-chat/{thread_id}/{file_id}{ext}"
+    return {
+        "url": public_url,
+        "name": safe_name,
+        "mime": file.content_type or "application/octet-stream",
+        "size": len(data),
+    }
 
 
 @router.post("/threads/{thread_id}/typing")

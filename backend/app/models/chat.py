@@ -125,6 +125,13 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True
     )
+    # Quick Wins хвосты: цитирование сообщения. NULL = не ответ на конкретное.
+    # При удалении оригинала FK сбрасывается в NULL (ON DELETE SET NULL).
+    reply_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
 
 
 class ChatMessageReaction(Base):

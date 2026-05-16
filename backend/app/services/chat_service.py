@@ -77,6 +77,29 @@ def serialize_message(m: ChatMessage, reactions: list[dict] | None = None) -> di
     }
 
 
+def serialize_message_with_reply(m, reply_to=None) -> dict:
+    """Сериализация сообщения + опциональный preview оригинала (Quick Wins хвосты).
+
+    Args:
+        m: ChatMessage — текущее сообщение.
+        reply_to: ChatMessage | None — оригинал, на который отвечают.
+
+    Возвращает dict от serialize_message + поля reply_to_id и reply_to.
+    """
+    base = serialize_message(m)
+    base["reply_to_id"] = str(m.reply_to_id) if getattr(m, "reply_to_id", None) else None
+    if reply_to is not None:
+        preview = (reply_to.body or "")[:100]
+        base["reply_to"] = {
+            "id": str(reply_to.id),
+            "body_preview": preview,
+            "sender_type": reply_to.sender_type,
+        }
+    else:
+        base["reply_to"] = None
+    return base
+
+
 async def serialize_message_with_reactions(
     m: ChatMessage, db: AsyncSession, me_user_id: uuid.UUID | None = None,
 ) -> dict:
@@ -257,6 +280,7 @@ async def add_patient_message(
 async def add_staff_message(
     db: AsyncSession, thread: ChatThread, user_id: uuid.UUID,
     sender_type: str, body: str, attachments: list | None = None,
+    reply_to_id: uuid.UUID | None = None,
 ) -> ChatMessage:
     if sender_type not in ("doctor", "reg", "manager", "system"):
         raise ValueError(f"Invalid sender_type {sender_type}")
@@ -267,6 +291,7 @@ async def add_staff_message(
         sender_id=user_id,
         body=body,
         attachments=attachments,
+        reply_to_id=reply_to_id,
     )
     db.add(msg)
     thread.last_message_at = datetime.utcnow()
