@@ -8,6 +8,7 @@ sys.path.insert(0, "/opt/clinika")
 from tools.audit.dead_code_audit import (  # noqa: E402
     extract_backend_endpoints,
     extract_frontend_api_calls,
+    extract_frontend_imports,
 )
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
@@ -39,6 +40,16 @@ class TestFrontendApiCalls(unittest.TestCase):
     def test_skips_comments(self):
         calls = extract_frontend_api_calls(FIX / "SampleApi.jsx")
         self.assertTrue(all(c["method"] != "PUT" for c in calls))
+
+
+class TestFrontendImports(unittest.TestCase):
+    def test_finds_static_and_lazy(self):
+        imports = extract_frontend_imports(FIX / "SampleConsumer.jsx")
+        targets = [i["target"] for i in imports]
+        # Должны быть оба упоминания SampleComponent (статический import + lazy)
+        match = [t for t in targets if t.endswith("SampleComponent")]
+        self.assertGreaterEqual(len(match), 2,
+            f"ожидали ≥ 2 упоминаний SampleComponent, нашли {match}")
 
 
 if __name__ == "__main__":

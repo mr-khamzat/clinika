@@ -54,6 +54,30 @@ def _strip_jsx_comments(text: str) -> str:
     return text
 
 
+_RE_IMPORT = re.compile(
+    r'(?:^|\n)\s*import\s+(?:[\w*{}\s,]+from\s+)?[\'"]([^\'"]+)[\'"]'
+)
+_RE_LAZY = re.compile(
+    r'lazy\s*\(\s*\(\s*\)\s*=>\s*import\s*\(\s*[\'"]([^\'"]+)[\'"]'
+)
+
+
+def extract_frontend_imports(path: pathlib.Path) -> list[dict]:
+    """Извлекает [{file, target, kind}] импортов из .jsx/.js файла.
+
+    kind: 'static' (обычный import) | 'lazy' (React.lazy)
+    """
+    text = _strip_jsx_comments(
+        path.read_text(encoding="utf-8", errors="ignore")
+    )
+    out: list[dict] = []
+    for m in _RE_IMPORT.finditer(text):
+        out.append({"file": str(path), "target": m.group(1), "kind": "static"})
+    for m in _RE_LAZY.finditer(text):
+        out.append({"file": str(path), "target": m.group(1), "kind": "lazy"})
+    return out
+
+
 def extract_frontend_api_calls(path: pathlib.Path) -> list[dict]:
     """Извлекает [{file, method, path}] вызовов api.* из .jsx/.js файла."""
     text = _strip_jsx_comments(
