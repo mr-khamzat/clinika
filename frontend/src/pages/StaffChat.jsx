@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import api from '../api'
 import { API_BASE, SLUG } from '../config'
 import CreateChannelModal from '../components/staff/CreateChannelModal'
+import PinnedMessagesModal from '../components/staff/PinnedMessagesModal'
 
 // Палитра аватаров — детерминированно генерируется из user_id
 const AVATAR_COLORS = [
@@ -129,6 +130,9 @@ export default function StaffChat() {
   const [uploadingFile, setUploadingFile] = useState(null) // {progress, name}
   // Slack-fundament: каналы (Task 6)
   const [createChannelOpen, setCreateChannelOpen] = useState(false)
+  // Pin (Task 7)
+  const [pinnedOpen, setPinnedOpen] = useState(false)
+  const [reactPickerFor, setReactPickerFor] = useState(null) // id сообщения с открытым picker'ом
   const wsRef = useRef(null)
   const wsRetryRef = useRef(0)
   const messagesEndRef = useRef(null)
@@ -325,11 +329,61 @@ export default function StaffChat() {
   }
 
 
+  // ── Slack-fundament: reactions / pin helpers (Task 7) ────────────────────
+  const QUICK_REACTIONS = ['👍', '❤️', '✅', '🙏', '😂', '🔥']
+
+  async function refetchMessages() {
+    if (!activeRoomId) return
+    try {
+      const { data } = await api.get(`/staff-chat/rooms/${activeRoomId}/messages`)
+      setMessages(data.messages || [])
+    } catch (e) {
+      // тихо
+    }
+  }
+
+  async function toggleReaction(msg, emoji) {
+    try {
+      await api.post(`/staff-chat/messages/${msg.id}/reactions`, { emoji })
+      await refetchMessages()
+    } catch (e) {
+      alert('Не удалось поставить реакцию: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  async function togglePin(msg) {
+    try {
+      await api.post(`/staff-chat/messages/${msg.id}/pin`)
+      await refetchMessages()
+    } catch (e) {
+      alert('Не удалось закрепить: ' + (e?.response?.data?.detail || e.message))
+    }
+  }
+
+  const canPin = useMemo(() => {
+    if (!me || !activeRoomId) return false
+    const room = rooms.find((r) => r.id === activeRoomId)
+    if (!room) return false
+    if (room.type === 'direct') return true
+    const myMember = (room.members || members).find((m) => m.id === me.id)
+    if (myMember?.member_role === 'admin') return true
+    const role = me.role || me.user_role
+    if (role && ['admin', 'manager', 'owner', 'superadmin'].includes(String(role).toLowerCase())) return true
+    return false
+  }, [me, activeRoomId, rooms, members])
+
   // ── Context menus (Telegram-style ПКМ) ──────────────────────────────────
   function openMsgContextMenu(e, msg, isMine) {
     const items = []
     if (msg.body) {
       items.push({ label: 'Копировать', icon: '📋', onClick: () => { navigator.clipboard?.writeText(msg.body) } })
+    }
+    if (!msg.deleted_at && canPin) {
+      items.push({
+        label: msg.pinned_at ? 'Открепить' : 'Закрепить',
+        icon: '📌',
+        onClick: () => togglePin(msg),
+      })
     }
     if (isMine && !msg.deleted_at) {
       items.push({ label: 'Удалить', icon: '🗑', danger: true, onClick: async () => {
@@ -724,6 +778,19 @@ export default function StaffChat() {
                     : (peer ? (peerOnline ? <span style={{ color: 'oklch(0.55 0.18 145)' }}>● в сети</span> : 'был(а) недавно') : `Участников: ${members.length}`)}
                 </div>
               </div>
+              {(() => {
+                const pinnedCount = (messages || []).filter((mm) => mm.pinned_at).length
+                if (pinnedCount === 0) return null
+                return (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setPinnedOpen(true) }}
+                    className="sc-pinned-badge"
+                    title="Открыть закреплённые сообщения"
+                  >
+                    📌 {pinnedCount}
+                  </button>
+                )
+              })()}
               <svg className="sc-conv-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>
             </header>
 
@@ -739,8 +806,13 @@ export default function StaffChat() {
                         {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} /> : <div style={{ width: 32 }} />}
                       </div>
                     )}
-                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
+                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '') + (m.pinned_at ? ' is-pinned' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
                       {showSender && !mine && <div className="sc-msg-sender">{sender?.name || 'Сотрудник'}</div>}
+                      {m.pinned_at && (
+                        <div className="sc-msg-pin-badge" title="Закреплено">
+                          <span style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>📌 закреплено</span>
+                        </div>
+                      )}
                       {m.deleted_at ? (
                         <div className="sc-msg-deleted"><em>сообщение удалено</em></div>
                       ) : (
@@ -767,6 +839,75 @@ export default function StaffChat() {
                             </a>
                           ))}
                         </>
+                      )}
+                      {/* Reactions bar (Slack-style, Task 7) */}
+                      {!m.deleted_at && (
+                        <div className="sc-msg-reactions" style={{ position: 'relative' }}>
+                          {(m.reactions || []).map((r) => {
+                            const mineHere = !!r.mine || !!r.by_me
+                            return (
+                              <button
+                                key={r.emoji}
+                                onClick={(e) => { e.stopPropagation(); toggleReaction(m, r.emoji) }}
+                                className={'sc-reaction-chip' + (mineHere ? ' is-mine' : '')}
+                                title={mineHere ? 'Убрать реакцию' : `Поставить ${r.emoji}`}
+                              >
+                                <span>{r.emoji}</span>
+                                <span className="sc-reaction-count">{r.count || 1}</span>
+                              </button>
+                            )
+                          })}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setReactPickerFor((cur) => cur === m.id ? null : m.id) }}
+                            className="sc-reaction-add"
+                            title="Добавить реакцию"
+                            aria-label="Добавить реакцию"
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>add_reaction</span>
+                            {!(m.reactions || []).length && <span style={{ fontSize: 12, marginLeft: 4 }}>+</span>}
+                          </button>
+                          {reactPickerFor === m.id && (
+                            <>
+                              <div
+                                onClick={() => setReactPickerFor(null)}
+                                style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                              />
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="sc-reaction-picker"
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '100%',
+                                  [mine ? 'right' : 'left']: 0,
+                                  marginBottom: 6,
+                                  background: 'var(--sc-surface, #fff)',
+                                  border: '1px solid var(--sc-border, rgba(0,0,0,.08))',
+                                  borderRadius: 999,
+                                  padding: '6px 8px',
+                                  boxShadow: '0 8px 24px rgba(15,23,42,.18)',
+                                  display: 'inline-flex',
+                                  gap: 4,
+                                  zIndex: 50,
+                                }}
+                              >
+                                {QUICK_REACTIONS.map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    onClick={(e) => { e.stopPropagation(); setReactPickerFor(null); toggleReaction(m, emoji) }}
+                                    style={{
+                                      width: 30, height: 30, borderRadius: 999,
+                                      background: 'transparent', border: 0, cursor: 'pointer',
+                                      fontSize: 18,
+                                    }}
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       )}
                       <div className="sc-msg-time">{formatTime(m.created_at)}</div>
                     </div>
@@ -887,6 +1028,13 @@ export default function StaffChat() {
           setRooms((prev) => prev.some((x) => x.id === room.id) ? prev : [room, ...prev])
           if (room?.id) openRoom(room.id)
         }}
+      />
+
+      {/* PINNED MESSAGES MODAL (Task 7) */}
+      <PinnedMessagesModal
+        open={pinnedOpen}
+        onClose={() => setPinnedOpen(false)}
+        roomId={activeRoomId}
       />
 
       {/* ADD MEMBERS MODAL */}
@@ -1340,6 +1488,53 @@ const STAFF_CHAT_CSS = `
   font-size: 16px; line-height: 1; transition: background 120ms;
 }
 .sc-sec-add:hover { background: var(--sc-bg-3, #e5e7eb); }
+.sc-msg-bubble.is-pinned {
+  box-shadow: inset 3px 0 0 #F59E0B;
+}
+.sc-msg-pin-badge {
+  margin-bottom: 4px; padding: 2px 6px;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 6px; display: inline-block;
+}
+.sc-msg-reactions {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin-top: 6px;
+}
+.sc-reaction-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 999px;
+  background: var(--sc-bg-2, #f3f5f8);
+  border: 1px solid var(--sc-border, rgba(0,0,0,.08));
+  font-size: 12px; cursor: pointer; line-height: 1.4;
+  transition: background 120ms, transform 80ms;
+}
+.sc-reaction-chip:hover { background: var(--sc-bg-3, #e5e7eb); }
+.sc-reaction-chip:active { transform: scale(0.96); }
+.sc-reaction-chip.is-mine {
+  background: rgba(0,151,167,0.12);
+  border-color: rgba(0,151,167,0.4);
+  color: #0097A7;
+  font-weight: 600;
+}
+.sc-reaction-count { font-size: 11px; font-weight: 600; }
+.sc-reaction-add {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px; border-radius: 999px;
+  background: transparent; border: 1px dashed var(--sc-border, rgba(0,0,0,.18));
+  color: var(--sc-fg-3, #6b7280); cursor: pointer; font-size: 12px;
+  opacity: 0.6; transition: opacity 120ms, background 120ms;
+}
+.sc-msg-bubble:hover .sc-reaction-add { opacity: 1; }
+.sc-reaction-add:hover { background: var(--sc-bg-2, #f3f5f8); }
+.sc-pinned-badge {
+  margin-left: auto; margin-right: 4px;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #B45309; font-size: 12px; font-weight: 600;
+  border: 0; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.sc-pinned-badge:hover { background: rgba(245, 158, 11, 0.22); }
 .sc-room {
   display: flex; gap: 12px;
   width: 100%;
