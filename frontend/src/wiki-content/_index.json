@@ -509,5 +509,89 @@
     "category": "changelog",
     "order": 1,
     "summary": "История изменений платформы по главам 1-10 + Здоровье+, с датами и roadmap v2."
+  },
+  {
+    "slug": "telephony-overview",
+    "title": "Телефония — обзор",
+    "category": "feature",
+    "order": 1,
+    "summary": "PSTN-интеграция: 3 модели в БД, pluggable provider-абстракция, настройка в /manager/telephony."
+  },
+  {
+    "slug": "telephony-sipuni",
+    "title": "Sipuni Provider",
+    "category": "feature",
+    "order": 2,
+    "summary": "Callback API Sipuni: sipuni_id + secret, MD5-подпись, webhook /api/telephony/webhook/sipuni."
+  },
+  {
+    "slug": "telephony-mango",
+    "title": "Mango Office Provider",
+    "category": "feature",
+    "order": 3,
+    "summary": "Mango VPBX commands callback: X-MPBX-API-Key + sha256 signature, webhook /api/telephony/webhook/mango."
+  },
+  {
+    "slug": "telephony-zadarma",
+    "title": "Zadarma Provider",
+    "category": "feature",
+    "order": 4,
+    "summary": "Zadarma callback API: user_key + secret, base64(hmac_sha1) signature, webhook /api/telephony/webhook/zadarma."
+  },
+  {
+    "slug": "chat-sla-escalation",
+    "title": "SLA авто-эскалация в чате",
+    "category": "feature",
+    "order": 5,
+    "summary": "Job каждые 60s: 15/30/60 мин без ответа → авто-передача треда на reg/manager/owner."
+  },
+  {
+    "slug": "chat-templates",
+    "title": "Шаблоны быстрых ответов",
+    "category": "feature",
+    "order": 6,
+    "summary": "CRUD шаблонов в /manager/chat-templates, автокомплит по `/` в textarea, личные vs общие."
+  },
+  {
+    "slug": "staffchat-channels",
+    "title": "Каналы в StaffChat",
+    "category": "feature",
+    "order": 7,
+    "summary": "3 типа rooms (direct/group/channel). Sidebar разбит на «Каналы» и «Direct messages»."
+  },
+  {
+    "slug": "staffchat-polls-and-bot",
+    "title": "Опросы и CI-бот в StaffChat",
+    "category": "feature",
+    "order": 8,
+    "summary": "Опросы с multi_select и прогресс-барами. CI-бот POST /api/staff-chat/bot/post для Grafana/CI."
+  },
+  {
+    "slug": "calls-1.0.30-features",
+    "title": "Calls 1.0.30 — новые возможности",
+    "category": "feature",
+    "order": 9,
+    "summary": "Global hotkeys, темы, tray badge, диалпад PSTN. Auto-update через electron-updater."
+  },
+  {
+    "slug": "telemed-advanced",
+    "title": "Telemed advanced (screen share + ICE restart)",
+    "category": "feature",
+    "order": 10,
+    "summary": "Screen sharing через getDisplayMedia, DeviceTestModal с VU-meter, Auto-ICE-restart."
+  },
+  {
+    "slug": "push-notifications",
+    "title": "Web Push уведомления",
+    "category": "feature",
+    "order": 11,
+    "summary": "VAPID + Service Worker + /push/subscribe + кнопка-колокольчик в шапке чата клиники."
+  },
+  {
+    "slug": "chat-drag-drop-and-reply",
+    "title": "Drag&drop файлов и Quoted reply",
+    "category": "feature",
+    "order": 12,
+    "summary": "Drag&drop файлов до 50MB. Quoted reply с reply_to_id и scroll к оригиналу."
   }
 ]
