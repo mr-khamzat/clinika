@@ -1618,9 +1618,11 @@ app.include_router(clinic_chat_router)
 app.include_router(staff_chat_router)
 app.include_router(owner_bot_webhook_router)
 app.include_router(chat_admin_router)
-# Workflow batch — tenant chat settings (SLA/autoclose)
+# Workflow batch — tenant chat settings (SLA/autoclose) + CRUD message templates
 from app.routers.tenant_settings import router as _tenant_settings_router
+from app.routers.chat_templates import router as _chat_templates_router
 app.include_router(_tenant_settings_router)
+app.include_router(_chat_templates_router)
 app.include_router(franchise_modules_router)
 app.include_router(franchise_revenue_router)
 app.include_router(patient_calendar_router)
