@@ -22,12 +22,12 @@ import os
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, and_, or_, update
+from sqlalchemy import select, and_, or_, update, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, AsyncSessionLocal
@@ -36,6 +36,7 @@ from app.core.security import decode_token
 from app.models.user import User
 from app.models.staff_chat import (
     StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatFile,
+    StaffChatMessageReaction,
     ROOM_TYPE_DIRECT,
 )
 from app.services import staff_chat_service as svc
@@ -70,6 +71,243 @@ class MessageCreate(BaseModel):
 
 class MuteRequest(BaseModel):
     muted: bool
+
+
+# ── StaffChat Slack-fundament: каналы / реакции / mentions / pin ──────────────
+class GroupJoinForbidden(Exception):
+    """Попытка присоединиться к закрытому каналу без приглашения."""
+    pass
+
+
+class LastAdminError(Exception):
+    """Последний admin не может выйти — передай права или удали канал."""
+    pass
+
+
+class PinLimitError(Exception):
+    """Превышен лимит 20 закреплённых сообщений на канал."""
+    pass
+
+
+class CreateChannelIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    type: Literal["channel", "group"]
+    clinic_id: Optional[uuid.UUID] = None
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+class InviteIn(BaseModel):
+    user_ids: list[uuid.UUID] = Field(min_length=1, max_length=50)
+
+
+class PatchChannelIn(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+
+
+class ReactionIn(BaseModel):
+    emoji: str = Field(min_length=1, max_length=16)
+
+
+# ── Helpers (pure logic, удобно для unit-тестов) ──────────────────────────────
+async def _create_channel_logic(db, user, payload):
+    """Создаёт room (channel/group) + сразу делает creator'а admin'ом."""
+    room = StaffChatRoom(
+        tenant_id=user.tenant_id, type=payload.type, name=payload.name,
+        clinic_id=payload.clinic_id, created_by_id=user.id,
+        description=payload.description,
+    )
+    db.add(room)
+    await db.flush()  # получаем room.id
+    member = StaffChatMember(
+        room_id=room.id, user_id=user.id, member_role="admin",
+    )
+    db.add(member)
+    return room, member
+
+
+async def _join_channel_logic(db, user, room):
+    """Присоединение к открытому channel. Group → exception."""
+    if room.type == "group":
+        raise GroupJoinForbidden("Это закрытый канал — нужно приглашение")
+    if user.tenant_id != room.tenant_id:
+        raise GroupJoinForbidden("Кросс-тенантное присоединение запрещено")
+    existing = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room.id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        return existing
+    member = StaffChatMember(room_id=room.id, user_id=user.id, member_role="member")
+    db.add(member)
+    return member
+
+
+async def _leave_channel_logic(db, user, room, member):
+    """Выход из канала. Последний admin → exception."""
+    if member.member_role == "admin":
+        rest_admins = (await db.execute(
+            select(StaffChatMember).where(
+                StaffChatMember.room_id == room.id,
+                StaffChatMember.member_role == "admin",
+                StaffChatMember.user_id != user.id,
+            )
+        )).scalars().all()
+        if not rest_admins:
+            raise LastAdminError("Нельзя выйти — вы последний admin")
+    await db.delete(member)
+
+
+# ── Channels endpoints ────────────────────────────────────────────────────────
+@router.post("/channels", status_code=201)
+async def create_channel(
+    body: CreateChannelIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    if not user.tenant_id:
+        raise HTTPException(403, "Нет тенанта")
+    room, _ = await _create_channel_logic(db, user, body)
+    await db.commit()
+    await db.refresh(room)
+    return {
+        "id": str(room.id), "type": room.type, "name": room.name,
+        "description": room.description, "tenant_id": str(room.tenant_id),
+    }
+
+
+@router.get("/channels/public")
+async def list_public_channels(
+    q: Optional[str] = Query(None, max_length=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    if not user.tenant_id:
+        raise HTTPException(403, "Нет тенанта")
+    stmt = select(StaffChatRoom).where(
+        StaffChatRoom.tenant_id == user.tenant_id,
+        StaffChatRoom.type == "channel",
+    )
+    if q:
+        stmt = stmt.where(StaffChatRoom.name.ilike(f"%{q}%"))
+    rows = (await db.execute(stmt.limit(50))).scalars().all()
+    return {"channels": [
+        {"id": str(r.id), "name": r.name, "description": r.description}
+        for r in rows
+    ]}
+
+
+@router.post("/channels/{room_id}/join", status_code=201)
+async def join_channel(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    room = (await db.execute(
+        select(StaffChatRoom).where(StaffChatRoom.id == room_id)
+    )).scalar_one_or_none()
+    if not room:
+        raise HTTPException(404, "Канал не найден")
+    try:
+        await _join_channel_logic(db, user, room)
+        await db.commit()
+        return {"ok": True, "room_id": str(room.id)}
+    except GroupJoinForbidden as e:
+        await db.rollback()
+        raise HTTPException(403, str(e))
+
+
+@router.post("/channels/{room_id}/invite", status_code=201)
+async def invite_to_channel(
+    room_id: uuid.UUID,
+    body: InviteIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    me = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not me or me.member_role != "admin":
+        raise HTTPException(403, "Только admin может приглашать")
+    added = 0
+    for uid in body.user_ids:
+        existing = (await db.execute(
+            select(StaffChatMember).where(
+                StaffChatMember.room_id == room_id,
+                StaffChatMember.user_id == uid,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            continue
+        db.add(StaffChatMember(room_id=room_id, user_id=uid, member_role="member"))
+        added += 1
+    await db.commit()
+    return {"added": added}
+
+
+@router.post("/channels/{room_id}/leave", status_code=204)
+async def leave_channel(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    me = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not me:
+        raise HTTPException(404, "Вы не участник")
+    room = (await db.execute(
+        select(StaffChatRoom).where(StaffChatRoom.id == room_id)
+    )).scalar_one()
+    try:
+        await _leave_channel_logic(db, user, room, me)
+        await db.commit()
+    except LastAdminError as e:
+        await db.rollback()
+        raise HTTPException(409, str(e))
+    return None
+
+
+@router.patch("/channels/{room_id}")
+async def patch_channel(
+    room_id: uuid.UUID,
+    body: PatchChannelIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_not_patient(user)
+    me = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if not me or me.member_role != "admin":
+        raise HTTPException(403, "Только admin может редактировать канал")
+    room = (await db.execute(
+        select(StaffChatRoom).where(StaffChatRoom.id == room_id)
+    )).scalar_one_or_none()
+    if not room:
+        raise HTTPException(404, "Канал не найден")
+    if body.name is not None:
+        room.name = body.name
+    if body.description is not None:
+        room.description = body.description
+    await db.commit()
+    return {"id": str(room.id), "name": room.name, "description": room.description}
 
 
 # ── /me — текущий пользователь (краткая инфа для UI) ─────────────────────────
