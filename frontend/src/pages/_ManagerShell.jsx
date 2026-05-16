@@ -44,6 +44,8 @@ export const MGR_NAV = [
   { key:'subscription_discounts', label:'Скидки тарифов', icon:'percent', path:'/manager/subscription/discounts', group:'subscriptions' },
   // miswebhook01 — интеграции МИС: вебхуки на события подписки
   { key:'mis_webhooks', label:'Интеграции с МИС', icon:'webhook', path:'/manager/integrations/mis', group:'integrations' },
+  // Телефония — PSTN-провайдер (Mango/Sipuni/...), DID-номера, история звонков
+  { key:'telephony', label:'Телефония', icon:'phone', path:'/manager/telephony', group:'integrations' },
   { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors',  group:'team' },
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors', group:'team' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors',  group:'team' },

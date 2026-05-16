@@ -81,6 +81,8 @@ const ManagerSubscriptionPending = lazy(() => import('./pages/ManagerSubscriptio
 const ManagerSubscriptionDiscounts = lazy(() => import('./pages/ManagerSubscriptionDiscounts'))
 // miswebhook01 — интеграции с внешним МИС (события подписки)
 const ManagerMisWebhooks = lazy(() => import('./pages/ManagerMisWebhooks'))
+// Телефония — провайдер, DID-номера, история звонков
+const ManagerTelephony = lazy(() => import('./pages/ManagerTelephony'))
 // Склад / 1С-импорт остатков (Этап 0 интеграции с 1С)
 const ManagerInventory = lazy(() => import('./pages/ManagerInventory'))
 // Маркетинг — расходы на рекламу, каналы и атрибуция пациентов
@@ -346,6 +348,8 @@ function MiniApp() {
               <Route path="manager/subscription/discounts" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSubscriptionDiscounts /></Suspense>} />
               {/* miswebhook01 — интеграции МИС (вебхуки на события подписки) */}
               <Route path="manager/integrations/mis" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerMisWebhooks /></Suspense>} />
+              {/* Телефония — провайдер, DID, история звонков */}
+              <Route path="manager/telephony" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerTelephony /></Suspense>} />
               {/* Склад + импорт из 1С (Excel/CSV) — Этап 0 интеграции */}
               <Route path="manager/inventory" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventory /></Suspense>} />
               {/* Маркетинг — расходы, каналы, атрибуция пациентов */}
