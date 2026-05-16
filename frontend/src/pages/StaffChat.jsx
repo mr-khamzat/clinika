@@ -18,6 +18,7 @@ import api from '../api'
 import { API_BASE, SLUG } from '../config'
 import CreateChannelModal from '../components/staff/CreateChannelModal'
 import PinnedMessagesModal from '../components/staff/PinnedMessagesModal'
+import MentionAutocomplete from '../components/staff/MentionAutocomplete'
 
 // Палитра аватаров — детерминированно генерируется из user_id
 const AVATAR_COLORS = [
@@ -128,10 +129,11 @@ export default function StaffChat() {
   const [me, setMe] = useState(null)
   const [filePolicy, setFilePolicy] = useState({ max_size_mb: 50, ttl_hours: 48 })
   const [uploadingFile, setUploadingFile] = useState(null) // {progress, name}
-  // Slack-fundament: каналы (Task 6)
+  // Slack-fundament: каналы / pinned / mentions
   const [createChannelOpen, setCreateChannelOpen] = useState(false)
-  // Pin (Task 7)
   const [pinnedOpen, setPinnedOpen] = useState(false)
+  const [unreadMentions, setUnreadMentions] = useState({}) // {room_id: count}
+  const [mentionQuery, setMentionQuery] = useState(null)
   const [reactPickerFor, setReactPickerFor] = useState(null) // id сообщения с открытым picker'ом
   const wsRef = useRef(null)
   const wsRetryRef = useRef(0)
@@ -256,6 +258,27 @@ export default function StaffChat() {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
+  // ── Unread mentions (badge "@" в sidebar) ───────────────────────────────
+  useEffect(() => {
+    let alive = true
+    async function loadMentions() {
+      try {
+        const { data } = await api.get('/staff-chat/mentions/unread')
+        if (!alive) return
+        const map = {}
+        for (const it of (data?.rooms || [])) {
+          if (it.room_id != null) map[it.room_id] = it.mention_count || 0
+        }
+        setUnreadMentions(map)
+      } catch {
+        // endpoint может ещё не быть реализован на бэкенде — молчим
+      }
+    }
+    loadMentions()
+    const tid = setInterval(loadMentions, 30000)
+    return () => { alive = false; clearInterval(tid) }
+  }, [])
+
   // ── Обработка WS-событий ────────────────────────────────────────────────
   const handleWsEvent = useCallback((msg) => {
     if (msg.type === 'message:new') {
@@ -329,19 +352,22 @@ export default function StaffChat() {
   }
 
 
-  // ── Slack-fundament: reactions / pin helpers (Task 7) ────────────────────
+  // ── Slack-fundament: reactions / pin helpers ─────────────────────────────
+  // Быстрые реакции в picker'е (как Slack/Discord)
   const QUICK_REACTIONS = ['👍', '❤️', '✅', '🙏', '😂', '🔥']
 
+  // Перезагрузка сообщений текущей активной комнаты (после toggle reaction / pin)
   async function refetchMessages() {
     if (!activeRoomId) return
     try {
       const { data } = await api.get(`/staff-chat/rooms/${activeRoomId}/messages`)
       setMessages(data.messages || [])
     } catch (e) {
-      // тихо
+      // тихо — UI остаётся в текущем состоянии
     }
   }
 
+  // Toggle реакции (бэк сам решает add/remove)
   async function toggleReaction(msg, emoji) {
     try {
       await api.post(`/staff-chat/messages/${msg.id}/reactions`, { emoji })
@@ -351,6 +377,7 @@ export default function StaffChat() {
     }
   }
 
+  // Pin / unpin сообщения
   async function togglePin(msg) {
     try {
       await api.post(`/staff-chat/messages/${msg.id}/pin`)
@@ -360,17 +387,31 @@ export default function StaffChat() {
     }
   }
 
+  // Может ли текущий user закреплять сообщения в активной комнате?
+  // (admin в группе/канале или manager+ роль)
   const canPin = useMemo(() => {
     if (!me || !activeRoomId) return false
     const room = rooms.find((r) => r.id === activeRoomId)
     if (!room) return false
-    if (room.type === 'direct') return true
+    if (room.type === 'direct') return true // в DM любой участник может закрепить
     const myMember = (room.members || members).find((m) => m.id === me.id)
     if (myMember?.member_role === 'admin') return true
+    // По-возможности проверяем глобальную роль (manager+)
     const role = me.role || me.user_role
     if (role && ['admin', 'manager', 'owner', 'superadmin'].includes(String(role).toLowerCase())) return true
     return false
   }, [me, activeRoomId, rooms, members])
+
+  // Подсветка @username внутри текста сообщения
+  function highlightMentions(text) {
+    if (!text) return text
+    const parts = String(text).split(/(@[A-Za-zА-Яа-я0-9_]{2,30})/g)
+    return parts.map((part, i) =>
+      /^@[A-Za-zА-Яа-я0-9_]/.test(part)
+        ? <span key={i} style={{ color: 'var(--accent, #0097A7)', fontWeight: 600 }}>{part}</span>
+        : part
+    )
+  }
 
   // ── Context menus (Telegram-style ПКМ) ──────────────────────────────────
   function openMsgContextMenu(e, msg, isMine) {
@@ -378,6 +419,7 @@ export default function StaffChat() {
     if (msg.body) {
       items.push({ label: 'Копировать', icon: '📋', onClick: () => { navigator.clipboard?.writeText(msg.body) } })
     }
+    // Pin/unpin — для тех у кого есть права
     if (!msg.deleted_at && canPin) {
       items.push({
         label: msg.pinned_at ? 'Открепить' : 'Закрепить',
@@ -474,6 +516,7 @@ export default function StaffChat() {
       setMessages(msgs.messages || [])
       // Сбросить unread
       setRooms((prev) => prev.map((r) => r.id === roomId ? { ...r, unread: 0 } : r))
+      setUnreadMentions((prev) => { if (!(roomId in prev)) return prev; const n = { ...prev }; delete n[roomId]; return n })
       api.post(`/staff-chat/rooms/${roomId}/read`).catch(() => {})
       scrollToBottom()
       composerRef.current?.focus()
@@ -693,6 +736,7 @@ export default function StaffChat() {
               const isActive = r.id === activeRoomId
               const peerId = r.type === 'direct' ? r.members.find((m) => me && m.id !== me.id)?.id : null
               const isOnline = peerId ? onlineUsers.has(peerId) : false
+              const hasMention = (unreadMentions[r.id] || 0) > 0
               return (
                 <button
                   key={r.id}
@@ -720,7 +764,24 @@ export default function StaffChat() {
                               (r.last_message.body || (r.last_message.attachments?.length ? '📎 файл' : '')))
                           : <em style={{ color: 'var(--sc-fg-3)' }}>Нет сообщений</em>}
                       </span>
-                      {r.unread > 0 && <span className="sc-unread">{r.unread > 99 ? '99+' : r.unread}</span>}
+                      <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                        {hasMention && (
+                          <span
+                            title={`Упоминаний: ${unreadMentions[r.id]}`}
+                            style={{
+                              fontSize: 10,
+                              padding: '2px 6px',
+                              borderRadius: 999,
+                              background: 'rgba(0,151,167,.18)',
+                              color: 'var(--accent, #0097A7)',
+                              fontWeight: 700,
+                            }}
+                          >
+                            @
+                          </span>
+                        )}
+                        {r.unread > 0 && <span className="sc-unread">{r.unread > 99 ? '99+' : r.unread}</span>}
+                      </span>
                     </div>
                   </div>
                 </button>
@@ -817,7 +878,7 @@ export default function StaffChat() {
                         <div className="sc-msg-deleted"><em>сообщение удалено</em></div>
                       ) : (
                         <>
-                          {m.body && <div className="sc-msg-body">{m.body}</div>}
+                          {m.body && <div className="sc-msg-body" style={{ whiteSpace: 'pre-wrap' }}>{highlightMentions(m.body)}</div>}
                           {m.attachments?.map((a) => (
                             <a key={a.id || a.url} href={a.url} onClick={(e) => { e.preventDefault(); downloadAttachment(a) }} className="sc-attach" role="button" title="Кликните чтобы скачать файл на ПК">
                               <span className="sc-attach-icon">
@@ -840,7 +901,7 @@ export default function StaffChat() {
                           ))}
                         </>
                       )}
-                      {/* Reactions bar (Slack-style, Task 7) */}
+                      {/* Reactions bar (Slack-style) */}
                       {!m.deleted_at && (
                         <div className="sc-msg-reactions" style={{ position: 'relative' }}>
                           {(m.reactions || []).map((r) => {
@@ -940,12 +1001,35 @@ export default function StaffChat() {
                   rows={1}
                   placeholder="Написать сообщение…"
                   value={draft}
-                  onChange={(e) => { setDraft(e.target.value); sendTyping() }}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setDraft(v)
+                    sendTyping()
+                    // @-trigger: '@' в начале или после пробела/переноса; пустой query тоже валиден
+                    const m = v.match(/(?:^|\s)@([A-Za-zА-Яа-я0-9_]*)$/)
+                    if (m) setMentionQuery(m[1])
+                    else setMentionQuery(null)
+                  }}
                   onKeyDown={(e) => {
+                    // Не отправляем сообщение, пока открыт mention picker — Enter уходит ему
+                    if (mentionQuery != null && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape')) {
+                      return
+                    }
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
                       sendMessage()
                     }
+                  }}
+                />
+                <MentionAutocomplete
+                  query={mentionQuery}
+                  onClose={() => setMentionQuery(null)}
+                  onPick={(u) => {
+                    const handle = u.username || u.full_name || u.name || 'user'
+                    setDraft((d) => d.replace(/(^|\s)@([A-Za-zА-Яа-я0-9_]*)$/, (full, prefix) => `${prefix}@${handle} `))
+                    setMentionQuery(null)
+                    // Возвращаем фокус в textarea
+                    requestAnimationFrame(() => composerRef.current?.focus())
                   }}
                 />
                 <button
@@ -1025,12 +1109,13 @@ export default function StaffChat() {
         onClose={() => setCreateChannelOpen(false)}
         clinicId={me?.clinic_id || null}
         onCreated={(room) => {
+          // Добавляем созданную комнату в список и сразу открываем
           setRooms((prev) => prev.some((x) => x.id === room.id) ? prev : [room, ...prev])
           if (room?.id) openRoom(room.id)
         }}
       />
 
-      {/* PINNED MESSAGES MODAL (Task 7) */}
+      {/* PINNED MESSAGES MODAL */}
       <PinnedMessagesModal
         open={pinnedOpen}
         onClose={() => setPinnedOpen(false)}
@@ -1535,6 +1620,7 @@ const STAFF_CHAT_CSS = `
   display: inline-flex; align-items: center; gap: 4px;
 }
 .sc-pinned-badge:hover { background: rgba(245, 158, 11, 0.22); }
+.sc-mention-hl { color: var(--accent, #0097A7); font-weight: 600; }
 .sc-room {
   display: flex; gap: 12px;
   width: 100%;
@@ -1662,7 +1748,7 @@ const STAFF_CHAT_CSS = `
   background: var(--sc-accent-soft); color: var(--sc-accent);
   font-size: 12.5px; padding: 6px 12px; border-radius: 8px; margin-bottom: 8px;
 }
-.sc-composer-row { display: flex; gap: 8px; align-items: flex-end; }
+.sc-composer-row { display: flex; gap: 8px; align-items: flex-end; position: relative; }
 .sc-attach-btn { width: 38px; height: 38px; }
 .sc-input {
   flex: 1;
