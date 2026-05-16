@@ -79,6 +79,11 @@ class ChatThread(Base):
     pinned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True,
     )
+    # Quick Wins #4: цветовая метка для визуальной приоритизации в списке.
+    # Допустимые значения: 'red' / 'yellow' / 'green' / 'blue' или NULL.
+    color_label: Mapped[str | None] = mapped_column(
+        String(20), nullable=True,
+    )
 
 
 class ChatMessage(Base):

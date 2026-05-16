@@ -372,3 +372,93 @@ def test_list_clinic_threads_orders_by_pinned():
     # source-level assertion: order_by должен включать pinned_at (как ключевое
     # слово), чтобы заиндексированные треды шли первыми.
     assert "pinned_at" in src, "list_clinic_threads() должен сортировать по pinned_at"
+
+
+# ─── 4. Color label ──────────────────────────────────────────────────────────
+
+
+def test_color_label_model_has_column():
+    """ChatThread имеет колонку color_label (string)."""
+    from app.models.chat import ChatThread
+    cols = {c.name for c in ChatThread.__table__.columns}
+    assert "color_label" in cols
+
+
+def test_color_label_serializer():
+    """serialize_thread() возвращает color_label."""
+    from app.services.chat_service import serialize_thread
+    th = _make_thread_obj()
+    th.color_label = "yellow"
+    out = serialize_thread(th)
+    assert out["color_label"] == "yellow"
+    th.color_label = None
+    out2 = serialize_thread(th)
+    assert out2["color_label"] is None
+
+
+@pytest.mark.asyncio
+async def test_color_label_set_and_clear():
+    """PATCH /clinic/chat/threads/{id}/label — устанавливает и снимает цвет."""
+    from app.routers import clinic_chat as cc
+    th = _make_thread_obj()
+    th.color_label = None
+    fake = _staff_user(th)
+
+    # Установка цвета
+    db1 = AsyncMock()
+    r_ids = MagicMock(); r_ids.all.return_value = [(th.clinic_id,)]
+    r_th = MagicMock(); r_th.scalar_one_or_none.return_value = th
+    db1.execute = AsyncMock(side_effect=[r_ids, r_th])
+    db1.commit = AsyncMock()
+
+    res1 = await cc.set_color_label(
+        thread_id=th.id, body=cc.ColorLabelIn(color="red"),
+        user=fake, db=db1,
+    )
+    assert res1["color_label"] == "red"
+    assert th.color_label == "red"
+
+    # Сброс цвета
+    db2 = AsyncMock()
+    r_ids2 = MagicMock(); r_ids2.all.return_value = [(th.clinic_id,)]
+    r_th2 = MagicMock(); r_th2.scalar_one_or_none.return_value = th
+    db2.execute = AsyncMock(side_effect=[r_ids2, r_th2])
+    db2.commit = AsyncMock()
+
+    res2 = await cc.set_color_label(
+        thread_id=th.id, body=cc.ColorLabelIn(color=None),
+        user=fake, db=db2,
+    )
+    assert res2["color_label"] is None
+    assert th.color_label is None
+
+
+@pytest.mark.asyncio
+async def test_color_label_validation_rejects_invalid():
+    """Недопустимый цвет → 400 HTTPException."""
+    from app.routers import clinic_chat as cc
+    from fastapi import HTTPException
+    th = _make_thread_obj()
+    fake = _staff_user(th)
+
+    db = AsyncMock()
+    r_ids = MagicMock(); r_ids.all.return_value = [(th.clinic_id,)]
+    r_th = MagicMock(); r_th.scalar_one_or_none.return_value = th
+    db.execute = AsyncMock(side_effect=[r_ids, r_th])
+    db.commit = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await cc.set_color_label(
+            thread_id=th.id, body=cc.ColorLabelIn(color="purple"),
+            user=fake, db=db,
+        )
+    assert exc.value.status_code == 400
+
+
+def test_color_label_in_schema_accepts_none():
+    """Pydantic ColorLabelIn(color=None) валиден (сброс метки)."""
+    from app.routers.clinic_chat import ColorLabelIn
+    m = ColorLabelIn(color=None)
+    assert m.color is None
+    m2 = ColorLabelIn(color="green")
+    assert m2.color == "green"

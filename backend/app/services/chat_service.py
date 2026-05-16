@@ -56,6 +56,8 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
         "pinned_at": (
             t.pinned_at.isoformat() if getattr(t, "pinned_at", None) else None
         ),
+        # Quick Wins #4: цветовая метка (red/yellow/green/blue/None).
+        "color_label": getattr(t, "color_label", None),
     }
 
 

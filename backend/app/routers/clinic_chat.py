@@ -97,6 +97,14 @@ class ReactionIn(BaseModel):
     emoji: str = Field(min_length=1, max_length=16)
 
 
+# Quick Wins #4: разрешённые цвета (None = сбросить метку).
+ALLOWED_COLOR_LABELS = {"red", "yellow", "green", "blue"}
+
+
+class ColorLabelIn(BaseModel):
+    color: Optional[str] = None
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/threads")
@@ -241,6 +249,35 @@ async def assign_doctor(
     th.assigned_doctor_id = body.doctor_id
     await db.commit()
     return cs.serialize_thread(th)
+
+
+@router.patch("/threads/{thread_id}/label")
+async def set_color_label(
+    thread_id: uuid.UUID,
+    body: ColorLabelIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins #4: установить/снять цветовую метку треда.
+
+    color=None → снять метку. Допустимые цвета: red/yellow/green/blue.
+    """
+    _ensure_clinic_role(user)
+    allowed = await _user_clinic_ids(db, user)
+    th = await cs.get_thread(db, thread_id)
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+    if body.color is not None and body.color not in ALLOWED_COLOR_LABELS:
+        raise HTTPException(
+            400,
+            f"Недопустимый цвет '{body.color}'. Допустимые: "
+            f"{sorted(ALLOWED_COLOR_LABELS)} или null.",
+        )
+    th.color_label = body.color
+    await db.commit()
+    return {"color_label": th.color_label, "thread_id": str(thread_id)}
 
 
 @router.post("/threads/{thread_id}/pin")
