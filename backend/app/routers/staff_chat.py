@@ -1172,3 +1172,21 @@ async def file_policy():
             "Для длительного хранения используйте документы пациента или внешнее хранилище."
         ),
     }
+
+
+# ── Search endpoint (sf05) ────────────────────────────────────────────────────
+
+@router.get("/search")
+async def search_staff_chat(
+    q: str = Query(min_length=2, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Глобальный поиск по body в room'ах текущего пользователя (ILIKE).
+
+    Возвращает: [{message_id, room_id, room_name, body_snippet, created_at, sender_id}].
+    """
+    _ensure_not_patient(user)
+    results = await svc.search_messages_logic(db, user, q, limit=limit)
+    return {"q": q, "count": len(results), "results": results}

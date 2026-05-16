@@ -429,3 +429,48 @@ def serialize_room(
         "last_message": serialize_message(last_msg) if last_msg else None,
         "unread": unread,
     }
+
+
+# ── Global search ─────────────────────────────────────────────────────────────
+async def search_messages_logic(
+    db: AsyncSession,
+    user: User,
+    q: str,
+    limit: int = 50,
+) -> list[dict]:
+    """ILIKE-поиск по `body` среди сообщений в room'ах, где user — member.
+
+    Возвращает список dict'ов, отсортированный по created_at DESC.
+    """
+    q_stripped = (q or "").strip()
+    if len(q_stripped) < 2:
+        return []
+    rooms = await user_room_ids(db, user.id)
+    if not rooms:
+        return []
+    safe_limit = min(max(limit, 1), 200)
+    like_pattern = f"%{q_stripped}%"
+    res = await db.execute(
+        select(StaffChatMessage, StaffChatRoom)
+        .join(StaffChatRoom, StaffChatRoom.id == StaffChatMessage.room_id)
+        .where(and_(
+            StaffChatMessage.room_id.in_(rooms),
+            StaffChatMessage.body.ilike(like_pattern),
+            StaffChatMessage.deleted_at.is_(None),
+        ))
+        .order_by(StaffChatMessage.created_at.desc())
+        .limit(safe_limit)
+    )
+    out: list[dict] = []
+    for msg, room in res.all():
+        body = msg.body or ""
+        snippet = body if len(body) <= 240 else body[:240] + "…"
+        out.append({
+            "message_id": str(msg.id),
+            "room_id": str(msg.room_id),
+            "room_name": room.name,
+            "body_snippet": snippet,
+            "created_at": msg.created_at.isoformat(),
+            "sender_id": str(msg.sender_id) if msg.sender_id else None,
+        })
+    return out
