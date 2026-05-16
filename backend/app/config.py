@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:admin@клиниксеть.рф"
+    # ТЗ Web Push 2026-05-16: email для VAPID-claim (имеет приоритет над vapid_subject)
+    # если задан — автоматически конвертируется в mailto: формат
+    vapid_claim_email: str = ""
 
     # ===== БЛОК: SMTP для email-уведомлений (Этап 10 ROADMAP) =====
     # Если smtp_host пустой — email_service.send_email тихо логирует и ничего не делает.
