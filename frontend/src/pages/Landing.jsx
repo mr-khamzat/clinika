@@ -29,6 +29,11 @@ import FunctionalShowcase from '../components/landing/FunctionalShowcase'
 import Testimonials from '../components/landing/Testimonials'
 import FaqAccordion from '../components/landing/FaqAccordion'
 import CtaNewsletter from '../components/landing/CtaNewsletter'
+import NumbersStrip from '../components/landing/NumbersStrip'
+import ProductTour from '../components/landing/ProductTour'
+import IntegrationsGrid from '../components/landing/IntegrationsGrid'
+import Testimonial from '../components/landing/Testimonial'
+import FAQ from '../components/landing/FAQ'
 import { LANDING_EXTRAS_CSS } from '../components/landing/landing_extras.css.js'
 
 // ===== БЛОК: SVG-иконки (без внешней либы) =====
@@ -508,7 +513,7 @@ export default function Landing() {
               </button>
             </div>
             <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.27.exe" download className="ks-btn-ghost">
+              <a href="/downloads/KliniknetCalls-Setup-1.0.28.exe" download className="ks-btn-ghost">
                 {ICONS.download} Calls Windows · 1.0.27 (с AWG VPN + чат)
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
@@ -580,6 +585,9 @@ export default function Landing() {
           </FadeIn>
         </div>
       </section>
+
+      {/* ===== БЛОК: NUMBERS STRIP — 4 метрики с count-up ===== */}
+      <NumbersStrip />
 
       {/* ===== БЛОК: STATS STRIP — реальные показатели ===== */}
       <div className="ks-stats">
@@ -783,6 +791,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ===== БЛОК: PRODUCT TOUR — 4 экрана продукта с SVG-mockup'ами ===== */}
+      <ProductTour />
+
       {/* ===== БЛОК: FUNCTIONAL SHOWCASE — alternating «текст + мок» ===== */}
       <FunctionalShowcase />
 
@@ -804,6 +815,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ===== БЛОК: INTEGRATIONS GRID — 6 готовых интеграций ===== */}
+      <IntegrationsGrid />
 
       {/* ===== БЛОК: PRICING (3 плана + toggle мес/год) ===== */}
       <section id="pricing" className="ks-section ks-pricing">
@@ -869,6 +883,12 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ===== БЛОК: TESTIMONIAL — большая цитата основателя ===== */}
+      <Testimonial />
+
+      {/* ===== БЛОК: FAQ — 6 вопросов в аккордеоне ===== */}
+      <FAQ />
 
       {/* ===== БЛОК: TESTIMONIALS — 3 цитаты ===== */}
       <Testimonials />
@@ -1027,7 +1047,7 @@ export default function Landing() {
                 Версия 1.0.27 — встроенный AWG VPN, внутренний чат сотрудников (отдельное окно), WhatsApp Web в боковой панели, окно «Диагностика».
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
-                <a href="/downloads/KliniknetCalls-Setup-1.0.27.exe" download className="ks-btn-primary">
+                <a href="/downloads/KliniknetCalls-Setup-1.0.28.exe" download className="ks-btn-primary">
                   {ICONS.download} Windows · 1.0.27 (AWG VPN + чат)
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
