@@ -213,3 +213,80 @@ class StaffChatMessageReaction(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+class StaffChatPoll(Base):
+    """Опрос в StaffChat. Связан 1:1 с system-message в треде канала.
+
+    options — JSONB список строк ["Вариант 1", "Вариант 2", ...].
+    multi_select=True → пользователь может голосовать за несколько вариантов.
+    closes_at — необязательная дата автозакрытия (после этого время голос отклоняется).
+    """
+    __tablename__ = "staff_chat_polls"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("staff_chat_messages.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("staff_chat_rooms.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    creator_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    question: Mapped[str] = mapped_column(String(500), nullable=False)
+    # ["Вариант 1", "Вариант 2", ...]
+    options: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    multi_select: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
+    closes_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow,
+        nullable=False,
+    )
+
+
+class StaffChatPollVote(Base):
+    """Голос пользователя за опцию опроса.
+
+    UNIQUE (poll_id, user_id, option_index) — нельзя дважды проголосовать
+    за одну и ту же опцию. Для single-select при выборе нового варианта
+    предыдущие голоса этого user'а удаляются на уровне application.
+    """
+    __tablename__ = "staff_chat_poll_votes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    poll_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("staff_chat_polls.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    option_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("poll_id", "user_id", "option_index", name="uq_poll_vote_user_option"),
+    )
