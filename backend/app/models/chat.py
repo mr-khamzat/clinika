@@ -84,6 +84,20 @@ class ChatThread(Base):
     color_label: Mapped[str | None] = mapped_column(
         String(20), nullable=True,
     )
+    # Workflow batch (wf01_sla): SLA-эскалация + reassign history.
+    # last_inbound_message_at — таймстемп последнего сообщения от пациента
+    # (нужно для расчёта SLA в chat_sla_job).
+    last_inbound_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    # Текущий уровень SLA-эскалации: 'reg' | 'manager' | 'owner' | NULL.
+    sla_breached_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sla_breached_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # JSONB-лог передач треда:
+    # [{at, from_user_id, to_user_id, actor_user_id, reason, note}]
+    reassigned_history: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default='[]', nullable=False,
+    )
 
 
 class ChatMessage(Base):

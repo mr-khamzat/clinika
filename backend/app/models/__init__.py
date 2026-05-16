@@ -195,6 +195,8 @@ from app.models.subscription_plan_discount import SubscriptionPlanDiscount
 from app.models.tenant_mis_subscription_webhook import TenantMisSubscriptionWebhook
 from app.models.pending_subscription import PendingSubscriptionRequest
 from app.models.chat import ChatThread, ChatMessage, ChatMessageReaction
+# Workflow batch — шаблоны быстрых ответов в чате (wf03_templates)
+from app.models.message_template import MessageTemplate  # noqa: F401
 from app.models.calendar import PatientCalendarToken
 
 # Глава 10 — Интеграции (лаборатория / wellness партнёрки / партнёрская программа агрегаторам)
