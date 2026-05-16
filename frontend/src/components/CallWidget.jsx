@@ -37,6 +37,7 @@ export default function CallWidget() {
 
   const [micOn, setMicOn] = useState(true)
   const [camOn, setCamOn] = useState(true)
+  const [isSharing, setIsSharing] = useState(false)
 
   const wsRef          = useRef(null)
   const pingRef        = useRef(null)
@@ -49,6 +50,8 @@ export default function CallWidget() {
   const pendingIce     = useRef([])
   const iceConfigRef   = useRef(DEFAULT_RTC_CONFIG)
   const userGestureUnlockedRef = useRef(false)  // факт user-click для autoplay-policy
+  const cameraTrackRef = useRef(null)     // сохранённый камера-track пока идёт screen share
+  const screenTrackRef = useRef(null)     // активный screen-track для остановки
 
   // ── Проверка модулей ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -242,6 +245,47 @@ export default function CallWidget() {
     return pc
   }
 
+  // ── Screen sharing ─────────────────────────────────────────────────────────
+  const startScreenShare = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' },
+        audio: false,
+      })
+      const screenTrack = stream.getVideoTracks()[0]
+      if (!screenTrack) return
+      screenTrackRef.current = screenTrack
+      const pc = pcRef.current
+      const videoSender = pc?.getSenders?.().find(s => s.track && s.track.kind === 'video')
+      if (videoSender) {
+        cameraTrackRef.current = videoSender.track
+        await videoSender.replaceTrack(screenTrack)
+      }
+      // Когда пользователь нажал «Stop sharing» в системном UI браузера
+      screenTrack.onended = () => stopScreenShare()
+      setIsSharing(true)
+    } catch (e) {
+      // Пользователь нажал Cancel в picker'е — это норма, не ошибка
+      if (e?.name === 'NotAllowedError') return
+      console.warn('startScreenShare failed', e)
+    }
+  }
+
+  const stopScreenShare = async () => {
+    const pc = pcRef.current
+    const videoSender = pc?.getSenders?.().find(s => s.track && s.track.kind === 'video')
+    if (videoSender && cameraTrackRef.current) {
+      try { await videoSender.replaceTrack(cameraTrackRef.current) } catch {}
+    }
+    if (screenTrackRef.current) {
+      try { screenTrackRef.current.stop() } catch {}
+      screenTrackRef.current = null
+    }
+    setIsSharing(false)
+  }
+
+  const toggleScreenShare = () => (isSharing ? stopScreenShare() : startScreenShare())
+
   const getMedia = async (callType) => {
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -265,6 +309,13 @@ export default function CallWidget() {
 
   const cleanupMedia = () => {
     stopAllTones()
+    // Если идёт screen share — остановить track перед закрытием pc
+    if (screenTrackRef.current) {
+      try { screenTrackRef.current.stop() } catch {}
+      screenTrackRef.current = null
+    }
+    cameraTrackRef.current = null
+    setIsSharing(false)
     localStreamRef.current?.getTracks().forEach(t => t.stop())
     localStreamRef.current = null
     if (remoteStreamRef.current) {
@@ -500,6 +551,13 @@ export default function CallWidget() {
             <button onClick={toggleCam}
               className={`w-14 h-14 rounded-full flex items-center justify-center transition ${camOn ? 'bg-white/20 text-white hover:bg-white/30' : 'bg-red-500 text-white'}`}>
               <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>{camOn ? 'videocam' : 'videocam_off'}</span>
+            </button>
+            <button onClick={toggleScreenShare}
+              title={isSharing ? 'Остановить демонстрацию' : 'Показать экран'}
+              className={`w-14 h-14 rounded-full flex items-center justify-center transition ${isSharing ? 'bg-sky-500 text-white hover:bg-sky-600 border-2 border-sky-300' : 'bg-white/20 text-white hover:bg-white/30'}`}>
+              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>
+                {isSharing ? 'stop_screen_share' : 'screen_share'}
+              </span>
             </button>
             <button onClick={endCall}
               className="w-16 h-16 rounded-full bg-red-500 text-white flex items-center justify-center hover:bg-red-600 transition">
