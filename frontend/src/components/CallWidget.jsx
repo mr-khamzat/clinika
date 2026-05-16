@@ -8,6 +8,7 @@ import api from '../api'
 import useAuthStore from '../store/auth'
 import { API_BASE } from '../config'
 import { startRingback, stopRingback, startRingtone, stopRingtone, stopAllTones } from '../lib/callTones'
+import { buildMediaConstraints } from '../lib/deviceStorage'
 import { useToast } from '../design'
 
 const DEFAULT_RTC_CONFIG = {
@@ -230,12 +231,12 @@ export default function CallWidget() {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState
       // 'disconnected' — временное состояние WebRTC, не дропаем звонок.
-      // ICE-restart обрабатывается в addEventListener('iceconnectionstatechange') ниже.
+      // ICE может восстановиться сам или через restartIce.
       if (s === 'connected') stopAllTones()
+      // ICE restart обрабатывается в oniceconnectionstatechange ниже.
       // 'closed' — мы сами закрыли, обработка не нужна.
     }
 
-    // Auto-ICE-restart при потере связи (макс 3 попытки, backoff 1/3/6 с).
     pc.addEventListener('iceconnectionstatechange', async () => {
       const s = pc.iceConnectionState
       // Connected — сброс счётчика
@@ -268,7 +269,7 @@ export default function CallWidget() {
         }
         const offer = await pc.createOffer({ iceRestart: true })
         await pc.setLocalDescription(offer)
-        // Шлём новый offer через существующий сигнальный канал (sendWs над WS).
+        // Шлём новый offer через существующий сигнальный канал WS.
         const peerId = activePeerIdRef.current || targetId
         sendWs({
           type: 'call_invite',
@@ -327,21 +328,11 @@ export default function CallWidget() {
   const toggleScreenShare = () => (isSharing ? stopScreenShare() : startScreenShare())
 
   const getMedia = async (callType) => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-        sampleRate: 48000,
-      },
-      video: callType === 'video' ? {
-        width:  { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 24 },
-        facingMode: 'user',
-      } : false,
-    })
+    // Подхватываем предпочитаемые deviceId mic/cam из localStorage
+    // (см. DeviceTestModal — пользователь мог их сохранить перед звонком).
+    const stream = await navigator.mediaDevices.getUserMedia(
+      buildMediaConstraints({ audio: true, video: callType === 'video' })
+    )
     localStreamRef.current = stream
     if (localVideoRef.current) localVideoRef.current.srcObject = stream
     return stream
