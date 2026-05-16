@@ -372,3 +372,67 @@ async def sipuni_webhook(
         call.recording_url = parsed["recording_url"]
     await db.commit()
     return {"ok": True}
+
+
+# ── Mango webhook (no auth — Mango ставит подпись только на исходящих) ────────
+
+@router.post("/telephony/webhook/mango")
+async def mango_webhook(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Принимает call_state_change от Mango Office.
+
+    Mango шлёт state = Appeared|Connected|Disappeared|NoAnswer|Busy|Failed.
+    Логика:
+    1. Найти PhoneCall по provider_call_id (command_id или entry_id)
+    2. Обновить status, duration, ended_at, recording_url
+    """
+    from app.services.telephony.mango import MangoProvider
+    parsed = await MangoProvider("", "").handle_incoming_webhook(payload)
+    if not parsed.get("provider_call_id"):
+        return {"ok": False}
+    call = (await db.execute(
+        select(PhoneCall).where(PhoneCall.provider_call_id == parsed["provider_call_id"])
+    )).scalar_one_or_none()
+    if not call:
+        return {"ok": False, "reason": "call_not_found"}
+    call.status = parsed["status"]
+    if parsed.get("duration_sec"):
+        call.duration_sec = parsed["duration_sec"]
+        call.ended_at = datetime.utcnow()
+    if parsed.get("recording_url"):
+        call.recording_url = parsed["recording_url"]
+    await db.commit()
+    return {"ok": True}
+
+
+# ── Zadarma webhook (no auth — signature валидируется на уровне настроек Zadarma) ──
+
+@router.post("/telephony/webhook/zadarma")
+async def zadarma_webhook(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+):
+    """Принимает NOTIFY_* события от Zadarma.
+
+    Zadarma шлёт callback на webhook URL, заданный в личном кабинете.
+    Логика идентична Sipuni: найти PhoneCall по provider_call_id и обновить статус.
+    """
+    from app.services.telephony.zadarma import ZadarmaProvider
+    parsed = await ZadarmaProvider("", "").handle_incoming_webhook(payload)
+    if not parsed.get("ok") or not parsed.get("provider_call_id"):
+        return {"ok": False}
+    call = (await db.execute(
+        select(PhoneCall).where(PhoneCall.provider_call_id == parsed["provider_call_id"])
+    )).scalar_one_or_none()
+    if not call:
+        return {"ok": False, "reason": "call_not_found"}
+    call.status = parsed["status"]
+    if parsed.get("duration_sec"):
+        call.duration_sec = parsed["duration_sec"]
+        call.ended_at = datetime.utcnow()
+    if parsed.get("recording_url"):
+        call.recording_url = parsed["recording_url"]
+    await db.commit()
+    return {"ok": True}
