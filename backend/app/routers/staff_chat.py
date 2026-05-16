@@ -1190,3 +1190,79 @@ async def search_staff_chat(
     _ensure_not_patient(user)
     results = await svc.search_messages_logic(db, user, q, limit=limit)
     return {"q": q, "count": len(results), "results": results}
+
+
+# ── Polls endpoints (sf05) ────────────────────────────────────────────────────
+
+class CreatePollIn(BaseModel):
+    room_id: uuid.UUID
+    question: str = Field(min_length=1, max_length=500)
+    options: list[str] = Field(min_length=2, max_length=20)
+    multi_select: bool = False
+    closes_at: Optional[datetime] = None
+
+
+class VotePollIn(BaseModel):
+    option_index: int = Field(ge=0)
+
+
+@router.post("/polls", status_code=201)
+async def create_poll(
+    body: CreatePollIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создаёт опрос в указанной комнате (только для member-а).
+
+    Создаёт system-message в треде комнаты со связанным poll-объектом.
+    """
+    _ensure_not_patient(user)
+    room = await svc.get_room(db, body.room_id)
+    if not room:
+        raise HTTPException(404, "Комната не найдена")
+    if not await svc.is_member(db, room.id, user.id):
+        raise HTTPException(403, "Нет доступа к этой комнате")
+    try:
+        poll, msg = await svc.create_poll_logic(
+            db, user, room,
+            question=body.question,
+            options=body.options,
+            multi_select=body.multi_select,
+            closes_at=body.closes_at,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await db.commit()
+    await db.refresh(poll)
+    await db.refresh(msg)
+    poll_dict = await svc.serialize_poll_for_message(db, msg.id, current_user_id=user.id)
+    return {
+        "poll": poll_dict,
+        "message_id": str(msg.id),
+        "room_id": str(room.id),
+    }
+
+
+@router.post("/polls/{poll_id}/vote")
+async def vote_poll(
+    poll_id: uuid.UUID,
+    body: VotePollIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle голоса за опцию. Single-select: новый голос заменяет старый."""
+    _ensure_not_patient(user)
+    from app.models.staff_chat import StaffChatPoll
+    r = await db.execute(select(StaffChatPoll).where(StaffChatPoll.id == poll_id))
+    poll = r.scalar_one_or_none()
+    if not poll:
+        raise HTTPException(404, "Опрос не найден")
+    if not await svc.is_member(db, poll.room_id, user.id):
+        raise HTTPException(403, "Нет доступа к этой комнате")
+    try:
+        action = await svc.toggle_poll_vote_logic(db, user, poll, body.option_index)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await db.commit()
+    poll_dict = await svc.serialize_poll_for_message(db, poll.message_id, current_user_id=user.id)
+    return {"action": action, "poll": poll_dict}

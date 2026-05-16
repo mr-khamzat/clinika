@@ -474,3 +474,160 @@ async def search_messages_logic(
             "sender_id": str(msg.sender_id) if msg.sender_id else None,
         })
     return out
+
+
+# ── Polls serialization ───────────────────────────────────────────────────────
+async def serialize_poll_for_message(
+    db: AsyncSession,
+    message_id: uuid.UUID,
+    *,
+    current_user_id: uuid.UUID | None = None,
+) -> dict | None:
+    """Если у сообщения есть связанный опрос — возвращает его сериализованным.
+
+    Шейп:
+        {id, question, options: [{text, votes, by_me}], multi_select,
+         closes_at, total_votes}
+    """
+    from app.models.staff_chat import StaffChatPoll
+    r = await db.execute(
+        select(StaffChatPoll).where(StaffChatPoll.message_id == message_id)
+    )
+    poll = r.scalar_one_or_none()
+    if not poll:
+        return None
+    return await _serialize_poll_obj(db, poll, current_user_id=current_user_id)
+
+
+async def _serialize_poll_obj(
+    db: AsyncSession,
+    poll,  # StaffChatPoll
+    *,
+    current_user_id: uuid.UUID | None = None,
+) -> dict:
+    from app.models.staff_chat import StaffChatPollVote
+    r = await db.execute(
+        select(StaffChatPollVote).where(StaffChatPollVote.poll_id == poll.id)
+    )
+    votes = list(r.scalars().all())
+    my_indices: set[int] = set()
+    counts: dict[int, int] = {}
+    cur = str(current_user_id) if current_user_id else None
+    for v in votes:
+        counts[v.option_index] = counts.get(v.option_index, 0) + 1
+        if cur and str(v.user_id) == cur:
+            my_indices.add(v.option_index)
+    options_out = []
+    for idx, text in enumerate(poll.options or []):
+        options_out.append({
+            "text": text,
+            "votes": counts.get(idx, 0),
+            "by_me": idx in my_indices,
+        })
+    return {
+        "id": str(poll.id),
+        "question": poll.question,
+        "options": options_out,
+        "multi_select": bool(poll.multi_select),
+        "closes_at": poll.closes_at.isoformat() if poll.closes_at else None,
+        "total_votes": len(votes),
+    }
+
+
+# ── Polls business logic ──────────────────────────────────────────────────────
+async def create_poll_logic(
+    db: AsyncSession,
+    user: User,
+    room,  # StaffChatRoom
+    question: str,
+    options: list[str],
+    multi_select: bool = False,
+    closes_at: datetime | None = None,
+):
+    """Создаёт опрос + связанное system-message в треде комнаты.
+
+    Возвращает (poll, message). Вызывающий выполняет commit.
+    """
+    from app.models.staff_chat import StaffChatPoll, StaffChatMessage
+    q = (question or "").strip()
+    opts = [str(o).strip() for o in (options or []) if str(o).strip()]
+    if not q:
+        raise ValueError("Пустой вопрос опроса")
+    if len(opts) < 2:
+        raise ValueError("Нужно минимум 2 варианта")
+    if len(opts) > 20:
+        raise ValueError("Максимум 20 вариантов")
+    # system-message с body=question (для feed-ленты), без attachments
+    msg = StaffChatMessage(
+        room_id=room.id,
+        sender_id=user.id,
+        body=q,
+    )
+    db.add(msg)
+    room.last_message_at = datetime.utcnow()
+    await db.flush()
+    poll = StaffChatPoll(
+        message_id=msg.id,
+        room_id=room.id,
+        creator_id=user.id,
+        question=q,
+        options=opts,
+        multi_select=bool(multi_select),
+        closes_at=closes_at,
+    )
+    db.add(poll)
+    # отправителю auto-read
+    await db.execute(
+        update(StaffChatMember)
+        .where(and_(
+            StaffChatMember.room_id == room.id,
+            StaffChatMember.user_id == user.id,
+        ))
+        .values(last_read_at=msg.created_at)
+    )
+    await db.flush()
+    return poll, msg
+
+
+async def toggle_poll_vote_logic(
+    db: AsyncSession,
+    user: User,
+    poll,  # StaffChatPoll
+    option_index: int,
+) -> str:
+    """Toggle голоса. Single-select: при выборе нового — старый снимается.
+
+    Возвращает "added" | "removed".
+    """
+    from app.models.staff_chat import StaffChatPollVote
+    if option_index < 0 or option_index >= len(poll.options or []):
+        raise ValueError("Неверный option_index")
+    if poll.closes_at and poll.closes_at.replace(tzinfo=None) < datetime.utcnow():
+        raise ValueError("Опрос закрыт")
+    # Ищем существующий голос (этот user, этот option)
+    r = await db.execute(
+        select(StaffChatPollVote).where(and_(
+            StaffChatPollVote.poll_id == poll.id,
+            StaffChatPollVote.user_id == user.id,
+            StaffChatPollVote.option_index == option_index,
+        ))
+    )
+    existing = r.scalar_one_or_none()
+    if existing:
+        await db.delete(existing)
+        return "removed"
+    # Single-select: удаляем все предыдущие голоса user'а в этом poll'е
+    if not poll.multi_select:
+        await db.execute(
+            delete(StaffChatPollVote).where(and_(
+                StaffChatPollVote.poll_id == poll.id,
+                StaffChatPollVote.user_id == user.id,
+            ))
+        )
+    vote = StaffChatPollVote(
+        poll_id=poll.id,
+        user_id=user.id,
+        option_index=option_index,
+    )
+    db.add(vote)
+    return "added"
