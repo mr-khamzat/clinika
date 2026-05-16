@@ -24,39 +24,74 @@ import CommandPalette from '../components/CommandPalette'
 import NotificationsBell from '../components/NotificationsBell'
 
 // ─── Карта разделов (синхронизирована с ManagerDashboard) ───
+// Поле `group` группирует разделы для виджета «Быстрые переходы» и drawer «Ещё».
+// Ключи групп описаны в MGR_NAV_GROUPS (см. ниже).
 export const MGR_NAV = [
-  { key:'analytics',    label:'Аналитика', icon:'bar_chart',    path:'/manager/analytics' },
-  { key:'kpi',          label:'KPI',       icon:'emoji_events', path:'/manager/kpi' },
-  { key:'activity',     label:'Журнал',    icon:'article',      path:'/manager/activity' },
-  { key:'bonuses',      label:'Выплаты',   icon:'payments',     path:'/manager/bonuses' },
-  { key:'history',      label:'История',   icon:'history',      path:'/manager/history' },
-  { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings' },
-  { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices' },
+  { key:'analytics',    label:'Аналитика', icon:'bar_chart',    path:'/manager/analytics',     group:'reports' },
+  { key:'kpi',          label:'KPI',       icon:'emoji_events', path:'/manager/kpi',           group:'reports' },
+  { key:'activity',     label:'Журнал',    icon:'article',      path:'/manager/activity',      group:'reports' },
+  { key:'bonuses',      label:'Выплаты',   icon:'payments',     path:'/manager/bonuses',       group:'finance' },
+  { key:'history',      label:'История',   icon:'history',      path:'/manager/history',       group:'reports' },
+  { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings',      group:'settings' },
+  { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices',      group:'finance' },
   // svcfin01: финансовая модель платформы — счета платформе/сети/сотрудникам
-  { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance' },
+  { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance',    group:'finance' },
   // Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
-  { key:'subscription_cash', label:'Подписки (наличные)', icon:'payments', path:'/manager/subscription-cash' },
-  { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors' },
-  { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
-  { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },
-  { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments' },
+  { key:'subscription_cash', label:'Подписки (наличные)', icon:'payments', path:'/manager/subscription-cash', group:'subscriptions' },
+  // Очередь заявок на подписку (ручное одобрение менеджером)
+  { key:'subscription_pending', label:'Заявки на тариф', icon:'pending_actions', path:'/manager/subscription-pending', group:'subscriptions' },
+  // discountrules01 — категорные скидки тарифа подписки «Здоровье+»
+  { key:'subscription_discounts', label:'Скидки тарифов', icon:'percent', path:'/manager/subscription/discounts', group:'subscriptions' },
+  // miswebhook01 — интеграции МИС: вебхуки на события подписки
+  { key:'mis_webhooks', label:'Интеграции с МИС', icon:'webhook', path:'/manager/integrations/mis', group:'integrations' },
+  { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors',  group:'team' },
+  { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors', group:'team' },
+  { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors',  group:'team' },
+  { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments',  group:'schedule' },
   // Глава 4 — Manager productivity
-  { key:'kanban',       label:'Kanban-расписание', icon:'view_kanban',  path:'/manager/kanban' },
-  { key:'doctor-load',  label:'Загрузка врачей',    icon:'timeline',     path:'/manager/doctor-load' },
-  { key:'templates',    label:'Шаблоны направлений', icon:'dynamic_form', path:'/manager/templates' },
-  { key:'multi-clinic', label:'Все клиники',         icon:'domain',       path:'/manager/multi-clinic', requiresMultiClinic: true },
-  { key:'forecast',     label:'Прогноз расходов',    icon:'trending_up',  path:'/manager/forecast' },
+  { key:'kanban',       label:'Kanban-расписание', icon:'view_kanban',  path:'/manager/kanban',      group:'schedule' },
+  { key:'doctor-load',  label:'Загрузка врачей',    icon:'timeline',     path:'/manager/doctor-load', group:'schedule' },
+  { key:'templates',    label:'Шаблоны направлений', icon:'dynamic_form', path:'/manager/templates',  group:'schedule' },
+  { key:'multi-clinic', label:'Все клиники',         icon:'domain',       path:'/manager/multi-clinic', requiresMultiClinic: true, group:'settings' },
+  { key:'forecast',     label:'Прогноз расходов',    icon:'trending_up',  path:'/manager/forecast',    group:'finance' },
   // Глава 7 — Регламент-конструктор: «Мои регламенты» для управляющего
-  { key:'regulations',  label:'Регламенты',          icon:'rule',         path:'/manager/regulations' },
+  { key:'regulations',  label:'Регламенты',          icon:'rule',         path:'/manager/regulations', group:'settings' },
   // Глава 8 — Программа лояльности (Награды + Лидерборд + Claims + Manual Adjust)
-  { key:'loyalty',      label:'Лояльность',          icon:'workspace_premium', path:'/manager/loyalty' },
+  { key:'loyalty',      label:'Лояльность',          icon:'workspace_premium', path:'/manager/loyalty', group:'subscriptions' },
   // Глава 9 — Чат с пациентами (премиум-чат клиники)
-  { key:'chat',         label:'Чат пациентов',       icon:'forum',             path:'/manager/chat' },
+  { key:'chat',         label:'Чат пациентов',       icon:'forum',             path:'/manager/chat',    group:'communications' },
+  // Workflow — шаблоны ответов и SLA-настройки чата
+  { key:'chat-templates', label:'Шаблоны ответов',   icon:'dynamic_form',      path:'/manager/chat-templates', group:'communications' },
+  { key:'chat-settings',  label:'Настройки чата',    icon:'tune',              path:'/manager/chat-settings',  group:'communications' },
   // Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...)
-  { key:'lab',          label:'Лаборатории',         icon:'science',           path:'/manager/lab' },
+  { key:'lab',          label:'Лаборатории',         icon:'science',           path:'/manager/lab',     group:'integrations' },
   // Глава 10 — Агрегаторы лидов: входящие заявки от DocDoc/ПроДокторов/Yandex Health
-  { key:'aggregator',   label:'Заявки агрегаторов',  icon:'campaign',          path:'/manager/aggregator' },
+  { key:'aggregator',   label:'Заявки агрегаторов',  icon:'campaign',          path:'/manager/aggregator', group:'communications' },
+  // Этап 0 интеграции с 1С — Склад: товары + импорт Excel/CSV
+  { key:'inventory',    label:'Склад',               icon:'inventory_2',       path:'/manager/inventory',           group:'inventory' },
+  { key:'inventory_receipts', label:'Приходы',          icon:'local_shipping',    path:'/manager/inventory/receipts', group:'inventory' },
+  { key:'inventory_batches', label:'Партии',            icon:'inventory',         path:'/manager/inventory/batches',  group:'inventory' },
+  { key:'suppliers',    label:'Поставщики',         icon:'business',          path:'/manager/suppliers',           group:'inventory' },
+  { key:'service_norms', label:'Нормативы услуг',    icon:'tune',              path:'/manager/services/norms',      group:'inventory' },
+  // Маркетинг — расходы на рекламу, каналы привлечения, атрибуция пациентов
+  { key:'marketing',    label:'Маркетинг',           icon:'campaign',          path:'/manager/marketing', group:'marketing' },
 ]
+
+// ─── Метаданные групп навигации (порядок = порядок отображения) ───
+// Используются в ManagerDashboard (Quick Actions) и drawer «Ещё» для группировки.
+export const MGR_NAV_GROUPS = [
+  { key:'reports',        label:'Отчётность',            icon:'monitoring' },
+  { key:'schedule',       label:'Расписание',            icon:'calendar_month' },
+  { key:'team',           label:'Команда',               icon:'groups' },
+  { key:'finance',        label:'Финансы',               icon:'account_balance' },
+  { key:'subscriptions',  label:'Подписки и лояльность', icon:'card_membership' },
+  { key:'inventory',      label:'Склад',                 icon:'inventory_2' },
+  { key:'marketing',      label:'Маркетинг',             icon:'campaign' },
+  { key:'communications', label:'Коммуникации',          icon:'forum' },
+  { key:'integrations',   label:'Интеграции',            icon:'cable' },
+  { key:'settings',       label:'Настройки',             icon:'settings' },
+]
+
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => MGR_NAV.find(n => n.key === k)).filter(Boolean)
 const moreItems   = MGR_NAV.filter(n => !BOTTOM_KEYS.includes(n.key))
@@ -246,27 +281,79 @@ export default function ManagerShell({
             <div className="px-5 mb-3" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Разделы
             </div>
-            <div className="grid grid-cols-3 gap-3 px-4 pb-6">
-              {visibleMoreItems.map(item => (
-                <button
-                  key={item.key}
-                  onClick={() => { nav(item.path); setMoreOpen(false) }}
-                  className="flex flex-col items-center gap-2 p-3 transition-transform active:scale-95"
-                  style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 14 }}
-                >
-                  <span
-                    className="inline-grid place-items-center"
-                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent)' }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
-                      {item.icon}
-                    </span>
-                  </span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-2)', textAlign: 'center', lineHeight: 1.2 }}>
-                    {item.label}
-                  </span>
-                </button>
-              ))}
+            {/* Сгруппированный список по MGR_NAV_GROUPS — drawer уже модальный, скролл вертикальный */}
+            <div className="px-4 pb-6 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+              {MGR_NAV_GROUPS.map(group => {
+                const items = visibleMoreItems.filter(it => it.group === group.key)
+                if (items.length === 0) return null
+                return (
+                  <div key={group.key} className="mb-4">
+                    <div className="flex items-center gap-2 px-1 mb-2">
+                      <span className="material-symbols-outlined" style={{ fontSize: 16, color:'var(--accent)' }}>{group.icon}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        {group.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>({items.length})</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {items.map(item => (
+                        <button
+                          key={item.key}
+                          onClick={() => { nav(item.path); setMoreOpen(false) }}
+                          className="flex flex-col items-center gap-2 p-3 transition-transform active:scale-95"
+                          style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 14 }}
+                        >
+                          <span
+                            className="inline-grid place-items-center"
+                            style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
+                              {item.icon}
+                            </span>
+                          </span>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-2)', textAlign: 'center', lineHeight: 1.2 }}>
+                            {item.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+              {/* Хвост: пункты без group (если вдруг) */}
+              {(() => {
+                const orphans = visibleMoreItems.filter(it => !it.group)
+                if (orphans.length === 0) return null
+                return (
+                  <div className="mb-4">
+                    <div className="px-1 mb-2" style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Прочее
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {orphans.map(item => (
+                        <button
+                          key={item.key}
+                          onClick={() => { nav(item.path); setMoreOpen(false) }}
+                          className="flex flex-col items-center gap-2 p-3 transition-transform active:scale-95"
+                          style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 14 }}
+                        >
+                          <span
+                            className="inline-grid place-items-center"
+                            style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
+                              {item.icon}
+                            </span>
+                          </span>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-2)', textAlign: 'center', lineHeight: 1.2 }}>
+                            {item.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </>

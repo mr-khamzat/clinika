@@ -32,6 +32,7 @@ const Landing = lazy(() => import('./pages/Landing'))
 const StaffChat = lazy(() => import('./pages/StaffChat'))
 const ChatSettings = lazy(() => import('./pages/ChatSettings'))
 const ChatRoles = lazy(() => import('./pages/ChatRoles'))
+const PlatformAnnouncements = lazy(() => import('./pages/PlatformAnnouncements'))
 const FranchiseModules = lazy(() => import('./pages/FranchiseModules'))
 const FranchiseRevenue = lazy(() => import('./pages/FranchiseRevenue'))
 const Franchise = lazy(() => import('./pages/Franchise'))
@@ -66,12 +67,39 @@ const ManagerRegulations    = lazy(() => import('./pages/ManagerRegulations'))
 const ManagerLoyalty        = lazy(() => import('./pages/ManagerLoyalty'))
 // Глава 9 — Чат с пациентами (премиум-чат клиники)
 const ManagerChatPage       = lazy(() => import('./pages/ManagerChatPage'))
+const ManagerChatTemplates  = lazy(() => import('./pages/ManagerChatTemplates'))
+const ManagerChatSettings   = lazy(() => import('./pages/ManagerChatSettings'))
 // Глава 10 — Лабораторные интеграции: CRUD провайдеров
 const ManagerLab            = lazy(() => import('./pages/ManagerLab'))
 // Глава 10 — Агрегаторы лидов: входящие заявки от DocDoc/ПроДокторов/Yandex Health
 const ManagerAggregator     = lazy(() => import('./pages/ManagerAggregator'))
 // Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
 const ManagerSubscriptionCash = lazy(() => import('./pages/ManagerSubscriptionCash'))
+// Очередь подписок «на одобрение» — заявки пациентов до активации
+const ManagerSubscriptionPending = lazy(() => import('./pages/ManagerSubscriptionPending'))
+// discountrules01 — дифференцированные скидки по категориям/услугам для тарифа
+const ManagerSubscriptionDiscounts = lazy(() => import('./pages/ManagerSubscriptionDiscounts'))
+// miswebhook01 — интеграции с внешним МИС (события подписки)
+const ManagerMisWebhooks = lazy(() => import('./pages/ManagerMisWebhooks'))
+// Склад / 1С-импорт остатков (Этап 0 интеграции с 1С)
+const ManagerInventory = lazy(() => import('./pages/ManagerInventory'))
+// Маркетинг — расходы на рекламу, каналы и атрибуция пациентов
+const ManagerMarketing = lazy(() => import('./pages/ManagerMarketing'))
+const ManagerSuppliers = lazy(() => import('./pages/ManagerSuppliers'))
+const ManagerInventoryReceipts = lazy(() => import('./pages/ManagerInventoryReceipts'))
+const ManagerInventoryReceiptDetail = lazy(() => import('./pages/ManagerInventoryReceiptDetail'))
+const ManagerInventoryBatches = lazy(() => import('./pages/ManagerInventoryBatches'))
+const ManagerServiceNorms = lazy(() => import('./pages/ManagerServiceNorms'))
+// ─── Кабинет директора сети (read-only аналитика по сети) ───
+const DirectorLayout    = lazy(() => import('./pages/DirectorLayout'))
+const DirectorDashboard = lazy(() => import('./pages/director/DirectorDashboard'))
+const DirectorPnL       = lazy(() => import('./pages/director/DirectorPnL'))
+const DirectorCashflow  = lazy(() => import('./pages/director/DirectorCashflow'))
+const DirectorKPI       = lazy(() => import('./pages/director/DirectorKPI'))
+const DirectorMarketing = lazy(() => import('./pages/director/DirectorMarketing'))
+const DirectorClinics   = lazy(() => import('./pages/director/DirectorClinics'))
+const DirectorDoctors   = lazy(() => import('./pages/director/DirectorDoctors'))
+const DirectorServices  = lazy(() => import('./pages/director/DirectorServices'))
 const ClinicSchedules = lazy(() => import('./pages/ClinicSchedules'))
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 const AdminRoot = lazy(() => import('./pages/AdminRoot'))
@@ -303,22 +331,54 @@ function MiniApp() {
               <Route path="manager/loyalty"      element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLoyalty /></Suspense>} />
               {/* Глава 9 — Чат с пациентами (премиум-чат клиники) */}
               <Route path="manager/chat"         element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerChatPage /></Suspense>} />
+              {/* Workflow — CRUD шаблонов ответов + SLA-настройки */}
+              <Route path="manager/chat-templates" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerChatTemplates /></Suspense>} />
+              <Route path="manager/chat-settings"  element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerChatSettings /></Suspense>} />
               {/* Глава 10 — Лабораторные интеграции: CRUD провайдеров (Invitro/KDL/...) */}
               <Route path="manager/lab"          element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerLab /></Suspense>} />
               {/* Глава 10 — Агрегаторы лидов: DocDoc/ПроДокторов/Yandex Health */}
               <Route path="manager/aggregator"   element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerAggregator /></Suspense>} />
               {/* Наличная активация подписки «Здоровье+» — касса клиники */}
               <Route path="manager/subscription-cash" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSubscriptionCash /></Suspense>} />
+              {/* Очередь подписок на одобрение (заявки пациентов) */}
+              <Route path="manager/subscription-pending" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSubscriptionPending /></Suspense>} />
+              {/* discountrules01 — категорные скидки тарифа подписки */}
+              <Route path="manager/subscription/discounts" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSubscriptionDiscounts /></Suspense>} />
+              {/* miswebhook01 — интеграции МИС (вебхуки на события подписки) */}
+              <Route path="manager/integrations/mis" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerMisWebhooks /></Suspense>} />
+              {/* Склад + импорт из 1С (Excel/CSV) — Этап 0 интеграции */}
+              <Route path="manager/inventory" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventory /></Suspense>} />
+              {/* Маркетинг — расходы, каналы, атрибуция пациентов */}
+              <Route path="manager/marketing" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerMarketing /></Suspense>} />
+              <Route path="manager/suppliers" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerSuppliers /></Suspense>} />
+              <Route path="manager/inventory/receipts" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventoryReceipts /></Suspense>} />
+              <Route path="manager/inventory/receipts/:id" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventoryReceiptDetail /></Suspense>} />
+              <Route path="manager/inventory/batches" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventoryBatches /></Suspense>} />
+              <Route path="manager/services/norms" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerServiceNorms /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
             </>
           )}
 
         </Route>
+        {/* ─── Кабинет директора сети (own shell, без общего Layout) ─── */}
+        {(user?.role === 'director' || user?.role === 'deputy_director') && (
+          <Route path="/director" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><DirectorLayout /></Suspense>}>
+            <Route index element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorDashboard /></Suspense>} />
+            <Route path="pnl"       element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorPnL /></Suspense>} />
+            <Route path="cashflow"  element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorCashflow /></Suspense>} />
+            <Route path="kpi"       element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorKPI /></Suspense>} />
+            <Route path="marketing" element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorMarketing /></Suspense>} />
+            <Route path="clinics"   element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorClinics /></Suspense>} />
+            <Route path="doctors"   element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorDoctors /></Suspense>} />
+            <Route path="services"  element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorServices /></Suspense>} />
+          </Route>
+        )}
         {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}
         <Route path="/admin/chat-settings" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatSettings /></Suspense>} />
         <Route path="/admin/franchise-revenue" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseRevenue /></Suspense>} />
         <Route path="/admin/franchise-modules" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseModules /></Suspense>} />
         <Route path="/admin/chat-roles" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatRoles /></Suspense>} />
+        <Route path="/admin/announcements" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><PlatformAnnouncements /></Suspense>} />
         <Route path="/staff-chat" element={<Suspense fallback={<div style={{minHeight:"100vh",background:"#0f1115"}}/>}><StaffChat /></Suspense>} />
       </Routes>
       </Suspense>
@@ -347,6 +407,10 @@ function RootRedirect() {
   }
   if (user.role === 'manager') {
     window.location.replace('/' + SLUG + '/manager')
+    return null
+  }
+  if (user.role === 'director' || user.role === 'deputy_director') {
+    window.location.replace('/' + SLUG + '/director')
     return null
   }
   if (user.role === 'patient') {
