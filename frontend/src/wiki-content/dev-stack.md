@@ -38,7 +38,7 @@
 - **Electron** — оболочка.
 - **WebRTC** + ваш coturn для P2P звонков.
 - **WhatsApp Web** в боковой панели (BrowserView, partition `persist:whatsapp`).
-- **AWG VPN** — встроен в 1.0.22+, обход блокировок Чечни/Ингушетии.
+- **Диалпад PSTN** — встроен в 1.0.30+, набор городских/мобильных номеров через интегрированных провайдеров (Sipuni/Mango/Zadarma).
 - **electron-builder** — NSIS installer (Windows). Сборка через wine 9 + winehq на Linux.
 
 Текущая версия: см. `/api/health/full → calls_version` или `frontend/public/downloads/latest.yml`.

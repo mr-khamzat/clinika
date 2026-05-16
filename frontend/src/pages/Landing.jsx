@@ -9,7 +9,7 @@
  *   - LoginModal  (вход → редирект по роли)
  *   - ContactModal (форма «Получить демо» → POST /contact/)
  *   - scrollTo(id) для anchor-навигации
- *   - Скачивание Calls для Windows / macOS (Win 1.0.24 NSIS installer + AWG VPN + чат сотрудников, Mac 1.0.7 arm64/x64)
+ *   - Скачивание Calls для Windows / macOS (Win 1.0.30 NSIS installer + внутренний чат сотрудников + диалпад, Mac 1.0.7 arm64/x64)
  *
  * Структура секций (как в klinikset.html):
  *   Nav → Hero → StatsStrip → Roles (tabs) → Features (9 карточек)
@@ -514,7 +514,7 @@ export default function Landing() {
             </div>
             <div className="ks-hero-downloads">
               <a href="/downloads/KliniknetCalls-Setup-1.0.28.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Windows · 1.0.27 (с AWG VPN + чат)
+                {ICONS.download} Calls Windows · 1.0.30 (диалпад + чат сотрудников)
               </a>
               <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
                 {ICONS.download} Calls macOS · Apple Silicon
@@ -544,7 +544,7 @@ export default function Landing() {
             </div>
           </FadeIn>
 
-          {/* Hero side — премиум AI-визуал из дизайна Stitch klinikset.html */}
+          {/* Hero side — мини-дашборд руководителя сети клиник */}
           <FadeIn delay={150} className="ks-hero-side">
             <div className="ks-ai-card">
               <div className="ks-ai-card-bg" aria-hidden>
@@ -553,24 +553,41 @@ export default function Landing() {
                 <div className="ks-ai-orb ks-ai-orb-3" />
               </div>
               <div className="ks-ai-card-content">
-                <div className="ks-ai-card-tag"><span className="ks-ai-card-tag-dot" />AI · работает 24/7</div>
-                <div className="ks-ai-card-emblem">
-                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                <div className="ks-ai-card-tag"><span className="ks-ai-card-tag-dot" />Панель руководителя · live</div>
+                <div className="ks-ai-card-emblem" aria-hidden="true">
+                  <svg width="148" height="76" viewBox="0 0 148 76" fill="none">
                     <defs>
-                      <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <linearGradient id="ksDashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                         <stop offset="0%" stopColor="oklch(0.85 0.12 240)" />
                         <stop offset="100%" stopColor="oklch(0.55 0.16 200)" />
                       </linearGradient>
+                      <linearGradient id="ksDashLine" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="oklch(0.85 0.12 240)" stopOpacity="0.45" />
+                        <stop offset="100%" stopColor="oklch(0.55 0.16 200)" />
+                      </linearGradient>
                     </defs>
-                    <circle cx="32" cy="32" r="28" fill="url(#aiGrad)" opacity="0.18" />
-                    <circle cx="32" cy="32" r="20" fill="url(#aiGrad)" opacity="0.32" />
-                    <circle cx="32" cy="32" r="12" fill="url(#aiGrad)" />
-                    <text x="32" y="38" textAnchor="middle" fill="#fff" fontSize="13" fontWeight="700" fontFamily="Golos Text, sans-serif" letterSpacing="-0.02em">AI</text>
+                    {/* Карточка выручки */}
+                    <rect x="4" y="4" width="64" height="32" rx="8" fill="url(#ksDashGrad)" opacity="0.22" />
+                    <text x="12" y="18" fill="#fff" fontSize="8" fontWeight="600" opacity="0.75">Выручка / мес</text>
+                    <text x="12" y="30" fill="#fff" fontSize="13" fontWeight="800">₽ 4.2M</text>
+                    {/* Карточка тредов */}
+                    <rect x="76" y="4" width="68" height="32" rx="8" fill="url(#ksDashGrad)" opacity="0.22" />
+                    <text x="84" y="18" fill="#fff" fontSize="8" fontWeight="600" opacity="0.75">Откр. тредов</text>
+                    <text x="84" y="30" fill="#fff" fontSize="13" fontWeight="800">37</text>
+                    <circle cx="138" cy="20" r="3.5" fill="oklch(0.78 0.18 145)">
+                      <animate attributeName="opacity" values="0.4;1;0.4" dur="1.6s" repeatCount="indefinite" />
+                    </circle>
+                    {/* Sparkline график загрузки */}
+                    <rect x="4" y="44" width="140" height="28" rx="8" fill="url(#ksDashGrad)" opacity="0.18" />
+                    <text x="12" y="55" fill="#fff" fontSize="7.5" fontWeight="600" opacity="0.75">Загрузка врачей · 7 дней</text>
+                    <polyline points="14,67 28,62 42,64 56,58 70,55 84,51 98,48 112,52 126,46 140,49"
+                              fill="none" stroke="url(#ksDashLine)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    <circle cx="140" cy="49" r="2.4" fill="#fff" />
                   </svg>
                 </div>
                 <div className="ks-ai-card-name">
-                  <div className="ks-ai-card-line">AI-аналитик платформы</div>
-                  <div className="ks-ai-card-role">обучен на 1.2 млн приёмов · следит за каждой клиникой</div>
+                  <div className="ks-ai-card-line">Сеть клиник на одном экране</div>
+                  <div className="ks-ai-card-role">выручка · загрузка врачей · открытые треды — в реальном времени</div>
                 </div>
                 <div className="ks-ai-card-pulse">
                   <span /><span /><span /><span />
@@ -578,9 +595,9 @@ export default function Landing() {
               </div>
             </div>
             <div className="ks-persona-quote">
-              <strong>Каждую ночь анализирую загрузку всех клиник</strong> и подсвечиваю
-              где теряется выручка — окна в расписании, простаивающие кабинеты, врачи
-              с просадкой по NPS.
+              <strong>Каждое утро вижу где теряется выручка</strong> — окна в расписании,
+              простаивающие кабинеты, врачи с просадкой по NPS. Не нужно вытаскивать
+              отчёты — всё уже на главной.
             </div>
           </FadeIn>
         </div>
@@ -1044,11 +1061,11 @@ export default function Landing() {
               <h2 className="ks-section-title">КлиникСеть Calls — видеосвязь врача и пациента</h2>
               <p className="ks-section-sub">
                 P2P-видеосвязь через ваш собственный coturn-сервер. Без сторонних облачных провайдеров.
-                Версия 1.0.27 — встроенный AWG VPN, внутренний чат сотрудников (отдельное окно), WhatsApp Web в боковой панели, окно «Диагностика».
+                Версия 1.0.30 — внутренний чат сотрудников (отдельное окно), WhatsApp Web в боковой панели, диалпад для PSTN-звонков, горячие клавиши Ctrl+Shift+M/L/H, темы system/light/dark.
               </p>
               <div className="ks-hero-actions" style={{ flexWrap: 'wrap' }}>
                 <a href="/downloads/KliniknetCalls-Setup-1.0.28.exe" download className="ks-btn-primary">
-                  {ICONS.download} Windows · 1.0.27 (AWG VPN + чат)
+                  {ICONS.download} Windows · 1.0.30 (диалпад + чат)
                 </a>
                 <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-secondary">
                   {ICONS.download} macOS Apple Silicon · 91 МБ
