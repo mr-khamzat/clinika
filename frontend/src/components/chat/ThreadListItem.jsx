@@ -115,6 +115,12 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
           <span className="truncate flex-1" style={{ fontSize: 12, color: 'var(--fg-3, #94a3b8)' }}>
             {preview || '— нет сообщений'}
           </span>
+          {thread.sla_breached_level && (
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full font-bold"
+                  style={{ fontSize: 10, background: '#fee2e2', color: '#991b1b' }}>
+              SLA
+            </span>
+          )}
           {unread > 0 && (
             <span
               className="flex-shrink-0 grid place-items-center font-bold text-white"
