@@ -35,6 +35,39 @@ _RE_PREFIX = re.compile(
 )
 
 
+# api/apiClient/client.method('url'). Список известных имён клиентов в этом репо.
+_API_CLIENT_NAMES = (
+    "api", "apiClient", "axiosClient",
+    "client", "httpClient", "http",
+)
+_RE_API_CALL = re.compile(
+    r'\b(?:' + "|".join(_API_CLIENT_NAMES) + r')'
+    r'\.(get|post|put|delete|patch)\s*\(\s*[\'"`]([^\'"`]+)[\'"`]',
+)
+_RE_TEMPLATE_VAR = re.compile(r'\$\{[^}]+\}')
+
+
+def _strip_jsx_comments(text: str) -> str:
+    """Однострочные // и многострочные /* */ комментарии."""
+    text = re.sub(r'//[^\n]*', '', text)
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+    return text
+
+
+def extract_frontend_api_calls(path: pathlib.Path) -> list[dict]:
+    """Извлекает [{file, method, path}] вызовов api.* из .jsx/.js файла."""
+    text = _strip_jsx_comments(
+        path.read_text(encoding="utf-8", errors="ignore")
+    )
+    out: list[dict] = []
+    for m in _RE_API_CALL.finditer(text):
+        method = m.group(1).upper()
+        raw = m.group(2)
+        path_norm = _RE_TEMPLATE_VAR.sub("{var}", raw)
+        out.append({"file": str(path), "method": method, "path": path_norm})
+    return out
+
+
 def extract_backend_endpoints(path: pathlib.Path) -> list[dict]:
     """Извлекает [{file, method, path}] из одного .py файла."""
     text = path.read_text(encoding="utf-8", errors="ignore")
