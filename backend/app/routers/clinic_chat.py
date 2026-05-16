@@ -22,6 +22,8 @@ from app.models.user import User, UserRole
 from app.models.chat import ChatThread
 from app.models.clinic import Clinic
 from app.services import chat_service as cs
+# Workflow batch — reassign треда другому пользователю (того же тенанта)
+from app.services.chat_workflow_service import reassign_thread, CrossTenantError
 
 
 router = APIRouter(prefix="/clinic/chat", tags=["clinic-chat"])
@@ -380,6 +382,47 @@ async def close_thread(
     th.status = "closed"
     await db.commit()
     return cs.serialize_thread(th)
+
+
+class ReassignIn(BaseModel):
+    to_user_id: uuid.UUID
+    note: Optional[str] = Field(default=None, max_length=500)
+
+
+@router.post("/threads/{thread_id}/reassign")
+async def reassign(
+    thread_id: uuid.UUID,
+    body: ReassignIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Передача треда другому сотруднику того же тенанта (Workflow batch).
+
+    Доступно: manager / franchise_owner / reg или текущий assigned врач.
+    Сбрасывает SLA-эскалацию, добавляет запись в reassigned_history,
+    создаёт system-сообщение в треде.
+    """
+    _ensure_clinic_role(user)
+    rt = await db.execute(select(ChatThread).where(ChatThread.id == thread_id))
+    th = rt.scalar_one_or_none()
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    allowed = await _user_clinic_ids(db, user)
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+    role_val = user.role.value if hasattr(user.role, "value") else user.role
+    if role_val not in ("manager", "franchise_owner", "reg") and th.assigned_doctor_id != user.id:
+        raise HTTPException(403, "Передавать может только manager/owner/reg/текущий назначенный")
+    rt2 = await db.execute(select(User).where(User.id == body.to_user_id))
+    target = rt2.scalar_one_or_none()
+    if not target:
+        raise HTTPException(404, "Целевой пользователь не найден")
+    try:
+        await reassign_thread(db, thread=th, target_user=target, actor=user, note=body.note)
+    except CrossTenantError:
+        raise HTTPException(400, "Целевой пользователь не из вашей клиники")
+    await db.commit()
+    return {"ok": True, "thread_id": str(th.id), "to_user_id": str(target.id)}
 
 
 @router.get("/threads/{thread_id}/patient-context")
