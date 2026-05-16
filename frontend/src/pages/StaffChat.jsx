@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import api from '../api'
 import { API_BASE, SLUG } from '../config'
+import CreateChannelModal from '../components/staff/CreateChannelModal'
 
 // Палитра аватаров — детерминированно генерируется из user_id
 const AVATAR_COLORS = [
@@ -109,6 +110,9 @@ export default function StaffChat() {
   const [members, setMembers] = useState([])
   const [draft, setDraft] = useState('')
   const [showNewChat, setShowNewChat] = useState(false)
+  // Вкладка сайдбара: 'chats' — список комнат, 'contacts' — все сотрудники для быстрого DM
+  const [sidebarTab, setSidebarTab] = useState('chats')
+  const [contactSearch, setContactSearch] = useState('')
   const [searchContact, setSearchContact] = useState('')
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
@@ -123,6 +127,8 @@ export default function StaffChat() {
   const [me, setMe] = useState(null)
   const [filePolicy, setFilePolicy] = useState({ max_size_mb: 50, ttl_hours: 48 })
   const [uploadingFile, setUploadingFile] = useState(null) // {progress, name}
+  // Slack-fundament: каналы (Task 6)
+  const [createChannelOpen, setCreateChannelOpen] = useState(false)
   const wsRef = useRef(null)
   const wsRetryRef = useRef(0)
   const messagesEndRef = useRef(null)
@@ -163,6 +169,37 @@ export default function StaffChat() {
         setMe(meRes.data)
         setRooms(roomsRes.data.rooms || [])
         setContacts(contactsRes.data)
+        // Авто-открытие DM из ?dm=<user_id> — переход из других страниц (например, «Чат» в карточке сотрудника)
+        try {
+          const sp = new URLSearchParams(window.location.search)
+          const dmId = sp.get("dm")
+          if (dmId) {
+            const { data: room } = await api.post("/staff-chat/rooms/direct", { user_id: dmId })
+            setRooms((prev) => {
+              const exists = prev.some((r) => r.id === room.id)
+              return exists ? prev.map((r) => r.id === room.id ? { ...r, ...room } : r) : [room, ...prev]
+            })
+            // Полная инициализация комнаты (как в openRoom) — иначе показывает «Выберите чат»
+            try {
+              const [{ data: details }, { data: msgs }] = await Promise.all([
+                api.get(`/staff-chat/rooms/${room.id}`),
+                api.get(`/staff-chat/rooms/${room.id}/messages`),
+              ])
+              setActiveRoomId(room.id)
+              setMembers(details.members || [])
+              setMessages(msgs.messages || [])
+              api.post(`/staff-chat/rooms/${room.id}/read`).catch(() => {})
+            } catch (loadErr) {
+              console.warn("dm room load failed", loadErr)
+              setActiveRoomId(room.id)
+            }
+            // Чистим URL чтобы при reload не открывалось повторно
+            const cleanUrl = window.location.pathname + window.location.hash
+            history.replaceState(null, "", cleanUrl)
+          }
+        } catch (err) {
+          console.warn("dm autostart failed", err)
+        }
         setFilePolicy(polRes.data)
       } catch (e) {
         console.error('staff-chat init failed:', e)
@@ -492,7 +529,18 @@ export default function StaffChat() {
       {/* SIDEBAR */}
       <aside className="sc-sidebar">
         <header className="sc-side-header">
-          <div className="sc-side-title">Чаты</div>
+          <div className="sc-side-tabs">
+            <button
+              className={'sc-side-tab' + (sidebarTab === 'chats' ? ' is-active' : '')}
+              onClick={() => setSidebarTab('chats')}
+              type="button"
+            >Чаты</button>
+            <button
+              className={'sc-side-tab' + (sidebarTab === 'contacts' ? ' is-active' : '')}
+              onClick={() => setSidebarTab('contacts')}
+              type="button"
+            >Контакты</button>
+          </div>
           <div className="sc-header-actions">
             <button className="sc-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -524,6 +572,57 @@ export default function StaffChat() {
           </div>
         </header>
 
+        {sidebarTab === 'contacts' ? (
+          <>
+            <input
+              className="sc-input sc-search sc-contact-search"
+              placeholder="Поиск сотрудника…"
+              value={contactSearch}
+              onChange={(e) => setContactSearch(e.target.value)}
+            />
+            <div className="sc-rooms">
+              {(() => {
+                const q = contactSearch.toLowerCase().trim()
+                const groups = (contacts.groups || [])
+                  .map((g) => ({
+                    ...g,
+                    users: (g.users || []).filter((u) => !q || (u.name || '').toLowerCase().includes(q)),
+                  }))
+                  .filter((g) => g.users.length > 0)
+                if (groups.length === 0) {
+                  return (
+                    <div className="sc-empty">
+                      <div className="sc-empty-icon">👥</div>
+                      <div className="sc-empty-title">{q ? 'Никого не найдено' : 'Контактов пока нет'}</div>
+                      <div className="sc-empty-sub">{q ? 'Попробуйте изменить запрос.' : 'Сотрудники тенанта появятся здесь автоматически.'}</div>
+                    </div>
+                  )
+                }
+                return groups.map((g) => (
+                  <div key={g.clinic_id || g.label} className="sc-contact-group">
+                    <div className="sc-contact-group-label">{g.label}</div>
+                    {g.users.map((u) => (
+                      <button
+                        key={u.id}
+                        className="sc-contact-row sc-contact-clickable"
+                        type="button"
+                        onClick={() => startDirectChat(u.id)}
+                        title={`Открыть чат с ${u.name}`}
+                      >
+                        <Avatar name={u.name} id={u.id} size={40} online={onlineUsers.has(u.id)} />
+                        <div className="sc-contact-body">
+                          <div className="sc-contact-name">{u.name}</div>
+                          <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
+                        </div>
+                        <span className="sc-contact-arrow">›</span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              })()}
+            </div>
+          </>
+        ) : (
         <div className="sc-rooms">
           {rooms.length === 0 && (
             <div className="sc-empty">
@@ -532,40 +631,70 @@ export default function StaffChat() {
               <div className="sc-empty-sub">Начните диалог с сотрудником сети — кнопка «+» вверху.</div>
             </div>
           )}
-          {rooms.map((r) => {
-            const isActive = r.id === activeRoomId
-            const peerId = r.type === 'direct' ? r.members.find((m) => me && m.id !== me.id)?.id : null
-            const isOnline = peerId ? onlineUsers.has(peerId) : false
+          {(() => {
+            // Slack-style split: Каналы (channel/group/broadcast) сверху, DM ниже
+            const channels = rooms.filter((r) => r.type === 'channel' || r.type === 'group' || r.type === 'broadcast')
+            const dms = rooms.filter((r) => r.type === 'direct')
+            const renderRoom = (r) => {
+              const isActive = r.id === activeRoomId
+              const peerId = r.type === 'direct' ? r.members.find((m) => me && m.id !== me.id)?.id : null
+              const isOnline = peerId ? onlineUsers.has(peerId) : false
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => openRoom(r.id)}
+                  onContextMenu={(e) => { e.preventDefault(); openRoomContextMenu(e, r) }}
+                  className={'sc-room' + (isActive ? ' is-active' : '')}
+                >
+                  <Avatar name={r.name} id={peerId || r.id} size={42} online={isOnline} />
+                  <div className="sc-room-body">
+                    <div className="sc-room-row">
+                      <span className="sc-room-name">
+                        {r.type === 'channel' && <span style={{ color: 'var(--sc-fg-3)', marginRight: 4 }}>#</span>}
+                        {r.type === 'group' && <span style={{ marginRight: 4 }}>🔒</span>}
+                        {r.name || 'Без названия'}
+                      </span>
+                      <span className="sc-room-time">
+                        {peerId && onlineUsers.has(peerId) && <span className="sc-room-online" title="В сети">●</span>}
+                        {formatTime(r.last_message_at)}
+                      </span>
+                    </div>
+                    <div className="sc-room-row">
+                      <span className="sc-room-preview">
+                        {r.last_message
+                          ? (r.last_message.deleted_at ? <em>удалено</em> :
+                              (r.last_message.body || (r.last_message.attachments?.length ? '📎 файл' : '')))
+                          : <em style={{ color: 'var(--sc-fg-3)' }}>Нет сообщений</em>}
+                      </span>
+                      {r.unread > 0 && <span className="sc-unread">{r.unread > 99 ? '99+' : r.unread}</span>}
+                    </div>
+                  </div>
+                </button>
+              )
+            }
             return (
-              <button
-                key={r.id}
-                onClick={() => openRoom(r.id)}
-                onContextMenu={(e) => { e.preventDefault(); openRoomContextMenu(e, r) }}
-                className={'sc-room' + (isActive ? ' is-active' : '')}
-              >
-                <Avatar name={r.name} id={peerId || r.id} size={42} online={isOnline} />
-                <div className="sc-room-body">
-                  <div className="sc-room-row">
-                    <span className="sc-room-name">{r.name || 'Без названия'}</span>
-                    <span className="sc-room-time">
-                      {peerId && onlineUsers.has(peerId) && <span className="sc-room-online" title="В сети">●</span>}
-                      {formatTime(r.last_message_at)}
-                    </span>
-                  </div>
-                  <div className="sc-room-row">
-                    <span className="sc-room-preview">
-                      {r.last_message
-                        ? (r.last_message.deleted_at ? <em>удалено</em> :
-                            (r.last_message.body || (r.last_message.attachments?.length ? '📎 файл' : '')))
-                        : <em style={{ color: 'var(--sc-fg-3)' }}>Нет сообщений</em>}
-                    </span>
-                    {r.unread > 0 && <span className="sc-unread">{r.unread > 99 ? '99+' : r.unread}</span>}
-                  </div>
+              <>
+                <div className="sc-sec-header">
+                  <span className="sc-sec-title">Каналы ({channels.length})</span>
+                  <button
+                    onClick={() => setCreateChannelOpen(true)}
+                    className="sc-sec-add"
+                    aria-label="Создать канал"
+                    title="Создать канал"
+                  >
+                    +
+                  </button>
                 </div>
-              </button>
+                {channels.map(renderRoom)}
+                <div className="sc-sec-header" style={{ marginTop: 8 }}>
+                  <span className="sc-sec-title">Direct messages ({dms.length})</span>
+                </div>
+                {dms.map(renderRoom)}
+              </>
             )
-          })}
+          })()}
         </div>
+        )}
       </aside>
 
       {/* CONVERSATION */}
@@ -748,6 +877,17 @@ export default function StaffChat() {
           onSubmit={createGroup}
         />
       )}
+
+      {/* CREATE CHANNEL MODAL (Slack-style) */}
+      <CreateChannelModal
+        open={createChannelOpen}
+        onClose={() => setCreateChannelOpen(false)}
+        clinicId={me?.clinic_id || null}
+        onCreated={(room) => {
+          setRooms((prev) => prev.some((x) => x.id === room.id) ? prev : [room, ...prev])
+          if (room?.id) openRoom(room.id)
+        }}
+      />
 
       {/* ADD MEMBERS MODAL */}
       {addMembersOpen && activeRoom && (
@@ -1150,6 +1290,26 @@ const STAFF_CHAT_CSS = `
   display: flex; flex-direction: column;
   overflow: hidden;
 }
+.sc-side-tabs { display: flex; gap: 4px; background: var(--sc-bg-2, #f3f5f8); border-radius: 999px; padding: 3px; }
+.sc-side-tab {
+  flex: 1; padding: 7px 14px; border: 0; background: transparent;
+  border-radius: 999px; cursor: pointer; font-weight: 600; font-size: 13px;
+  color: var(--sc-fg-3, #6b7280); transition: background 120ms, color 120ms;
+}
+.sc-side-tab.is-active {
+  background: var(--sc-surface, #ffffff); color: var(--sc-fg, #111827);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+.sc-contact-search { margin: 0 12px 8px; width: calc(100% - 24px); }
+.sc-contact-clickable {
+  width: 100%; text-align: left; border: 0; background: transparent;
+  cursor: pointer; padding: 10px 12px; border-radius: 10px;
+  display: flex; align-items: center; gap: 10px;
+  transition: background 120ms;
+}
+.sc-contact-clickable:hover { background: var(--sc-bg-2, #f3f5f8); }
+.sc-contact-arrow { margin-left: auto; color: var(--sc-fg-3, #9ca3af); font-size: 20px; }
+
 .sc-side-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 20px 14px;
@@ -1165,6 +1325,21 @@ const STAFF_CHAT_CSS = `
 }
 .sc-icon-btn:hover { background: var(--sc-accent-soft); color: var(--sc-accent); }
 .sc-rooms { flex: 1; overflow-y: auto; padding: 8px 8px 16px; }
+.sc-sec-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 10px 4px;
+}
+.sc-sec-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--sc-fg-3, #6b7280);
+}
+.sc-sec-add {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--sc-bg-2, #f3f5f8); color: var(--sc-fg-2, #374151);
+  border: 0; cursor: pointer; display: grid; place-items: center;
+  font-size: 16px; line-height: 1; transition: background 120ms;
+}
+.sc-sec-add:hover { background: var(--sc-bg-3, #e5e7eb); }
 .sc-room {
   display: flex; gap: 12px;
   width: 100%;
