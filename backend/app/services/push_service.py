@@ -117,7 +117,7 @@ async def send_push_to_phone(phone: str, title: str, body: str, data: dict | Non
         ok = await send_push(sub, title, body, data, db)
         if ok:
             count += 1
-            await db.execute(text("UPDATE push_subscriptions SET last_used = now() WHERE endpoint = :ep"), {"ep": row[0]})
+            await db.execute(text("UPDATE push_subscriptions SET last_used_at = now() WHERE endpoint = :ep"), {"ep": row[0]})
         else:
             dead.append(row[0])
     for ep in dead:
