@@ -134,7 +134,7 @@ from app.routers.admin_subscription_plans import router as admin_subscription_pl
 from app.routers.manager_subscription_cash import router as manager_subscription_cash_router
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
-from app.routers.staff_chat import router as staff_chat_router
+from app.routers.staff_chat import router as staff_chat_router, _bot_router as staff_chat_bot_router
 from app.routers.owner_bot_webhook import router as owner_bot_webhook_router
 from app.routers.chat_admin import router as chat_admin_router
 from app.routers.franchise_modules import router as franchise_modules_router
@@ -1616,6 +1616,7 @@ app.include_router(manager_subscription_cash_router)
 app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
 app.include_router(staff_chat_router)
+app.include_router(staff_chat_bot_router)
 app.include_router(owner_bot_webhook_router)
 app.include_router(chat_admin_router)
 # Workflow batch — tenant chat settings (SLA/autoclose) + CRUD message templates

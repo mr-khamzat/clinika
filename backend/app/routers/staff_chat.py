@@ -1266,3 +1266,74 @@ async def vote_poll(
     await db.commit()
     poll_dict = await svc.serialize_poll_for_message(db, poll.message_id, current_user_id=user.id)
     return {"action": action, "poll": poll_dict}
+
+
+# ── Bot/CI endpoint (sf05) ────────────────────────────────────────────────────
+
+class BotPostIn(BaseModel):
+    channel_name: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=10_000)
+    secret: str = Field(min_length=1, max_length=200)
+    tenant_slug: Optional[str] = None
+
+
+# Bot-router: использует префикс /api для совместимости с CI/мониторингом
+# (вне auth-цикла, проверка по shared secret).
+_bot_router = APIRouter(prefix="/api/staff-chat", tags=["staff-chat-bot"])
+
+
+def _check_bot_secret(secret: str) -> None:
+    expected = os.environ.get("STAFF_CHAT_BOT_SECRET", "").strip()
+    if not expected:
+        raise HTTPException(503, "Bot endpoint не настроен (STAFF_CHAT_BOT_SECRET)")
+    if not secret or secret != expected:
+        raise HTTPException(401, "Неверный bot secret")
+
+
+@_bot_router.post("/bot/post")
+async def bot_post_message(
+    body: BotPostIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Постинг сообщения от CI/мониторинга в канал по имени.
+
+    Аутентификация: shared secret в теле запроса (STAFF_CHAT_BOT_SECRET env).
+    Поиск канала: по точному имени (StaffChatRoom.name). Если задан
+    tenant_slug — ограничиваем поиск этим тенантом.
+    """
+    _check_bot_secret(body.secret)
+    # Резолв тенанта (если задан slug)
+    tenant_filter = None
+    if body.tenant_slug:
+        from app.models.tenant import Tenant
+        rt = await db.execute(
+            select(Tenant.id).where(Tenant.slug == body.tenant_slug)
+        )
+        tid = rt.scalar_one_or_none()
+        if not tid:
+            raise HTTPException(404, "Тенант не найден")
+        tenant_filter = tid
+    # Ищем комнату по имени
+    q = select(StaffChatRoom).where(StaffChatRoom.name == body.channel_name)
+    if tenant_filter is not None:
+        q = q.where(StaffChatRoom.tenant_id == tenant_filter)
+    rr = await db.execute(q.limit(1))
+    room = rr.scalar_one_or_none()
+    if not room:
+        raise HTTPException(404, "Канал не найден")
+    # Постим сообщение от имени bot — sender_id = NULL (system).
+    msg = StaffChatMessage(
+        room_id=room.id,
+        sender_id=None,
+        body=(body.body or "").strip(),
+    )
+    db.add(msg)
+    room.last_message_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(msg)
+    return {
+        "message_id": str(msg.id),
+        "room_id": str(room.id),
+        "channel_name": room.name,
+        "created_at": msg.created_at.isoformat(),
+    }
