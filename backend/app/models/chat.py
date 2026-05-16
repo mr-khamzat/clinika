@@ -66,6 +66,14 @@ class ChatThread(Base):
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow,
         nullable=False,
     )
+    # Quick Wins: индикатор "печатает..." (последний пинг от каждой стороны).
+    # Фронт показывает индикатор если timestamp < 7 сек назад.
+    last_typing_at_clinic: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_typing_at_patient: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class ChatMessage(Base):

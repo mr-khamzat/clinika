@@ -186,6 +186,31 @@ async def post_message(
     return cs.serialize_message(msg)
 
 
+@router.post("/threads/{thread_id}/typing")
+async def typing_indicator(
+    thread_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins: пинг "клиника печатает...".
+
+    Ставит ChatThread.last_typing_at_clinic = now(). Фронт пингует раз в
+    ~3 сек пока пользователь активно набирает. Другая сторона показывает
+    индикатор если timestamp моложе 7 сек.
+    """
+    _ensure_clinic_role(user)
+    allowed = await _user_clinic_ids(db, user)
+    th = await cs.get_thread(db, thread_id)
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+    from datetime import datetime as _dt
+    th.last_typing_at_clinic = _dt.utcnow()
+    await db.commit()
+    return {"ok": True, "last_typing_at_clinic": th.last_typing_at_clinic.isoformat()}
+
+
 @router.post("/threads/{thread_id}/assign")
 async def assign_doctor(
     thread_id: uuid.UUID,

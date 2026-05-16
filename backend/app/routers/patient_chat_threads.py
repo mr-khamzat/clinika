@@ -211,3 +211,26 @@ async def mark_read(
     await cs.mark_read_for_patient(db, th)
     await db.commit()
     return {"ok": True, "unread_for_patient": 0}
+
+
+@router.post("/patient/chat/threads/{thread_id}/typing")
+async def patient_typing(
+    thread_id: uuid.UUID,
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_patient_session: Optional[str] = Header(None, alias="X-Patient-Session"),
+    session_token: Optional[str] = Query(None),
+    t: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins: пинг "пациент печатает..." (см. clinic_chat.typing_indicator)."""
+    from datetime import datetime as _dt
+    sess = await _get_session(db, request, authorization, x_patient_session,
+                              session_token or t)
+    acc = await _account(db, sess)
+    th = await cs.get_thread(db, thread_id)
+    if not th or th.patient_id != acc.id:
+        raise HTTPException(404, "Thread not found")
+    th.last_typing_at_patient = _dt.utcnow()
+    await db.commit()
+    return {"ok": True, "last_typing_at_patient": th.last_typing_at_patient.isoformat()}

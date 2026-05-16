@@ -42,6 +42,15 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
         "updated_at": t.updated_at.isoformat() if t.updated_at else None,
         "last_message_preview": (last_msg.body[:140] if last_msg else None),
         "last_message_sender": (last_msg.sender_type if last_msg else None),
+        # Quick Wins: typing-индикатор (последний пинг с каждой стороны).
+        "last_typing_at_clinic": (
+            t.last_typing_at_clinic.isoformat()
+            if getattr(t, "last_typing_at_clinic", None) else None
+        ),
+        "last_typing_at_patient": (
+            t.last_typing_at_patient.isoformat()
+            if getattr(t, "last_typing_at_patient", None) else None
+        ),
     }
 
 
