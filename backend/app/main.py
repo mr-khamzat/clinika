@@ -1046,6 +1046,12 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(ads_attribution_job, 'cron', hour=4, minute=30, id='ads_attribution', replace_existing=True)
     scheduler.add_job(ads_health_pause_job, 'cron', hour=4, minute=0, id='ads_health_pause', replace_existing=True)
     scheduler.add_job(cleanup_staff_chat_files_job, 'interval', minutes=30, id='staff_chat_files_cleanup', replace_existing=True)
+    # Workflow batch — SLA-checker + autoclose чатов пациент↔клиника (раз в минуту)
+    from app.services.chat_sla_job import chat_sla_checker_job
+    scheduler.add_job(
+        chat_sla_checker_job, 'interval', seconds=60,
+        id='chat_sla_checker', replace_existing=True, max_instances=1,
+    )
     scheduler.add_job(tg_owner_bot_poll_job, 'interval', seconds=2, id='tg_owner_bot_poll', max_instances=1, replace_existing=True)
     # SLA-напоминания (Этап 9 ROADMAP) — пациенту за 3 дня и автору за 1 день
     scheduler.add_job(referral_reminder_patient_job, 'interval', hours=1, id='referral_reminder_patient', replace_existing=True)
