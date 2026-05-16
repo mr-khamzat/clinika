@@ -88,7 +88,7 @@ export default function Testimonial() {
               flexShrink: 0,
             }}
           >
-            ХГ
+            КС
           </div>
           <div style={{ textAlign: 'left' }}>
             <div
@@ -99,13 +99,13 @@ export default function Testimonial() {
                 marginBottom: 2,
               }}
             >
-              Хамзат Гадаборшев
+              Основатель сети
             </div>
             <div style={{ fontSize: 14, color: 'var(--fg-2)' }}>
-              Основатель сети «КлиникСеть»
+              «КлиникСеть» · многопрофильная сеть
             </div>
             <div style={{ fontSize: 12, color: 'var(--fg-3)', marginTop: 4 }}>
-              5 клиник · 50+ врачей · Северный Кавказ
+              5 клиник · 50+ врачей
             </div>
           </div>
         </div>
