@@ -16,7 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    String, Integer, DateTime, ForeignKey, Text,
+    String, Integer, DateTime, ForeignKey, Text, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -100,4 +100,38 @@ class ChatMessage(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False, index=True
+    )
+
+
+class ChatMessageReaction(Base):
+    """Quick Wins #2: реакция на сообщение (emoji-тег).
+
+    Юзер (пациент или сотрудник) может поставить любое количество
+    разных emoji на одно сообщение, но не дублировать один и тот же.
+    UNIQUE (message_id, user_type, user_id, emoji).
+    """
+    __tablename__ = "chat_message_reactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "user_type", "user_id", "emoji",
+            name="uq_chat_msg_reaction",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="CASCADE"),
+        nullable=False, index=True,
+    )
+    # 'patient' | 'staff'
+    user_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False
+    )
+    emoji: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )

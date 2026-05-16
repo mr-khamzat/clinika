@@ -153,6 +153,9 @@ from app.models.inventory import (
     InventoryMovement,
     InventoryCategory,
     InventoryMovementType,
+    # Этапы 2-3 INVENTORY_COST_PLAN
+    ServiceConsumable,
+    AppointmentCost,
 )
 
 # Module Monitoring System — health-state каждого платного модуля per-tenant
@@ -186,7 +189,12 @@ from app.models.loyalty_ext import LoyaltyAccountExt, LoyaltyEvent, LoyaltyClaim
 # Глава 9 — Подписка «Здоровье+», асинхронный чат, iCal, document storage
 from app.models.subscription import PatientSubscription, PatientSubscriptionHistory
 from app.models.subscription_plan import SubscriptionPlan
-from app.models.chat import ChatThread, ChatMessage
+# discountrules01 — категорные скидки тарифов подписки
+from app.models.subscription_plan_discount import SubscriptionPlanDiscount
+# miswebhook01 — МИС-вебхуки на события подписки
+from app.models.tenant_mis_subscription_webhook import TenantMisSubscriptionWebhook
+from app.models.pending_subscription import PendingSubscriptionRequest
+from app.models.chat import ChatThread, ChatMessage, ChatMessageReaction
 from app.models.calendar import PatientCalendarToken
 
 # Глава 10 — Интеграции (лаборатория / wellness партнёрки / партнёрская программа агрегаторам)
@@ -198,3 +206,12 @@ from app.models.staff_chat import StaffChatRoom, StaffChatMember, StaffChatMessa
 from app.models.chat_global_settings import ChatGlobalSettings
 
 from app.models.franchise_module_grant import FranchiseModuleGrant, FranchiseInternalAct
+
+# Маркетинг и атрибуция (DirectorMarketing — ROI/sources)
+from app.models.marketing import MarketingChannel, AdSpendEntry, PatientAttribution
+
+# Notification preferences — per-user отключение категорий уведомлений
+from app.models.notification_preference import NotificationPreference
+
+# Platform announcements (super_admin → всем сотрудникам всех тенантов)
+from app.models.platform_announcement import PlatformAnnouncement

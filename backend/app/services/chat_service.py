@@ -54,7 +54,7 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
     }
 
 
-def serialize_message(m: ChatMessage) -> dict:
+def serialize_message(m: ChatMessage, reactions: list[dict] | None = None) -> dict:
     return {
         "id": str(m.id),
         "thread_id": str(m.thread_id),
@@ -64,7 +64,33 @@ def serialize_message(m: ChatMessage) -> dict:
         "attachments": m.attachments or [],
         "read_at": m.read_at.isoformat() if m.read_at else None,
         "created_at": m.created_at.isoformat() if m.created_at else None,
+        # Quick Wins #2: реакции [{emoji, count, by_me}]. Без БД — []; для
+        # обогащённого вывода используется serialize_message_with_reactions().
+        "reactions": reactions or [],
     }
+
+
+async def serialize_message_with_reactions(
+    m: ChatMessage, db: AsyncSession, me_user_id: uuid.UUID | None = None,
+) -> dict:
+    """Сериализует сообщение + агрегирует реакции в [{emoji, count, by_me}].
+
+    by_me=True если текущий пользователь (me_user_id) поставил эту реакцию.
+    """
+    from app.models.chat import ChatMessageReaction
+    r = await db.execute(
+        select(ChatMessageReaction).where(ChatMessageReaction.message_id == m.id)
+    )
+    rows = list(r.scalars().all())
+    by_emoji: dict[str, dict] = {}
+    for row in rows:
+        bucket = by_emoji.setdefault(
+            row.emoji, {"emoji": row.emoji, "count": 0, "by_me": False}
+        )
+        bucket["count"] += 1
+        if me_user_id is not None and row.user_id == me_user_id:
+            bucket["by_me"] = True
+    return serialize_message(m, reactions=list(by_emoji.values()))
 
 
 async def list_patient_threads(

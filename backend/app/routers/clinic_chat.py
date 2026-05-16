@@ -92,6 +92,11 @@ class AssignIn(BaseModel):
     doctor_id: uuid.UUID
 
 
+class ReactionIn(BaseModel):
+    # короткий emoji-тег: 'thumbs_up', 'heart', 'laugh', ... или сам unicode
+    emoji: str = Field(min_length=1, max_length=16)
+
+
 # ── Endpoints ──────────────────────────────────────────────────────────────
 
 @router.get("/threads")
@@ -236,6 +241,59 @@ async def assign_doctor(
     th.assigned_doctor_id = body.doctor_id
     await db.commit()
     return cs.serialize_thread(th)
+
+
+@router.post("/messages/{message_id}/reactions")
+async def toggle_reaction(
+    message_id: uuid.UUID,
+    body: ReactionIn,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins #2: toggle-реакция на сообщение.
+
+    Если у текущего user уже стоит этот emoji — удаляет (added=False);
+    иначе добавляет строку (added=True).
+    """
+    _ensure_clinic_role(user)
+    allowed = await _user_clinic_ids(db, user)
+    # Загружаем сообщение и проверяем доступ через тред
+    from app.models.chat import ChatMessage, ChatMessageReaction
+    rm = await db.execute(select(ChatMessage).where(ChatMessage.id == message_id))
+    msg = rm.scalar_one_or_none()
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    th = await cs.get_thread(db, msg.thread_id)
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+
+    # Ищем существующую реакцию того же user+emoji
+    rr = await db.execute(
+        select(ChatMessageReaction).where(
+            ChatMessageReaction.message_id == message_id,
+            ChatMessageReaction.user_type == "staff",
+            ChatMessageReaction.user_id == user.id,
+            ChatMessageReaction.emoji == body.emoji,
+        )
+    )
+    existing = rr.scalar_one_or_none()
+    if existing is not None:
+        await db.delete(existing)
+        await db.commit()
+        return {"added": False, "emoji": body.emoji, "message_id": str(message_id)}
+
+    new = ChatMessageReaction(
+        id=uuid.uuid4(),
+        message_id=message_id,
+        user_type="staff",
+        user_id=user.id,
+        emoji=body.emoji,
+    )
+    db.add(new)
+    await db.commit()
+    return {"added": True, "emoji": body.emoji, "message_id": str(message_id)}
 
 
 @router.post("/threads/{thread_id}/close")

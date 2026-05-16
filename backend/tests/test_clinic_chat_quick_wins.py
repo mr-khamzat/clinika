@@ -194,3 +194,114 @@ async def test_patient_typing_endpoint_updates_timestamp():
     assert res["ok"] is True
     assert th.last_typing_at_patient is not None
     assert th.last_typing_at_patient.replace(tzinfo=None) >= before - timedelta(seconds=2)
+
+
+# ─── 2. Reactions ────────────────────────────────────────────────────────────
+
+
+def test_reaction_model_exists():
+    """ChatMessageReaction модель импортируется и имеет ожидаемые колонки."""
+    from app.models.chat import ChatMessageReaction
+    cols = {c.name for c in ChatMessageReaction.__table__.columns}
+    assert {"id", "message_id", "user_type", "user_id", "emoji", "created_at"} <= cols
+    assert ChatMessageReaction.__tablename__ == "chat_message_reactions"
+
+
+def test_serialize_message_reactions_default_empty():
+    """serialize_message(m) без db даёт reactions=[] (back-compat)."""
+    from app.services.chat_service import serialize_message
+    th = _make_thread_obj()
+    msg = _make_msg_obj(th)
+    out = serialize_message(msg)
+    assert "reactions" in out
+    assert out["reactions"] == []
+
+
+@pytest.mark.asyncio
+async def test_serialize_message_with_db_aggregates():
+    """serialize_message_with_reactions() агрегирует {emoji,count,by_me}."""
+    from app.services.chat_service import serialize_message_with_reactions
+    th = _make_thread_obj()
+    msg = _make_msg_obj(th)
+    me = uuid.uuid4()
+    other = uuid.uuid4()
+
+    from app.models.chat import ChatMessageReaction
+    reactions = [
+        ChatMessageReaction(
+            id=uuid.uuid4(), message_id=msg.id, user_type="staff",
+            user_id=me, emoji="thumbs_up",
+        ),
+        ChatMessageReaction(
+            id=uuid.uuid4(), message_id=msg.id, user_type="staff",
+            user_id=other, emoji="thumbs_up",
+        ),
+        ChatMessageReaction(
+            id=uuid.uuid4(), message_id=msg.id, user_type="patient",
+            user_id=other, emoji="heart",
+        ),
+    ]
+
+    db = AsyncMock()
+    r = MagicMock()
+    sc = MagicMock()
+    sc.all.return_value = reactions
+    r.scalars.return_value = sc
+    db.execute = AsyncMock(return_value=r)
+
+    out = await serialize_message_with_reactions(msg, db=db, me_user_id=me)
+    emoji_map = {x["emoji"]: x for x in out["reactions"]}
+    assert emoji_map["thumbs_up"]["count"] == 2
+    assert emoji_map["thumbs_up"]["by_me"] is True
+    assert emoji_map["heart"]["count"] == 1
+    assert emoji_map["heart"]["by_me"] is False
+
+
+@pytest.mark.asyncio
+async def test_clinic_reaction_toggle_adds_then_removes():
+    """POST /clinic/chat/messages/{id}/reactions: первый раз — добавил, второй — удалил."""
+    from app.routers import clinic_chat as cc
+    from app.models.chat import ChatMessageReaction
+
+    th = _make_thread_obj()
+    msg = _make_msg_obj(th)
+    fake = _staff_user(th)
+
+    # ── Сценарий 1: реакция не существует → добавляется.
+    db1 = AsyncMock()
+    # _user_clinic_ids
+    r_ids = MagicMock(); r_ids.all.return_value = [(th.clinic_id,)]
+    # get message
+    r_msg = MagicMock(); r_msg.scalar_one_or_none.return_value = msg
+    # get thread (через cs.get_thread)
+    r_th = MagicMock(); r_th.scalar_one_or_none.return_value = th
+    # find existing reaction → None
+    r_react = MagicMock(); r_react.scalar_one_or_none.return_value = None
+    db1.execute = AsyncMock(side_effect=[r_ids, r_msg, r_th, r_react])
+    db1.add = MagicMock()
+    db1.commit = AsyncMock()
+    db1.flush = AsyncMock()
+
+    body = cc.ReactionIn(emoji="thumbs_up")
+    r1 = await cc.toggle_reaction(message_id=msg.id, body=body, user=fake, db=db1)
+    assert r1["added"] is True
+    assert r1["emoji"] == "thumbs_up"
+    db1.add.assert_called()  # реакция добавлена
+
+    # ── Сценарий 2: реакция уже существует → удаляется.
+    existing = ChatMessageReaction(
+        id=uuid.uuid4(), message_id=msg.id, user_type="staff",
+        user_id=fake.id, emoji="thumbs_up",
+    )
+    db2 = AsyncMock()
+    r_ids2 = MagicMock(); r_ids2.all.return_value = [(th.clinic_id,)]
+    r_msg2 = MagicMock(); r_msg2.scalar_one_or_none.return_value = msg
+    r_th2 = MagicMock(); r_th2.scalar_one_or_none.return_value = th
+    r_react2 = MagicMock(); r_react2.scalar_one_or_none.return_value = existing
+    db2.execute = AsyncMock(side_effect=[r_ids2, r_msg2, r_th2, r_react2])
+    db2.delete = AsyncMock()
+    db2.commit = AsyncMock()
+
+    r2 = await cc.toggle_reaction(message_id=msg.id, body=body, user=fake, db=db2)
+    assert r2["added"] is False
+    db2.delete.assert_awaited_once_with(existing)
