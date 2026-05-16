@@ -74,6 +74,11 @@ class ChatThread(Base):
     last_typing_at_patient: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Quick Wins #3: закрепление треда в списке клиники.
+    # NULL = не запиннен. Запиннятые сортируются первыми (pinned_at DESC).
+    pinned_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+    )
 
 
 class ChatMessage(Base):

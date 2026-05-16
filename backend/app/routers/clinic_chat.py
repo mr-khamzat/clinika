@@ -243,6 +243,37 @@ async def assign_doctor(
     return cs.serialize_thread(th)
 
 
+@router.post("/threads/{thread_id}/pin")
+async def pin_thread(
+    thread_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quick Wins #3: toggle pin треда.
+
+    Если уже запиннен — снимает (pinned_at = NULL).
+    Иначе ставит pinned_at = now().
+    """
+    _ensure_clinic_role(user)
+    allowed = await _user_clinic_ids(db, user)
+    th = await cs.get_thread(db, thread_id)
+    if not th:
+        raise HTTPException(404, "Thread not found")
+    if th.clinic_id not in allowed:
+        raise HTTPException(403, "Нет доступа к этому треду")
+    from datetime import datetime as _dt
+    if th.pinned_at is None:
+        th.pinned_at = _dt.utcnow()
+    else:
+        th.pinned_at = None
+    await db.commit()
+    return {
+        "is_pinned": th.pinned_at is not None,
+        "pinned_at": th.pinned_at.isoformat() if th.pinned_at else None,
+        "thread_id": str(thread_id),
+    }
+
+
 @router.post("/messages/{message_id}/reactions")
 async def toggle_reaction(
     message_id: uuid.UUID,

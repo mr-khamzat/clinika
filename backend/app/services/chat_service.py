@@ -51,6 +51,11 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
             t.last_typing_at_patient.isoformat()
             if getattr(t, "last_typing_at_patient", None) else None
         ),
+        # Quick Wins #3: pin-треды (закреплены в списке клиники).
+        "is_pinned": bool(getattr(t, "pinned_at", None)),
+        "pinned_at": (
+            t.pinned_at.isoformat() if getattr(t, "pinned_at", None) else None
+        ),
     }
 
 
@@ -113,8 +118,13 @@ async def list_clinic_threads(
     q = select(ChatThread).where(ChatThread.clinic_id.in_(list(clinic_ids)))
     if status:
         q = q.where(ChatThread.status == status)
-    q = q.order_by(ChatThread.last_message_at.desc().nullslast(),
-                   ChatThread.created_at.desc())
+    # Quick Wins #3: запиннятые треды (pinned_at NOT NULL) — наверху списка,
+    # внутри запиннятых — pinned_at DESC, потом обычная сортировка.
+    q = q.order_by(
+        ChatThread.pinned_at.desc().nullslast(),
+        ChatThread.last_message_at.desc().nullslast(),
+        ChatThread.created_at.desc(),
+    )
     r = await db.execute(q)
     return list(r.scalars().all())
 

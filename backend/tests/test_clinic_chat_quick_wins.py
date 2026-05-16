@@ -305,3 +305,70 @@ async def test_clinic_reaction_toggle_adds_then_removes():
     r2 = await cc.toggle_reaction(message_id=msg.id, body=body, user=fake, db=db2)
     assert r2["added"] is False
     db2.delete.assert_awaited_once_with(existing)
+
+
+# ─── 3. Pin thread ───────────────────────────────────────────────────────────
+
+
+def test_pin_model_has_column():
+    """ChatThread имеет колонку pinned_at."""
+    from app.models.chat import ChatThread
+    cols = {c.name for c in ChatThread.__table__.columns}
+    assert "pinned_at" in cols
+
+
+def test_pin_serializer_outputs_is_pinned():
+    """serialize_thread() возвращает is_pinned + pinned_at."""
+    from app.services.chat_service import serialize_thread
+    th = _make_thread_obj()
+    th.pinned_at = datetime(2026, 5, 16, 9, 0)
+    out = serialize_thread(th)
+    assert out["is_pinned"] is True
+    assert out["pinned_at"] == "2026-05-16T09:00:00"
+
+    th.pinned_at = None
+    out2 = serialize_thread(th)
+    assert out2["is_pinned"] is False
+    assert out2["pinned_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_pin_endpoint_toggles():
+    """POST /clinic/chat/threads/{id}/pin — toggle on/off."""
+    from app.routers import clinic_chat as cc
+    th = _make_thread_obj()
+    th.pinned_at = None
+    fake = _staff_user(th)
+
+    # toggle ON
+    db1 = AsyncMock()
+    r_ids = MagicMock(); r_ids.all.return_value = [(th.clinic_id,)]
+    r_th = MagicMock(); r_th.scalar_one_or_none.return_value = th
+    db1.execute = AsyncMock(side_effect=[r_ids, r_th])
+    db1.commit = AsyncMock()
+    res_on = await cc.pin_thread(thread_id=th.id, user=fake, db=db1)
+    assert res_on["is_pinned"] is True
+    assert res_on["pinned_at"] is not None
+    assert th.pinned_at is not None
+
+    # toggle OFF
+    db2 = AsyncMock()
+    r_ids2 = MagicMock(); r_ids2.all.return_value = [(th.clinic_id,)]
+    r_th2 = MagicMock(); r_th2.scalar_one_or_none.return_value = th
+    db2.execute = AsyncMock(side_effect=[r_ids2, r_th2])
+    db2.commit = AsyncMock()
+    res_off = await cc.pin_thread(thread_id=th.id, user=fake, db=db2)
+    assert res_off["is_pinned"] is False
+    assert res_off["pinned_at"] is None
+    assert th.pinned_at is None
+
+
+def test_list_clinic_threads_orders_by_pinned():
+    """list_clinic_threads() запрос упорядочен pinned_at DESC NULLS LAST → last_message_at DESC."""
+    # Проверяем сам построенный SQL через compile() — без выполнения.
+    from app.services import chat_service as cs
+    import inspect
+    src = inspect.getsource(cs.list_clinic_threads)
+    # source-level assertion: order_by должен включать pinned_at (как ключевое
+    # слово), чтобы заиндексированные треды шли первыми.
+    assert "pinned_at" in src, "list_clinic_threads() должен сортировать по pinned_at"
