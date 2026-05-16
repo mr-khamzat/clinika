@@ -137,6 +137,8 @@ export default function StaffChat() {
   const [unreadMentions, setUnreadMentions] = useState({}) // {room_id: count}
   const [mentionQuery, setMentionQuery] = useState(null)
   const [reactPickerFor, setReactPickerFor] = useState(null) // id сообщения с открытым picker'ом
+  // Threads (reply): {id, body_preview, sender_name}
+  const [replyingTo, setReplyingTo] = useState(null)
   const wsRef = useRef(null)
   const wsRetryRef = useRef(0)
   const messagesEndRef = useRef(null)
@@ -550,10 +552,11 @@ export default function StaffChat() {
     const body = draft.trim()
     if (!body && !attachments) return
     try {
-      const { data: msg } = await api.post(`/staff-chat/rooms/${activeRoomId}/messages`, {
-        body, attachments,
-      })
+      const payload = { body, attachments }
+      if (replyingTo?.id) payload.reply_to_id = replyingTo.id
+      const { data: msg } = await api.post(`/staff-chat/rooms/${activeRoomId}/messages`, payload)
       setDraft('')
+      setReplyingTo(null)
       // Сообщение вернётся также через WS, но для мгновенного отклика — добавляем сразу
       setMessages((prev) => prev.some((x) => x.id === msg.id) ? prev : [...prev, msg])
       scrollToBottom()
@@ -561,6 +564,19 @@ export default function StaffChat() {
     } catch (e) {
       alert('Не удалось отправить: ' + (e?.response?.data?.detail || e.message))
     }
+  }
+
+  // ── Прокрутка к конкретному сообщению (для thread-цитат) ──────────────────
+  function scrollToMessage(msgId) {
+    if (!msgId) return
+    requestAnimationFrame(() => {
+      const el = document.querySelector(`[data-msg-id="${msgId}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('sc-msg-highlight')
+        setTimeout(() => el.classList.remove('sc-msg-highlight'), 1800)
+      }
+    })
   }
 
   // ── Загрузка файла + отправка ────────────────────────────────────────────
@@ -877,7 +893,7 @@ export default function StaffChat() {
                 const sender = members.find((x) => x.id === m.sender_id)
                 const showSender = !mine && (idx === 0 || messages[idx - 1].sender_id !== m.sender_id)
                 return (
-                  <div key={m.id} className={'sc-msg-row' + (mine ? ' is-mine' : '')}>
+                  <div key={m.id} data-msg-id={m.id} className={'sc-msg-row' + (mine ? ' is-mine' : '')}>
                     {!mine && (
                       <div className="sc-msg-avatar">
                         {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} /> : <div style={{ width: 32 }} />}
@@ -889,6 +905,22 @@ export default function StaffChat() {
                         <div className="sc-msg-pin-badge" title="Закреплено">
                           <span style={{ fontSize: 11, color: '#B45309', fontWeight: 700 }}>📌 закреплено</span>
                         </div>
+                      )}
+                      {/* Цитата ответа (thread) — серая полоса сверху, клик ведёт к оригиналу */}
+                      {m.reply_to && (
+                        <button
+                          type="button"
+                          className="sc-msg-quote"
+                          onClick={(e) => { e.stopPropagation(); scrollToMessage(m.reply_to.id || m.reply_to_id) }}
+                          title="Перейти к оригиналу"
+                        >
+                          <span className="sc-msg-quote-author">
+                            {m.reply_to.sender_name || members.find((x) => x.id === m.reply_to.sender_id)?.name || 'Сотрудник'}
+                          </span>
+                          <span className="sc-msg-quote-body">
+                            {(m.reply_to.body_preview || m.reply_to.body || '📎 файл').slice(0, 120)}
+                          </span>
+                        </button>
                       )}
                       {m.deleted_at ? (
                         <div className="sc-msg-deleted"><em>сообщение удалено</em></div>
@@ -942,6 +974,26 @@ export default function StaffChat() {
                           >
                             <span className="material-symbols-outlined" style={{ fontSize: 14, verticalAlign: 'middle' }}>add_reaction</span>
                             {!(m.reactions || []).length && <span style={{ fontSize: 12, marginLeft: 4 }}>+</span>}
+                          </button>
+                          {/* Кнопка «Ответить» — открывает thread reply preview над composer */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setReplyingTo({
+                                id: m.id,
+                                body_preview: (m.body || (m.attachments?.length ? '📎 файл' : '')).slice(0, 140),
+                                sender_name: sender?.name || (mine ? 'Вы' : 'Сотрудник'),
+                              })
+                              requestAnimationFrame(() => composerRef.current?.focus())
+                            }}
+                            className="sc-reaction-add sc-reply-btn"
+                            title="Ответить"
+                            aria-label="Ответить"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polyline points="9 17 4 12 9 7"/>
+                              <path d="M20 18v-2a4 4 0 00-4-4H4"/>
+                            </svg>
                           </button>
                           {reactPickerFor === m.id && (
                             <>
@@ -998,6 +1050,22 @@ export default function StaffChat() {
               {uploadingFile && (
                 <div className="sc-upload-bar">
                   Загрузка {uploadingFile.name} — {uploadingFile.progress}%
+                </div>
+              )}
+              {replyingTo && (
+                <div className="sc-reply-preview">
+                  <div className="sc-reply-preview-bar" />
+                  <div className="sc-reply-preview-body">
+                    <div className="sc-reply-preview-author">↩ Ответ: {replyingTo.sender_name}</div>
+                    <div className="sc-reply-preview-text">{replyingTo.body_preview}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="sc-reply-preview-close"
+                    onClick={() => setReplyingTo(null)}
+                    title="Отменить ответ"
+                    aria-label="Отменить ответ"
+                  >×</button>
                 </div>
               )}
               <div className="sc-composer-row">
@@ -2029,6 +2097,84 @@ const STAFF_CHAT_CSS = `
   font-size: 10px;
   margin-right: 4px;
   vertical-align: middle;
+}
+
+/* Threads (reply quote) */
+.sc-msg-quote {
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: rgba(15,23,42,.05);
+  border-left: 3px solid var(--sc-accent, #0097A7);
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border-top: 0; border-right: 0; border-bottom: 0;
+  transition: background 120ms;
+}
+.sc-msg-quote:hover { background: rgba(15,23,42,.09); }
+.sc-msg-bubble.is-mine .sc-msg-quote {
+  background: rgba(255,255,255,.18);
+  border-left-color: rgba(255,255,255,.6);
+}
+.sc-msg-bubble.is-mine .sc-msg-quote:hover { background: rgba(255,255,255,.28); }
+.sc-msg-quote-author {
+  font-size: 11.5px; font-weight: 700;
+  color: var(--sc-accent, #0097A7);
+}
+.sc-msg-bubble.is-mine .sc-msg-quote-author { color: rgba(255,255,255,.95); }
+.sc-msg-quote-body {
+  font-size: 12.5px;
+  color: var(--sc-fg-2, #374151);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.sc-msg-bubble.is-mine .sc-msg-quote-body { color: rgba(255,255,255,.88); }
+
+.sc-reply-btn { margin-left: 4px; }
+
+/* Reply preview над composer */
+.sc-reply-preview {
+  display: flex; gap: 10px; align-items: stretch;
+  padding: 8px 12px;
+  background: var(--sc-bg, #f6f6f8);
+  border: 1px solid var(--sc-border, rgba(0,0,0,.08));
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.sc-reply-preview-bar {
+  width: 3px; flex-shrink: 0;
+  background: var(--sc-accent, #0097A7);
+  border-radius: 2px;
+}
+.sc-reply-preview-body { flex: 1; min-width: 0; }
+.sc-reply-preview-author {
+  font-size: 12px; font-weight: 700;
+  color: var(--sc-accent, #0097A7);
+}
+.sc-reply-preview-text {
+  font-size: 12.5px; color: var(--sc-fg-2, #374151);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 2px;
+}
+.sc-reply-preview-close {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--sc-fg-3, #6b7280); font-size: 20px;
+  width: 28px; height: 28px; line-height: 1;
+  border-radius: 8px; align-self: center;
+}
+.sc-reply-preview-close:hover { background: var(--sc-bg-2, #e5e7eb); }
+
+/* Highlight: подсветка сообщения после scroll-к-цитате */
+@keyframes scMsgHighlight {
+  0% { background-color: rgba(245, 158, 11, 0.22); }
+  100% { background-color: transparent; }
+}
+.sc-msg-highlight .sc-msg-bubble {
+  animation: scMsgHighlight 1.6s ease-out;
 }
 
 /* Mobile */
