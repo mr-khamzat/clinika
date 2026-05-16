@@ -23,6 +23,8 @@ import { useToast } from '../design'
 import MessageBubble from '../components/chat/MessageBubble'
 import ThreadListItem from '../components/chat/ThreadListItem'
 import PatientContextPanel from '../components/chat/PatientContextPanel'
+import ReassignModal from '../components/chat/ReassignModal'
+import TemplateAutocomplete from '../components/chat/TemplateAutocomplete'
 import useChatSoundNotification from '../hooks/useChatSoundNotification'
 
 const POLL_MS = 10_000
@@ -167,6 +169,8 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
   const [sending, setSending] = useState(false)
   const [showListMobile, setShowListMobile] = useState(true)
   const [assignOpen, setAssignOpen] = useState(false)
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [tplQuery, setTplQuery] = useState(null)                 // null = неактивен, '' = открыт пустой, иначе текст после '/'
   const [showPatientCard, setShowPatientCard] = useState(false)  // mobile drawer карточки пациента
   const [labelMenuOpen, setLabelMenuOpen] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -371,11 +375,16 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
 
   // ── Auto-resize + typing-emit ────────────────────────────────────────────
   const onDraftChange = (e) => {
-    setDraft(e.target.value)
+    const v = e.target.value
+    setDraft(v)
     const ta = e.target
     ta.style.height = 'auto'
     ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
-    if (e.target.value.trim().length > 0) emitTyping()
+    if (v.trim().length > 0) emitTyping()
+    // Триггер шаблонов: если строка начинается с / — открываем picker
+    const m = v.match(/^\/(\S*)$/)
+    if (m) setTplQuery(m[1])
+    else setTplQuery(null)
   }
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -577,6 +586,17 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                         />
                       )}
                       <span className="truncate">{active?.thread?.patient_name || active?.thread?.patient_phone || 'Пациент'}</span>
+                      {active?.thread?.sla_breached_level && (
+                        <span className="px-2 py-1 rounded-md inline-flex items-center gap-1 flex-shrink-0"
+                              style={{
+                                background: '#fee2e2', color: '#991b1b',
+                                fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em',
+                              }}
+                              title={`SLA нарушен — эскалирован до ${active.thread.sla_breached_level}`}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>warning</span>
+                          SLA: {active.thread.sla_breached_level.toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <div className="truncate" style={{ fontSize: 11.5, color: 'var(--fg-3, #94a3b8)' }}>
                       {(() => {
@@ -712,6 +732,14 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                       <span className="material-symbols-outlined" style={{ fontSize: 20 }}>person_add</span>
                     </button>
                   )}
+                  {canAssign && active?.thread?.status !== 'closed' && (
+                    <button onClick={() => setReassignOpen(true)}
+                      className="grid place-items-center"
+                      style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                      title="Передать тред">
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>swap_horiz</span>
+                    </button>
+                  )}
                   {canClose && active?.thread?.status !== 'closed' && (
                     <button
                       onClick={doClose}
@@ -760,7 +788,17 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                     Тред закрыт
                   </div>
                 ) : (
-                  <div className="px-2 py-2" style={{ borderTop: '1px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)' }}>
+                  <div className="px-2 py-2" style={{ borderTop: '1px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)', position: 'relative' }}>
+                    <TemplateAutocomplete
+                      query={tplQuery}
+                      onPick={async (t) => {
+                        try { const r = await api.post(`/chat/templates/${t.id}/use`); setDraft(r.data?.body || t.body) }
+                        catch { setDraft(t.body) }
+                        setTplQuery(null)
+                        setTimeout(() => textareaRef.current?.focus(), 30)
+                      }}
+                      onClose={() => setTplQuery(null)}
+                    />
                     <div className="flex items-end gap-2">
                       <textarea
                         ref={textareaRef}
@@ -768,7 +806,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                         onChange={onDraftChange}
                         onKeyDown={onKeyDown}
                         rows={1}
-                        placeholder="Ответ пациенту…"
+                        placeholder="Ответ пациенту… (наберите / для шаблонов)"
                         className="flex-1 px-3 py-2.5 rounded-2xl outline-none resize-none"
                         style={{ background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', fontSize: 14, color: 'var(--fg, #0F172A)', lineHeight: 1.4, maxHeight: 140, minHeight: 40 }}
                       />
@@ -815,6 +853,14 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
         onClose={() => setAssignOpen(false)}
         onAssign={doAssign}
         clinicId={active?.thread?.clinic_id || clinicIdProp}
+      />
+
+      <ReassignModal
+        open={reassignOpen}
+        onClose={() => setReassignOpen(false)}
+        threadId={activeId}
+        clinicId={active?.thread?.clinic_id || clinicIdProp}
+        onDone={() => { fetchThread(activeId, true); fetchThreads() }}
       />
 
       {/* Mobile-drawer карточки пациента (на узких экранах) */}
