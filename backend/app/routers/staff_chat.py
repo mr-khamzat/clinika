@@ -310,6 +310,39 @@ async def patch_channel(
     return {"id": str(room.id), "name": room.name, "description": room.description}
 
 
+
+@router.delete("/channels/{room_id}", status_code=204)
+async def delete_channel(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Удаляет канал. Только admin канала ИЛИ manager/franchise_owner/super_admin."""
+    _ensure_not_patient(user)
+    room = (await db.execute(
+        select(StaffChatRoom).where(StaffChatRoom.id == room_id)
+    )).scalar_one_or_none()
+    if not room:
+        raise HTTPException(404, "Канал не найден")
+    if room.type == "direct":
+        raise HTTPException(400, "DM нельзя удалить — выйдите из переписки")
+    # Проверка прав: admin канала ИЛИ глобальная роль manager+
+    me = (await db.execute(
+        select(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+            StaffChatMember.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    is_admin = me and me.member_role == "admin"
+    role_val = user.role.value if hasattr(user.role, "value") else str(user.role)
+    is_global_admin = role_val in ("manager", "franchise_owner", "super_admin")
+    if not (is_admin or is_global_admin):
+        raise HTTPException(403, "Только admin канала или manager+ может удалить")
+    # Каскадно удалятся через FK ondelete=CASCADE (members, messages, reactions, files)
+    await db.delete(room)
+    await db.commit()
+    return None
+
 # ── Reactions ─────────────────────────────────────────────────────────────────
 async def _toggle_reaction_logic(db, user, message, emoji: str) -> str:
     """Toggle: добавляет если нет, удаляет если есть. Returns 'added' | 'removed'."""

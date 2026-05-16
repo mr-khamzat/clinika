@@ -53,7 +53,12 @@ export default function CreateChannelModal({ open, onClose, onCreated, clinicId 
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="w-full px-3 py-2 rounded-xl outline-none"
-          style={{ background: 'var(--bg-1, #f6f6f8)', border: '1px solid var(--border, rgba(0,0,0,.08))' }}
+          style={{
+            background: 'var(--bg-1, #f6f6f8)',
+            border: '1px solid var(--border, rgba(0,0,0,.08))',
+            color: 'var(--fg, #0F172A)',
+            fontSize: 14,
+          }}
         />
         <textarea
           placeholder="Описание (необязательно)"
@@ -61,7 +66,12 @@ export default function CreateChannelModal({ open, onClose, onCreated, clinicId 
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           className="w-full px-3 py-2 rounded-xl outline-none resize-none"
-          style={{ background: 'var(--bg-1, #f6f6f8)', border: '1px solid var(--border, rgba(0,0,0,.08))' }}
+          style={{
+            background: 'var(--bg-1, #f6f6f8)',
+            border: '1px solid var(--border, rgba(0,0,0,.08))',
+            color: 'var(--fg, #0F172A)',
+            fontSize: 14,
+          }}
         />
         <div className="grid grid-cols-2 gap-2">
           <button
