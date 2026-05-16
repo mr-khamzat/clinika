@@ -20,6 +20,7 @@ import CreateChannelModal from '../components/staff/CreateChannelModal'
 import ChannelSettingsModal from '../components/staff/ChannelSettingsModal'
 import PinnedMessagesModal from '../components/staff/PinnedMessagesModal'
 import MentionAutocomplete from '../components/staff/MentionAutocomplete'
+import GlobalSearchBox from '../components/staff/GlobalSearchBox'
 
 // Палитра аватаров — детерминированно генерируется из user_id
 const AVATAR_COLORS = [
@@ -566,7 +567,7 @@ export default function StaffChat() {
     }
   }
 
-  // ── Прокрутка к конкретному сообщению (для thread-цитат) ──────────────────
+  // ── Прокрутка к конкретному сообщению (для thread-цитат и поиска) ─────────
   function scrollToMessage(msgId) {
     if (!msgId) return
     requestAnimationFrame(() => {
@@ -577,6 +578,15 @@ export default function StaffChat() {
         setTimeout(() => el.classList.remove('sc-msg-highlight'), 1800)
       }
     })
+  }
+
+  // ── Открыть комнату и проскроллить к сообщению (для global search) ───────
+  async function openRoomAndScrollTo(roomId, msgId) {
+    if (!roomId) return
+    if (roomId !== activeRoomId) {
+      await openRoom(roomId)
+    }
+    setTimeout(() => scrollToMessage(msgId), 250)
   }
 
   // ── Загрузка файла + отправка ────────────────────────────────────────────
@@ -657,6 +667,11 @@ export default function StaffChat() {
             >Контакты</button>
           </div>
           <div className="sc-header-actions">
+            <GlobalSearchBox
+              onPick={(r) => {
+                if (r?.room_id) openRoomAndScrollTo(r.room_id, r.message_id)
+              }}
+            />
             <button className="sc-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen(true)}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3"/>
