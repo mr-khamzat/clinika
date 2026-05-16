@@ -24,9 +24,11 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { Avatar } from '../design'
+import DeviceTestModal from './calls/DeviceTestModal'
 
 export default function IncomingCallModal({ call, onDismiss, apiBase, token }) {
   const [armed, setArmed] = useState(false) // защита от случайного клика 1с
+  const [testOpen, setTestOpen] = useState(false)
   const audioCtxRef = useRef(null)
   const ringTimerRef = useRef(null)
 
@@ -92,12 +94,27 @@ export default function IncomingCallModal({ call, onDismiss, apiBase, token }) {
 
   if (!call) return null
 
-  const handleAccept = () => {
-    if (!armed) return
-    // Перед редиректом — глушим звук, чтобы не было «хвоста».
+  const stopRingingResources = () => {
     if (ringTimerRef.current) clearInterval(ringTimerRef.current)
     if (audioCtxRef.current) { try { audioCtxRef.current.close() } catch {} }
+  }
+
+  const performAccept = () => {
+    // Перед редиректом — глушим звук, чтобы не было «хвоста».
+    stopRingingResources()
     window.location.href = call.join_url
+  }
+
+  const handleAccept = () => {
+    if (!armed) return
+    performAccept()
+  }
+
+  const handleOpenDeviceTest = () => {
+    if (!armed) return
+    // Глушим ringtone пока пользователь возится с настройками устройств.
+    stopRingingResources()
+    setTestOpen(true)
   }
 
   const handleDecline = async () => {
@@ -201,6 +218,29 @@ export default function IncomingCallModal({ call, onDismiss, apiBase, token }) {
         <p style={{ fontSize: 15, opacity: 0.65, marginTop: 8 }}>
           Видеоприём — нажмите «Принять»
         </p>
+
+        {/* Кнопка проверки устройств перед принятием */}
+        <button
+          onClick={handleOpenDeviceTest}
+          disabled={!armed}
+          aria-label="Проверить устройства"
+          style={{
+            marginTop: 20,
+            background: armed ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.05)',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,.18)',
+            padding: '10px 18px', borderRadius: 999,
+            fontSize: 14, fontWeight: 600,
+            cursor: armed ? 'pointer' : 'not-allowed',
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            opacity: armed ? 1 : 0.5,
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+            settings
+          </span>
+          Проверить устройства
+        </button>
       </div>
 
       {/* ── Низ: кнопки управления ─────────────────────────────────── */}
@@ -274,6 +314,18 @@ export default function IncomingCallModal({ call, onDismiss, apiBase, token }) {
           Принять
         </button>
       </div>
+
+      {/* Модал теста микрофона/камеры перед принятием звонка */}
+      <DeviceTestModal
+        open={testOpen}
+        onClose={() => setTestOpen(false)}
+        onConfirm={() => {
+          setTestOpen(false)
+          performAccept()
+        }}
+        title="Проверьте устройства перед звонком"
+        confirmLabel="Принять звонок"
+      />
     </div>
   )
 }
