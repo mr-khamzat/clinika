@@ -20,6 +20,7 @@ import CreateChannelModal from '../components/staff/CreateChannelModal'
 import ChannelSettingsModal from '../components/staff/ChannelSettingsModal'
 import PinnedMessagesModal from '../components/staff/PinnedMessagesModal'
 import MentionAutocomplete from '../components/staff/MentionAutocomplete'
+import CreatePollModal from '../components/staff/CreatePollModal'
 import GlobalSearchBox from '../components/staff/GlobalSearchBox'
 
 // Палитра аватаров — детерминированно генерируется из user_id
@@ -140,6 +141,8 @@ export default function StaffChat() {
   const [reactPickerFor, setReactPickerFor] = useState(null) // id сообщения с открытым picker'ом
   // Threads (reply): {id, body_preview, sender_name}
   const [replyingTo, setReplyingTo] = useState(null)
+  // Polls
+  const [createPollOpen, setCreatePollOpen] = useState(false)
   const wsRef = useRef(null)
   const wsRetryRef = useRef(0)
   const messagesEndRef = useRef(null)
@@ -589,6 +592,44 @@ export default function StaffChat() {
     setTimeout(() => scrollToMessage(msgId), 250)
   }
 
+  // ── Голосование в опросе ────────────────────────────────────────────────
+  async function votePoll(poll, optionId) {
+    if (!poll?.id || !optionId) return
+    try {
+      // Оптимистичный апдейт: обновляем локальное состояние сразу
+      setMessages((prev) => prev.map((m) => {
+        if (!m.poll || m.poll.id !== poll.id) return m
+        const multi = !!m.poll.multi_select
+        const options = (m.poll.options || []).map((opt) => {
+          const wasMine = !!opt.voted_by_me
+          if (opt.id === optionId) {
+            const newMine = !wasMine
+            return {
+              ...opt,
+              voted_by_me: newMine,
+              votes_count: Math.max(0, (opt.votes_count || 0) + (newMine ? 1 : -1)),
+            }
+          }
+          // В single-select снимаем галки с остальных
+          if (!multi && wasMine) {
+            return { ...opt, voted_by_me: false, votes_count: Math.max(0, (opt.votes_count || 0) - 1) }
+          }
+          return opt
+        })
+        return { ...m, poll: { ...m.poll, options } }
+      }))
+      const { data } = await api.post(`/staff-chat/polls/${poll.id}/vote`, { option_id: optionId })
+      // Sync с серверным состоянием
+      if (data?.poll) {
+        setMessages((prev) => prev.map((m) => (m.poll && m.poll.id === poll.id ? { ...m, poll: data.poll } : m)))
+      }
+    } catch (e) {
+      alert('Не удалось проголосовать: ' + (e?.response?.data?.detail || e.message))
+      // Перезагрузим сообщения чтобы откатить оптимистичный апдейт
+      await refetchMessages()
+    }
+  }
+
   // ── Загрузка файла + отправка ────────────────────────────────────────────
   async function uploadFile(file) {
     if (!activeRoomId || !file) return
@@ -942,6 +983,49 @@ export default function StaffChat() {
                       ) : (
                         <>
                           {m.body && <div className="sc-msg-body" style={{ whiteSpace: 'pre-wrap' }}>{highlightMentions(m.body)}</div>}
+                          {/* Опрос (poll) — компактный список вариантов с прогресс-барами */}
+                          {m.poll && (() => {
+                            const poll = m.poll
+                            const options = poll.options || []
+                            const totalVotes = options.reduce((s, o) => s + (o.votes_count || 0), 0)
+                            const closed = poll.closed_at || (poll.closes_at && new Date(poll.closes_at) < new Date())
+                            return (
+                              <div className="sc-poll" onClick={(e) => e.stopPropagation()}>
+                                <div className="sc-poll-q">{poll.question}</div>
+                                {poll.multi_select && (
+                                  <div className="sc-poll-hint">Можно выбрать несколько</div>
+                                )}
+                                {options.map((opt) => {
+                                  const pct = totalVotes > 0 ? Math.round(((opt.votes_count || 0) / totalVotes) * 100) : 0
+                                  const mineVoted = !!opt.voted_by_me
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      disabled={closed}
+                                      onClick={() => votePoll(poll, opt.id)}
+                                      className={'sc-poll-option' + (mineVoted ? ' is-mine' : '') + (closed ? ' is-closed' : '')}
+                                      title={closed ? 'Опрос закрыт' : (mineVoted ? 'Убрать голос' : 'Проголосовать')}
+                                    >
+                                      <span className="sc-poll-bar" style={{ width: pct + '%' }} />
+                                      <span className="sc-poll-label">
+                                        <span className="sc-poll-check">{mineVoted ? '☑' : '☐'}</span>
+                                        {opt.label}
+                                      </span>
+                                      <span className="sc-poll-pct">{pct}% · {opt.votes_count || 0}</span>
+                                    </button>
+                                  )
+                                })}
+                                <div className="sc-poll-meta">
+                                  Голосов: {totalVotes}
+                                  {closed && <span> · закрыт</span>}
+                                  {!closed && poll.closes_at && (
+                                    <span> · до {new Date(poll.closes_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })()}
                           {m.attachments?.map((a) => (
                             <a key={a.id || a.url} href={a.url} onClick={(e) => { e.preventDefault(); downloadAttachment(a) }} className="sc-attach" role="button" title="Кликните чтобы скачать файл на ПК">
                               <span className="sc-attach-icon">
@@ -996,7 +1080,7 @@ export default function StaffChat() {
                               e.stopPropagation()
                               setReplyingTo({
                                 id: m.id,
-                                body_preview: (m.body || (m.attachments?.length ? '📎 файл' : '')).slice(0, 140),
+                                body_preview: (m.body || (m.attachments?.length ? '📎 файл' : (m.poll ? '📊 опрос' : ''))).slice(0, 140),
                                 sender_name: sender?.name || (mine ? 'Вы' : 'Сотрудник'),
                               })
                               requestAnimationFrame(() => composerRef.current?.focus())
@@ -1094,6 +1178,19 @@ export default function StaffChat() {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); e.target.value = '' }}
                   />
                 </label>
+                <button
+                  type="button"
+                  className="sc-icon-btn sc-attach-btn"
+                  onClick={() => setCreatePollOpen(true)}
+                  title="Создать опрос"
+                  aria-label="Создать опрос"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="6" y1="20" x2="6" y2="12"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="18" y1="20" x2="18" y2="8"/>
+                  </svg>
+                </button>
                 <textarea
                   ref={composerRef}
                   className="sc-input"
@@ -1190,6 +1287,14 @@ export default function StaffChat() {
 
       {/* SETTINGS MODAL */}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* CREATE POLL MODAL */}
+      <CreatePollModal
+        open={createPollOpen && !!activeRoomId}
+        roomId={activeRoomId}
+        onClose={() => setCreatePollOpen(false)}
+        onCreated={() => { setCreatePollOpen(false); refetchMessages() }}
+      />
 
       {/* CREATE GROUP / BROADCAST MODAL */}
       {(createGroupOpen || createBroadcastOpen) && (
@@ -2183,7 +2288,76 @@ const STAFF_CHAT_CSS = `
 }
 .sc-reply-preview-close:hover { background: var(--sc-bg-2, #e5e7eb); }
 
-/* Highlight: подсветка сообщения после scroll-к-цитате */
+/* Polls */
+.sc-poll {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: rgba(15,23,42,.04);
+  border-radius: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sc-msg-bubble.is-mine .sc-poll { background: rgba(255,255,255,.14); }
+.sc-poll-q {
+  font-size: 13.5px; font-weight: 700;
+  color: var(--sc-fg, #0F172A);
+}
+.sc-msg-bubble.is-mine .sc-poll-q { color: rgba(255,255,255,.98); }
+.sc-poll-hint {
+  font-size: 11px; color: var(--sc-fg-3, #6b7280);
+}
+.sc-msg-bubble.is-mine .sc-poll-hint { color: rgba(255,255,255,.7); }
+.sc-poll-option {
+  position: relative;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--sc-border, rgba(0,0,0,.08));
+  background: var(--sc-surface, #fff);
+  color: var(--sc-fg, #0F172A);
+  cursor: pointer;
+  font-size: 13px;
+  overflow: hidden;
+  text-align: left;
+  transition: border-color 120ms, transform 80ms;
+}
+.sc-poll-option:hover:not(:disabled) { border-color: var(--sc-accent, #0097A7); }
+.sc-poll-option:active:not(:disabled) { transform: scale(0.99); }
+.sc-poll-option.is-mine {
+  border-color: var(--sc-accent, #0097A7);
+  background: rgba(0,151,167,.08);
+}
+.sc-poll-option.is-closed { cursor: not-allowed; opacity: 0.7; }
+.sc-poll-bar {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: rgba(0,151,167,.16);
+  border-radius: 8px;
+  transition: width 220ms ease;
+  z-index: 0;
+}
+.sc-poll-option.is-mine .sc-poll-bar { background: rgba(0,151,167,.28); }
+.sc-poll-label {
+  position: relative; z-index: 1;
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sc-poll-check {
+  font-size: 14px; flex-shrink: 0;
+  color: var(--sc-accent, #0097A7);
+}
+.sc-poll-pct {
+  position: relative; z-index: 1;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--sc-fg-3, #6b7280);
+  flex-shrink: 0;
+}
+.sc-poll-meta {
+  font-size: 11px; color: var(--sc-fg-3, #6b7280);
+  margin-top: 2px;
+}
+.sc-msg-bubble.is-mine .sc-poll-meta { color: rgba(255,255,255,.7); }
+
+/* Highlight: подсветка сообщения после scroll-к-цитате/поиску */
 @keyframes scMsgHighlight {
   0% { background-color: rgba(245, 158, 11, 0.22); }
   100% { background-color: transparent; }
