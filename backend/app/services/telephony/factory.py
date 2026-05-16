@@ -9,6 +9,7 @@ from .base import TelephonyProvider
 from .null import NullProvider
 from .sipuni import SipuniProvider
 from .mango import MangoProvider
+from .zadarma import ZadarmaProvider
 
 
 async def get_provider(db: AsyncSession, tenant_id: uuid.UUID) -> TelephonyProvider:
@@ -32,5 +33,11 @@ async def get_provider(db: AsyncSession, tenant_id: uuid.UUID) -> TelephonyProvi
         if not key or not salt:
             return NullProvider()
         return MangoProvider(key, salt)
-    # Другие провайдеры (zadarma/onlinepbx/...) — отдельной сессией
+    if cfg.provider == "zadarma":
+        user_key = enc.decrypt(cfg.api_key_encrypted) if cfg.api_key_encrypted else ""
+        secret = enc.decrypt(cfg.api_secret_encrypted) if cfg.api_secret_encrypted else ""
+        if not user_key or not secret:
+            return NullProvider()
+        return ZadarmaProvider(user_key, secret)
+    # Другие провайдеры (onlinepbx/...) — отдельной сессией
     return NullProvider()
