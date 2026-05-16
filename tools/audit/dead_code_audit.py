@@ -138,6 +138,163 @@ def extract_backend_endpoints(path: pathlib.Path) -> list[dict]:
     return out
 
 
+# ── Scanning ────────────────────────────────────────────────────────────────
+
+def _walk_files(root: pathlib.Path, suffixes: tuple[str, ...]) -> list[pathlib.Path]:
+    return [
+        p for p in root.rglob("*")
+        if p.suffix in suffixes and p.is_file()
+        and "/node_modules/" not in str(p)
+        and "/__pycache__/" not in str(p)
+    ]
+
+
+def scan_all() -> dict:
+    print("[audit] scan backend …")
+    py_files = _walk_files(BACKEND_DIR, (".py",))
+    endpoints: list[dict] = []
+    for f in py_files:
+        endpoints.extend(extract_backend_endpoints(f))
+    print(f"[audit]  ↳ endpoints: {len(endpoints)}")
+
+    print("[audit] scan frontend …")
+    js_files = _walk_files(FRONTEND_DIR, (".jsx", ".js", ".ts", ".tsx"))
+    calls: list[dict] = []
+    imports: list[dict] = []
+    for f in js_files:
+        calls.extend(extract_frontend_api_calls(f))
+        imports.extend(extract_frontend_imports(f))
+    print(f"[audit]  ↳ api-calls: {len(calls)}  imports: {len(imports)}")
+
+    # Текстовый корпус всего фронта (для эвристики "review")
+    corpus_parts: list[str] = []
+    for f in js_files:
+        try:
+            corpus_parts.append(f.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:
+            pass
+    text_corpus = "\n".join(corpus_parts)
+
+    classified = [
+        {**ep, "risk": classify_endpoint(ep, calls, text_corpus)}
+        for ep in endpoints
+    ]
+
+    # Frontend orphan компоненты
+    referenced: set[str] = set()
+    for imp in imports:
+        bn = pathlib.Path(imp["target"]).name
+        referenced.add(bn.split(".")[0])
+    orphan_components: list[dict] = []
+    for f in js_files:
+        name = f.stem
+        # Компонентами считаем .jsx с PascalCase именем
+        if not name or not name[0].isupper():
+            continue
+        if name in referenced:
+            continue
+        if "/tests/" in str(f) or "/__tests__/" in str(f):
+            continue
+        orphan_components.append({"file": str(f), "name": name, "risk": "safe"})
+
+    return {
+        "endpoints": classified,
+        "orphan_components": orphan_components,
+        "totals": {
+            "py_files": len(py_files),
+            "js_files": len(js_files),
+            "endpoints_total": len(endpoints),
+        },
+    }
+
+
+# ── External tools ──────────────────────────────────────────────────────────
+
+def run_external_tools() -> dict:
+    """vulture (Python) + knip (JS) — best-effort, не блокирует основной flow."""
+    raw_dir = AUDIT_DIR / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    results: dict[str, str] = {}
+
+    try:
+        r = subprocess.run(
+            ["vulture", str(BACKEND_DIR), "--min-confidence", "70"],
+            capture_output=True, text=True, timeout=120,
+        )
+        (raw_dir / "vulture.txt").write_text(r.stdout, encoding="utf-8")
+        results["vulture"] = r.stdout
+        print(f"[audit] vulture: {len(r.stdout.splitlines())} строк")
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        results["vulture"] = ""
+        print(f"[audit] vulture: пропущен ({type(e).__name__})")
+
+    try:
+        r = subprocess.run(
+            ["knip", "--reporter", "json"],
+            cwd=str(REPO_ROOT / "frontend"),
+            capture_output=True, text=True, timeout=180,
+        )
+        (raw_dir / "knip.json").write_text(r.stdout or "", encoding="utf-8")
+        results["knip"] = r.stdout
+        print(f"[audit] knip: {len(r.stdout)} bytes")
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        results["knip"] = ""
+        print(f"[audit] knip: пропущен ({type(e).__name__})")
+
+    return results
+
+
+# ── Reporter ────────────────────────────────────────────────────────────────
+
+def render_report(data: dict, raw: dict) -> str:
+    eps = data["endpoints"]
+    safe   = [e for e in eps if e["risk"] == "safe"]
+    review = [e for e in eps if e["risk"] == "review"]
+    alive  = [e for e in eps if e["risk"] == "alive"]
+    orphans = data["orphan_components"]
+    totals = data["totals"]
+
+    def _rel(p: str) -> str:
+        return p.replace(str(REPO_ROOT) + "/", "")
+
+    def _ep_line(e: dict) -> str:
+        return f"- `{e['method']} {e['path']}` — {_rel(e['file'])}"
+
+    def _orphan_line(o: dict) -> str:
+        return f"- `{o['name']}` — {_rel(o['file'])}"
+
+    parts: list[str] = []
+    parts.append(f"# Dead-code audit — {TODAY}\n")
+    parts.append("## Summary\n")
+    parts.append("| Layer | 🟢 safe | 🟡 review | ✅ alive |")
+    parts.append("|-------|---------|----------|---------|")
+    parts.append(f"| Backend endpoints ({totals['endpoints_total']}) | {len(safe)} | {len(review)} | {len(alive)} |")
+    parts.append(f"| Frontend orphan components | {len(orphans)} | — | — |\n")
+
+    parts.append("## Backend endpoints без потребителя 🟢\n")
+    if safe:
+        parts.extend(_ep_line(e) for e in safe[:200])
+    else:
+        parts.append("_нет_")
+
+    parts.append("\n## Backend endpoints — требуют решения 🟡\n")
+    if review:
+        parts.extend(_ep_line(e) for e in review[:200])
+    else:
+        parts.append("_нет_")
+
+    parts.append("\n## Frontend orphan components 🟢\n")
+    if orphans:
+        parts.extend(_orphan_line(o) for o in orphans[:200])
+    else:
+        parts.append("_нет_")
+
+    parts.append("\n## Raw tools\n")
+    parts.append(f"- vulture: `tools/audit/raw/vulture.txt` ({len(raw.get('vulture', ''))} bytes)")
+    parts.append(f"- knip: `tools/audit/raw/knip.json` ({len(raw.get('knip', ''))} bytes)")
+    return "\n".join(parts)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Dead-code audit Клиники")
     ap.add_argument("--no-telegram", action="store_true",
@@ -148,7 +305,16 @@ def main() -> int:
                     help="Chat ID получателя")
     args = ap.parse_args()
     print(f"[audit] start {TODAY}")
-    # Реализация в Task 2+.
+    data = scan_all()
+    raw = run_external_tools()
+    report = render_report(data, raw)
+    report_path = AUDIT_DIR / f"report-{TODAY}.md"
+    report_path.write_text(report, encoding="utf-8")
+    print(f"[audit] report: {report_path}")
+    if args.no_telegram:
+        print("[audit] --no-telegram — пропускаю отправку")
+        return 0
+    # TG отправка в T7
     return 0
 
 
