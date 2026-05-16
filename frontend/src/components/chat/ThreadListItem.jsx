@@ -61,6 +61,10 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
   }, [title])
   const color = useMemo(() => avatarColor(title), [title])
 
+  const labelHex = {
+    red: '#EF4444', yellow: '#F59E0B', green: '#22C55E', blue: '#3B82F6',
+  }[thread.color_label] || null
+
   return (
     <button
       onClick={onClick}
@@ -73,6 +77,7 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
         borderRadius: 14,
         background: active ? 'var(--accent-soft, rgba(0,151,167,.08))' : 'transparent',
         border: `1px solid ${active ? 'var(--accent-line, rgba(0,151,167,.25))' : 'transparent'}`,
+        borderLeft: labelHex ? `3px solid ${labelHex}` : (active ? '1px solid var(--accent-line, rgba(0,151,167,.25))' : '1px solid transparent'),
         minHeight: 64,
       }}
     >
@@ -88,7 +93,14 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
         {initials}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {thread.is_pinned && (
+            <span
+              className="material-symbols-outlined flex-shrink-0"
+              style={{ fontSize: 14, color: '#F59E0B', fontVariationSettings: "'FILL' 1" }}
+              title="Закреплён"
+            >push_pin</span>
+          )}
           <span className="truncate font-semibold" style={{ fontSize: 13.5, color: 'var(--fg, #0F172A)' }}>
             {title}
           </span>
