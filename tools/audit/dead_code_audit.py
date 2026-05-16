@@ -22,6 +22,42 @@ AUDIT_DIR = REPO_ROOT / "tools" / "audit"
 TODAY = datetime.date.today().isoformat()
 
 
+# ── Парсеры ─────────────────────────────────────────────────────────────────
+
+# @router.get("/path") или @app.get("/path")
+_RE_ROUTE = re.compile(
+    r'^\s*@(?:router|app)\.(get|post|put|delete|patch|options|head)'
+    r'\(\s*[\'"]([^\'"]+)[\'"]',
+    re.MULTILINE,
+)
+_RE_PREFIX = re.compile(
+    r'APIRouter\s*\(\s*[^)]*prefix\s*=\s*[\'"]([^\'"]+)[\'"]'
+)
+
+
+def extract_backend_endpoints(path: pathlib.Path) -> list[dict]:
+    """Извлекает [{file, method, path}] из одного .py файла."""
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    # Удаляем строки-комментарии (полные #-строки) перед матчингом.
+    cleaned = "\n".join(
+        line for line in text.splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    prefix_match = _RE_PREFIX.search(cleaned)
+    prefix = prefix_match.group(1) if prefix_match else ""
+    out: list[dict] = []
+    for m in _RE_ROUTE.finditer(cleaned):
+        method, sub = m.group(1).upper(), m.group(2)
+        if sub.startswith("/"):
+            full = prefix + sub
+        else:
+            full = f"{prefix}/{sub}"
+        # «/» в конце префикса + «/» в начале sub → двойной слеш, чиним
+        full = re.sub(r"//+", "/", full)
+        out.append({"file": str(path), "method": method, "path": full})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Dead-code audit Клиники")
     ap.add_argument("--no-telegram", action="store_true",
