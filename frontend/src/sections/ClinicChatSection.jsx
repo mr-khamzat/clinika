@@ -17,10 +17,13 @@
  * ========================================
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { useToast } from '../design'
 import MessageBubble from '../components/chat/MessageBubble'
 import ThreadListItem from '../components/chat/ThreadListItem'
+import PatientContextPanel from '../components/chat/PatientContextPanel'
+import useChatSoundNotification from '../hooks/useChatSoundNotification'
 
 const POLL_MS = 10_000
 
@@ -149,6 +152,7 @@ function AssignDoctorModal({ open, onClose, onAssign, clinicId }) {
 // ── Главный компонент ────────────────────────────────────────────────────────
 export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdProp }) {
   const { toast } = useToast() || {}
+  const nav = useNavigate()
 
   const [threads, setThreads] = useState([])
   const [loadingList, setLoadingList] = useState(true)
@@ -163,6 +167,14 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
   const [sending, setSending] = useState(false)
   const [showListMobile, setShowListMobile] = useState(true)
   const [assignOpen, setAssignOpen] = useState(false)
+  const [showPatientCard, setShowPatientCard] = useState(false)  // mobile drawer карточки пациента
+  const [labelMenuOpen, setLabelMenuOpen] = useState(false)
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try { return localStorage.getItem('clinic_chat_sound') !== '0' } catch { return true }
+  })
+  const playSound = useChatSoundNotification({ enabled: soundEnabled })
+  const lastNotifyIdRef = useRef(null)        // последний message_id для которого играли звук
+  const typingTickRef = useRef(0)             // дебаунс отправки typing
 
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
@@ -170,6 +182,24 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
 
   const canAssign = role === 'manager' || role === 'reg' || role === 'franchise_owner'
   const canClose  = role === 'manager' || role === 'reg' || role === 'doctor' || role === 'franchise_owner'
+
+  // ── Quick actions: ссылки на запись / направление ──────────────────────
+  // /manager/schedules доступен только manager/franchise_owner.
+  const canBook = role === 'manager' || role === 'franchise_owner'
+  const patientPhone = active?.thread?.patient_phone || ''
+  const patientName  = active?.thread?.patient_name || ''
+  const goBookAppointment = () => {
+    const qs = new URLSearchParams()
+    if (patientPhone) qs.set('patient_phone', patientPhone)
+    if (patientName)  qs.set('patient_name', patientName)
+    nav('/manager/schedules' + (qs.toString() ? '?' + qs.toString() : ''))
+  }
+  const goCreateReferral = () => {
+    const qs = new URLSearchParams()
+    if (patientPhone) qs.set('patient_phone', patientPhone)
+    if (patientName)  qs.set('patient_name', patientName)
+    nav('/create' + (qs.toString() ? '?' + qs.toString() : ''))
+  }
 
   // ── Fetch threads ─────────────────────────────────────────────────────────
   const fetchThreads = useCallback(async () => {
@@ -225,6 +255,20 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
     return () => clearInterval(tid)
   }, [fetchThreads])
 
+  // Звук на новое входящее сообщение (только не своё).
+  useEffect(() => {
+    const list = active?.messages || []
+    if (!list.length) return
+    const last = list[list.length - 1]
+    if (last.id === lastNotifyIdRef.current) return
+    lastNotifyIdRef.current = last.id
+    // Не воспроизводим звук при первой загрузке треда — только при добавлении НОВЫХ сообщений после mount.
+    const isOwn = last.sender_type === 'doctor' || last.sender_type === 'manager'
+                  || last.sender_type === 'reg' || last.sender_type === 'staff' || last.is_mine
+    if (isOwn) return
+    playSound()
+  }, [active, playSound])
+
   // Авто-скролл
   useEffect(() => {
     const list = active?.messages || []
@@ -279,12 +323,59 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
     }
   }
 
-  // ── Auto-resize ──────────────────────────────────────────────────────────
+  // ── Quick wins: реакции / pin / label / typing-emit ─────────────────────
+  const doReact = async (messageId, emoji) => {
+    try {
+      await api.post(`/clinic/chat/messages/${messageId}/reactions`, { emoji })
+      await fetchThread(activeId, true)
+    } catch (e) {
+      toast?.(e?.response?.data?.detail || 'Не удалось добавить реакцию', 'error')
+    }
+  }
+  const doPin = async () => {
+    if (!activeId) return
+    try {
+      await api.post(`/clinic/chat/threads/${activeId}/pin`)
+      await fetchThread(activeId, true)
+      fetchThreads()
+    } catch (e) {
+      toast?.(e?.response?.data?.detail || 'Не удалось закрепить', 'error')
+    }
+  }
+  const doLabel = async (color) => {
+    if (!activeId) return
+    setLabelMenuOpen(false)
+    try {
+      await api.patch(`/clinic/chat/threads/${activeId}/label`, { color })
+      await fetchThread(activeId, true)
+      fetchThreads()
+    } catch (e) {
+      toast?.(e?.response?.data?.detail || 'Не удалось применить лейбл', 'error')
+    }
+  }
+  // Эмитим typing не чаще раза в 4 сек, чтобы не заваливать backend
+  const emitTyping = useCallback(() => {
+    if (!activeId) return
+    const now = Date.now()
+    if (now - typingTickRef.current < 4000) return
+    typingTickRef.current = now
+    api.post(`/clinic/chat/threads/${activeId}/typing`).catch(() => {})
+  }, [activeId])
+  const toggleSound = () => {
+    setSoundEnabled(v => {
+      const next = !v
+      try { localStorage.setItem('clinic_chat_sound', next ? '1' : '0') } catch {}
+      return next
+    })
+  }
+
+  // ── Auto-resize + typing-emit ────────────────────────────────────────────
   const onDraftChange = (e) => {
     setDraft(e.target.value)
     const ta = e.target
     ta.style.height = 'auto'
     ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
+    if (e.target.value.trim().length > 0) emitTyping()
   }
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -323,6 +414,15 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
         .msg-in { animation: msg-in .22s cubic-bezier(.22,1,.36,1) }
         .chat-scroll::-webkit-scrollbar { width: 6px }
         .chat-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 6px }
+        /* 3-я колонка (карточка пациента) — только на широких экранах при выбранном треде */
+        .clinic-chat-patient-col { display: none; }
+        @media (min-width: 1100px) {
+          .clinic-chat-patient-col[data-has-active="true"] { display: flex; }
+        }
+        /* На широких экранах кнопка-toggle карточки в шапке скрыта (панель и так видна) */
+        @media (min-width: 1100px) {
+          .clinic-chat-patient-toggle { display: none !important; }
+        }
       `}</style>
 
       <div
@@ -336,7 +436,11 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
         <div
           className="grid"
           style={{
-            gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 900 ? '320px 1fr' : '1fr',
+            // Desktop: список 320 | чат 1fr | карточка 300 (если выбран тред); иначе 320 | 1fr.
+            // Mobile: одна колонка, переключение между списком/тредом; карточка — overlay-drawer.
+            gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 1100
+              ? (activeId ? '320px 1fr 300px' : '320px 1fr')
+              : (typeof window !== 'undefined' && window.innerWidth >= 900 ? '320px 1fr' : '1fr'),
             minHeight: 'min(640px, calc(100vh - 220px))',
           }}
         >
@@ -450,14 +554,154 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                     <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
                   </button>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold truncate" style={{ fontSize: 14, color: 'var(--fg, #0F172A)' }}>
-                      {active?.thread?.patient_name || active?.thread?.patient_phone || 'Пациент'}
+                    <div className="font-bold truncate flex items-center gap-1.5" style={{ fontSize: 14, color: 'var(--fg, #0F172A)' }}>
+                      {active?.thread?.is_pinned && (
+                        <span
+                          className="material-symbols-outlined"
+                          style={{ fontSize: 16, color: '#F59E0B', fontVariationSettings: "'FILL' 1" }}
+                          title="Тред закреплён"
+                        >push_pin</span>
+                      )}
+                      {active?.thread?.color_label && (
+                        <span
+                          style={{
+                            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                            background:
+                              active.thread.color_label === 'red'    ? '#EF4444' :
+                              active.thread.color_label === 'yellow' ? '#F59E0B' :
+                              active.thread.color_label === 'green'  ? '#22C55E' :
+                              active.thread.color_label === 'blue'   ? '#3B82F6' : 'transparent',
+                          }}
+                          title={`Лейбл: ${active.thread.color_label}`}
+                          aria-hidden
+                        />
+                      )}
+                      <span className="truncate">{active?.thread?.patient_name || active?.thread?.patient_phone || 'Пациент'}</span>
                     </div>
                     <div className="truncate" style={{ fontSize: 11.5, color: 'var(--fg-3, #94a3b8)' }}>
-                      {active?.thread?.subject || 'без темы'}
-                      {active?.thread?.assigned_doctor_name && <span> · {active.thread.assigned_doctor_name}</span>}
+                      {(() => {
+                        // Typing indicator: показываем если last_typing_at_patient свежий (< 5s)
+                        const t = active?.thread?.last_typing_at_patient
+                        if (t) {
+                          const age = Date.now() - new Date(t).getTime()
+                          if (age < 5000 && age >= 0) {
+                            return <span style={{ color: 'var(--accent, #0097A7)', fontStyle: 'italic' }}>Пациент печатает…</span>
+                          }
+                        }
+                        return (
+                          <>
+                            {active?.thread?.subject || 'без темы'}
+                            {active?.thread?.assigned_doctor_name && <span> · {active.thread.assigned_doctor_name}</span>}
+                          </>
+                        )
+                      })()}
                     </div>
                   </div>
+                  {/* Quick-actions: запись / направление / карточка пациента */}
+                  {canBook && (
+                    <button
+                      onClick={goBookAppointment}
+                      className="grid place-items-center"
+                      style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                      title="Записать на приём"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>event_available</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={goCreateReferral}
+                    className="grid place-items-center"
+                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                    title="Создать направление"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>assignment_add</span>
+                  </button>
+                  <button
+                    onClick={() => setShowPatientCard(true)}
+                    className="clinic-chat-patient-toggle grid place-items-center"
+                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                    title="Карточка пациента"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>account_circle</span>
+                  </button>
+                  {/* Pin thread */}
+                  <button
+                    onClick={doPin}
+                    className="grid place-items-center"
+                    style={{
+                      width: 36, height: 36, borderRadius: 10,
+                      background: active?.thread?.is_pinned ? 'rgba(245,158,11,.18)' : 'var(--bg-1, #f1f5f9)',
+                      color: active?.thread?.is_pinned ? '#B45309' : 'var(--fg-2, #475569)',
+                    }}
+                    title={active?.thread?.is_pinned ? 'Открепить' : 'Закрепить тред'}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: active?.thread?.is_pinned ? "'FILL' 1" : "'FILL' 0" }}>push_pin</span>
+                  </button>
+                  {/* Color label */}
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={() => setLabelMenuOpen(v => !v)}
+                      className="grid place-items-center"
+                      style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                      title="Лейбл (метка)"
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>label</span>
+                    </button>
+                    {labelMenuOpen && (
+                      <div
+                        onMouseLeave={() => setLabelMenuOpen(false)}
+                        style={{
+                          position: 'absolute', top: '100%', right: 0, marginTop: 6,
+                          background: 'var(--surface, #fff)',
+                          border: '1px solid var(--border, #e2e8f0)',
+                          borderRadius: 12, padding: 6,
+                          boxShadow: '0 8px 24px rgba(15,23,42,.15)',
+                          zIndex: 30, display: 'flex', gap: 6,
+                        }}
+                      >
+                        {[
+                          { c: 'red',    hex: '#EF4444' },
+                          { c: 'yellow', hex: '#F59E0B' },
+                          { c: 'green',  hex: '#22C55E' },
+                          { c: 'blue',   hex: '#3B82F6' },
+                        ].map(({ c, hex }) => (
+                          <button
+                            key={c}
+                            onClick={() => doLabel(c)}
+                            title={c}
+                            style={{
+                              width: 28, height: 28, borderRadius: '50%',
+                              background: hex, border: active?.thread?.color_label === c ? '3px solid #0F172A' : '2px solid #fff',
+                              cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,.18)',
+                            }}
+                            aria-label={`Установить лейбл ${c}`}
+                          />
+                        ))}
+                        <button
+                          onClick={() => doLabel(null)}
+                          title="Снять лейбл"
+                          style={{
+                            width: 28, height: 28, borderRadius: '50%',
+                            background: 'var(--bg-1, #f1f5f9)', border: '2px solid var(--border, #e2e8f0)',
+                            cursor: 'pointer', display: 'grid', placeItems: 'center', color: 'var(--fg-2, #475569)',
+                          }}
+                          aria-label="Снять лейбл"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {/* Sound toggle */}
+                  <button
+                    onClick={toggleSound}
+                    className="grid place-items-center"
+                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: soundEnabled ? 'var(--accent, #0097A7)' : 'var(--fg-3, #94a3b8)' }}
+                    title={soundEnabled ? 'Звук уведомлений: вкл' : 'Звук уведомлений: выкл'}
+                    aria-label="Звук уведомлений"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{soundEnabled ? 'notifications_active' : 'notifications_off'}</span>
+                  </button>
                   {canAssign && active?.thread?.status !== 'closed' && (
                     <button
                       onClick={() => setAssignOpen(true)}
@@ -505,7 +749,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                             {item.label}
                           </span>
                         </div>
-                      : <MessageBubble key={item.id} message={item.msg} isOwn={item.isOwn} showAvatar={item.showAvatar} />
+                      : <MessageBubble key={item.id} message={item.msg} isOwn={item.isOwn} showAvatar={item.showAvatar} onReact={active?.thread?.status !== 'closed' ? doReact : undefined} />
                   ))}
                   <div ref={bottomRef} />
                 </div>
@@ -546,6 +790,23 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
               </>
             )}
           </div>
+
+          {/* Карточка пациента — 3-я колонка на широких экранах */}
+          <div
+            className="clinic-chat-patient-col flex-col border-l"
+            data-has-active={activeId ? 'true' : 'false'}
+            style={{ borderColor: 'var(--border, #e2e8f0)', background: 'var(--bg-1, #f8fafc)' }}
+          >
+            {activeId && (
+              <PatientContextPanel
+                variant="panel"
+                threadId={activeId}
+                onBookAppointment={canBook ? goBookAppointment : undefined}
+                onCreateReferral={goCreateReferral}
+                showBookButton={canBook}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -555,6 +816,19 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
         onAssign={doAssign}
         clinicId={active?.thread?.clinic_id || clinicIdProp}
       />
+
+      {/* Mobile-drawer карточки пациента (на узких экранах) */}
+      {activeId && (
+        <PatientContextPanel
+          variant="drawer"
+          threadId={activeId}
+          open={showPatientCard}
+          onClose={() => setShowPatientCard(false)}
+          onBookAppointment={canBook ? () => { setShowPatientCard(false); goBookAppointment() } : undefined}
+          onCreateReferral={() => { setShowPatientCard(false); goCreateReferral() }}
+          showBookButton={canBook}
+        />
+      )}
     </>
   )
 }

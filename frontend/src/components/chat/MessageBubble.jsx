@@ -5,12 +5,17 @@
  * Используется в PatientChatSection.jsx и ClinicChatSection.jsx.
  *
  * Props:
- *   message     — { id, sender_type, sender_name, body, attachments, created_at, read_at }
- *   isOwn       — bool: сообщение собственное (отображается справа)
- *   showAvatar  — bool: показывать аватар отправителя (для не-собственных)
+ *   message       — { id, sender_type, sender_name, body, attachments,
+ *                     created_at, read_at, reactions?: [{emoji,count,by_me}] }
+ *   isOwn         — bool: сообщение собственное (отображается справа)
+ *   showAvatar    — bool: показывать аватар отправителя (для не-собственных)
+ *   onReact       — (messageId, emoji) => void: toggle реакции (если задан, показываем UI)
  * ========================================
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import MarkdownText from './MarkdownText'
+
+const QUICK_REACTIONS = ['👍', '❤️', '✅', '🙏', '😂', '🔥']
 
 function fmtTime(iso) {
   if (!iso) return ''
@@ -41,12 +46,14 @@ function fileIconName(att) {
   return 'attach_file'
 }
 
-export default function MessageBubble({ message, isOwn, showAvatar = true }) {
+export default function MessageBubble({ message, isOwn, showAvatar = true, onReact }) {
   const isSystem = message.sender_type === 'system' || message.sender_type === 'bot'
   const name = message.sender_name || (isOwn ? 'Вы' : 'Клиника')
   const color = useMemo(() => avatarColor(name), [name])
   const initials = (name || '?').split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
   const atts = Array.isArray(message.attachments) ? message.attachments : []
+  const reactions = Array.isArray(message.reactions) ? message.reactions : []
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // Системное сообщение — серая пилюля по центру
   if (isSystem) {
@@ -111,8 +118,12 @@ export default function MessageBubble({ message, isOwn, showAvatar = true }) {
             fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
           }}
         >
-          {/* Текст */}
-          {message.body && <div>{message.body}</div>}
+          {/* Текст (с Markdown) */}
+          {message.body && (
+            <div style={{ color: isOwn ? '#fff' : 'var(--fg, #0F172A)' }}>
+              <MarkdownText>{message.body}</MarkdownText>
+            </div>
+          )}
 
           {/* Вложения */}
           {atts.length > 0 && (
@@ -173,6 +184,100 @@ export default function MessageBubble({ message, isOwn, showAvatar = true }) {
             )}
           </div>
         </div>
+
+        {/* Реакции (под бабблом) */}
+        {(reactions.length > 0 || onReact) && (
+          <div
+            className="flex items-center gap-1 flex-wrap relative"
+            style={{
+              marginTop: 4,
+              justifyContent: isOwn ? 'flex-end' : 'flex-start',
+              paddingLeft: isOwn ? 0 : 4,
+              paddingRight: isOwn ? 4 : 0,
+            }}
+          >
+            {reactions.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                onClick={() => onReact?.(message.id, r.emoji)}
+                title={r.by_me ? 'Убрать вашу реакцию' : 'Добавить реакцию'}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 3,
+                  padding: '2px 7px',
+                  borderRadius: 10,
+                  fontSize: 12,
+                  background: r.by_me ? 'rgba(0,151,167,.18)' : 'var(--bg-1, #f1f5f9)',
+                  border: `1px solid ${r.by_me ? 'rgba(0,151,167,.5)' : 'var(--border, #e2e8f0)'}`,
+                  cursor: 'pointer',
+                  color: 'var(--fg, #0F172A)',
+                }}
+              >
+                <span style={{ fontSize: 13, lineHeight: 1 }}>{r.emoji}</span>
+                <span style={{ fontSize: 11, fontWeight: 600 }}>{r.count}</span>
+              </button>
+            ))}
+            {onReact && (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(v => !v)}
+                title="Добавить реакцию"
+                aria-label="Добавить реакцию"
+                style={{
+                  display: 'inline-grid',
+                  placeItems: 'center',
+                  width: 22, height: 22,
+                  borderRadius: 8,
+                  background: 'var(--bg-1, #f1f5f9)',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  cursor: 'pointer',
+                  color: 'var(--fg-3, #94a3b8)',
+                  fontSize: 12,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_reaction</span>
+              </button>
+            )}
+            {pickerOpen && (
+              <div
+                onMouseLeave={() => setPickerOpen(false)}
+                style={{
+                  position: 'absolute',
+                  top: '100%', marginTop: 4,
+                  [isOwn ? 'right' : 'left']: 0,
+                  background: 'var(--surface, #fff)',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  borderRadius: 12,
+                  padding: 4,
+                  display: 'flex',
+                  gap: 2,
+                  boxShadow: '0 6px 20px rgba(15,23,42,.12)',
+                  zIndex: 10,
+                }}
+              >
+                {QUICK_REACTIONS.map(e => (
+                  <button
+                    key={e}
+                    type="button"
+                    onClick={() => { onReact?.(message.id, e); setPickerOpen(false) }}
+                    style={{
+                      width: 32, height: 32,
+                      borderRadius: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: 18,
+                    }}
+                  >
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
