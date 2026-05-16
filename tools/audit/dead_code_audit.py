@@ -54,6 +54,29 @@ def _strip_jsx_comments(text: str) -> str:
     return text
 
 
+def _normalize_path_for_match(p: str) -> str:
+    """Заменяем {anything} → {var} (унификация path-параметров)."""
+    return re.sub(r"\{[^}]+\}", "{var}", p)
+
+
+def classify_endpoint(endpoint: dict, calls: list[dict], text_corpus: str) -> str:
+    """Возвращает один из: alive | review | safe.
+
+    alive  — есть фронт-вызов с тем же method и нормализованным path
+    review — нет вызова, но путь упоминается в репо (в комментах/строках)
+    safe   — путь нигде не встречается
+    """
+    target = _normalize_path_for_match(endpoint["path"])
+    for c in calls:
+        if c["method"] != endpoint["method"]:
+            continue
+        if _normalize_path_for_match(c["path"]) == target:
+            return "alive"
+    if endpoint["path"] in text_corpus:
+        return "review"
+    return "safe"
+
+
 _RE_IMPORT = re.compile(
     r'(?:^|\n)\s*import\s+(?:[\w*{}\s,]+from\s+)?[\'"]([^\'"]+)[\'"]'
 )

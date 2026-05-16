@@ -6,6 +6,7 @@ import unittest
 sys.path.insert(0, "/opt/clinika")
 
 from tools.audit.dead_code_audit import (  # noqa: E402
+    classify_endpoint,
     extract_backend_endpoints,
     extract_frontend_api_calls,
     extract_frontend_imports,
@@ -46,10 +47,30 @@ class TestFrontendImports(unittest.TestCase):
     def test_finds_static_and_lazy(self):
         imports = extract_frontend_imports(FIX / "SampleConsumer.jsx")
         targets = [i["target"] for i in imports]
-        # Должны быть оба упоминания SampleComponent (статический import + lazy)
         match = [t for t in targets if t.endswith("SampleComponent")]
         self.assertGreaterEqual(len(match), 2,
             f"ожидали ≥ 2 упоминаний SampleComponent, нашли {match}")
+
+
+class TestClassifyEndpoint(unittest.TestCase):
+    def test_safe_when_no_match(self):
+        ep = {"file": "x.py", "method": "GET", "path": "/x/legacy"}
+        self.assertEqual(classify_endpoint(ep, calls=[], text_corpus=""), "safe")
+
+    def test_review_when_only_in_text(self):
+        ep = {"file": "x.py", "method": "GET", "path": "/x/legacy"}
+        corpus = "// см. /x/legacy в документации"
+        self.assertEqual(classify_endpoint(ep, [], corpus), "review")
+
+    def test_alive_when_called(self):
+        ep = {"file": "x.py", "method": "GET", "path": "/x/items/{id}"}
+        calls = [{"file": "y.jsx", "method": "GET", "path": "/x/items/{var}"}]
+        self.assertEqual(classify_endpoint(ep, calls, ""), "alive")
+
+    def test_method_mismatch_not_alive(self):
+        ep = {"file": "x.py", "method": "POST", "path": "/x/items"}
+        calls = [{"file": "y.jsx", "method": "GET", "path": "/x/items"}]
+        self.assertNotEqual(classify_endpoint(ep, calls, ""), "alive")
 
 
 if __name__ == "__main__":
