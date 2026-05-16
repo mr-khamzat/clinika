@@ -1639,6 +1639,10 @@ app.include_router(admin_system_router)
 app.include_router(health_detailed_router)
 app.include_router(prometheus_router)
 
+# Telephony (PSTN: конфиг провайдера, DID-номера, dial, история звонков)
+from app.routers.tenant_telephony import router as _telephony_router
+app.include_router(_telephony_router)
+
 # Reviews plugin
 from app.plugins.reviews import ReviewsPlugin
 from app.plugins.registry import plugin_registry
