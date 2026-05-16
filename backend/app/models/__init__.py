@@ -217,3 +217,6 @@ from app.models.notification_preference import NotificationPreference
 
 # Platform announcements (super_admin → всем сотрудникам всех тенантов)
 from app.models.platform_announcement import PlatformAnnouncement
+
+# Telephony (PSTN-интеграция: конфиг провайдера, DID-номера, история звонков)
+from app.models.telephony import TelephonyConfig, DidNumber, PhoneCall  # noqa: F401
