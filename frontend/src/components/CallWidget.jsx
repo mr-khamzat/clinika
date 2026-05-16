@@ -38,6 +38,7 @@ export default function CallWidget() {
   const [micOn, setMicOn] = useState(true)
   const [camOn, setCamOn] = useState(true)
   const [isSharing, setIsSharing] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
 
   const wsRef          = useRef(null)
   const pingRef        = useRef(null)
@@ -52,6 +53,8 @@ export default function CallWidget() {
   const userGestureUnlockedRef = useRef(false)  // факт user-click для autoplay-policy
   const cameraTrackRef = useRef(null)     // сохранённый камера-track пока идёт screen share
   const screenTrackRef = useRef(null)     // активный screen-track для остановки
+  const reconnectAttemptsRef = useRef(0)  // счётчик попыток ICE-restart (0..3)
+  const activePeerIdRef = useRef(null)    // id собеседника для ICE-restart offer
 
   // ── Проверка модулей ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -204,6 +207,7 @@ export default function CallWidget() {
   const createPC = (targetId) => {
     if (pcRef.current) pcRef.current.close()
     pendingIce.current = []
+    activePeerIdRef.current = targetId
     const pc = new RTCPeerConnection(iceConfigRef.current)
     pcRef.current = pc
 
@@ -226,21 +230,57 @@ export default function CallWidget() {
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState
       // 'disconnected' — временное состояние WebRTC, не дропаем звонок.
-      // ICE может восстановиться сам или через restartIce.
+      // ICE-restart обрабатывается в addEventListener('iceconnectionstatechange') ниже.
       if (s === 'connected') stopAllTones()
-      if (s === 'failed') {
-        try { pc.restartIce() } catch {}
-      }
       // 'closed' — мы сами закрыли, обработка не нужна.
     }
 
-    pc.oniceconnectionstatechange = () => {
+    // Auto-ICE-restart при потере связи (макс 3 попытки, backoff 1/3/6 с).
+    pc.addEventListener('iceconnectionstatechange', async () => {
       const s = pc.iceConnectionState
-      if (s === 'failed') {
-        try { pc.restartIce() } catch {}
+      // Connected — сброс счётчика
+      if (s === 'connected' || s === 'completed') {
+        setReconnecting(false)
+        reconnectAttemptsRef.current = 0
+        return
       }
-      // disconnected → ничего не делаем, ждём connected/failed
-    }
+      // Не реагируем на остальные состояния кроме disconnected/failed
+      if (s !== 'disconnected' && s !== 'failed') return
+      // Лимит 3 попытки
+      if (reconnectAttemptsRef.current >= 3) {
+        setReconnecting(false)
+        try { toast?.('Не удалось восстановить связь', 'error') } catch {}
+        try { endCall() } catch {}
+        return
+      }
+      setReconnecting(true)
+      const attempt = ++reconnectAttemptsRef.current
+      const delay = attempt === 1 ? 1000 : attempt === 2 ? 3000 : 6000
+      await new Promise(r => setTimeout(r, delay))
+      // За время задержки соединение могло восстановиться само.
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        setReconnecting(false)
+        return
+      }
+      try {
+        if (typeof pc.restartIce === 'function') {
+          pc.restartIce()
+        }
+        const offer = await pc.createOffer({ iceRestart: true })
+        await pc.setLocalDescription(offer)
+        // Шлём новый offer через существующий сигнальный канал (sendWs над WS).
+        const peerId = activePeerIdRef.current || targetId
+        sendWs({
+          type: 'call_invite',
+          callee_id: peerId,
+          call_type: mode,
+          sdp_offer: pc.localDescription.toJSON(),
+          ice_restart: true,
+        })
+      } catch (e) {
+        console.warn('ICE restart attempt failed', e)
+      }
+    })
 
     return pc
   }
@@ -316,6 +356,9 @@ export default function CallWidget() {
     }
     cameraTrackRef.current = null
     setIsSharing(false)
+    setReconnecting(false)
+    reconnectAttemptsRef.current = 0
+    activePeerIdRef.current = null
     localStreamRef.current?.getTracks().forEach(t => t.stop())
     localStreamRef.current = null
     if (remoteStreamRef.current) {
@@ -539,6 +582,26 @@ export default function CallWidget() {
             {!camOn && (
               <div className="absolute bottom-28 right-4 z-50 w-36 h-24 rounded-2xl bg-gray-800 border-2 border-white/30 shadow-2xl flex items-center justify-center pointer-events-auto">
                 <span className="material-symbols-outlined text-white/40 text-3xl">videocam_off</span>
+              </div>
+            )}
+            {/* ── Оверлей переподключения при ICE-restart ──────────────── */}
+            {reconnecting && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0, zIndex: 60,
+                  background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(2px)',
+                  display: 'grid', placeItems: 'center',
+                  color: '#fff', fontSize: 16, fontWeight: 600,
+                  textAlign: 'center', padding: 20, pointerEvents: 'auto',
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🔄</div>
+                  Переподключение…<br/>
+                  <span style={{ fontSize: 13, opacity: .8 }}>
+                    попытка {reconnectAttemptsRef.current} из 3
+                  </span>
+                </div>
               </div>
             )}
           </div>
