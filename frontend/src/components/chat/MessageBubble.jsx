@@ -46,7 +46,7 @@ function fileIconName(att) {
   return 'attach_file'
 }
 
-export default function MessageBubble({ message, isOwn, showAvatar = true, onReact }) {
+export default function MessageBubble({ message, isOwn, showAvatar = true, onReact, onReply }) {
   const isSystem = message.sender_type === 'system' || message.sender_type === 'bot'
   const name = message.sender_name || (isOwn ? 'Вы' : 'Клиника')
   const color = useMemo(() => avatarColor(name), [name])
@@ -78,6 +78,7 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
   return (
     <div
       className="flex msg-in"
+      data-msg-id={message.id}
       style={{ justifyContent: isOwn ? 'flex-end' : 'flex-start', gap: 8, margin: '6px 0' }}
     >
       {!isOwn && (
@@ -118,6 +119,40 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
             fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
           }}
         >
+          {/* Цитата (reply_to) — клик скроллит к оригиналу */}
+          {message.reply_to && (
+            <div
+              onClick={() => {
+                const el = document.querySelector(`[data-msg-id="${message.reply_to.id}"]`)
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  // Подсветка-флэш
+                  el.style.transition = 'background-color .3s'
+                  const prev = el.style.backgroundColor
+                  el.style.backgroundColor = 'rgba(0,151,167,.15)'
+                  setTimeout(() => { el.style.backgroundColor = prev }, 1200)
+                }
+              }}
+              title="Перейти к оригиналу"
+              style={{
+                padding: '6px 8px',
+                marginBottom: 6,
+                borderRadius: 8,
+                borderLeft: `3px solid ${isOwn ? 'rgba(255,255,255,.65)' : 'var(--accent, #0097A7)'}`,
+                background: isOwn ? 'rgba(255,255,255,.12)' : 'rgba(0,151,167,.06)',
+                fontSize: 12,
+                color: isOwn ? 'rgba(255,255,255,.85)' : 'var(--fg-2, #475569)',
+                fontStyle: 'italic',
+                cursor: 'pointer',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              ↩ {message.reply_to.body_preview}
+            </div>
+          )}
+
           {/* Текст (с Markdown) */}
           {message.body && (
             <div style={{ color: isOwn ? '#fff' : 'var(--fg, #0F172A)' }}>
@@ -185,8 +220,8 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
           </div>
         </div>
 
-        {/* Реакции (под бабблом) */}
-        {(reactions.length > 0 || onReact) && (
+        {/* Реакции + кнопка ответа (под бабблом) */}
+        {(reactions.length > 0 || onReact || onReply) && (
           <div
             className="flex items-center gap-1 flex-wrap relative"
             style={{
@@ -238,6 +273,27 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
                 }}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add_reaction</span>
+              </button>
+            )}
+            {onReply && (
+              <button
+                type="button"
+                onClick={() => onReply(message)}
+                title="Ответить"
+                aria-label="Ответить"
+                style={{
+                  display: 'inline-grid',
+                  placeItems: 'center',
+                  width: 22, height: 22,
+                  borderRadius: 8,
+                  background: 'var(--bg-1, #f1f5f9)',
+                  border: '1px solid var(--border, #e2e8f0)',
+                  cursor: 'pointer',
+                  color: 'var(--fg-3, #94a3b8)',
+                  fontSize: 12,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>reply</span>
               </button>
             )}
             {pickerOpen && (

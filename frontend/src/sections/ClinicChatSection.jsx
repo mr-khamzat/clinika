@@ -26,6 +26,7 @@ import PatientContextPanel from '../components/chat/PatientContextPanel'
 import ReassignModal from '../components/chat/ReassignModal'
 import TemplateAutocomplete from '../components/chat/TemplateAutocomplete'
 import useChatSoundNotification from '../hooks/useChatSoundNotification'
+import { enableWebPush, disableWebPush, getPushPermissionState } from '../lib/webPush'
 
 const POLL_MS = 10_000
 
@@ -180,6 +181,16 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
   const lastNotifyIdRef = useRef(null)        // последний message_id для которого играли звук
   const typingTickRef = useRef(0)             // дебаунс отправки typing
 
+  // ── Quick wins хвосты: drag&drop, quoted reply, push button ───────────────
+  const [isDragging, setIsDragging] = useState(false)
+  const [pendingAttachments, setPendingAttachments] = useState([])
+  const [replyingTo, setReplyingTo] = useState(null)  // {id, body_preview, sender_type}
+  const [pushState, setPushState] = useState('default')  // default|granted|denied|unsupported
+
+  useEffect(() => {
+    getPushPermissionState().then(setPushState)
+  }, [])
+
   const bottomRef = useRef(null)
   const textareaRef = useRef(null)
   const lastMsgIdRef = useRef(null)
@@ -287,11 +298,17 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
   const send = useCallback(async () => {
     if (!activeId) return
     const body = draft.trim()
-    if (!body) return
+    if (!body && pendingAttachments.length === 0) return
     setSending(true)
     try {
-      await api.post(`/clinic/chat/threads/${activeId}/messages`, { body })
+      await api.post(`/clinic/chat/threads/${activeId}/messages`, {
+        body,
+        attachments: pendingAttachments.length ? pendingAttachments : undefined,
+        reply_to_id: replyingTo?.id,
+      })
       setDraft('')
+      setPendingAttachments([])
+      setReplyingTo(null)
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
       await fetchThread(activeId, true)
       fetchThreads()
@@ -299,7 +316,29 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
       toast?.(e?.response?.data?.detail || 'Не удалось отправить', 'error')
     }
     setSending(false)
-  }, [activeId, draft, fetchThread, fetchThreads, toast])
+  }, [activeId, draft, pendingAttachments, replyingTo, fetchThread, fetchThreads, toast])
+
+  // ── Drag&drop handlers (загрузка файлов в текущий тред) ──────────────────
+  const handleDrop = useCallback(async (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (!activeId) return
+    const files = Array.from(e.dataTransfer?.files || [])
+    for (const file of files) {
+      const fd = new FormData()
+      fd.append('file', file)
+      try {
+        const r = await api.post(`/clinic/chat/threads/${activeId}/files`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
+        setPendingAttachments(prev => [...prev, r.data])
+      } catch (err) {
+        toast?.(err?.response?.data?.detail || 'Не удалось загрузить файл', 'error')
+      }
+    }
+  }, [activeId, toast])
+  const handleDragOver = useCallback((e) => { e.preventDefault(); setIsDragging(true) }, [])
+  const handleDragLeave = useCallback((e) => { e.preventDefault(); setIsDragging(false) }, [])
 
   // ── Assign / Close ───────────────────────────────────────────────────────
   const doAssign = async (doctorId) => {
@@ -722,6 +761,43 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{soundEnabled ? 'notifications_active' : 'notifications_off'}</span>
                   </button>
+                  {/* Web Push subscribe toggle */}
+                  {pushState !== 'unsupported' && (
+                    <button
+                      onClick={async () => {
+                        if (pushState === 'granted') {
+                          const r = await disableWebPush()
+                          if (r.ok) setPushState('default')
+                        } else {
+                          const r = await enableWebPush()
+                          if (r.ok) {
+                            setPushState('granted')
+                            toast?.('Push-уведомления включены', 'success')
+                          } else if (r.reason) {
+                            toast?.(r.reason, 'error')
+                          }
+                        }
+                      }}
+                      className="grid place-items-center"
+                      style={{
+                        width: 36, height: 36, borderRadius: 10,
+                        background: 'var(--bg-1, #f1f5f9)',
+                        color: pushState === 'granted' ? 'var(--accent, #0097A7)' : 'var(--fg-3, #94a3b8)',
+                      }}
+                      title={pushState === 'granted' ? 'Push-уведомления: вкл' : 'Включить push-уведомления'}
+                      aria-label="Push notifications"
+                    >
+                      <span
+                        className="material-symbols-outlined"
+                        style={{
+                          fontSize: 20,
+                          fontVariationSettings: pushState === 'granted' ? "'FILL' 1" : "'FILL' 0",
+                        }}
+                      >
+                        {pushState === 'granted' ? 'notifications_active' : 'notifications'}
+                      </span>
+                    </button>
+                  )}
                   {canAssign && active?.thread?.status !== 'closed' && (
                     <button
                       onClick={() => setAssignOpen(true)}
@@ -755,11 +831,15 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                 {/* Поток */}
                 <div
                   className="chat-scroll flex-1 overflow-y-auto p-3"
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
                   style={{
                     background: 'var(--bg-1, #f8fafc)',
                     backgroundImage: 'radial-gradient(rgba(0,151,167,.06) 1px, transparent 1px)',
                     backgroundSize: '24px 24px',
                     maxHeight: 'calc(100vh - 360px)',
+                    position: 'relative',
                   }}
                 >
                   {loadingMsgs && <div className="text-center py-6" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Загрузка…</div>}
@@ -777,9 +857,35 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                             {item.label}
                           </span>
                         </div>
-                      : <MessageBubble key={item.id} message={item.msg} isOwn={item.isOwn} showAvatar={item.showAvatar} onReact={active?.thread?.status !== 'closed' ? doReact : undefined} />
+                      : <MessageBubble
+                          key={item.id}
+                          message={item.msg}
+                          isOwn={item.isOwn}
+                          showAvatar={item.showAvatar}
+                          onReact={active?.thread?.status !== 'closed' ? doReact : undefined}
+                          onReply={active?.thread?.status !== 'closed' ? (msg) => setReplyingTo({
+                            id: msg.id,
+                            body_preview: (msg.body || '').slice(0, 100),
+                            sender_type: msg.sender_type,
+                          }) : undefined}
+                        />
                   ))}
                   <div ref={bottomRef} />
+                  {isDragging && (
+                    <div
+                      style={{
+                        position: 'absolute', inset: 0, zIndex: 50,
+                        background: 'rgba(0,151,167,.15)',
+                        border: '3px dashed #0097A7',
+                        display: 'grid', placeItems: 'center',
+                        fontSize: 16, fontWeight: 600, color: '#0097A7',
+                        pointerEvents: 'none',
+                        borderRadius: 8,
+                      }}
+                    >
+                      Отпустите чтобы прикрепить
+                    </div>
+                  )}
                 </div>
 
                 {/* Input */}
@@ -789,6 +895,59 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                   </div>
                 ) : (
                   <div className="px-2 py-2" style={{ borderTop: '1px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)', position: 'relative' }}>
+                    {/* Pending attachments preview (chips с ✕) */}
+                    {pendingAttachments.length > 0 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '6px 8px' }}>
+                        {pendingAttachments.map((a, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              padding: '4px 8px', borderRadius: 8, fontSize: 11,
+                              background: 'var(--bg-1, #f1f5f9)',
+                              display: 'flex', gap: 4, alignItems: 'center',
+                              border: '1px solid var(--border, #e2e8f0)',
+                            }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>attach_file</span>
+                            <span style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => setPendingAttachments(prev => prev.filter((_, j) => j !== i))}
+                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg-3, #94a3b8)', padding: 0, lineHeight: 1 }}
+                              aria-label="Убрать вложение"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Reply-to preview */}
+                    {replyingTo && (
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '6px 10px', margin: '0 8px 4px',
+                          background: 'var(--bg-1, #f1f5f9)',
+                          borderLeft: '3px solid var(--accent, #0097A7)',
+                          borderRadius: 8,
+                          fontSize: 12,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: 'var(--accent, #0097A7)' }}>reply</span>
+                        <span style={{ flex: 1, color: 'var(--fg-2, #475569)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Ответ: {replyingTo.body_preview}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setReplyingTo(null)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--fg-3, #94a3b8)' }}
+                          aria-label="Отменить ответ"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                     <TemplateAutocomplete
                       query={tplQuery}
                       onPick={async (t) => {
@@ -813,7 +972,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                       <button
                         type="button"
                         onClick={send}
-                        disabled={sending || !draft.trim()}
+                        disabled={sending || (!draft.trim() && pendingAttachments.length === 0)}
                         className="grid place-items-center flex-shrink-0 text-white disabled:opacity-40"
                         style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #0097A7, #0A2342)', boxShadow: '0 4px 12px rgba(0,151,167,.35)' }}
                         aria-label="Отправить"
