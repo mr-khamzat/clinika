@@ -156,6 +156,8 @@ from app.routers.admin_system import (
     detailed_router as health_detailed_router,
     disaster_health_check,
 )
+# Supervisor — мониторинг всех сервисов для super_admin (страница AdminSupervisor.jsx)
+from app.routers.supervisor import router as supervisor_router
 from app.core import disaster_middleware as _disaster_mw
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
@@ -1637,6 +1639,7 @@ app.include_router(wellness_router)
 app.include_router(admin_aggregator_router)
 app.include_router(public_aggregator_router)
 app.include_router(admin_system_router)
+app.include_router(supervisor_router)
 app.include_router(health_detailed_router)
 app.include_router(prometheus_router)
 
