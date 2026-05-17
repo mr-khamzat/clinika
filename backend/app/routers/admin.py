@@ -389,37 +389,6 @@ async def upsert_tenant_module(
     return {"tenant_id": str(tenant_id), "module": data.module, "enabled": data.enabled}
 
 
-@router.put("/tenants/{tenant_id}/plugins")
-async def upsert_tenant_plugin(
-    tenant_id: uuid.UUID,
-    data: PluginUpdate,
-    _: User = Depends(require_super_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Включить/выключить плагин для тенанта."""
-    t = await db.get(Tenant, tenant_id)
-    if not t:
-        raise HTTPException(status_code=404, detail="Тенант не найден")
-
-    r = await db.execute(
-        select(TenantPlugin).where(
-            TenantPlugin.tenant_id == tenant_id,
-            TenantPlugin.plugin == data.plugin,
-        )
-    )
-    plug = r.scalar_one_or_none()
-    if plug:
-        plug.enabled = data.enabled
-        plug.config = data.config
-        plug.updated_at = datetime.utcnow()
-    else:
-        plug = TenantPlugin(tenant_id=tenant_id, plugin=data.plugin, enabled=data.enabled, config=data.config)
-        db.add(plug)
-
-    await db.commit()
-    return {"tenant_id": str(tenant_id), "plugin": data.plugin, "enabled": data.enabled}
-
-
 # ── Эндпоинты: Метрики платформы ────────────────────────────────────────────
 
 @router.get("/metrics")

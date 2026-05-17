@@ -4,7 +4,6 @@
 ========================================
 Эндпоинты для роли reg (Регистратор):
   • GET  /referrals/{id}/print           — PDF направления (A5, кириллица, QR)
-  • GET  /referrals/print-batch          — пакет направлений в одном PDF
   • GET  /referrals/patients/search      — быстрый поиск пациентов по своим направлениям
                                             (по имени и/или телефону)
 
@@ -345,58 +344,6 @@ async def print_referral_pdf(
     disposition = "inline" if inline else "attachment"
     headers = {
         "Content-Disposition": f'{disposition}; filename="{fname}"',
-        "Cache-Control": "no-store",
-    }
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
-
-
-# ─── ЭНДПОИНТ: пакетная печать нескольких направлений ───
-@router.get("/print-batch")
-async def print_referrals_batch(
-    ids: str = Query(..., description="UUIDs через запятую"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Несколько направлений в одном PDF (по одному на страницу A5)."""
-    try:
-        id_list = [uuid.UUID(x.strip()) for x in ids.split(",") if x.strip()]
-    except ValueError:
-        raise HTTPException(status_code=400, detail="ids должны быть UUID через запятую")
-    if not id_list:
-        raise HTTPException(status_code=400, detail="Передайте хотя бы один id")
-    if len(id_list) > 50:
-        raise HTTPException(status_code=400, detail="Максимум 50 направлений за раз")
-
-    refs = (await db.execute(select(Referral).where(Referral.id.in_(id_list)))).scalars().all()
-    refs = [r for r in refs if _can_access_referral(r, current_user)]
-    if not refs:
-        raise HTTPException(status_code=404, detail="Доступных направлений не найдено")
-
-    # объединяем HTML, между страницами — page-break
-    parts = []
-    for i, r in enumerate(refs):
-        page = await _build_referral_html(db, r, current_user)
-        # Извлекаем <body>...</body> — но проще: оборачиваем целым шаблоном на каждое направление
-        # weasyprint умеет multiple HTML входов, но мы держим один; добавляем page-break-after.
-        if i == 0:
-            parts.append(page.replace("</body>", "<div style='page-break-after: always;'></div></body>"))
-        else:
-            # начиная со 2-го — только содержимое внутри body, отделённое page-break
-            body_start = page.find("<body>")
-            body_end = page.find("</body>")
-            if body_start != -1 and body_end != -1:
-                inner = page[body_start + len("<body>"):body_end]
-                # стиль на каждый блок — пересоздавать не нужно; просто чанк HTML
-                # вместе с разделителем
-                if i < len(refs) - 1:
-                    parts.append(inner + "<div style='page-break-after: always;'></div>")
-                else:
-                    parts.append(inner)
-    full_html = "\n".join(parts)
-    pdf_bytes = _html_to_pdf(full_html)
-
-    headers = {
-        "Content-Disposition": f'inline; filename="referrals_batch_{len(refs)}.pdf"',
         "Cache-Control": "no-store",
     }
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
