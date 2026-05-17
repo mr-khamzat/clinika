@@ -14,9 +14,24 @@
  * ========================================
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useInRouterContext } from 'react-router-dom'
 import api from '../api'
 import { BASE_PATH, SLUG } from '../config'
+
+// ────────────────────────────────────────────────────────────────────────
+// CommandPalette подключается на верхнем уровне всех staff-кабинетов.
+// В Layout/Manager/Doctor — он внутри <BrowserRouter>, и useNavigate работает.
+// В AdminLayout (/admin платформы super_admin) — он ВНЕ <BrowserRouter>
+// (см. App.jsx:529: AdminRoot возвращается до <BrowserRouter>).
+// useNavigate() в этой ветке кидает «may be used only in the context of
+// a <Router> component» и валит весь /admin (белый экран).
+//
+// Решение: проверяем useInRouterContext() и рендерим один из двух inner-
+// компонентов. Каждый из них имеет СВОЮ стабильную последовательность
+// хуков (Rules of Hooks выполняются), потому что выбор делается на уровне
+// родителя при mount и не меняется в течение жизни компонента (Layout
+// либо всегда внутри Router'а, либо всегда снаружи).
+// ────────────────────────────────────────────────────────────────────────
 
 /* eslint-disable react-hooks/exhaustive-deps */
 
@@ -59,8 +74,32 @@ function urlFor(item) {
   }
 }
 
+// Внешний компонент — выбирает inner с/без useNavigate
 export default function CommandPalette() {
+  const inRouter = useInRouterContext()
+  return inRouter ? <CommandPaletteWithRouter /> : <CommandPaletteNoRouter />
+}
+
+// Версия для AdminLayout — навигация через window.location.assign (полный reload,
+// допустимо т.к. в /admin SLUG='' и переходов из палитры между секциями мало).
+function CommandPaletteNoRouter() {
+  const navigate = useCallback((to) => {
+    try {
+      const url = (typeof to === 'string' && to.startsWith('/')) ? to : `/${to || ''}`
+      window.location.assign(url)
+    } catch {}
+  }, [])
+  return <CommandPaletteImpl navigate={navigate} />
+}
+
+// Версия для Layout/Manager/Doctor — внутри BrowserRouter, доступен useNavigate.
+function CommandPaletteWithRouter() {
   const navigate = useNavigate()
+  return <CommandPaletteImpl navigate={navigate} />
+}
+
+// Тело палитры — принимает navigate(to) как prop
+function CommandPaletteImpl({ navigate }) {
   // Стабильная пустая ссылка — иначе каждый рендер создаёт новый объект и эффекты, зависящие от data, бесконечно ре-рендерятся
   const EMPTY = useMemo(() => ({ patients: [], doctors: [], referrals: [], services: [] }), [])
   const enabled = !!SLUG

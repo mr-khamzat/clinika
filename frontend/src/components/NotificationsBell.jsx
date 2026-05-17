@@ -7,20 +7,24 @@
  * Использует:
  *   GET  /notifications/recent          — последние 10 уведомлений
  *   POST /notifications/{id}/read       — отметить прочитанным
+ *   POST /notifications/read-all        — отметить все прочитанными
+ *   GET  /notifications/preferences     — категории + отключённые
+ *   PUT  /notifications/preferences     — сохранить отключённые
  *
- * Закрывается при клике вне (useEffect + document mousedown).
- * Counter unread показывается badge'ом.
+ * UI:
+ *   - dropdown со списком, иконка-шестерёнка → модалка категорий
+ *   - кнопка «Прочитать все» при unread > 0
  *
  * Props:
  *   size      — диаметр кнопки (px), по умолчанию 36
- *   variant   — 'square' (border) | 'round' (rounded-full с hover-bg) — для разных Layout
+ *   variant   — 'square' (border) | 'round' (rounded-full с hover-bg)
  * ========================================
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import api from '../api'
-import { SLUG } from '../config'
+import NotificationPreferencesModal from './NotificationPreferencesModal'
 
-// ===== БЛОК (W4): глобальные keyframes для dropdown slide+fade 200ms =====
+// ===== Глобальные keyframes для dropdown slide+fade 200ms =====
 const KS_DROPDOWN_STYLE_ID = 'ks-dropdown-anim'
 function ensureDropdownAnim() {
   if (typeof document === 'undefined') return
@@ -53,42 +57,68 @@ function relTime(iso) {
   return new Date(iso).toLocaleDateString('ru-RU')
 }
 
-// Иконка по типу уведомления
+// Иконка по типу уведомления (мапится на категорию из бэка)
 function iconFor(type) {
   switch (type) {
-    case 'referral_created':  return 'qr_code_2'
-    case 'bonus_credited':    return 'payments'
-    case 'call_missed':       return 'phone_missed'
-    case 'system_alert':      return 'priority_high'
-    case 'appointment':       return 'event'
-    default:                  return 'notifications'
+    case 'announcement':     return 'campaign'
+    case 'security_alert':   return 'shield_lock'
+    case 'region_alert':     return 'public_off'
+    case 'patient_data':     return 'health_and_safety'
+    case 'staff_event':      return 'group'
+    case 'clinic_event':     return 'business'
+    case 'referral_event':   return 'qr_code_2'
+    case 'bonus_event':      return 'payments'
+    case 'finance_event':    return 'account_balance'
+    case 'discount_event':   return 'sell'
+    case 'settings_event':   return 'tune'
+    case 'contact_request':  return 'mail'
+    case 'system_info':      return 'info'
+    // legacy типы (на случай старого клиента/кеша)
+    case 'referral_created': return 'qr_code_2'
+    case 'bonus_credited':   return 'payments'
+    case 'call_missed':      return 'phone_missed'
+    case 'system_alert':     return 'priority_high'
+    case 'appointment':      return 'event'
+    default:                 return 'notifications'
   }
 }
 
 // Цвет иконки по типу
 function colorFor(type) {
   switch (type) {
-    case 'bonus_credited':    return '#10b981'  // зелёный
-    case 'call_missed':       return '#ef4444'  // красный
-    case 'system_alert':      return '#f59e0b'  // оранжевый
-    default:                  return '#0097A7'  // teal accent
+    case 'announcement':     return '#0ea5e9'  // голубой — объявления
+    case 'security_alert':   return '#ef4444'  // красный
+    case 'region_alert':     return '#f59e0b'  // оранжевый
+    case 'patient_data':     return '#8b5cf6'  // фиолетовый — 152-ФЗ
+    case 'bonus_event':      return '#10b981'  // зелёный
+    case 'finance_event':    return '#10b981'
+    case 'contact_request':  return '#3b82f6'  // синий
+    case 'referral_event':   return '#0097A7'
+    case 'discount_event':   return '#0097A7'
+    // legacy
+    case 'bonus_credited':   return '#10b981'
+    case 'call_missed':      return '#ef4444'
+    case 'system_alert':     return '#f59e0b'
+    default:                 return '#0097A7'  // teal accent
   }
 }
 
 export default function NotificationsBell({ size = 36, variant = 'square' }) {
-  const enabled = !!SLUG
+  // Раньше было `enabled = !!SLUG` — в /admin (платформа super_admin, SLUG='')
+  // колокольчик не подгружал уведомления вовсе. Теперь включён всегда:
+  // если бэкенд не отдаёт /notifications/recent — catch ставит [] и 0.
+  const enabled = true
   const [open, setOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)   // exit-анимация dropdown'а
+  const [mounted, setMounted] = useState(false)
   const [closing, setClosing] = useState(false)
   const [items, setItems] = useState([])
   const [unread, setUnread] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [prefsOpen, setPrefsOpen] = useState(false)
   const ref = useRef(null)
 
-  // Гарантируем CSS-анимацию dropdown'а (200ms slide+fade)
   useEffect(() => { ensureDropdownAnim() }, [])
 
-  // Mount/unmount sync с open для проигрывания exit-анимации
   useEffect(() => {
     if (open) { setMounted(true); setClosing(false); return }
     setClosing(true)
@@ -96,7 +126,6 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
     return () => clearTimeout(t)
   }, [open])
 
-  // Загрузка уведомлений
   const load = useCallback(async () => {
     setLoading(true)
     try {
@@ -104,7 +133,6 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
       setItems(r.data.items || [])
       setUnread(r.data.unread || 0)
     } catch {
-      // Тихо — иконка остаётся, dropdown пустой
       setItems([])
       setUnread(0)
     } finally {
@@ -112,8 +140,6 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
     }
   }, [])
 
-  // Полная загрузка при открытии и опрос каждые 60 сек для бейджа
-  // Только когда SLUG задан — иначе на платформенном /admin (БЕЗ slug) /notifications/recent шлёт 404 → бесконечный re-fetch
   useEffect(() => { if (enabled) load() }, [load, enabled])
   useEffect(() => {
     if (!enabled) return
@@ -121,36 +147,44 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
     return () => clearInterval(t)
   }, [load, enabled])
 
-  // Закрытие при клике вне dropdown
   useEffect(() => {
     if (!open) return
     const onDoc = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setOpen(false)
-      }
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  // Отметить прочитанным
   const markRead = async (id) => {
     try {
       await api.post(`/notifications/${id}/read`)
       setItems(prev => prev.map(it => it.id === id ? { ...it, is_read: true } : it))
       setUnread(prev => Math.max(0, prev - 1))
-    } catch {
-      /* noop */
-    }
+    } catch { /* noop */ }
+  }
+
+  const markAllRead = async (e) => {
+    e?.stopPropagation?.()
+    if (unread === 0) return
+    try {
+      await api.post('/notifications/read-all')
+      setItems(prev => prev.map(it => ({ ...it, is_read: true })))
+      setUnread(0)
+    } catch { /* noop */ }
   }
 
   const toggle = () => {
     setOpen(o => !o)
-    // При открытии — обновим (если разрешено)
     if (!open && enabled) load()
   }
 
-  // Стилизация кнопки в зависимости от варианта
+  const openPrefs = (e) => {
+    e?.stopPropagation?.()
+    setOpen(false)
+    setPrefsOpen(true)
+  }
+
   const btnStyle = variant === 'round'
     ? {
         width: size, height: size,
@@ -201,7 +235,7 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
           className={closing ? 'ks-dd-leave' : 'ks-dd-enter'}
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-            width: 360, maxWidth: '92vw', zIndex: 100,
+            width: 380, maxWidth: '92vw', zIndex: 100,
             background: 'var(--surface, #fff)',
             color: 'var(--fg, #191c1e)',
             border: '1px solid var(--border, rgba(0,0,0,0.08))',
@@ -212,19 +246,55 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
           }}
           role="menu"
         >
+          {/* Header */}
           <div className="flex items-center justify-between" style={{
             padding: '10px 14px',
             borderBottom: '1px solid var(--border, rgba(0,0,0,0.08))',
+            gap: 8,
           }}>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>Уведомления</div>
-            {unread > 0 && (
-              <span style={{
-                fontSize: 11, padding: '2px 7px', borderRadius: 999,
-                background: '#ef4444', color: '#fff', fontWeight: 700,
-              }}>{unread} новых</span>
-            )}
+            <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>Уведомления</div>
+              {unread > 0 && (
+                <span style={{
+                  fontSize: 11, padding: '2px 7px', borderRadius: 999,
+                  background: '#ef4444', color: '#fff', fontWeight: 700,
+                }}>{unread} новых</span>
+              )}
+            </div>
+            <div className="flex items-center" style={{ gap: 4 }}>
+              {unread > 0 && (
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  title="Отметить все прочитанными"
+                  style={{
+                    fontSize: 12, padding: '4px 10px', borderRadius: 8,
+                    border: '1px solid var(--border, rgba(0,0,0,0.10))',
+                    background: 'var(--bg-1, #f7f9fb)',
+                    color: 'var(--fg-2, #4a4f5a)',
+                    cursor: 'pointer',
+                  }}
+                >Прочитать все</button>
+              )}
+              <button
+                type="button"
+                onClick={openPrefs}
+                title="Настройки уведомлений"
+                aria-label="Настройки уведомлений"
+                style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  border: 0, background: 'transparent',
+                  display: 'inline-grid', placeItems: 'center',
+                  cursor: 'pointer', color: 'var(--fg-3, #727783)',
+                }}
+                className="hover:bg-[var(--bg-1,#f7f9fb)]"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>settings</span>
+              </button>
+            </div>
           </div>
 
+          {/* List */}
           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
             {loading && (
               <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--fg-3, #727783)' }}>
@@ -275,6 +345,13 @@ export default function NotificationsBell({ size = 36, variant = 'square' }) {
             })}
           </div>
         </div>
+      )}
+
+      {prefsOpen && (
+        <NotificationPreferencesModal
+          onClose={() => setPrefsOpen(false)}
+          onSaved={() => { setPrefsOpen(false); load() }}
+        />
       )}
     </div>
   )

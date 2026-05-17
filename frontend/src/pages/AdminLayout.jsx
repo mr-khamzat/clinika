@@ -8863,8 +8863,11 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
 
       {/* HelpModal удалён — справка ведёт на /wiki */}
 
-      {/* W3: глобальный поиск Cmd+K */}
-      {/* <CommandPalette /> отключён до фикса useNavigate в renderer */}
+      {/* W3: глобальный поиск Cmd+K
+          Включён обратно после фикса CommandPalette: компонент сам
+          определяет, есть ли BrowserRouter (useInRouterContext) и в /admin
+          (вне Router'а) использует window.location.assign вместо useNavigate. */}
+      <CommandPalette />
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`
