@@ -33,6 +33,8 @@ const StaffChat = lazy(() => import('./pages/StaffChat'))
 const ChatSettings = lazy(() => import('./pages/ChatSettings'))
 const ChatRoles = lazy(() => import('./pages/ChatRoles'))
 const PlatformAnnouncements = lazy(() => import('./pages/PlatformAnnouncements'))
+// Supervisor — мониторинг сервисов платформы (только super_admin)
+const AdminSupervisor = lazy(() => import('./pages/AdminSupervisor'))
 const FranchiseModules = lazy(() => import('./pages/FranchiseModules'))
 const FranchiseRevenue = lazy(() => import('./pages/FranchiseRevenue'))
 const Franchise = lazy(() => import('./pages/Franchise'))
@@ -53,6 +55,8 @@ const ManagerSettings = lazy(() => import('./pages/ManagerSettings'))
 const ManagerInvoices = lazy(() => import('./pages/ManagerInvoices'))
 // svcfin01: финансовая модель платформы — 3 таба (Платформе/Сети/Сотрудникам)
 const ManagerFinance = lazy(() => import('./pages/ManagerFinance'))
+// billingledger01: журнал биллинг-операций франшизы (append-only)
+const ManagerBillingLedger = lazy(() => import('./pages/ManagerBillingLedger'))
 const ManagerAppointments = lazy(() => import('./pages/ManagerAppointments'))
 // Глава 4 — Manager productivity (lazy load)
 // (reused lazy from top import)
@@ -320,6 +324,8 @@ function MiniApp() {
               <Route path="manager/partner-doctors"  element={<ManagerPartnerDoctors />} />
               <Route path="manager/invoices" element={<ManagerInvoices />} />
               <Route path="manager/finance" element={<ManagerFinance />} />
+              {/* billingledger01: журнал биллинг-операций франшизы */}
+              <Route path="manager/finance/ledger" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerBillingLedger /></Suspense>} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
               {/* Глава 4 — Manager productivity */}
               <Route path="manager/kanban"       element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerKanban /></Suspense>} />
@@ -383,6 +389,10 @@ function MiniApp() {
         <Route path="/admin/franchise-modules" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseModules /></Suspense>} />
         <Route path="/admin/chat-roles" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatRoles /></Suspense>} />
         <Route path="/admin/announcements" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><PlatformAnnouncements /></Suspense>} />
+        {/* Supervisor — мониторинг сервисов (super_admin); если не super_admin — backend вернёт 403, страница покажет ошибку */}
+        {user?.role === 'super_admin' && (
+          <Route path="/admin/supervisor" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><AdminSupervisor /></Suspense>} />
+        )}
         <Route path="/staff-chat" element={<Suspense fallback={<div style={{minHeight:"100vh",background:"#0f1115"}}/>}><StaffChat /></Suspense>} />
       </Routes>
       </Suspense>

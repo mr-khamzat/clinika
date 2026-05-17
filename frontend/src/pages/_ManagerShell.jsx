@@ -36,6 +36,8 @@ export const MGR_NAV = [
   { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices',      group:'finance' },
   // svcfin01: финансовая модель платформы — счета платформе/сети/сотрудникам
   { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance',    group:'finance' },
+  // billingledger01: журнал биллинг-операций франшизы (append-only)
+  { key:'billing_ledger', label:'Журнал биллинга', icon:'receipt_long', path:'/manager/finance/ledger', group:'finance' },
   // Наличная активация подписки «Здоровье+/Семья+/Pro» (касса клиники, печать квитанции)
   { key:'subscription_cash', label:'Подписки (наличные)', icon:'payments', path:'/manager/subscription-cash', group:'subscriptions' },
   // Очередь заявок на подписку (ручное одобрение менеджером)
