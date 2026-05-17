@@ -3,7 +3,7 @@ import re
 import uuid
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -339,6 +339,47 @@ async def list_calls(
         ],
         "page": page,
     }
+
+
+# ── Recording download ────────────────────────────────────────────────────────
+
+@router.get("/telephony/calls/{call_id}/recording")
+async def get_call_recording(
+    call_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Скачивает аудио-запись звонка через активный провайдер тенанта.
+
+    1. Загружает PhoneCall по id, проверяет принадлежность tenant.
+    2. Через factory получает провайдер и вызывает fetch_recording(provider_call_id).
+    3. Если bytes — отдаёт audio/mpeg (inline), иначе 404.
+    """
+    _require_settings_role(user)
+    call = (await db.execute(
+        select(PhoneCall).where(
+            PhoneCall.id == call_id,
+            PhoneCall.tenant_id == user.tenant_id,
+        )
+    )).scalar_one_or_none()
+    if not call:
+        raise HTTPException(404, "Звонок не найден")
+    if not call.provider_call_id:
+        raise HTTPException(404, "У звонка нет provider_call_id")
+    provider = await get_provider(db, user.tenant_id)
+    try:
+        audio = await provider.fetch_recording(call.provider_call_id)
+    except Exception as e:
+        # Защитный fallback: провайдер не должен падать, но мало ли
+        raise HTTPException(502, f"Ошибка получения записи: {e}")
+    if not audio:
+        raise HTTPException(404, "Запись недоступна")
+    filename = f"call-{call.id}.mp3"
+    return Response(
+        content=audio,
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 # ── Sipuni webhook (no auth — Sipuni не подписывает) ──────────────────────────

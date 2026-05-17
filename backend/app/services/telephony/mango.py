@@ -10,6 +10,7 @@ from .base import TelephonyProvider, CallInitiateResult, CallStatusResult
 log = logging.getLogger(__name__)
 
 CALLBACK_URL = "https://app.mango-office.ru/vpbx/commands/callback"
+RECORDING_URL = "https://app.mango-office.ru/vpbx/queries/recording/post"
 
 
 class MangoProvider(TelephonyProvider):
@@ -69,8 +70,40 @@ class MangoProvider(TelephonyProvider):
         return CallStatusResult(status="unknown")
 
     async def fetch_recording(self, provider_call_id: str) -> bytes | None:
-        # Запись — отдельный endpoint Mango, отложим для отдельной задачи.
-        return None
+        """Скачивает запись звонка через Mango VPBX API.
+
+        POST /vpbx/queries/recording/post — JSON {action: 'play', recording_id, call_id}.
+        Headers: X-MPBX-API-Key + X-MPBX-Signature (sha256(api_key + body + salt)).
+        Возвращает audio/mpeg на успех.
+        """
+        if not provider_call_id:
+            return None
+        body = {
+            "action": "play",
+            "recording_id": provider_call_id,
+            "call_id": provider_call_id,
+        }
+        json_body = json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+        sig = self._signature(json_body)
+        headers = {
+            "X-MPBX-API-Key": self.api_key,
+            "X-MPBX-Signature": sig,
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(RECORDING_URL, content=json_body, headers=headers)
+        except Exception as e:
+            log.warning("Mango fetch_recording exception: %s", e)
+            return None
+        if r.status_code != 200:
+            log.warning("Mango fetch_recording HTTP %s: %s", r.status_code, (r.text or "")[:200])
+            return None
+        ctype = (r.headers.get("content-type") or "").lower()
+        if "audio" not in ctype:
+            log.warning("Mango fetch_recording non-audio (%s): %s", ctype, (r.text or "")[:200])
+            return None
+        return r.content or None
 
     async def handle_incoming_webhook(self, payload: dict) -> dict:
         """Обработка call_state_change от Mango.

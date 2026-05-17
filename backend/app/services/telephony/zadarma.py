@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 
 API_BASE = "https://api.zadarma.com"
 CALLBACK_PATH = "/v1/request/callback/"
+RECORDING_PATH = "/v1/pbx/record/request/"
 
 
 class ZadarmaProvider(TelephonyProvider):
@@ -65,8 +66,54 @@ class ZadarmaProvider(TelephonyProvider):
         return CallStatusResult(status="unknown")
 
     async def fetch_recording(self, provider_call_id: str) -> bytes | None:
-        # Запись доступна через отдельный API (/v1/pbx/record/request/) — отдельная задача.
-        return None
+        """Скачивает запись Zadarma в 2 шага.
+
+        Шаг 1: GET /v1/pbx/record/request/?call_id=X — возвращает JSON
+               {status: 'success', link: 'https://...'} с signed download URL.
+        Шаг 2: GET link — отдаёт audio/mpeg (или audio/wav).
+
+        На любой сбой/ошибочный статус возвращаем None и логируем.
+        """
+        if not provider_call_id:
+            return None
+        params = {"call_id": provider_call_id}
+        sig = self._signature(RECORDING_PATH, params)
+        headers = {"Authorization": f"{self.user_key}:{sig}"}
+        url = f"{API_BASE}{RECORDING_PATH}?" + urllib.parse.urlencode(sorted(params.items()))
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.get(url, headers=headers)
+                if r.status_code != 200:
+                    log.warning("Zadarma record request HTTP %s: %s",
+                                r.status_code, (r.text or "")[:200])
+                    return None
+                try:
+                    data = r.json()
+                except Exception:
+                    log.warning("Zadarma record request invalid JSON: %s", (r.text or "")[:200])
+                    return None
+                if (data.get("status") or "").lower() != "success":
+                    log.warning("Zadarma record request status != success: %s", data)
+                    return None
+                link = data.get("link") or data.get("links")
+                if isinstance(link, list):
+                    link = link[0] if link else None
+                if not link:
+                    log.warning("Zadarma record request: пустая ссылка: %s", data)
+                    return None
+                # Шаг 2 — скачиваем bytes по signed URL (без Authorization)
+                r2 = await client.get(link)
+        except Exception as e:
+            log.warning("Zadarma fetch_recording exception: %s", e)
+            return None
+        if r2.status_code != 200:
+            log.warning("Zadarma record download HTTP %s", r2.status_code)
+            return None
+        ctype = (r2.headers.get("content-type") or "").lower()
+        if "audio" not in ctype and "octet-stream" not in ctype:
+            log.warning("Zadarma record non-audio (%s)", ctype)
+            return None
+        return r2.content or None
 
     async def handle_incoming_webhook(self, payload: dict) -> dict:
         """Обработка Zadarma NOTIFY_* webhooks.

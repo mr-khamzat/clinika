@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 API_BASE = "https://sipuni.com"
 CALLBACK_URL = f"{API_BASE}/api/callback/call_number"
+RECORDING_URL = f"{API_BASE}/api/statistic/recording/get"
 
 
 class SipuniProvider(TelephonyProvider):
@@ -61,8 +62,38 @@ class SipuniProvider(TelephonyProvider):
         return CallStatusResult(status="unknown")
 
     async def fetch_recording(self, provider_call_id: str) -> bytes | None:
-        # Запись доступна через отдельный endpoint Sipuni — отложим для отдельной задачи.
-        return None
+        """Скачивает запись звонка по call_id.
+
+        Sipuni: POST /api/statistic/recording/get
+        Параметры: user, time, signature = md5(call_id + user + time + secret), call_id.
+        Возвращает audio/mpeg на успех, JSON {error: ...} либо HTTP-ошибку — иначе.
+        """
+        if not provider_call_id:
+            return None
+        ts = int(time.time())
+        raw = f"{provider_call_id}{self.sipuni_id}{ts}{self.secret_key}"
+        signature = hashlib.md5(raw.encode("utf-8")).hexdigest()
+        payload = {
+            "user": self.sipuni_id,
+            "time": str(ts),
+            "signature": signature,
+            "call_id": provider_call_id,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(RECORDING_URL, data=payload)
+        except Exception as e:
+            log.warning("Sipuni fetch_recording exception: %s", e)
+            return None
+        if r.status_code != 200:
+            log.warning("Sipuni fetch_recording HTTP %s: %s", r.status_code, (r.text or "")[:200])
+            return None
+        ctype = (r.headers.get("content-type") or "").lower()
+        if "audio" not in ctype:
+            # JSON-ошибка или текст
+            log.warning("Sipuni fetch_recording non-audio (%s): %s", ctype, (r.text or "")[:200])
+            return None
+        return r.content or None
 
     async def handle_incoming_webhook(self, payload: dict) -> dict:
         """Обработка статус-уведомлений Sipuni.
