@@ -464,9 +464,27 @@ async def update_appointment_status(
     appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
     if not appt or (current_user.tenant_id is not None and appt.tenant_id != current_user.tenant_id):
         raise HTTPException(404, "Запись не найдена")
+    before_status_val = appt.status.value if hasattr(appt.status, "value") else str(appt.status)
     appt.status = data.status
     from datetime import datetime
     appt.updated_at = datetime.utcnow()
+
+    # Этап 2-3 INVENTORY_COST_PLAN: hooks при смене статуса (best-effort).
+    new_status_val = data.status.value if hasattr(data.status, "value") else str(data.status)
+    try:
+        if new_status_val == "completed" and before_status_val != "completed":
+            from app.services.appointment_costing import on_appointment_completed
+            await on_appointment_completed(db, appt.id, current_user.id)
+        elif before_status_val == "completed" and new_status_val != "completed":
+            from app.services.appointment_costing import on_appointment_uncomplete
+            if appt.tenant_id:
+                await on_appointment_uncomplete(db, appt.id, appt.tenant_id)
+    except Exception as _e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("appointments").warning(
+            "inventory hook (scheduling) failed: %s", _e
+        )
+
     await db.commit()
     return {"id": str(appt.id), "status": appt.status}
 

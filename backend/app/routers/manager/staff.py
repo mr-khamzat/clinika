@@ -251,9 +251,9 @@ class CreateStaffRequest(BaseModel):
 
 # Иерархия: какие роли может создавать каждая роль (запрет создавать выше себя)
 _ROLE_HIERARCHY = {
-    UserRole.SUPER_ADMIN:     {"reg", "nurse", "doctor", "recruiter", "manager", "franchise_owner", "partner_doctor", "visiting_doctor"},
-    UserRole.FRANCHISE_OWNER: {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor"},
-    UserRole.MANAGER:         {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor"},
+    UserRole.SUPER_ADMIN:     {"reg", "nurse", "doctor", "recruiter", "manager", "franchise_owner", "partner_doctor", "visiting_doctor", "deputy_director"},
+    UserRole.FRANCHISE_OWNER: {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director"},
+    UserRole.MANAGER:         {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director"},
 }
 
 # Карта строки role → enum UserRole
@@ -266,6 +266,7 @@ _ROLE_MAP = {
     "franchise_owner":  UserRole.FRANCHISE_OWNER,
     "partner_doctor":   UserRole.PARTNER_DOCTOR,
     "visiting_doctor":  UserRole.VISITING_DOCTOR,
+    "deputy_director":  UserRole.DEPUTY_DIRECTOR,
 }
 
 
@@ -366,6 +367,14 @@ async def create_staff_universal(
 
     db.add(new_user)
     await db.flush()
+
+    # Автопривязка зама к франшизе руководителя (для доступа к /director/*)
+    if target_role == UserRole.DEPUTY_DIRECTOR and current_user.tenant_id and not new_user.franchise_id:
+        from app.models.tenant import Tenant as _Tenant
+        t = await db.execute(select(_Tenant).where(_Tenant.id == current_user.tenant_id))
+        t_obj = t.scalar_one_or_none()
+        if t_obj and t_obj.franchise_id:
+            new_user.franchise_id = t_obj.franchise_id
 
     # ── Привязка к клиникам (DoctorClinicAccess) для всех типов врачей ──
     first_clinic_id: Optional[uuid.UUID] = primary_clinic_id

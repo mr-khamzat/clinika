@@ -11,15 +11,13 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-# Pre-gzip ассеты для nginx gzip_static — отдаются без CPU-расходов
-# Покрываем .js, .css, .woff2, .json, .svg, .html
-RUN apk add --no-cache gzip && \
-    find /app/dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.woff2' -o -name '*.svg' -o -name '*.json' -o -name '*.html' -o -name '*.map' \) -size +512c \
-      -exec sh -c 'gzip -kf9 "$1"' _ {} \; && \
-    echo "=== pre-gzipped files ===" && \
-    find /app/dist -name '*.gz' | head -20 && \
-    echo "=== sizes ===" && \
-    du -sh /app/dist /app/dist/assets 2>/dev/null
+# Pre-gzip ассеты для nginx gzip_static — отдаются без CPU-расходов.
+# Шаг ОПЦИОНАЛЬНЫЙ: если apk не достанет gzip (alpine repo недоступен), nginx будет жать на лету.
+RUN (apk add --no-cache gzip 2>/dev/null && \
+     find /app/dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.woff2' -o -name '*.svg' -o -name '*.json' -o -name '*.html' -o -name '*.map' \) -size +512c \
+       -exec sh -c 'gzip -kf9 "$1" 2>/dev/null || true' _ {} \; && \
+     echo "=== pre-gzipped OK ===") || echo "=== gzip step skipped (nginx will gzip on the fly) ==="
+RUN du -sh /app/dist /app/dist/assets 2>/dev/null || true
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html

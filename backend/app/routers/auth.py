@@ -174,6 +174,8 @@ async def _issue_tokens(user: User, request: Request, db: AsyncSession) -> dict:
         redirect_url = "/admin"
     elif role == "manager" and tenant_slug:
         redirect_url = f"/{tenant_slug}/manager"
+    elif role in ("director", "deputy_director") and tenant_slug:
+        redirect_url = f"/{tenant_slug}/director"
     elif role in ADMIN_CABINET_ROLES and tenant_slug:
         redirect_url = f"/{tenant_slug}/admin"
     elif tenant_slug:

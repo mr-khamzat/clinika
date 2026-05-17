@@ -41,25 +41,15 @@ function todayRu() {
   return new Date().toLocaleDateString('ru-RU', { weekday: 'long', day: 'numeric', month: 'long' })
 }
 
-// ─── Навигация (для quick-grid и bottom-nav) ───
-const ALL_NAV = [
-  { key:'analytics',    label:'Аналитика', icon:'bar_chart',    path:'/manager/analytics' },
-  { key:'kpi',          label:'KPI',       icon:'emoji_events', path:'/manager/kpi' },
-  { key:'activity',     label:'Журнал',    icon:'article',      path:'/manager/activity' },
-  { key:'bonuses',      label:'Выплаты',   icon:'payments',     path:'/manager/bonuses' },
-  { key:'history',      label:'История',   icon:'history',      path:'/manager/history' },
-  { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings' },
-  { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices' },
-  { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors' },
-  { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors' },
-  { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors' },
-  { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments' },
-  // Глава 9 — Чат с пациентами (премиум-чат клиники)
-  { key:'chat',         label:'Чат пациентов', icon:'forum',     path:'/manager/chat' },
-]
+// ─── Навигация (импорт единого источника из _ManagerShell) ───
+import { MGR_NAV, MGR_NAV_GROUPS } from './_ManagerShell'
+const ALL_NAV = MGR_NAV
 const BOTTOM_KEYS = ['analytics', 'bonuses', 'kpi', 'history']
 const bottomItems = BOTTOM_KEYS.map(k => ALL_NAV.find(n => n.key === k)).filter(Boolean)
 const moreItems   = ALL_NAV.filter(n => !BOTTOM_KEYS.includes(n.key))
+
+// Ключ для localStorage — какие группы Quick Actions раскрыты
+const QUICK_NAV_LS_KEY = 'mgr_quick_nav_expanded'
 
 // ─── Иконка-плитка для quick-grid ───
 function QuickTile({ icon, label, onClick }) {
@@ -117,6 +107,52 @@ export default function ManagerDashboard() {
   const [todayStats, setTodayStats]         = useState(null)
   const [error, setError]                   = useState('')
   const [moreOpen, setMoreOpen]             = useState(false)
+
+  // ─── Quick Actions: сворачиваемые группы навигации ───
+  // Состояние какие группы открыты (по умолчанию — только 'reports').
+  // Сохраняется в localStorage для запоминания между сессиями.
+  const [expandedGroups, setExpandedGroups] = useState(() => {
+    try {
+      const saved = localStorage.getItem(QUICK_NAV_LS_KEY)
+      if (saved) return new Set(JSON.parse(saved))
+    } catch {}
+    return new Set(['reports']) // дефолт: открыта группа «Отчётность»
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(QUICK_NAV_LS_KEY, JSON.stringify([...expandedGroups]))
+    } catch {}
+  }, [expandedGroups])
+  const toggleGroup = useCallback((key) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  // ─── Multi-clinic фильтр: скрываем пункт «Все клиники» если у юзера ≤1 клиники ───
+  const [accessibleClinicsCount, setAccessibleClinicsCount] = useState(null)
+  useEffect(() => {
+    let alive = true
+    api.get('/manager/clinics-accessible')
+      .then(r => { if (alive) setAccessibleClinicsCount(Array.isArray(r.data) ? r.data.length : 0) })
+      .catch(() => { if (alive) setAccessibleClinicsCount(0) })
+    return () => { alive = false }
+  }, [])
+
+  // ─── Раскладка MGR_NAV по группам — для виджета «Быстрые переходы» ───
+  const navByGroup = useMemo(() => {
+    const map = new Map()
+    MGR_NAV_GROUPS.forEach(g => map.set(g.key, []))
+    MGR_NAV.forEach(item => {
+      if (!item.group) return
+      if (!map.has(item.group)) map.set(item.group, [])
+      map.get(item.group).push(item)
+    })
+    return map
+  }, [])
 
   const buildParams = useCallback(() => {
     const p = {}
@@ -337,13 +373,73 @@ export default function ManagerDashboard() {
             <Card.Header>
               <div>
                 <Card.Title>Быстрые переходы</Card.Title>
-                <Card.Subtitle>Все разделы кабинета</Card.Subtitle>
+                <Card.Subtitle>Все разделы кабинета — по группам</Card.Subtitle>
               </div>
             </Card.Header>
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {ALL_NAV.map(n => (
-                <QuickTile key={n.key} icon={n.icon} label={n.label} onClick={() => nav(n.path)} />
-              ))}
+            {/* Сворачиваемые группы навигации (accordion). Состояние в localStorage. */}
+            <div className="flex flex-col gap-2">
+              {MGR_NAV_GROUPS.map(group => {
+                const items = (navByGroup.get(group.key) || [])
+                  .filter(it => !it.requiresMultiClinic || (accessibleClinicsCount ?? 0) > 1)
+                if (items.length === 0) return null
+                const isOpen = expandedGroups.has(group.key)
+                return (
+                  <div
+                    key={group.key}
+                    style={{
+                      background: 'var(--bg-1)',
+                      borderRadius: 10,
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.key)}
+                      className="w-full flex items-center justify-between transition-colors"
+                      style={{
+                        padding: '10px 14px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
+                      aria-expanded={isOpen}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined" style={{ fontSize: 18, color: 'var(--accent)' }}>
+                          {group.icon}
+                        </span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg)' }}>
+                          {group.label}
+                        </span>
+                        <span style={{ fontSize: 12, color: 'var(--fg-3)' }}>
+                          ({items.length})
+                        </span>
+                      </div>
+                      <span
+                        className="material-symbols-outlined"
+                        style={{
+                          fontSize: 20,
+                          color: 'var(--fg-3)',
+                          transition: 'transform 0.2s',
+                          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      >
+                        expand_more
+                      </span>
+                    </button>
+                    {isOpen && (
+                      <div
+                        className="grid grid-cols-3 sm:grid-cols-5 gap-2"
+                        style={{ padding: '4px 10px 12px' }}
+                      >
+                        {items.map(n => (
+                          <QuickTile key={n.key} icon={n.icon} label={n.label} onClick={() => nav(n.path)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </Card>
         </div>
@@ -606,27 +702,48 @@ export default function ManagerDashboard() {
             <div className="px-5 mb-3" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Разделы
             </div>
-            <div className="grid grid-cols-3 gap-3 px-4 pb-6">
-              {moreItems.map(item => (
-                <button
-                  key={item.key}
-                  onClick={() => { nav(item.path); setMoreOpen(false) }}
-                  className="flex flex-col items-center gap-2 p-3 transition-transform active:scale-95"
-                  style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 14 }}
-                >
-                  <span
-                    className="inline-grid place-items-center"
-                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent)' }}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
-                      {item.icon}
-                    </span>
-                  </span>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-2)', textAlign: 'center', lineHeight: 1.2 }}>
-                    {item.label}
-                  </span>
-                </button>
-              ))}
+            {/* Сгруппированный список по MGR_NAV_GROUPS — drawer модальный, всё видно через скролл */}
+            <div className="px-4 pb-6 overflow-y-auto" style={{ maxHeight: '70vh' }}>
+              {MGR_NAV_GROUPS.map(group => {
+                const items = moreItems.filter(it =>
+                  it.group === group.key &&
+                  (!it.requiresMultiClinic || (accessibleClinicsCount ?? 0) > 1)
+                )
+                if (items.length === 0) return null
+                return (
+                  <div key={group.key} className="mb-4">
+                    <div className="flex items-center gap-2 px-1 mb-2">
+                      <span className="material-symbols-outlined" style={{ fontSize: 16, color:'var(--accent)' }}>{group.icon}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        {group.label}
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--fg-4)' }}>({items.length})</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {items.map(item => (
+                        <button
+                          key={item.key}
+                          onClick={() => { nav(item.path); setMoreOpen(false) }}
+                          className="flex flex-col items-center gap-2 p-3 transition-transform active:scale-95"
+                          style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 14 }}
+                        >
+                          <span
+                            className="inline-grid place-items-center"
+                            style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft)', color: 'var(--accent)' }}
+                          >
+                            <span className="material-symbols-outlined" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
+                              {item.icon}
+                            </span>
+                          </span>
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--fg-2)', textAlign: 'center', lineHeight: 1.2 }}>
+                            {item.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </>

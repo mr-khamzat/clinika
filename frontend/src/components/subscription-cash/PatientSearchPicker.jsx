@@ -7,10 +7,11 @@
  *
  * Поведение:
  *   • Input с debounce 300ms
- *   • Запрос GET /referrals/patients/search?q=&limit=8
- *   • Dropdown со списком пациентов (аватар-инициалы, ФИО, телефон,
- *     текущая подписка если есть)
- *   • При выборе — вызывает onSelect(patient)
+ *   • Запрос GET /manager/subscription-cash/search-patients?q=&limit=8
+ *     (ищет в PatientAccount + МИС)
+ *   • Dropdown со списком пациентов: пометка «МИС, нет ЛК» если from_mis=true
+ *   • При выборе пациента из МИС — POST /manager/subscription-cash/ensure-patient,
+ *     результат превращается в PatientAccount и идёт в onSelect
  *   • Кнопка «+ Создать нового пациента» — onCreateNew()
  * ========================================
  */
@@ -57,10 +58,10 @@ export default function PatientSearchPicker({ onSelect, onCreateNew }) {
     setLoading(true)
     tmRef.current = setTimeout(async () => {
       try {
-        const res = await apiClient.get('/referrals/patients/search', {
+        const res = await apiClient.get('/manager/subscription-cash/search-patients', {
           params: { q: q.trim(), limit: 8 },
         })
-        const data = Array.isArray(res.data) ? res.data : []
+        const data = Array.isArray(res.data?.patients) ? res.data.patients : []
         setItems(data)
         setActiveIdx(data.length ? 0 : -1)
       } catch {
@@ -81,7 +82,33 @@ export default function PatientSearchPicker({ onSelect, onCreateNew }) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
-  const pick = (p) => {
+  const pick = async (p) => {
+    // Пациент из МИС (без ЛК) — сначала создаём PatientAccount.
+    if (p?.from_mis) {
+      setLoading(true)
+      try {
+        const r = await apiClient.post('/manager/subscription-cash/ensure-patient', {
+          phone: p.phone,
+          full_name: p.full_name || '',
+          mis_patient_id: p.mis_patient_id || null,
+        })
+        const created = r.data || {}
+        const merged = {
+          ...p,
+          id: created.id,
+          full_name: created.full_name || p.full_name,
+          phone: created.phone || p.phone,
+          from_mis: false,
+        }
+        setOpen(false); setQ(''); setItems([])
+        onSelect?.(merged)
+      } catch {
+        // ошибку просто проглатываем — пользователь увидит «крутилку» снова
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
     setOpen(false)
     setQ('')
     setItems([])
@@ -187,7 +214,7 @@ export default function PatientSearchPicker({ onSelect, onCreateNew }) {
             const active = activeIdx === i
             return (
               <button
-                key={p.id}
+                key={p.id || `mis-${p.mis_patient_id}` || `idx-${i}`}
                 onMouseEnter={() => setActiveIdx(i)}
                 onClick={() => pick(p)}
                 className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left"
@@ -211,8 +238,24 @@ export default function PatientSearchPicker({ onSelect, onCreateNew }) {
                   <div className="font-semibold truncate" style={{ color: 'var(--fg)', fontSize: 15 }}>
                     {p.full_name || 'Без имени'}
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span style={{ color: 'var(--fg-3)', fontSize: 12.5 }}>{p.phone || '—'}</span>
+                    {p.from_mis && (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                        style={{
+                          fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2,
+                          background: 'rgba(14,165,233,.14)',
+                          color: '#0369a1',
+                        }}
+                        title="Пациент найден в МИС, но у него ещё нет личного кабинета — будет создан автоматически."
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>
+                          medical_information
+                        </span>
+                        МИС · нет ЛК
+                      </span>
+                    )}
                     {p.subscription_plan_key && (
                       <span
                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"

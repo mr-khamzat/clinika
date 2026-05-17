@@ -41,6 +41,11 @@ function _getActiveTokenInfo() {
 api.interceptors.request.use(config => {
   const info = _getActiveTokenInfo()
   if (info.token) config.headers.Authorization = `Bearer ${info.token}`
+  // Пробрасываем slug тенанта во все запросы — бэкенд использует его для
+  // подтягивания override'ов франшизы (тарифы подписок и т.п.).
+  if (SLUG && !config.headers['X-Tenant-Slug']) {
+    config.headers['X-Tenant-Slug'] = SLUG
+  }
   return config
 })
 

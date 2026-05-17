@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getReferrals, getIncomingReferrals } from '../api'
 import CancelModal from '../components/CancelModal'
 
@@ -182,8 +182,25 @@ export default function History() {
     ['cancelled',        'Отменено'],
   ]
 
+  // Фильтр по телефону пациента из URL (?patient_phone=) — приходит из чата клиники.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const phoneFilter = (searchParams.get('patient_phone') || '').trim()
+  const clearPhoneFilter = () => {
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('patient_phone')
+    setSearchParams(sp, { replace: true })
+  }
+  const normPhone = (s) => (s || '').replace(/\D+/g, '')
+
   const activeList = mode === 'outgoing' ? referrals : incoming
-  const filtered = filter === 'all' ? activeList : activeList.filter(r => r.status === filter)
+  const filtered = useMemo(() => {
+    let list = filter === 'all' ? activeList : activeList.filter(r => r.status === filter)
+    if (phoneFilter) {
+      const target = normPhone(phoneFilter)
+      if (target) list = list.filter(r => normPhone(r.patient_phone).includes(target))
+    }
+    return list
+  }, [activeList, filter, phoneFilter])
 
   // Счётчик ожидающих входящих (для бейджа)
   const pendingIncoming = incoming.filter(r => r.status === 'created').length
@@ -220,6 +237,28 @@ export default function History() {
             </button>
           ))}
         </div>
+
+        {/* Фильтр по телефону пациента (из чата клиники: ?patient_phone=) */}
+        {phoneFilter && (
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs font-semibold inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+              style={{ background: '#dae5ff', color: '#1565c0' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>person</span>
+              Пациент: {phoneFilter}
+            </span>
+            <button
+              type="button"
+              onClick={clearPhoneFilter}
+              className="text-xs font-semibold text-[#727783] hover:text-[#191c1e] inline-flex items-center gap-1 px-2 py-1.5 rounded-full"
+              style={{ background: '#f2f4f6' }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+              Сбросить
+            </button>
+          </div>
+        )}
 
         {/* ── Описание входящих ── */}
         {mode === 'incoming' && (

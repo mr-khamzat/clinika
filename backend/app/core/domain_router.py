@@ -35,14 +35,14 @@ async def domain_challenge(tenant_id: str):
     Возвращает challenge-токен тенанта если домен ему принадлежит.
     """
     import uuid
-    from app.database import async_session
+    from app.database import AsyncSessionLocal
     from app.models.tenant import TenantBranding
     from sqlalchemy import select
     try:
         tid = uuid.UUID(tenant_id)
     except ValueError:
         raise HTTPException(404, "Not found")
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         b = (await db.execute(
             select(TenantBranding).where(TenantBranding.tenant_id == tid)
         )).scalar_one_or_none()
@@ -61,14 +61,14 @@ async def verify_domain(tenant_id: str):
     Если OK — выставляет domain_verified=True.
     """
     import uuid, httpx
-    from app.database import async_session
+    from app.database import AsyncSessionLocal
     from app.models.tenant import TenantBranding
     from sqlalchemy import select
     try:
         tid = uuid.UUID(tenant_id)
     except ValueError:
         raise HTTPException(404, "Not found")
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         b = (await db.execute(
             select(TenantBranding).where(TenantBranding.tenant_id == tid)
         )).scalar_one_or_none()
@@ -110,10 +110,10 @@ class DomainRouterMiddleware(BaseHTTPMiddleware):
 
         # Ищем тенант по custom_domain
         try:
-            from app.database import async_session
+            from app.database import AsyncSessionLocal
             from app.models.tenant import Tenant, TenantBranding
             from sqlalchemy import select
-            async with async_session() as db:
+            async with AsyncSessionLocal() as db:
                 b = (await db.execute(
                     select(TenantBranding).where(
                         TenantBranding.custom_domain == host,

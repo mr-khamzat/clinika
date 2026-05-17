@@ -42,10 +42,15 @@ export default function Login() {
       }
       const me = await getMe()
       setUser(me.data)
+      // Клиент-сайд фолбэк: если бэк не вернул redirect_url, а роль = director — отправляем в /director
+      let effectiveUrl = redirectUrl
+      if (!effectiveUrl && (me?.data?.role === 'director' || me?.data?.role === 'deputy_director')) {
+        effectiveUrl = '/' + (realSlug || SLUG) + '/director'
+      }
       // Редирект по роли (franchise_owner→/{slug}/admin, super_admin→/admin, manager→/{slug}/manager и т.д.)
       // Если backend не вернул redirect_url или он указывает на текущую страницу — обычный reload.
-      if (redirectUrl && redirectUrl !== window.location.pathname) {
-        window.location.href = redirectUrl
+      if (effectiveUrl && effectiveUrl !== window.location.pathname) {
+        window.location.href = effectiveUrl
       } else {
         window.location.reload()
       }

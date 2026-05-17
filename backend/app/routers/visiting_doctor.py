@@ -277,6 +277,16 @@ async def complete_visit(
     except Exception:
         pass
 
+    # Этап 2-3 INVENTORY_COST_PLAN: авто-списание + калькуляция (best-effort).
+    try:
+        from app.services.appointment_costing import on_appointment_completed
+        await on_appointment_completed(db, appointment.id, current_user.id)
+    except Exception as _e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("appointments").warning(
+            "inventory hook (visiting_doctor) failed: %s", _e
+        )
+
     # Найти doctor_record и определить тип доктора (internal/visiting/external)
     from app.models.doctor import Doctor
     doctor_record = await db.get(Doctor, appointment.doctor_id)

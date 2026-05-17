@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, DateTime, Boolean, ForeignKey, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 import enum
 from app.database import Base
 
@@ -16,7 +16,15 @@ class UserRole(str, enum.Enum):
     RECRUITER = "recruiter"
     PARTNER_DOCTOR = "partner_doctor"
     VISITING_DOCTOR = "visiting_doctor"
+    # Менеджер привлечения внешних врачей (external01)
+    ACQUISITION_MANAGER = "acquisition_manager"
     PATIENT = "patient"
+    # Директор сети — read-only финансово-операционный кабинет владельца сети.
+    # Привязка к франшизе через users.franchise_id (миграция director01).
+    DIRECTOR = "director"
+    # Зам руководителя сети — те же экраны DirectorCabinet, тоже read-only.
+    # Главврач = зам в крупных клиниках/больницах (deputydir01).
+    DEPUTY_DIRECTOR = "deputy_director"
 
 class User(Base):
     __tablename__ = "users"
@@ -49,6 +57,18 @@ class User(Base):
     specialization: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Менеджер привлечения (для partner_doctor/visiting_doctor)
     manager_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    # External doctors MVP (external01): ИНН самозанятого / ставка / признак активности
+    external_doctor_inn: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    external_doctor_rate: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    external_doctor_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    # Привязка к франшизе (для роли director и удобной фильтрации franchise_owner)
+    # Миграция: director01. NULL — не привязан к франшизе.
+    franchise_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("franchises.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="users")

@@ -6,7 +6,8 @@
  * Бизнес-логика не изменена.
  * ========================================
  */
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { getManagerReferrals } from '../api'
 import { Card, Chip, Button, EmptyState, ClinicScopeSelector, QuickActions, buildPatientCardActions, Modal } from '../design'
 import useClinicScope from '../lib/useClinicScope'
@@ -70,13 +71,35 @@ export default function ManagerHistory() {
   const [referrals, setReferrals] = useState([])
   const [loading, setLoading]     = useState(false)
   const [status, setStatus]       = useState('all')
-  const [dateFrom, setDateFrom]   = useState(monthAgo())
-  const [dateTo, setDateTo]       = useState(today())
+  // Если в URL пришёл patient_phone — раскрываем диапазон на «Всё время»,
+  // чтобы пользователь сразу увидел всю историю по этому телефону.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialPhoneFilter = (searchParams.get('patient_phone') || '').trim()
+  const [phoneFilter, setPhoneFilter] = useState(initialPhoneFilter)
+  const [dateFrom, setDateFrom]   = useState(initialPhoneFilter ? '' : monthAgo())
+  const [dateTo, setDateTo]       = useState(initialPhoneFilter ? '' : today())
   const [page, setPage]           = useState(1)
   const [hasMore, setHasMore]     = useState(false)
   const [expanded, setExpanded]   = useState(null)
   const [qrPrint, setQrPrint]     = useState(null) // { qr_code, short_code, service_name }
   const LIMIT = 50
+
+  // Нормализация телефона для сравнения (только цифры).
+  const normPhone = (s) => (s || '').replace(/\D+/g, '')
+  const filteredReferrals = useMemo(() => {
+    if (!phoneFilter) return referrals
+    const target = normPhone(phoneFilter)
+    if (!target) return referrals
+    return referrals.filter(r => normPhone(r.patient_phone).includes(target))
+  }, [referrals, phoneFilter])
+
+  const clearPhoneFilter = () => {
+    setPhoneFilter('')
+    // Убираем patient_phone из URL, остальные query сохраняем.
+    const sp = new URLSearchParams(searchParams)
+    sp.delete('patient_phone')
+    setSearchParams(sp, { replace: true })
+  }
 
   // Per-clinic scope — пробрасываем clinic_id в фильтр истории
   const scope = useClinicScope()
@@ -118,7 +141,7 @@ export default function ManagerHistory() {
     <ManagerShell
       active="history"
       title="История направлений"
-      subtitle={!loading && (referrals.length === 0 ? 'Нет записей' : `Найдено: ${referrals.length}${hasMore ? '+' : ''}`)}
+      subtitle={!loading && (filteredReferrals.length === 0 ? 'Нет записей' : `Найдено: ${filteredReferrals.length}${(!phoneFilter && hasMore) ? '+' : ''}`)}
       icon="history"
     >
       {/* Селектор клиники для per-clinic скоупа */}
@@ -130,6 +153,21 @@ export default function ManagerHistory() {
             onChange={scope.setSelectedId}
             allowAll={scope.isMultiClinic}
           />
+        </div>
+      )}
+
+      {/* Фильтр по телефону пациента (из URL ?patient_phone=) */}
+      {phoneFilter && (
+        <div className="mb-3 flex items-center gap-2">
+          <Chip variant="accent">Пациент: {phoneFilter}</Chip>
+          <button
+            type="button"
+            onClick={clearPhoneFilter}
+            className="text-xs font-semibold"
+            style={{ padding: '6px 10px', borderRadius: 999, background: 'var(--bg-1)', border: '1px solid var(--border)', color: 'var(--fg-2)' }}
+          >
+            Сбросить
+          </button>
         </div>
       )}
 
@@ -188,23 +226,23 @@ export default function ManagerHistory() {
       </div>
 
       {/* ─── Список ─── */}
-      {loading && referrals.length === 0 ? (
+      {loading && filteredReferrals.length === 0 ? (
         <Card>
           <div className="flex items-center justify-center py-16">
             <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
           </div>
         </Card>
-      ) : referrals.length === 0 ? (
+      ) : filteredReferrals.length === 0 ? (
         <Card>
           <EmptyState
             icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>history</span>}
             title="Направлений не найдено"
-            message="Попробуйте сменить период или фильтр статуса."
+            message={phoneFilter ? `По телефону «${phoneFilter}» направлений не найдено.` : 'Попробуйте сменить период или фильтр статуса.'}
           />
         </Card>
       ) : (
         <div className="grid gap-2">
-          {referrals.map(r => {
+          {filteredReferrals.map(r => {
             const isOpen = expanded === r.id
             const isCancelled = r.status === 'cancelled'
             const isCancelReq = r.status === 'cancel_requested'

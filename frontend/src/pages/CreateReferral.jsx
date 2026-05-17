@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getClinics, getClinicServices, createReferral, verifyPatientInMis } from '../api'
 import api from '../api'
 import useAuthStore from '../store/auth'
@@ -111,6 +111,20 @@ export default function CreateReferral() {
       setAllClinics(r.data)
       setClinics(r.data.filter(c => c.id !== user?.clinic_id))
     })
+  }, [])
+
+  // Prefill из URL (например, переход из чата клиники: ?patient_phone=&patient_name=)
+  const [searchParams] = useSearchParams()
+  useEffect(() => {
+    const phone = searchParams.get('patient_phone') || ''
+    const name  = searchParams.get('patient_name') || ''
+    if (!phone && !name) return
+    setForm(f => ({
+      ...f,
+      patient_phone: phone || f.patient_phone,
+      patient_name:  name  || f.patient_name,
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleToClinicChange = async (clinicId) => {

@@ -138,6 +138,77 @@ async def toggle_doctor_active(
 
 
 # ══════════════════════════════════════════════
+# Полное редактирование профиля сотрудника
+# ══════════════════════════════════════════════
+
+class UpdateStaffProfileRequest(BaseModel):
+    full_name:      Optional[str] = None
+    phone_number:   Optional[str] = None
+    email:          Optional[str] = None
+    specialization: Optional[str] = None
+    address:        Optional[str] = None
+    date_of_birth:  Optional[str] = None
+    category:       Optional[str] = None
+
+
+@router.patch("/recruiter-doctors/{doctor_id}/profile")
+async def update_doctor_profile(
+    doctor_id: uuid.UUID,
+    body: UpdateStaffProfileRequest,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полное редактирование профиля сотрудника (без логин/пароль и без смены роли).
+    Меняется только то что прислано в body. Менеджер франшизы."""
+    doctor = await db.get(User, doctor_id)
+    if not doctor or doctor.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=404, detail="Сотрудник не найден")
+    if doctor.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Нельзя редактировать super_admin")
+    # Если менеджер привязан к клинике — только своих сотрудников
+    if current_user.clinic_id and doctor.clinic_id and doctor.clinic_id != current_user.clinic_id:
+        # visiting/partner допускаем — у них основной clinic_id может быть None
+        if doctor.role not in (UserRole.VISITING_DOCTOR, UserRole.PARTNER_DOCTOR):
+            raise HTTPException(status_code=403, detail="Нет доступа к сотруднику другой клиники")
+
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="Нечего обновлять")
+
+    if "full_name" in payload:
+        v = (payload["full_name"] or "").strip()
+        if len(v) < 2:
+            raise HTTPException(status_code=400, detail="ФИО слишком короткое")
+        doctor.full_name = v
+    if "phone_number" in payload:
+        doctor.phone_number = (payload["phone_number"] or None) or None
+    if "email" in payload:
+        doctor.email = (payload["email"] or None) or None
+    if "specialization" in payload:
+        doctor.specialization = (payload["specialization"] or None) or None
+    if "address" in payload:
+        doctor.address = (payload["address"] or None) or None
+    if "date_of_birth" in payload:
+        doctor.date_of_birth = (payload["date_of_birth"] or None) or None
+    if "category" in payload:
+        doctor.category = (payload["category"] or None) or None
+
+    await db.commit()
+    await db.refresh(doctor)
+    return {
+        "success": True,
+        "doctor_id": str(doctor.id),
+        "full_name": doctor.full_name,
+        "phone_number": doctor.phone_number,
+        "email": doctor.email,
+        "specialization": doctor.specialization,
+        "address": doctor.address,
+        "date_of_birth": doctor.date_of_birth,
+        "category": doctor.category,
+    }
+
+
+# ══════════════════════════════════════════════
 # Единый список всех внешних врачей + регистрация
 # ══════════════════════════════════════════════
 

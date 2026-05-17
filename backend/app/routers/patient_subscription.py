@@ -24,6 +24,7 @@ from app.models.tenant import Tenant
 from app.services import family_service as fs
 from app.services import subscription_service as ss
 from app.services import subscription_benefits_service as sbs
+from app.services import mis_webhook_sender
 from app.services.patient_session_service import restore_session
 from app.services.subscription_module_service import health_plus_module_active
 
@@ -190,6 +191,27 @@ async def inquire_details(
             )
             await db.commit()
             thread_id = str(th.id)
+            # TG-уведомление менеджерам клиники: пациент запросил подробности
+            # по тарифу. Best-effort — не валим основной flow если TG лежит.
+            try:
+                from app.services.manager_notifier import (
+                    send_telegram_to_managers,
+                )
+                patient_name = acc.name or sess.phone
+                tg_text = (
+                    f"💎 <b>Запрос на тариф «{detail.get('title')}»</b>\n"
+                    f"Пациент: {patient_name}\n"
+                    f"Телефон: {sess.phone}\n"
+                    f"Чат-тред: thread_id={thread_id}"
+                )
+                await send_telegram_to_managers(
+                    db,
+                    tenant_id=sess.tenant_id,
+                    clinic_id=cl.id,
+                    text=tg_text,
+                )
+            except Exception:
+                pass
     except Exception:
         # Best-effort. Фолбэк — фронту достаточно chat_message чтобы запостить
         # самому.
@@ -258,6 +280,25 @@ async def start_subscription(
         payment_method=None,
     )
     await db.commit()
+    # МИС-webhook (best-effort, не ломает основной flow)
+    await mis_webhook_sender.send_mis_webhook_safe(
+        db,
+        tenant_id=sess.tenant_id,
+        event_type="subscription.activated",
+        payload={
+            "subscription_id": str(sub.id),
+            "patient_id": str(acc.id),
+            "patient_phone": acc.phone,
+            "patient_full_name": acc.name,
+            "plan_key": sub.plan,
+            "status": sub.status,
+            "started_at": sub.started_at,
+            "expires_at": sub.expires_at,
+            "price_monthly": float(sub.price_monthly or 0),
+            "payment_method": sub.payment_method or "online",
+            "source": "patient_self_serve",
+        },
+    )
     payload = ss.serialize_subscription(sub)
     # Заглушка оплаты (реальная ЮKassa подключится позже)
     payload["redirect_url"] = f"/p/payment-stub?subscription_id={sub.id}"
@@ -282,6 +323,23 @@ async def cancel_subscription(
         raise HTTPException(404, "No active subscription")
     await ss.cancel_subscription(db, sub, reason=body.reason)
     await db.commit()
+    # МИС-webhook
+    await mis_webhook_sender.send_mis_webhook_safe(
+        db,
+        tenant_id=sub.tenant_id,
+        event_type="subscription.cancelled",
+        payload={
+            "subscription_id": str(sub.id),
+            "patient_id": str(acc.id),
+            "patient_phone": acc.phone,
+            "patient_full_name": acc.name,
+            "plan_key": sub.plan,
+            "status": sub.status,
+            "expires_at": sub.expires_at,
+            "reason": body.reason,
+            "source": "patient_self_serve",
+        },
+    )
     return ss.serialize_subscription(sub)
 
 

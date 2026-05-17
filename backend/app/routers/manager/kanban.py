@@ -216,6 +216,21 @@ async def patch_appointment_status(
         # audit не должен ломать основное действие
         pass
 
+    # Этап 2-3 INVENTORY_COST_PLAN: hooks при смене статуса (best-effort).
+    try:
+        if target == AppointmentStatus.COMPLETED and before_status != "completed":
+            from app.services.appointment_costing import on_appointment_completed
+            await on_appointment_completed(db, appt.id, current_user.id)
+        elif before_status == "completed" and target != AppointmentStatus.COMPLETED:
+            from app.services.appointment_costing import on_appointment_uncomplete
+            if appt.tenant_id:
+                await on_appointment_uncomplete(db, appt.id, appt.tenant_id)
+    except Exception as _e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("appointments").warning(
+            "inventory hook (kanban) failed: %s", _e
+        )
+
     await db.commit()
 
     return {

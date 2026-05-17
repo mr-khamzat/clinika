@@ -17,6 +17,8 @@ const ROLE_FILTERS = [
   { v: '',                label: 'Все' },
   { v: 'franchise_owner', label: 'Владельцы франшиз' },
   { v: 'manager',         label: 'Руководители' },
+  { v: 'director',        label: 'Директора сети' },
+  { v: 'deputy_director', label: 'Замы руководителя' },
   { v: 'reg',             label: 'Регистраторы' },
   { v: 'doctor',          label: 'Врачи' },
   { v: 'recruiter',       label: 'Менеджеры найма' },
@@ -27,6 +29,8 @@ const ROLE_LABELS = {
   super_admin: 'Владелец платформы',
   franchise_owner: 'Владелец франшизы',
   manager: 'Руководитель',
+  director: 'Директор сети',
+  deputy_director: 'Зам руководителя',
   doctor: 'Врач',
   reg: 'Регистратор',
   nurse: 'Медсестра',
@@ -40,6 +44,8 @@ const ROLE_BADGE = {
   super_admin:     { bg: 'rgba(220, 38, 38, 0.10)',  fg: '#b91c1c' },
   franchise_owner: { bg: 'rgba(124, 58, 237, 0.10)', fg: '#6d28d9' },
   manager:         { bg: 'rgba(37, 99, 235, 0.10)',  fg: '#1d4ed8' },
+  director:        { bg: 'rgba(14, 116, 144, 0.10)',  fg: '#0e7490' },
+  deputy_director: { bg: 'rgba(13, 148, 136, 0.10)',  fg: '#0f766e' },
   doctor:          { bg: 'rgba(5, 150, 105, 0.10)',  fg: '#047857' },
   reg:             { bg: 'rgba(217, 119, 6, 0.10)',  fg: '#b45309' },
   patient:         { bg: 'rgba(75, 85, 99, 0.10)',   fg: '#4b5563' },
@@ -50,6 +56,7 @@ const ROLE_BADGE = {
 const ALLOWED_ROLES_TO_IMPERSONATE = new Set([
   'franchise_owner', 'manager', 'reg', 'doctor', 'nurse',
   'recruiter', 'partner_doctor', 'visiting_doctor', 'patient',
+  'director', 'deputy_director',
 ])
 
 export default function SuperAdminUsersSection() {

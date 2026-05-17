@@ -113,6 +113,26 @@ async def require_super_admin(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_director(user: User = Depends(get_current_user)) -> User:
+    """Доступ только для директора сети (или super_admin для отладки)."""
+    if user.role not in (UserRole.DIRECTOR, UserRole.DEPUTY_DIRECTOR, UserRole.SUPER_ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ только для директора сети"
+        )
+    return user
+
+
+async def require_director_or_owner(user: User = Depends(get_current_user)) -> User:
+    """Read-доступ к сетевой отчётности: director, franchise_owner или super_admin."""
+    if user.role not in (UserRole.DIRECTOR, UserRole.DEPUTY_DIRECTOR, UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав"
+        )
+    return user
+
+
 async def get_current_tenant(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

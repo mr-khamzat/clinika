@@ -72,6 +72,8 @@ def all_plans() -> list[dict]:
     return [
         {
             "plan": key,
+            "key": key,
+            "plan_key": key,
             "title": v["title"],
             "price_monthly": float(v["price_monthly"]),
             "trial_days": v["trial_days"],
@@ -99,6 +101,12 @@ async def all_plans_db(
     for r in rows:
         out.append({
             "plan": r["plan_key"],
+            # Алиас `key` — фронт-компоненты (PlanSelector, PaymentConfirmStep)
+            # ищут план по полю `key`. Бэк исторически отдавал только `plan`,
+            # из-за чего фронт всегда падал в hardcoded FALLBACK_PLANS и не
+            # видел тенант-override цен.
+            "key": r["plan_key"],
+            "plan_key": r["plan_key"],
             "title": r["title"],
             "description": r.get("description") or "",
             "price_monthly": r.get("price_monthly"),
@@ -350,8 +358,15 @@ async def compute_discount_for(
     patient_phone: str,
     base_price: float | Decimal | None,
     tenant_id: uuid.UUID | None = None,
+    service_id: uuid.UUID | None = None,
+    category_name: str | None = None,
 ) -> dict:
     """Считает скидку по активной подписке пациента для цены приёма.
+
+    С миграцией discountrules01 можно задавать дифференцированные скидки
+    через таблицу subscription_plan_discounts (scope=service|category|all).
+    Если service_id/category_name переданы, ищем по ним; иначе — fallback на
+    benefits.discount_percent из плана.
 
     Возвращает:
       {
@@ -359,6 +374,7 @@ async def compute_discount_for(
         discount_percent: float,   # 0..50
         discount_amount: float,    # >=0
         price_after: float,
+        discount_source: 'service' | 'category' | 'plan_all' | 'fallback' | 'none',
       }
     """
     if base_price is None:
@@ -367,6 +383,7 @@ async def compute_discount_for(
             "discount_percent": 0.0,
             "discount_amount": 0.0,
             "price_after": None,
+            "discount_source": "none",
         }
     base = Decimal(str(base_price))
     sub = await get_active_subscription_by_phone(db, patient_phone)
@@ -376,21 +393,51 @@ async def compute_discount_for(
             "discount_percent": 0.0,
             "discount_amount": 0.0,
             "price_after": float(base),
+            "discount_source": "none",
         }
     bens = await benefits_for_db(db, sub.plan, tenant_id=tenant_id or sub.tenant_id)
-    pct = int(bens.get("discount_percent", 0) or 0)
-    if pct <= 0:
+    fallback_pct = Decimal(str(bens.get("discount_percent", 0) or 0))
+
+    # Пытаемся подобрать дифференцированную скидку для конкретной услуги.
+    pct = fallback_pct
+    discount_source = "fallback"
+    try:
+        from app.services import subscription_plan_discount_service as discs
+        pct = await discs.get_effective_discount_for_service(
+            db,
+            tenant_id=tenant_id or sub.tenant_id,
+            plan_key=sub.plan,
+            service_id=service_id,
+            category_name=category_name,
+            fallback_pct=fallback_pct,
+        )
+        if pct != fallback_pct:
+            if service_id is not None:
+                discount_source = "service"
+            elif category_name:
+                discount_source = "category"
+            else:
+                discount_source = "plan_all"
+    except Exception:
+        # Если таблица ещё не накатилась или сервис недоступен —
+        # используем старый процент из плана.
+        pct = fallback_pct
+
+    pct_int = int(pct or 0)
+    if pct_int <= 0:
         return {
             "applied_subscription_id": str(sub.id),
             "discount_percent": 0.0,
             "discount_amount": 0.0,
             "price_after": float(base),
+            "discount_source": "none",
         }
-    pct = max(0, min(50, pct))
-    disc_amount = (base * Decimal(pct) / Decimal("100")).quantize(Decimal("0.01"))
+    pct_int = max(0, min(50, pct_int))
+    disc_amount = (base * Decimal(pct_int) / Decimal("100")).quantize(Decimal("0.01"))
     return {
         "applied_subscription_id": str(sub.id),
-        "discount_percent": float(pct),
+        "discount_percent": float(pct_int),
         "discount_amount": float(disc_amount),
         "price_after": float((base - disc_amount).quantize(Decimal("0.01"))),
+        "discount_source": discount_source,
     }

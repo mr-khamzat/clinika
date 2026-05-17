@@ -1,34 +1,31 @@
 /**
  * ========================================
- * БЛОК: ManagerRecruitDoctors (premium редизайн + design-system Modal)
+ * БЛОК: ManagerRecruitDoctors — управление сотрудниками
  * ========================================
- * Управление приезжими врачами: добавление, выдача QR/credentials,
- * переключение активности, смена данных. Бизнес-логика не изменена.
- *
- * История миграций:
- *   - 191a31b — premium-редизайн (Card/Chip/Button/Avatar/EmptyState)
- *   - Этап 5 ROADMAP — заменён собственный ModalShell на <Modal> из дизайн-системы
+ * - Добавление сотрудников всех ролей
+ * - Полное редактирование профиля (карточка)
+ * - Группировка списка по ролям (свернуть/развернуть)
+ * - Бейдж должности в карточке
+ * - Действия: Calls (звонок через наш сервис) + StaffChat (наш чат)
+ * - WhatsApp оставлен в меню как fallback
  * ========================================
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { Card, Chip, Button, Avatar, EmptyState, Modal } from '../design'
 import QuickActions from '../components/QuickActions'
 import ManagerShell from './_ManagerShell'
+import { SLUG } from '../config'
+import { callPhone, whatsappPhone } from '../lib/phoneActions'
 
-// ─── apiFetch (совместимость): все вызовы идут через единый axios `api`
-//     с auto-Bearer + auto-refresh (см. /src/api/index.js).
-//     `token` остаётся первым аргументом для обратной совместимости со старыми
-//     местами вызова — он не используется (Bearer ставит interceptor).
+// ─── apiFetch (совместимость со старыми вызовами в этом файле) ──────────────
 function apiFetch(_token, path, opts = {}) {
   const method = (opts.method || 'GET').toUpperCase()
   const config = {
-    method,
-    url: path,
+    method, url: path,
     headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
-    // axios сам обработает body — нужно отдать как data
     data: opts.body !== undefined ? (typeof opts.body === 'string' ? JSON.parse(opts.body) : opts.body) : undefined,
-    // Не выкидывать ошибку при 4xx — даём коду самостоятельно обработать `r.ok`
     validateStatus: () => true,
   }
   return api.request(config).then(res => ({
@@ -38,8 +35,21 @@ function apiFetch(_token, path, opts = {}) {
   }))
 }
 
-// ─── Поле формы ───
-function Field({ label, value, onChange, placeholder, type = 'text' }) {
+// ─── Метаданные ролей: лейбл, иконка, цвет бейджа, порядок групп ────────────
+const ROLE_META = {
+  manager:         { label: 'Руководитель',     icon: 'admin_panel_settings', color: '#1d4ed8', bg: 'rgba(37, 99, 235, 0.10)',  order: 1 },
+  deputy_director: { label: 'Зам руководителя',  icon: 'supervisor_account',    color: '#0f766e', bg: 'rgba(13, 148, 136, 0.10)', order: 1.5 },
+  doctor:          { label: 'Штатный врач',     icon: 'stethoscope',           color: '#047857', bg: 'rgba(5, 150, 105, 0.10)',  order: 2 },
+  partner_doctor:  { label: 'Врач-партнёр',     icon: 'handshake',             color: '#7c3aed', bg: 'rgba(124, 58, 237, 0.10)', order: 3 },
+  visiting_doctor: { label: 'Приезжий врач',    icon: 'flight_takeoff',        color: '#c2410c', bg: 'rgba(234, 88, 12, 0.10)',  order: 4 },
+  reg:             { label: 'Регистратор',      icon: 'badge',                 color: '#b45309', bg: 'rgba(217, 119, 6, 0.10)',  order: 5 },
+  nurse:           { label: 'Медсестра',        icon: 'medical_services',      color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 6 },
+  recruiter:       { label: 'Рекрутер',         icon: 'person_search',         color: '#6d28d9', bg: 'rgba(109, 40, 217, 0.10)', order: 7 },
+}
+const DEFAULT_ROLE_META = { label: 'Сотрудник', icon: 'person', color: '#4b5563', bg: 'rgba(75, 85, 99, 0.10)', order: 99 }
+
+// ─── Поле формы ─────────────────────────────────────────────────────────────
+function Field({ label, value, onChange, placeholder, type = 'text', readOnly = false }) {
   return (
     <div className="mb-3">
       <label
@@ -49,29 +59,28 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
         {label}
       </label>
       <input
-        type={type} value={value} onChange={onChange} placeholder={placeholder}
+        type={type} value={value || ''} onChange={onChange} placeholder={placeholder} readOnly={readOnly}
         className="w-full text-sm outline-none"
-        style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px', color: 'var(--fg)' }}
+        style={{
+          background: readOnly ? 'var(--bg-2)' : 'var(--bg-1)',
+          border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px',
+          color: 'var(--fg)',
+          cursor: readOnly ? 'not-allowed' : 'text',
+        }}
       />
     </div>
   )
 }
 
-// ─── QR-попап (на base дизайн-системы Modal) ───
+// ─── QR-попап (для credentials reset) ───────────────────────────────────────
 function QRPopup({ data, onClose }) {
   const [copied, setCopied] = useState('')
   const copy = (v, k) => { navigator.clipboard.writeText(v); setCopied(k); setTimeout(() => setCopied(''), 2000) }
   return (
     <Modal
-      open={!!data}
-      onClose={onClose}
-      size="sm"
+      open={!!data} onClose={onClose} size="sm"
       title={data?.message || 'Готово'}
-      actions={
-        <Button variant="primary" size="md" onClick={onClose}>
-          Закрыть
-        </Button>
-      }
+      actions={<Button variant="primary" size="md" onClick={onClose}>Закрыть</Button>}
     >
       <div className="text-center mb-4">
         <img
@@ -80,10 +89,7 @@ function QRPopup({ data, onClose }) {
         />
         <div className="text-xs mt-2" style={{ color: 'var(--fg-3)' }}>QR для входа в кабинет</div>
       </div>
-      <div
-        className="p-3"
-        style={{ background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)' }}
-      >
+      <div className="p-3" style={{ background: 'var(--bg-1)', borderRadius: 12, border: '1px solid var(--border)' }}>
         {[
           { label: 'Логин',  value: data.credentials?.username,  k: 'u' },
           { label: 'Пароль', value: data.credentials?.password,  k: 'p' },
@@ -102,9 +108,7 @@ function QRPopup({ data, onClose }) {
                 border: '1px solid var(--border)',
                 borderRadius: 8, padding: '5px 10px', fontSize: 12, color: 'var(--accent)',
               }}
-            >
-              {copied === r.k ? '✓' : '📋'}
-            </button>
+            >{copied === r.k ? '✓' : '📋'}</button>
           </div>
         ) : null)}
       </div>
@@ -112,82 +116,183 @@ function QRPopup({ data, onClose }) {
   )
 }
 
-// ─── Смена данных входа (на base дизайн-системы Modal) ───
-function ResetModal({ doctor, token, onClose, onDone }) {
-  const [form, setForm] = useState({ username: doctor.username || '', password: '' })
+// ─── EditModal — полная карточка сотрудника ─────────────────────────────────
+// Две вкладки: Профиль и Доступ. Каждая шлёт свой PATCH/POST.
+function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
+  const [tab, setTab] = useState('profile')
+  const [profile, setProfile] = useState({
+    full_name:      doctor.full_name      || '',
+    phone_number:   doctor.phone_number   || '',
+    email:          doctor.email          || '',
+    specialization: doctor.specialization || '',
+    address:        doctor.address        || '',
+    date_of_birth:  doctor.date_of_birth  || '',
+    category:       doctor.category       || '',
+  })
+  const [creds, setCreds] = useState({ username: doctor.username || '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const submit = async () => {
-    if (!form.username.trim() && !form.password.trim()) { setError('Заполните логин или пароль'); return }
+  const setP = (k, v) => setProfile(p => ({ ...p, [k]: v }))
+  const setC = (k, v) => setCreds(p => ({ ...p, [k]: v }))
+
+  const saveProfile = async () => {
+    if (!profile.full_name?.trim() || profile.full_name.trim().length < 2) { setError('Введите ФИО'); return }
     setLoading(true); setError('')
     try {
-      const r = await apiFetch(token, `/manager/recruiter-doctors/${doctor.id}/reset-credentials`, {
-        method: 'POST', body: JSON.stringify({ username: form.username || null, password: form.password || null }),
+      const r = await apiFetch(null, `/manager/recruiter-doctors/${doctor.id}/profile`, {
+        method: 'PATCH', body: JSON.stringify(profile),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || 'Ошибка')
-      onDone(data)
+      onProfileSaved?.(data)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
 
+  const saveCreds = async () => {
+    if (!creds.username?.trim() && !creds.password?.trim()) { setError('Заполните логин или пароль'); return }
+    setLoading(true); setError('')
+    try {
+      const r = await apiFetch(null, `/manager/recruiter-doctors/${doctor.id}/reset-credentials`, {
+        method: 'POST', body: JSON.stringify({ username: creds.username || null, password: creds.password || null }),
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.detail || 'Ошибка')
+      onCredentialsReset?.(data)
+    } catch (e) { setError(e.message) }
+    setLoading(false)
+  }
+
+  const meta = ROLE_META[doctor.role] || DEFAULT_ROLE_META
+
   return (
     <Modal
-      open={!!doctor}
-      onClose={onClose}
-      size="sm"
-      title="Сменить данные входа"
+      open={!!doctor} onClose={onClose} size="md"
+      title="Карточка сотрудника"
       actions={
         <>
-          <Button variant="secondary" size="md" onClick={onClose}>Отмена</Button>
-          <Button variant="primary" size="md" onClick={submit} disabled={loading}>
-            {loading ? '…' : 'Сохранить'}
-          </Button>
+          <Button variant="secondary" size="md" onClick={onClose}>Закрыть</Button>
+          {tab === 'profile' && (
+            <Button variant="primary" size="md" onClick={saveProfile} disabled={loading}>
+              {loading ? '…' : 'Сохранить'}
+            </Button>
+          )}
+          {tab === 'access' && (
+            <Button variant="primary" size="md" onClick={saveCreds} disabled={loading}>
+              {loading ? '…' : 'Применить'}
+            </Button>
+          )}
         </>
       }
     >
-      <div className="text-xs mb-4" style={{ color: 'var(--fg-3)' }}>{doctor.full_name}</div>
+      {/* Header c должностью */}
+      <div className="flex items-center gap-3 mb-4" style={{ paddingBottom: 12, borderBottom: '1px solid var(--line)' }}>
+        <Avatar name={doctor.full_name} size="md" />
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{doctor.full_name}</div>
+          <div
+            className="inline-flex items-center gap-1 mt-1"
+            style={{
+              fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+              background: meta.bg, color: meta.color,
+              textTransform: 'uppercase', letterSpacing: '0.04em',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{meta.icon}</span>
+            {meta.label}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4" style={{ background: 'var(--bg-1)', padding: 3, borderRadius: 10, border: '1px solid var(--border)' }}>
+        {[
+          { k: 'profile', label: 'Профиль', icon: 'badge' },
+          { k: 'access',  label: 'Доступ',  icon: 'vpn_key' },
+        ].map(t => {
+          const on = tab === t.k
+          return (
+            <button
+              key={t.k}
+              onClick={() => { setTab(t.k); setError('') }}
+              className="flex-1 flex items-center justify-center gap-1.5 transition-colors"
+              style={{
+                padding: '7px 12px', borderRadius: 8,
+                background: on ? 'var(--surface)' : 'transparent',
+                border: 0, cursor: 'pointer',
+                color: on ? 'var(--fg)' : 'var(--fg-3)',
+                fontSize: 13, fontWeight: 600,
+                boxShadow: on ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{t.icon}</span>
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
       {error && (
-        <div
-          className="rounded-lg p-2.5 mb-3 text-sm"
-          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
-        >
+        <div className="rounded-lg p-2.5 mb-3 text-sm"
+             style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}>
           {error}
         </div>
       )}
-      <Field label="Новый логин" value={form.username} onChange={e => setForm(p => ({ ...p, username: e.target.value }))} placeholder={doctor.username || ''} />
-      <Field label="Новый пароль" value={form.password} onChange={e => setForm(p => ({ ...p, password: e.target.value }))} placeholder="Оставьте пустым, чтобы не менять" />
+
+      {tab === 'profile' && (
+        <>
+          <Field label="ФИО *"        value={profile.full_name}      onChange={e => setP('full_name', e.target.value)} placeholder="Иванов Иван Иванович" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Телефон"    value={profile.phone_number}   onChange={e => setP('phone_number', e.target.value)} placeholder="+7 900 000 00 00" />
+            <Field label="Email"      value={profile.email}          onChange={e => setP('email', e.target.value)}         placeholder="user@mail.ru" />
+          </div>
+          <Field label="Специализация" value={profile.specialization} onChange={e => setP('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
+          <Field label="Адрес"        value={profile.address}        onChange={e => setP('address', e.target.value)}        placeholder="Адрес/Организация" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Дата рождения" type="date" value={profile.date_of_birth} onChange={e => setP('date_of_birth', e.target.value)} />
+            <Field label="Категория"     value={profile.category}    onChange={e => setP('category', e.target.value)} placeholder="высшая, первая…" />
+          </div>
+        </>
+      )}
+
+      {tab === 'access' && (
+        <>
+          <div className="text-xs mb-3" style={{ color: 'var(--fg-3)' }}>
+            Смена логина и пароля. Оставьте поле пустым, если менять не нужно.
+          </div>
+          <Field label="Логин"  value={creds.username} onChange={e => setC('username', e.target.value)} placeholder={doctor.username || 'login'} />
+          <Field label="Пароль" type="password" value={creds.password} onChange={e => setC('password', e.target.value)} placeholder="Новый пароль (мин. 4 символа)" />
+        </>
+      )}
     </Modal>
   )
 }
 
-// ─── Перечень доступных ролей при создании сотрудника (#22) ───
-// Менеджер франшизы создаёт пользователей всех ролей, кроме super_admin.
+// ─── Перечень доступных ролей при создании сотрудника ───────────────────────
 const STAFF_ROLES = [
-  { value: 'visiting_doctor', label: 'Приезжий врач',     icon: 'flight_takeoff', hint: 'Внешний приглашённый специалист с оплатой за приём' },
-  { value: 'partner_doctor',  label: 'Партнёр (внешний врач)', icon: 'handshake',     hint: 'Внешний врач-партнёр (направляет пациентов)' },
-  { value: 'doctor',          label: 'Штатный врач',      icon: 'stethoscope',    hint: 'Врач клиники, ведёт приёмы в кабинете врача' },
-  { value: 'recruiter',       label: 'Рекрутер',          icon: 'person_search',  hint: 'Привлекает врачей-партнёров и получает % бонуса' },
-  { value: 'manager',         label: 'Руководитель',      icon: 'admin_panel_settings', hint: 'Менеджер франшизы (управляет тенантом)' },
-  { value: 'reg',             label: 'Регистратор',       icon: 'badge',          hint: 'Регистратор клиники (приём пациентов)' },
-  { value: 'nurse',           label: 'Медсестра',         icon: 'medical_services', hint: 'Медсестра, ассистирует врачу' },
+  { value: 'visiting_doctor', label: 'Приезжий врач',     icon: 'flight_takeoff',         hint: 'Внешний приглашённый специалист с оплатой за приём' },
+  { value: 'partner_doctor',  label: 'Партнёр (внешний врач)', icon: 'handshake',          hint: 'Внешний врач-партнёр (направляет пациентов)' },
+  { value: 'doctor',          label: 'Штатный врач',      icon: 'stethoscope',            hint: 'Врач клиники, ведёт приёмы в кабинете врача' },
+  { value: 'recruiter',       label: 'Рекрутер',          icon: 'person_search',          hint: 'Привлекает врачей-партнёров и получает % бонуса' },
+  { value: 'manager',         label: 'Руководитель',      icon: 'admin_panel_settings',   hint: 'Менеджер франшизы (управляет тенантом)' },
+  { value: 'deputy_director', label: 'Зам руководителя',  icon: 'supervisor_account',      hint: 'Read-only кабинет руководителя сети (P&L, KPI, склад, маркетинг)' },
+  { value: 'reg',             label: 'Регистратор',       icon: 'badge',                  hint: 'Регистратор клиники (приём пациентов)' },
+  { value: 'nurse',           label: 'Медсестра',         icon: 'medical_services',       hint: 'Медсестра, ассистирует врачу' },
 ]
-
-// Какие поля показывать для каждой роли
 const ROLE_NEEDS = {
-  visiting_doctor: { specialization: true, address: true, clinics: true, terms: true,  primaryClinic: false, bonusPercent: false },
-  partner_doctor:  { specialization: true, address: true, clinics: true, terms: false, primaryClinic: false, bonusPercent: false },
-  doctor:          { specialization: true, address: false, clinics: true, terms: false, primaryClinic: false, bonusPercent: false },
-  recruiter:       { specialization: false, address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: true },
-  manager:         { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
-  reg:             { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
-  nurse:           { specialization: false, address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  visiting_doctor: { specialization: true, address: true,  clinics: true,  terms: true,  primaryClinic: false, bonusPercent: false },
+  partner_doctor:  { specialization: true, address: true,  clinics: true,  terms: false, primaryClinic: false, bonusPercent: false },
+  doctor:          { specialization: true, address: false, clinics: true,  terms: false, primaryClinic: false, bonusPercent: false },
+  recruiter:       { specialization: false,address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: true  },
+  manager:         { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  deputy_director: { specialization: false,address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: false },
+  reg:             { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  nurse:           { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
 }
 
-// ─── Форма добавления сотрудника (роли: reg/nurse/doctor/recruiter/manager/partner_doctor/visiting_doctor) ───
-function AddModal({ open, token, clinics, onClose, onDone }) {
-  // Универсальная форма создания сотрудника любой роли (#22)
+// ─── Форма добавления сотрудника ────────────────────────────────────────────
+function AddModal({ open, clinics, onClose, onDone }) {
   const [form, setForm] = useState({
     role: 'visiting_doctor',
     full_name: '', phone_number: '', email: '', specialization: '', address: '',
@@ -200,7 +305,6 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const toggle = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x => x !== id) : [...form.clinic_ids, id])
 
-  // Какие поля показывать для выбранной роли
   const needs = ROLE_NEEDS[form.role] || ROLE_NEEDS.visiting_doctor
   const roleMeta = STAFF_ROLES.find(r => r.value === form.role)
 
@@ -210,7 +314,6 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
     if (!form.password.trim())  { setError('Введите пароль'); return }
     setLoading(true); setError('')
     try {
-      // Универсальный endpoint /manager/users/create-staff обрабатывает все роли
       const payload = {
         role: form.role,
         full_name: form.full_name,
@@ -219,7 +322,6 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
         phone_number: form.phone_number || null,
         email: form.email || null,
       }
-      // Доп. поля по типу роли
       if (needs.specialization) payload.specialization = form.specialization || null
       if (needs.address)        payload.address        = form.address        || null
       if (needs.clinics)        payload.clinic_ids     = form.clinic_ids
@@ -228,12 +330,10 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
         payload.price_per_visit = form.price_per_visit ? parseFloat(form.price_per_visit) : null
         payload.doctor_percent  = form.doctor_percent  ? parseFloat(form.doctor_percent)  : 70
       }
-      if (needs.bonusPercent && form.bonus_percent) {
-        payload.bonus_percent = parseFloat(form.bonus_percent)
-      }
-      const r = await apiFetch(token, '/manager/users/create-staff', {
-        method: 'POST',
-        body: JSON.stringify(payload),
+      if (needs.bonusPercent && form.bonus_percent) payload.bonus_percent = parseFloat(form.bonus_percent)
+
+      const r = await apiFetch(null, '/manager/users/create-staff', {
+        method: 'POST', body: JSON.stringify(payload),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || 'Ошибка')
@@ -244,9 +344,7 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
 
   return (
     <Modal
-      open={open}
-      onClose={onClose}
-      size="md"
+      open={open} onClose={onClose} size="md"
       title="Добавить сотрудника"
       actions={
         <>
@@ -258,15 +356,12 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
       }
     >
       {error && (
-        <div
-          className="rounded-lg p-2.5 mb-3 text-sm"
-          style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}
-        >
+        <div className="rounded-lg p-2.5 mb-3 text-sm"
+             style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}>
           {error}
         </div>
       )}
 
-      {/* ─── Селектор роли (#22) ─── */}
       <div className="mb-4">
         <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
           Роль сотрудника *
@@ -276,9 +371,7 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
             const on = form.role === r.value
             return (
               <button
-                key={r.value}
-                type="button"
-                onClick={() => set('role', r.value)}
+                key={r.value} type="button" onClick={() => set('role', r.value)}
                 className="text-left transition-colors"
                 style={{
                   padding: '10px 12px', borderRadius: 10,
@@ -304,22 +397,14 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
       <Field label="Телефон" value={form.phone_number} onChange={e => set('phone_number', e.target.value)} placeholder="+7 900 000 00 00" />
       <Field label="Email"   value={form.email}        onChange={e => set('email', e.target.value)}        placeholder="user@mail.ru" />
 
-      {needs.specialization && (
-        <Field label="Специализация" value={form.specialization} onChange={e => set('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
-      )}
-      {needs.address && (
-        <Field label="Адрес/Организация" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Место работы" />
-      )}
+      {needs.specialization && (<Field label="Специализация" value={form.specialization} onChange={e => set('specialization', e.target.value)} placeholder="Хирург, терапевт..." />)}
+      {needs.address && (<Field label="Адрес/Организация" value={form.address} onChange={e => set('address', e.target.value)} placeholder="Место работы" />)}
 
       <Field label="Логин *"  value={form.username} onChange={e => set('username', e.target.value)} placeholder="login" />
       <Field label="Пароль *" value={form.password} onChange={e => set('password', e.target.value)} placeholder="Минимум 4 символа" />
 
-      {/* ─── Бонус % для рекрутера ─── */}
       {needs.bonusPercent && (
-        <div
-          className="p-3 mb-3"
-          style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
-        >
+        <div className="p-3 mb-3" style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}>
           <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Бонус рекрутера
           </div>
@@ -327,12 +412,8 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
         </div>
       )}
 
-      {/* ─── Условия работы (только visiting_doctor) ─── */}
       {needs.terms && (
-        <div
-          className="p-3 mb-3"
-          style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}
-        >
+        <div className="p-3 mb-3" style={{ background: 'var(--accent-soft)', borderRadius: 12, border: '1px solid var(--accent-line)' }}>
           <div className="font-semibold mb-2" style={{ fontSize: 12, color: 'var(--accent)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             Условия работы
           </div>
@@ -348,27 +429,22 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
         </div>
       )}
 
-      {/* ─── Основная клиника (для reg/nurse/manager) ─── */}
       {needs.primaryClinic && clinics.length > 0 && (
         <div className="mb-3">
           <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
             Клиника
           </label>
           <select
-            value={form.clinic_id}
-            onChange={e => set('clinic_id', e.target.value)}
+            value={form.clinic_id} onChange={e => set('clinic_id', e.target.value)}
             className="w-full text-sm outline-none"
             style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 9, padding: '9px 12px', color: 'var(--fg)' }}
           >
             <option value="">Без клиники</option>
-            {clinics.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
+            {clinics.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
           </select>
         </div>
       )}
 
-      {/* ─── Клиники доступа (для всех типов врачей) ─── */}
       {needs.clinics && clinics.length > 0 && (
         <div className="mb-2">
           <label className="block mb-2" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -387,9 +463,7 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
                     color: on ? 'var(--accent)' : 'var(--fg-3)',
                     border: `1px solid ${on ? 'var(--accent-line)' : 'var(--border)'}`,
                   }}
-                >
-                  {c.name}
-                </button>
+                >{c.name}</button>
               )
             })}
           </div>
@@ -399,67 +473,235 @@ function AddModal({ open, token, clinics, onClose, onDone }) {
   )
 }
 
-// ─── Главный компонент ───
+// ─── Карточка сотрудника ────────────────────────────────────────────────────
+function StaffCard({ doc, onEdit, onToggle, onDelete, onChat, onCall, onWhatsapp, toggling, deleting }) {
+  const meta = ROLE_META[doc.role] || DEFAULT_ROLE_META
+  const phone = doc.phone_number
+
+  return (
+    <Card style={{ opacity: doc.is_active ? 1 : 0.78, borderColor: doc.is_active ? 'var(--border)' : 'var(--bad-soft)' }}>
+      <div className="flex justify-between items-start gap-3 mb-3 flex-wrap">
+        <div className="flex items-start gap-3 min-w-0">
+          <Avatar name={doc.full_name} size="md" />
+          <div className="min-w-0">
+            <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{doc.full_name}</div>
+            {/* Бейдж должности */}
+            <div
+              className="inline-flex items-center gap-1 mt-0.5"
+              style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+                background: meta.bg, color: meta.color,
+                textTransform: 'uppercase', letterSpacing: '0.04em',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{meta.icon}</span>
+              {meta.label}
+            </div>
+            {doc.specialization && (
+              <div className="text-xs font-medium mt-1" style={{ color: 'var(--accent)' }}>{doc.specialization}</div>
+            )}
+          </div>
+        </div>
+        <Chip variant={doc.is_active ? 'good' : 'bad'} dot>
+          {doc.is_active ? 'Активен' : 'Заблокирован'}
+        </Chip>
+      </div>
+
+      {/* Контакты */}
+      <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+        {[
+          { label: 'Логин',   value: doc.username,     mono: true },
+          { label: 'Телефон', value: doc.phone_number },
+          { label: 'Email',   value: doc.email },
+          { label: 'Адрес',   value: doc.address },
+        ].filter(f => f.value).map(f => (
+          <div key={f.label} style={{ background: 'var(--bg-1)', borderRadius: 9, padding: '7px 10px' }}>
+            <div style={{ fontSize: 10, color: 'var(--fg-4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>{f.label}</div>
+            <div className="text-xs break-all"
+                 style={{ color: 'var(--fg)', fontFamily: f.mono ? 'SF Mono, Consolas, monospace' : 'inherit', fontWeight: f.mono ? 600 : 500 }}>
+              {f.value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Клиники */}
+      {doc.clinics?.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {doc.clinics.map(c => (<Chip key={c.id} variant="accent">{c.name}</Chip>))}
+        </div>
+      )}
+
+      {/* Действия */}
+      <div className="flex flex-wrap gap-2 items-center pt-3" style={{ borderTop: '1px solid var(--line)' }}>
+        {/* Наш чат */}
+        <Button variant="secondary" size="sm" onClick={() => onChat(doc)} title="Открыть чат КлиникСеть">
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>forum</span>
+          Чат
+        </Button>
+        {/* Наш звонок (Calls Electron deep-link или tel:) */}
+        {phone && (
+          <Button variant="secondary" size="sm" onClick={() => onCall(phone)} title="Позвонить через Calls">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>call</span>
+            Звонок
+          </Button>
+        )}
+        {/* WhatsApp оставлен как fallback */}
+        {phone && (
+          <Button variant="secondary" size="sm" onClick={() => onWhatsapp(phone)} title="WhatsApp">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
+            WhatsApp
+          </Button>
+        )}
+        <Button variant="secondary" size="sm" onClick={() => onEdit(doc)}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+          Карточка
+        </Button>
+        <Button variant={doc.is_active ? 'secondary' : 'primary'} size="sm" onClick={() => onToggle(doc)} disabled={toggling === doc.id}>
+          {toggling === doc.id ? '…' : (doc.is_active ? 'Заблокировать' : 'Активировать')}
+        </Button>
+        <Button variant="danger" size="sm" onClick={() => onDelete(doc)} disabled={deleting === doc.id} title="Удалить">
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
+          {deleting === doc.id ? '…' : 'Удалить'}
+        </Button>
+        <span className="ml-auto text-[11px]" style={{ color: 'var(--fg-4)' }}>
+          {new Date(doc.created_at).toLocaleDateString('ru-RU')}
+        </span>
+      </div>
+    </Card>
+  )
+}
+
+// ─── Заголовок группы (сворачивается) ───────────────────────────────────────
+function GroupHeader({ role, count, collapsed, onToggle }) {
+  const meta = ROLE_META[role] || DEFAULT_ROLE_META
+  return (
+    <button
+      type="button" onClick={onToggle}
+      className="w-full flex items-center gap-2 transition-colors"
+      style={{
+        padding: '10px 14px', marginBottom: collapsed ? 0 : 8,
+        background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
+        cursor: 'pointer',
+      }}
+    >
+      <span className="material-symbols-outlined" style={{ fontSize: 20, color: meta.color }}>{meta.icon}</span>
+      <span className="font-semibold text-sm" style={{ color: 'var(--fg)' }}>{meta.label}</span>
+      <span
+        className="font-semibold text-xs"
+        style={{ background: meta.bg, color: meta.color, padding: '2px 8px', borderRadius: 999 }}
+      >{count}</span>
+      <span className="material-symbols-outlined ml-auto" style={{ fontSize: 18, color: 'var(--fg-3)', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 150ms' }}>
+        expand_more
+      </span>
+    </button>
+  )
+}
+
+// ─── Главный компонент ─────────────────────────────────────────────────────
 export default function ManagerRecruitDoctors() {
-  // Токен больше не нужен — apiFetch использует общий axios `api` с auto-Bearer.
-  // Оставлено для обратной совместимости — некоторые компоненты-формы ниже принимают prop `token`.
-  const token = null
+  const navigate = useNavigate()
   const [doctors, setDoctors]   = useState([])
   const [clinics, setClinics]   = useState([])
   const [loading, setLoading]   = useState(true)
   const [search, setSearch]     = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [showAdd, setShowAdd]   = useState(false)
-  const [resetDoc, setResetDoc] = useState(null)
+  const [editDoc, setEditDoc]   = useState(null)
   const [qrResult, setQrResult] = useState(null)
   const [toggling, setToggling] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [collapsed, setCollapsed] = useState({})  // { role: true|false }
 
   const load = () => {
     setLoading(true)
-    apiFetch(token, '/manager/all-external-doctors').then(r => r.json())
+    apiFetch(null, '/manager/all-external-doctors').then(r => r.json())
       .then(d => { setDoctors(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => setLoading(false))
   }
 
   useEffect(() => {
     load()
-    apiFetch(token, '/manager/clinics/').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
+    apiFetch(null, '/manager/clinics/').then(r => r.json()).then(d => setClinics(Array.isArray(d) ? d : [])).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const toggleActive = async (doc) => {
     setToggling(doc.id)
-    await apiFetch(token, `/manager/recruiter-doctors/${doc.id}/toggle-active`, { method: 'PATCH' })
-    load()
-    setToggling(null)
+    await apiFetch(null, `/manager/recruiter-doctors/${doc.id}/toggle-active`, { method: 'PATCH' })
+    load(); setToggling(null)
   }
 
   const deleteStaff = async (doc) => {
     if (!window.confirm(`Удалить сотрудника «${doc.full_name}»?\n\nВход будет заблокирован, история записей и аудит сохранятся.`)) return
     setDeleting(doc.id)
     try {
-      const r = await apiFetch(token, `/manager/users/${doc.id}`, { method: 'DELETE' })
+      const r = await apiFetch(null, `/manager/users/${doc.id}`, { method: 'DELETE' })
       if (!r.ok && r.status !== 204) {
         const d = await r.json().catch(() => ({}))
         window.alert(d.detail || 'Не удалось удалить сотрудника')
       }
       load()
-    } finally {
-      setDeleting(null)
-    }
+    } finally { setDeleting(null) }
   }
 
-  const filtered = doctors.filter(d => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return [d.full_name, d.username, d.specialization, d.phone_number].some(v => v && v.toLowerCase().includes(q))
-  })
+  // ─ Открыть чат КлиникСеть в DM с этим сотрудником ─
+  const openChat = (doc) => {
+    // /staff-chat — отдельный route без slug, его SLUG=, токены там ищутся
+    // под ключами clinika_(admin_)?token_ (без slug). Пробрасываем актуальные
+    // токены через hash — StaffChat при монтировании их подберёт и сохранит,
+    // тот же паттерн используется Calls Electron.
+    const at = localStorage.getItem('clinika_admin_token_' + SLUG) || localStorage.getItem('clinika_token_' + SLUG) || ''
+    const rt = localStorage.getItem('clinika_admin_refresh_token_' + SLUG) || localStorage.getItem('clinika_refresh_token_' + SLUG) || ''
+    let hash = ''
+    if (at) {
+      hash = '#access_token=' + encodeURIComponent(at)
+      if (rt) hash += '&refresh_token=' + encodeURIComponent(rt)
+    }
+    window.open(`/staff-chat?dm=${doc.id}${hash}`, '_blank', 'noopener')
+  }
+
+  // ─ Группировка по ролям с фильтром и поиском ─
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return doctors.filter(d => {
+      if (roleFilter !== 'all' && d.role !== roleFilter) return false
+      if (!q) return true
+      return [d.full_name, d.username, d.specialization, d.phone_number, d.email]
+        .some(v => v && String(v).toLowerCase().includes(q))
+    })
+  }, [doctors, search, roleFilter])
+
+  const grouped = useMemo(() => {
+    const acc = {}
+    for (const d of filtered) {
+      const role = d.role || 'other'
+      if (!acc[role]) acc[role] = []
+      acc[role].push(d)
+    }
+    return Object.entries(acc).sort(([a], [b]) => {
+      return (ROLE_META[a]?.order || 99) - (ROLE_META[b]?.order || 99)
+    })
+  }, [filtered])
+
+  // ─ Подсчёт всех ролей для чипов фильтра ─
+  const roleCounts = useMemo(() => {
+    const acc = { all: doctors.length }
+    for (const d of doctors) acc[d.role] = (acc[d.role] || 0) + 1
+    return acc
+  }, [doctors])
+
+  const presentRoles = useMemo(() => {
+    return Object.keys(roleCounts)
+      .filter(r => r !== 'all' && roleCounts[r] > 0)
+      .sort((a, b) => (ROLE_META[a]?.order || 99) - (ROLE_META[b]?.order || 99))
+  }, [roleCounts])
 
   return (
     <ManagerShell
       active="recruit"
       title="Сотрудники"
-      subtitle={`${doctors.length} приезжих врачей · добавление сотрудников всех ролей`}
+      subtitle={`${doctors.length} сотрудников · добавление сотрудников всех ролей`}
       icon="groups"
       topbarRight={
         <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
@@ -468,11 +710,18 @@ export default function ManagerRecruitDoctors() {
         </Button>
       }
     >
-      {resetDoc && <ResetModal doctor={resetDoc} token={token} onClose={() => setResetDoc(null)} onDone={d => { setQrResult(d); setResetDoc(null); load() }} />}
-      {qrResult && <QRPopup    data={qrResult}   onClose={() => setQrResult(null)} />}
-      <AddModal   open={showAdd} token={token} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />
+      {editDoc && (
+        <EditModal
+          doctor={editDoc}
+          onClose={() => setEditDoc(null)}
+          onProfileSaved={() => { setEditDoc(null); load() }}
+          onCredentialsReset={(d) => { setQrResult(d); setEditDoc(null); load() }}
+        />
+      )}
+      {qrResult && <QRPopup data={qrResult} onClose={() => setQrResult(null)} />}
+      <AddModal open={showAdd} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />
 
-      {/* ─── Mobile add button ─── */}
+      {/* Mobile add */}
       <div className="mb-4 sm:hidden">
         <Button variant="primary" size="md" className="w-full" onClick={() => setShowAdd(true)}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>person_add</span>
@@ -480,18 +729,13 @@ export default function ManagerRecruitDoctors() {
         </Button>
       </div>
 
-      {/* ─── Поиск ─── */}
-      <div
-        className="flex items-center gap-2 mb-4"
-        style={{
-          background: 'var(--surface)', border: '1px solid var(--border)',
-          borderRadius: 'var(--radius)', padding: '10px 14px',
-        }}
-      >
+      {/* Поиск */}
+      <div className="flex items-center gap-2 mb-3"
+           style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '10px 14px' }}>
         <span className="material-symbols-outlined" style={{ color: 'var(--fg-3)', fontSize: 18 }}>search</span>
         <input
           value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Поиск по имени, логину, специализации…"
+          placeholder="Поиск по имени, логину, специализации, телефону, email…"
           className="flex-1 text-sm outline-none bg-transparent"
           style={{ color: 'var(--fg)' }}
         />
@@ -499,6 +743,42 @@ export default function ManagerRecruitDoctors() {
           <button onClick={() => setSearch('')} style={{ background: 'transparent', color: 'var(--fg-3)', fontSize: 16 }}>✕</button>
         )}
       </div>
+
+      {/* Фильтр-чипы по ролям */}
+      {!loading && doctors.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          <button
+            onClick={() => setRoleFilter('all')}
+            className="text-xs font-semibold transition-colors"
+            style={{
+              padding: '6px 12px', borderRadius: 999,
+              background: roleFilter === 'all' ? 'var(--accent-soft)' : 'var(--surface)',
+              color: roleFilter === 'all' ? 'var(--accent)' : 'var(--fg-3)',
+              border: `1px solid ${roleFilter === 'all' ? 'var(--accent-line)' : 'var(--border)'}`,
+            }}
+          >Все · {doctors.length}</button>
+          {presentRoles.map(role => {
+            const m = ROLE_META[role] || DEFAULT_ROLE_META
+            const on = roleFilter === role
+            return (
+              <button
+                key={role}
+                onClick={() => setRoleFilter(role)}
+                className="text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+                style={{
+                  padding: '6px 12px', borderRadius: 999,
+                  background: on ? m.bg : 'var(--surface)',
+                  color: on ? m.color : 'var(--fg-3)',
+                  border: `1px solid ${on ? m.color : 'var(--border)'}`,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{m.icon}</span>
+                {m.label} · {roleCounts[role]}
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {loading ? (
         <Card>
@@ -510,115 +790,45 @@ export default function ManagerRecruitDoctors() {
         <Card>
           <EmptyState
             icon={<span className="material-symbols-outlined" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>group_off</span>}
-            title={search ? 'Ничего не найдено' : 'Список приезжих врачей пуст'}
-            message={search ? 'Попробуйте изменить запрос.' : 'Используйте кнопку «Добавить» — можно создать сотрудника любой роли (регистратор, врач, рекрутер, приезжий, партнёр и т. д.).'}
-            action={!search ? (
-              <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>
-                Добавить сотрудника
-              </Button>
+            title={search || roleFilter !== 'all' ? 'Ничего не найдено' : 'Список сотрудников пуст'}
+            message={search || roleFilter !== 'all' ? 'Попробуйте изменить запрос или фильтр.' : 'Используйте кнопку «Добавить» — можно создать сотрудника любой роли.'}
+            action={!search && roleFilter === 'all' ? (
+              <Button variant="primary" size="md" onClick={() => setShowAdd(true)}>Добавить сотрудника</Button>
             ) : null}
           />
         </Card>
       ) : (
         <div className="grid gap-3">
-          {filtered.map(doc => (
-            <Card
-              key={doc.id}
-              style={{
-                opacity: doc.is_active ? 1 : 0.78,
-                borderColor: doc.is_active ? 'var(--border)' : 'var(--bad-soft)',
-              }}
-            >
-              <div className="flex justify-between items-start gap-3 mb-3 flex-wrap">
-                <div className="flex items-start gap-3 min-w-0">
-                  <Avatar name={doc.full_name} size="md" />
-                  <div className="min-w-0">
-                    <div className="font-semibold text-sm truncate" style={{ color: 'var(--fg)' }}>{doc.full_name}</div>
-                    {doc.specialization && (
-                      <div className="text-xs font-medium mt-0.5" style={{ color: 'var(--accent)' }}>
-                        {doc.specialization}
-                      </div>
-                    )}
+          {grouped.map(([role, list]) => {
+            const isCollapsed = !!collapsed[role]
+            return (
+              <div key={role}>
+                <GroupHeader
+                  role={role}
+                  count={list.length}
+                  collapsed={isCollapsed}
+                  onToggle={() => setCollapsed(p => ({ ...p, [role]: !p[role] }))}
+                />
+                {!isCollapsed && (
+                  <div className="grid gap-3">
+                    {list.map(doc => (
+                      <StaffCard
+                        key={doc.id} doc={doc}
+                        onEdit={setEditDoc}
+                        onToggle={toggleActive}
+                        onDelete={deleteStaff}
+                        onChat={openChat}
+                        onCall={callPhone}
+                        onWhatsapp={whatsappPhone}
+                        toggling={toggling}
+                        deleting={deleting}
+                      />
+                    ))}
                   </div>
-                </div>
-                <Chip variant={doc.is_active ? 'good' : 'bad'} dot>
-                  {doc.is_active ? 'Активен' : 'Заблокирован'}
-                </Chip>
-              </div>
-
-              {/* ─── Контакты ─── */}
-              <div className="grid gap-2 mb-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-                {[
-                  { label: 'Логин',   value: doc.username,     mono: true },
-                  { label: 'Телефон', value: doc.phone_number },
-                  { label: 'Email',   value: doc.email },
-                  { label: 'Адрес',   value: doc.address },
-                ].filter(f => f.value).map(f => (
-                  <div
-                    key={f.label}
-                    style={{ background: 'var(--bg-1)', borderRadius: 9, padding: '7px 10px' }}
-                  >
-                    <div style={{ fontSize: 10, color: 'var(--fg-4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.04em' }}>
-                      {f.label}
-                    </div>
-                    <div
-                      className="text-xs break-all"
-                      style={{
-                        color: 'var(--fg)',
-                        fontFamily: f.mono ? 'SF Mono, Consolas, monospace' : 'inherit',
-                        fontWeight: f.mono ? 600 : 500,
-                      }}
-                    >
-                      {f.value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* ─── Клиники ─── */}
-              {doc.clinics?.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {doc.clinics.map(c => (
-                    <Chip key={c.id} variant="accent">{c.name}</Chip>
-                  ))}
-                </div>
-              )}
-
-              {/* ─── Действия ─── */}
-              <div className="flex flex-wrap gap-2 items-center pt-3" style={{ borderTop: '1px solid var(--line)' }}>
-                {/* Quick Actions: позвонить / WhatsApp по приезжему врачу */}
-                {doc.phone_number && (
-                  <QuickActions
-                    context="doctor"
-                    doctor={doc}
-                    size="sm"
-                    hidePrint
-                  />
                 )}
-                <Button variant="secondary" size="sm" onClick={() => setResetDoc(doc)}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>vpn_key</span>
-                  Сменить данные
-                </Button>
-                <Button
-                  variant={doc.is_active ? 'secondary' : 'primary'} size="sm"
-                  onClick={() => toggleActive(doc)} disabled={toggling === doc.id}
-                >
-                  {toggling === doc.id ? '…' : (doc.is_active ? 'Заблокировать' : 'Активировать')}
-                </Button>
-                <Button
-                  variant="danger" size="sm"
-                  onClick={() => deleteStaff(doc)} disabled={deleting === doc.id}
-                  title="Удалить сотрудника (soft-delete)"
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>delete</span>
-                  {deleting === doc.id ? '…' : 'Удалить'}
-                </Button>
-                <span className="ml-auto text-[11px]" style={{ color: 'var(--fg-4)' }}>
-                  {new Date(doc.created_at).toLocaleDateString('ru-RU')}
-                </span>
               </div>
-            </Card>
-          ))}
+            )
+          })}
         </div>
       )}
     </ManagerShell>

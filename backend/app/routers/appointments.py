@@ -173,6 +173,18 @@ async def upsert_outcome(
         except Exception:
             pass  # лояльность не должна ломать закрытие приёма
 
+    # Этап 2-3 INVENTORY_COST_PLAN: авто-списание расходников + калькуляция cost.
+    # try/except — не должен ломать закрытие приёма.
+    if was_just_completed and appt.tenant_id:
+        try:
+            from app.services.appointment_costing import on_appointment_completed
+            await on_appointment_completed(db, appt.id, current_user.id)
+        except Exception as _e:  # noqa: BLE001
+            import logging as _logging
+            _logging.getLogger("appointments").warning(
+                "on_appointment_completed failed: %s", _e
+            )
+
     await db.commit()
     await db.refresh(outcome)
     return outcome
