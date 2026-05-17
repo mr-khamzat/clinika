@@ -137,12 +137,16 @@ async def health_detailed():
     try:
         async with AsyncSessionLocal() as s:
             try:
-                hour_ago = datetime.utcnow() - timedelta(hours=1)
-                cnt = (await s.execute(
-                    text("SELECT COUNT(*) FROM audit_entries WHERE level='error' AND created_at >= :h"),
-                    {"h": hour_ago},
-                )).scalar() or 0
-                result["recent_errors_1h"] = int(cnt)
+                exists = (await s.execute(text("SELECT to_regclass('public.audit_entries')"))).scalar()
+                if not exists:
+                    result["recent_errors_1h"] = 0
+                else:
+                    hour_ago = datetime.utcnow() - timedelta(hours=1)
+                    cnt = (await s.execute(
+                        text("SELECT COUNT(*) FROM audit_entries WHERE level='error' AND created_at >= :h"),
+                        {"h": hour_ago},
+                    )).scalar() or 0
+                    result["recent_errors_1h"] = int(cnt)
             except Exception:
                 result["recent_errors_1h"] = None
     except Exception:

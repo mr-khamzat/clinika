@@ -171,6 +171,9 @@ async def _recent_errors(limit: int = 20) -> list:
     """Последние ошибки (level='error') из таблицы audit_entries — best-effort."""
     try:
         async with AsyncSessionLocal() as s:
+            exists = (await s.execute(text("SELECT to_regclass('public.audit_entries')"))).scalar()
+            if not exists:
+                return []
             rows = (await s.execute(text(
                 "SELECT created_at, level, action, COALESCE(detail, '') AS detail "
                 "FROM audit_entries WHERE level='error' "
