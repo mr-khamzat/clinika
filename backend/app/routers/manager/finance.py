@@ -308,3 +308,156 @@ async def mark_invoice_paid(
     except Exception:
         pass
     return {"id": str(inv.id), "status": inv.status, "paid_at": inv.paid_at.isoformat() if inv.paid_at else None}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BillingLedger — журнал биллинг-операций франшизы (append-only)
+# GET /manager/billing/ledger?from=&to=&type=&clinic_id=&page=&limit=
+# Возвращает: {items, page, total, totals: {gross, net, by_type}}
+#
+# Доступ: manager / franchise_owner / super_admin (require_manager уже допускает всё).
+# Фильтрация по tenant_id текущего пользователя (super_admin без tenant_id видит всё).
+# ─────────────────────────────────────────────────────────────────────────────
+from app.models.billing_ledger import BillingLedger, Direction as _LedgerDirection
+
+
+@router.get("/billing/ledger")
+async def list_billing_ledger(
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    type: Optional[str] = Query(None, description="Фильтр по entry_type"),
+    clinic_id: Optional[uuid.UUID] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Журнал биллинг-операций франшизы.
+
+    - Фильтры: даты (from/to ISO), тип операции (entry_type), клиника.
+    - Пагинация: page (1-based) + limit (max 500).
+    - Тоталы считаются по ВСЕЙ выборке (после фильтров), не по странице.
+    """
+    filters = []
+    # Тенантная изоляция — super_admin без tenant_id видит весь платформенный лог.
+    if current_user.tenant_id is not None:
+        filters.append(BillingLedger.tenant_id == current_user.tenant_id)
+
+    # Даты (ISO 8601, время опционально).
+    if from_date:
+        try:
+            filters.append(BillingLedger.created_at >= datetime.fromisoformat(from_date))
+        except ValueError:
+            raise HTTPException(400, "Некорректный формат 'from' (ISO 8601)")
+    if to_date:
+        try:
+            # Если передана только дата — берём до 23:59:59 включительно.
+            dt = datetime.fromisoformat(to_date)
+            if len(to_date) <= 10:
+                dt = dt.replace(hour=23, minute=59, second=59)
+            filters.append(BillingLedger.created_at <= dt)
+        except ValueError:
+            raise HTTPException(400, "Некорректный формат 'to' (ISO 8601)")
+    if type:
+        filters.append(BillingLedger.entry_type == type)
+    if clinic_id:
+        filters.append(BillingLedger.clinic_id == clinic_id)
+
+    where = and_(*filters) if filters else True
+
+    # Тоталы (total count + gross/net/by_type) по всей выборке.
+    total_q = await db.execute(select(func.count(BillingLedger.id)).where(where))
+    total = int(total_q.scalar() or 0)
+
+    # gross: сумма всех direction=credit (поступления платформе/тенанту).
+    # net = credit - debit.
+    gross_q = await db.execute(
+        select(func.coalesce(func.sum(BillingLedger.amount), 0))
+        .where(and_(where, BillingLedger.direction == _LedgerDirection.CREDIT))
+    )
+    gross = float(gross_q.scalar() or 0)
+
+    debit_q = await db.execute(
+        select(func.coalesce(func.sum(BillingLedger.amount), 0))
+        .where(and_(where, BillingLedger.direction == _LedgerDirection.DEBIT))
+    )
+    debit = float(debit_q.scalar() or 0)
+    net = gross - debit
+
+    by_type_q = await db.execute(
+        select(
+            BillingLedger.entry_type,
+            BillingLedger.direction,
+            func.coalesce(func.sum(BillingLedger.amount), 0).label("sum"),
+            func.count(BillingLedger.id).label("cnt"),
+        )
+        .where(where)
+        .group_by(BillingLedger.entry_type, BillingLedger.direction)
+    )
+    by_type: dict = {}
+    for row in by_type_q.all():
+        bucket = by_type.setdefault(row.entry_type, {"credit": 0.0, "debit": 0.0, "count": 0})
+        bucket[row.direction] = float(row.sum or 0)
+        bucket["count"] += int(row.cnt or 0)
+
+    # Страница записей.
+    offset = (page - 1) * limit
+    rows_q = await db.execute(
+        select(BillingLedger)
+        .where(where)
+        .order_by(BillingLedger.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = rows_q.scalars().all()
+
+    # Подгрузка названий клиник одной выборкой.
+    clinic_ids = {r.clinic_id for r in rows if r.clinic_id}
+    clinic_names: dict = {}
+    if clinic_ids:
+        cn = await db.execute(select(Clinic).where(Clinic.id.in_(list(clinic_ids))))
+        for c in cn.scalars().all():
+            clinic_names[c.id] = c.name
+
+    items = []
+    for r in rows:
+        meta = r.meta or {}
+        items.append({
+            "id": str(r.id),
+            "tenant_id": str(r.tenant_id) if r.tenant_id else None,
+            "clinic_id": str(r.clinic_id) if r.clinic_id else None,
+            "clinic_name": clinic_names.get(r.clinic_id) if r.clinic_id else None,
+            "entry_type": r.entry_type,
+            "direction": r.direction,
+            "amount": float(r.amount or 0),
+            # signed amount для удобства фронта: credit = +, debit = -.
+            "signed_amount": (
+                float(r.amount or 0)
+                if r.direction == _LedgerDirection.CREDIT
+                else -float(r.amount or 0)
+            ),
+            "currency": r.currency,
+            "reference_id": str(r.reference_id) if r.reference_id else None,
+            "reference_type": r.reference_type,
+            "description": r.description,
+            # patient_name / receipt_url достаём из meta если положили при создании.
+            "patient_name": meta.get("patient_name"),
+            "receipt_url": meta.get("receipt_url"),
+            "is_split": bool(r.is_split),
+            "split_parent_id": str(r.split_parent_id) if r.split_parent_id else None,
+            "split_actor": r.split_actor,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    return {
+        "items": items,
+        "page": page,
+        "limit": limit,
+        "total": total,
+        "totals": {
+            "gross": gross,
+            "debit": debit,
+            "net": net,
+            "by_type": by_type,
+        },
+    }
