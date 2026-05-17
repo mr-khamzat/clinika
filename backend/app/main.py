@@ -72,6 +72,16 @@ from app.routers.ai_platform import router as ai_platform_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.visiting_doctor import router as visiting_router
 from app.routers.doctor_ai import router as doctor_ai_router
+from app.routers.announcements import router as announcements_router
+from app.routers.director import router as director_router
+from app.routers.director_export import router as director_export_router
+from app.routers.inventory_import import router as inventory_import_router
+from app.routers.inventory_batches import router as inventory_batches_router
+from app.routers.manager_mis_webhooks import router as manager_mis_webhooks_router
+from app.routers.marketing_ads import router as marketing_ads_router
+from app.routers.service_norms import router as service_norms_router
+from app.routers.subscription_discounts import router as subscription_discounts_router
+from app.routers.subscription_pending import router as subscription_pending_router
 from app.routers.regulations import router as regulations_router
 from app.routers.admin_regulations import router as admin_regulations_router
 from app.routers.external_doctor import router as external_doctor_router
@@ -1646,6 +1656,16 @@ app.include_router(prometheus_router)
 # Telephony (PSTN: конфиг провайдера, DID-номера, dial, история звонков)
 from app.routers.tenant_telephony import router as _telephony_router
 app.include_router(_telephony_router)
+app.include_router(announcements_router)
+app.include_router(director_router)
+app.include_router(director_export_router)
+app.include_router(inventory_import_router)
+app.include_router(inventory_batches_router)
+app.include_router(manager_mis_webhooks_router)
+app.include_router(marketing_ads_router)
+app.include_router(service_norms_router)
+app.include_router(subscription_discounts_router)
+app.include_router(subscription_pending_router)
 
 # Reviews plugin
 from app.plugins.reviews import ReviewsPlugin
