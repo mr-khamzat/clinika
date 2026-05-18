@@ -18,6 +18,14 @@ const LtvAnalyticsSection = lazy(() => import('../sections/ltv/LtvAnalyticsSecti
 const CallLogSection = lazy(() => import('../sections/calls/CallLogSection'))
 // Возвратность по врачам (повторно vs первично)
 const DoctorRetentionSection = lazy(() => import('../sections/analytics/DoctorRetentionSection'))
+// Возвратность по врачам — версия из МИС (точнее, по флагу is_first_doctor)
+const RetentionMisSection = lazy(() => import('../sections/analytics/RetentionMisSection'))
+// Источники / каналы привлечения
+const AttributionSection = lazy(() => import('../sections/analytics/AttributionSection'))
+// Программы / абонементы
+const ProgramsSection = lazy(() => import('../sections/analytics/ProgramsSection'))
+// No-show — пропуски визитов
+const NoShowSection = lazy(() => import('../sections/analytics/NoShowSection'))
 
 function fmt(n) { return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—' }
 
@@ -121,6 +129,10 @@ export default function ManagerAnalytics() {
           items={[
             { id: 'overview',  label: 'Аналитика' },
             { id: 'retention', label: 'Возвратность' },
+            { id: 'retention_mis', label: 'Возвратность · МИС' },
+            { id: 'attribution', label: 'Источники' },
+            { id: 'programs', label: 'Программы' },
+            { id: 'noshow', label: 'No-show' },
             { id: 'ltv',       label: 'LTV' },
             { id: 'calls',     label: 'Звонки' },
           ]}
@@ -150,6 +162,54 @@ export default function ManagerAnalytics() {
           </Card>
         }>
           <DoctorRetentionSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
+
+      {tab === 'retention_mis' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <RetentionMisSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
+
+      {tab === 'attribution' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <AttributionSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
+
+      {tab === 'programs' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <ProgramsSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
+
+      {tab === 'noshow' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <NoShowSection clinicId={scope.selectedId} />
         </Suspense>
       )}
 

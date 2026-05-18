@@ -230,3 +230,4 @@ from app.models.engagement import (
 # Accountant cabinet — кассовые смены клиники.
 from app.models.cash_shift import CashShift, CashShiftEntry  # noqa: F401
 from app.models.spending import Spending  # noqa: F401
+from app.models.mis_payment_import import MisPaymentImport  # noqa: F401

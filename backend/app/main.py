@@ -1050,6 +1050,8 @@ async def lifespan(app: FastAPI):
     _register_plugins()
     # APScheduler — задачи с персистентностью через Redis
     scheduler.add_job(run_auto_confirm_job, 'interval', minutes=10, id='auto_confirm', replace_existing=True)
+    from app.services.mis_payments_sync import sync_all_tenants_job as _mis_pay_sync_job
+    scheduler.add_job(_mis_pay_sync_job, 'interval', minutes=10, id='mis_payments_sync', replace_existing=True)
     scheduler.add_job(expire_referrals_job, 'interval', hours=1, id='expire_referrals', replace_existing=True)
     scheduler.add_job(renew_plugins_job, 'interval', hours=6, id='renew_plugins', replace_existing=True)
     scheduler.add_job(module_expiry_job, 'interval', hours=1, id='module_expiry', replace_existing=True)

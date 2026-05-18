@@ -100,6 +100,7 @@ export default function AccCash() {
   const [closeModal, setCloseModal]   = useState(false)
   const [closeForm, setCloseForm] = useState({ cash_end_actual: '', notes: '' })
   const [closing, setClosing]     = useState(false)
+  const [misSyncing, setMisSyncing] = useState(false)
   const [closedShift, setClosedShift] = useState(null) // показ результата закрытия
 
   // ─── Загрузка текущей смены + истории ───
@@ -178,6 +179,24 @@ export default function AccCash() {
     }
   }
 
+  // ─── Синхронизация платежей из МИС ───
+  async function syncMisPayments() {
+    if (misSyncing) return
+    setMisSyncing(true)
+    setError('')
+    try {
+      const r = await api.post('/accountant/cash/sync-mis-payments')
+      const s = r?.data || {}
+      const msg = `Синк МИС: импортировано наличных — ${s.imported_cash || 0}, карта — ${s.imported_card || 0}, пропущено дублей — ${s.skipped_dup || 0}`
+      window.alert(msg)
+      await reload()
+    } catch (e) {
+      setError(e?.response?.data?.detail || 'Не удалось синхронизировать с МИС')
+    } finally {
+      setMisSyncing(false)
+    }
+  }
+
   // ─── Закрыть смену ───
   function openCloseModal() {
     // Подсказка: предзаполним фактический cash_end_actual ожидаемой суммой
@@ -242,6 +261,10 @@ export default function AccCash() {
             <Button variant="secondary" onClick={() => openEntry('out')}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, verticalAlign: 'middle', marginRight: 4 }}>remove</span>
               Расход
+            </Button>
+            <Button variant="secondary" onClick={syncMisPayments} disabled={misSyncing}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18, verticalAlign: 'middle', marginRight: 4 }}>sync</span>
+              {misSyncing ? 'Синхронизация…' : 'Синк МИС'}
             </Button>
             <Button variant="secondary" onClick={openCloseModal}>
               Закрыть смену

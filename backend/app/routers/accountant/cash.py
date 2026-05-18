@@ -355,3 +355,30 @@ async def shift_details(
 
     base = _shift_to_out(shift, in_total, out_total, len(entries))
     return ShiftDetailsOut(**base.model_dump(), entries=[EntryOut.model_validate(e) for e in entries])
+
+
+# ─── Sync платежей из МИС вручную ─────────────────────────────────────────
+
+@router.post("/sync-mis-payments")
+async def sync_mis_payments_now(
+    user: User = Depends(require_accountant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ручной запуск синхронизации платежей из МИС в открытую смену.
+
+    Тянет getPayments за сегодня по всем clinic_id тенанта. Cash → в открытую
+    смену клиники как entry (direction=in, category=sale). Card/transfer →
+    регистрируется в mis_payment_imports как факт получения (для отчётности
+    они также доступны через /accountant/payments напрямую от МИС).
+
+    Идемпотентно: повторный вызов не создаст дубликатов (uq_mis_payment_unique).
+    """
+    from app.services.mis_payments_sync import sync_tenant_payments
+    from app.models.tenant import Tenant
+
+    tenant = await db.get(Tenant, user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Тенант не найден")
+
+    stats = await sync_tenant_payments(db, tenant)
+    return stats
