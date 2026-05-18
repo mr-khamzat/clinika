@@ -292,16 +292,29 @@ const ROLE_NEEDS = {
 }
 
 // ─── Форма добавления сотрудника ────────────────────────────────────────────
+const EMPTY_ADD_FORM = {
+  role: 'visiting_doctor',
+  full_name: '', phone_number: '', email: '', specialization: '', address: '',
+  username: '', password: '', clinic_ids: [], clinic_id: '',
+  price_per_visit: '', doctor_percent: '70',
+  bonus_percent: '10',
+}
+
 function AddModal({ open, clinics, onClose, onDone }) {
-  const [form, setForm] = useState({
-    role: 'visiting_doctor',
-    full_name: '', phone_number: '', email: '', specialization: '', address: '',
-    username: '', password: '', clinic_ids: [], clinic_id: '',
-    price_per_visit: '', doctor_percent: '70',
-    bonus_percent: '10',
-  })
+  const [form, setForm] = useState(EMPTY_ADD_FORM)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // AddModal остаётся смонтированным между открытиями (Modal-обёртка лишь
+  // прячет узел в DOM). Без сброса при повторном open форма сохраняла
+  // данные предыдущего сотрудника.
+  useEffect(() => {
+    if (open) {
+      setForm(EMPTY_ADD_FORM)
+      setError('')
+      setLoading(false)
+    }
+  }, [open])
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
   const toggle = id => set('clinic_ids', form.clinic_ids.includes(id) ? form.clinic_ids.filter(x => x !== id) : [...form.clinic_ids, id])
 
