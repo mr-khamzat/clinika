@@ -337,8 +337,9 @@ function OverviewSection({ analytics, me, tenants }) {
   const totalMRR = (tenants || []).reduce((s, t) => s + Number(t.mrr || 0), 0)
 
   // Спецификация (W4): Тенантов / Сотрудников / Направлений за месяц / MRR
-  const totalEmployees = (tenants || []).reduce((s, t) => s + Number(t.employees_count || t.staff_count || 0), 0)
-  const refsThisMonth = analytics?.referrals_month ?? analytics?.total_referrals ?? '—'
+  const totalEmployeesByTenants = (tenants || []).reduce((s, t) => s + Number(t.employees_count || t.staff_count || 0), 0)
+  const totalEmployees = totalEmployeesByTenants || Number(me?.total_employees || 0)
+  const refsThisMonth = analytics?.referrals_month ?? analytics?.total_referrals ?? me?.referrals_month ?? '—'
 
   return (
     <div className="flex flex-col gap-5">
@@ -366,7 +367,7 @@ function OverviewSection({ analytics, me, tenants }) {
         />
         <KpiCard
           label="Конверсия"
-          value={analytics?.conversion_rate ? `${analytics.conversion_rate}%` : '—'}
+          value={(analytics?.conversion_rate || me?.conversion_rate) ? `${analytics?.conversion_rate ?? me?.conversion_rate}%` : '—'}
           delta="по сети"
           trend="flat"
         />

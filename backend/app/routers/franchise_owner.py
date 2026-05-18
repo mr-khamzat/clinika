@@ -78,6 +78,28 @@ async def get_my_franchise(
         .where(Tenant.franchise_id == f.id, Subscription.status == SubStatus.ACTIVE)
     )).scalar() or 0)
 
+    # Агрегаты по сети для KPI на overview
+    from sqlalchemy import text as _text
+    tenants_ids_subq = select(Tenant.id).where(Tenant.franchise_id == f.id).subquery()
+    total_employees = (await db.execute(
+        select(func.count(User.id)).where(
+            User.tenant_id.in_(select(tenants_ids_subq.c.id)),
+            User.is_active.is_(True),
+            User.role != UserRole.PATIENT,
+        )
+    )).scalar() or 0
+
+    refs_row = (await db.execute(_text("""
+        SELECT
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL 30 days)         AS month_total,
+          COUNT(*) FILTER (WHERE status = confirmed AND created_at >= NOW() - INTERVAL 30 days) AS month_confirmed
+        FROM appointments
+        WHERE tenant_id IN (SELECT id FROM tenants WHERE franchise_id = :fid)
+    """), {"fid": str(f.id)})).one()
+    month_total = int(refs_row.month_total or 0)
+    month_confirmed = int(refs_row.month_confirmed or 0)
+    conversion_rate = round((month_confirmed / month_total * 100), 1) if month_total else 0
+
     return {
         "id": str(f.id),
         "name": f.name,
@@ -91,6 +113,10 @@ async def get_my_franchise(
         "is_active": f.is_active,
         "tenant_count": tc,
         "mrr_sum": mrr,
+        "total_employees": int(total_employees),
+        "referrals_month": month_total,
+        "referrals_month_confirmed": month_confirmed,
+        "conversion_rate": conversion_rate,
         "created_at": f.created_at.isoformat() if f.created_at else None,
     }
 
@@ -112,6 +138,13 @@ async def list_my_tenants(
             select(Subscription).where(Subscription.tenant_id == t.id)
             .order_by(Subscription.created_at.desc()).limit(1)
         )).scalar_one_or_none()
+        emp_count = (await db.execute(
+            select(func.count(User.id)).where(
+                User.tenant_id == t.id,
+                User.is_active.is_(True),
+                User.role != UserRole.PATIENT,
+            )
+        )).scalar() or 0
         out.append({
             "id": str(t.id),
             "name": t.name,
@@ -120,6 +153,7 @@ async def list_my_tenants(
             "plan": lic.plan if lic else None,
             "subscription_status": sub.status if sub else None,
             "mrr": float(sub.amount_per_period) if sub else 0.0,
+            "employees_count": int(emp_count),
             "trial_ends_at": sub.trial_ends_at.isoformat() if (sub and sub.trial_ends_at) else None,
             "created_at": t.created_at.isoformat() if t.created_at else None,
         })
