@@ -16,6 +16,8 @@ import ManagerShell from './_ManagerShell'
 const LtvAnalyticsSection = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
 // Ленивая загрузка секции «Звонки» — история CallLog + аналитика
 const CallLogSection = lazy(() => import('../sections/calls/CallLogSection'))
+// Возвратность по врачам (повторно vs первично)
+const DoctorRetentionSection = lazy(() => import('../sections/analytics/DoctorRetentionSection'))
 
 function fmt(n) { return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—' }
 
@@ -117,9 +119,10 @@ export default function ManagerAnalytics() {
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <Tabs
           items={[
-            { id: 'overview', label: 'Аналитика' },
-            { id: 'ltv',      label: 'LTV' },
-            { id: 'calls',    label: 'Звонки' },
+            { id: 'overview',  label: 'Аналитика' },
+            { id: 'retention', label: 'Возвратность' },
+            { id: 'ltv',       label: 'LTV' },
+            { id: 'calls',     label: 'Звонки' },
           ]}
           value={tab}
           onChange={setTab}
@@ -137,6 +140,18 @@ export default function ManagerAnalytics() {
           />
         )}
       </div>
+
+      {tab === 'retention' && (
+        <Suspense fallback={
+          <Card>
+            <div className="flex items-center justify-center py-16">
+              <div className="w-8 h-8 rounded-full animate-spin" style={{ border: '3px solid var(--accent-soft)', borderTopColor: 'var(--accent)' }} />
+            </div>
+          </Card>
+        }>
+          <DoctorRetentionSection clinicId={scope.selectedId} />
+        </Suspense>
+      )}
 
       {tab === 'ltv' && (
         <Suspense fallback={

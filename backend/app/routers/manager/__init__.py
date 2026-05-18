@@ -27,6 +27,7 @@ from .doctor_load import router as doctor_load_router
 from .referral_templates import router as referral_templates_router
 from .multi_clinic import router as multi_clinic_router
 from .cost_forecast import router as cost_forecast_router
+from .analytics_retention import router as analytics_retention_router
 
 router = APIRouter(prefix="/manager", tags=["manager"])
 
@@ -51,3 +52,4 @@ router.include_router(doctor_load_router)
 router.include_router(referral_templates_router)
 router.include_router(multi_clinic_router)
 router.include_router(cost_forecast_router)
+router.include_router(analytics_retention_router)
