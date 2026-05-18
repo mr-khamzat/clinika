@@ -102,7 +102,7 @@ export default function NetworkDashboard({ token }) {
   useEffect(() => {
     setLoading(true)
     setErr('')
-    fetchJson(token, `/api/network/overview?days=${days}`)
+    fetchJson(token, `/network/overview?days=${days}`)
       .then(d => { setData(d); setLoading(false) })
       .catch(e => { setErr(String(e.message || e)); setLoading(false) })
   }, [token, days])
