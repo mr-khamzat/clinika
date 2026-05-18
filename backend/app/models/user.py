@@ -25,6 +25,10 @@ class UserRole(str, enum.Enum):
     # Зам руководителя сети — те же экраны DirectorCabinet, тоже read-only.
     # Главврач = зам в крупных клиниках/больницах (deputydir01).
     DEPUTY_DIRECTOR = "deputy_director"
+    # Бухгалтер клиники — отдельный кабинет /accountant. Scope: clinic_id.
+    # Видит и ведёт кассовые смены, акты, платежи, расходы. БЕЗ доступа к
+    # медицинским данным и без прав на CRUD пользователей.
+    ACCOUNTANT = "accountant"
 
 class User(Base):
     __tablename__ = "users"

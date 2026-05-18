@@ -32,6 +32,7 @@ import asyncio
 from app.routers import auth, referrals, bonuses, clinics, admins, integrations
 from app.routers.password_reset import router as password_reset_router, cleanup_expired_password_reset_tokens
 from app.routers.manager import router as manager_router
+from app.routers.accountant import router as accountant_router
 from app.routers.monitoring import router as monitoring_router
 from app.routers.tenant import router as tenant_router
 # plugins_router удалён — старая plugin_*-система выпилена (заменена commercial_modules)
@@ -1542,6 +1543,7 @@ app.include_router(bonuses.router)
 app.include_router(clinics.router)
 app.include_router(admins.router)
 app.include_router(manager_router)
+app.include_router(accountant_router)
 app.include_router(contact_router)
 app.include_router(support_router)
 app.include_router(integrations.router)

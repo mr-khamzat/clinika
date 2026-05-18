@@ -42,6 +42,8 @@ const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
 // InviteRegister/InviteAccept — eager: маленькие, на критическом пути регистрации.
 import InviteRegister from './pages/InviteRegister'
 import InviteAccept from './pages/InviteAccept'
+// AccountantCabinet — отдельный кабинет для роли accountant (касса/акты/отчёты).
+const AccountantCabinet = lazy(() => import('./pages/AccountantCabinet'))
 const ManagerDashboard = lazy(() => import('./pages/ManagerDashboard'))
 const ManagerHistory = lazy(() => import('./pages/ManagerHistory'))
 const ManagerBonuses = lazy(() => import('./pages/ManagerBonuses'))
@@ -387,6 +389,15 @@ function MiniApp() {
             <Route path="network"   element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorNetwork /></Suspense>} />
           </Route>
         )}
+        {/* ─── Кабинет бухгалтера (accountant) — касса, акты, расходы ─── */}
+        {/* basename={"/" + SLUG} в BrowserRouter, поэтому /accountant = /{slug}/accountant */}
+        {user?.role === 'accountant' && (
+          <Route path="/accountant/*" element={
+            <Suspense fallback={<div style={{minHeight:'100vh'}}/>}>
+              <AccountantCabinet />
+            </Suspense>
+          } />
+        )}
         {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}
         <Route path="/admin/chat-settings" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatSettings /></Suspense>} />
         <Route path="/admin/franchise-revenue" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseRevenue /></Suspense>} />
@@ -429,6 +440,10 @@ function RootRedirect() {
   }
   if (user.role === 'director' || user.role === 'deputy_director') {
     window.location.replace('/' + SLUG + '/director')
+    return null
+  }
+  if (user.role === 'accountant') {
+    window.location.replace('/' + SLUG + '/accountant')
     return null
   }
   if (user.role === 'patient') {

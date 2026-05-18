@@ -47,6 +47,9 @@ export default function Login() {
       if (!effectiveUrl && (me?.data?.role === 'director' || me?.data?.role === 'deputy_director')) {
         effectiveUrl = '/' + (realSlug || SLUG) + '/director'
       }
+      if (!effectiveUrl && me?.data?.role === 'accountant') {
+        effectiveUrl = '/' + (realSlug || SLUG) + '/accountant'
+      }
       // Редирект по роли (franchise_owner→/{slug}/admin, super_admin→/admin, manager→/{slug}/manager и т.д.)
       // Если backend не вернул redirect_url или он указывает на текущую страницу — обычный reload.
       if (effectiveUrl && effectiveUrl !== window.location.pathname) {

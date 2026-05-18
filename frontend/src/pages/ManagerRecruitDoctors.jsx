@@ -45,6 +45,7 @@ const ROLE_META = {
   reg:             { label: 'Регистратор',      icon: 'badge',                 color: '#b45309', bg: 'rgba(217, 119, 6, 0.10)',  order: 5 },
   nurse:           { label: 'Медсестра',        icon: 'medical_services',      color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 6 },
   recruiter:       { label: 'Рекрутер',         icon: 'person_search',         color: '#6d28d9', bg: 'rgba(109, 40, 217, 0.10)', order: 7 },
+  accountant:      { label: 'Бухгалтер',         icon: 'calculate',             color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 8 },
 }
 const DEFAULT_ROLE_META = { label: 'Сотрудник', icon: 'person', color: '#4b5563', bg: 'rgba(75, 85, 99, 0.10)', order: 99 }
 
@@ -320,6 +321,7 @@ const STAFF_ROLES = [
   { value: 'deputy_director', label: 'Зам руководителя',  icon: 'supervisor_account',      hint: 'Read-only кабинет руководителя сети (P&L, KPI, склад, маркетинг)' },
   { value: 'reg',             label: 'Регистратор',       icon: 'badge',                  hint: 'Регистратор клиники (приём пациентов)' },
   { value: 'nurse',           label: 'Медсестра',         icon: 'medical_services',       hint: 'Медсестра, ассистирует врачу' },
+  { value: 'accountant',      label: 'Бухгалтер',         icon: 'calculate',              hint: 'Кабинет бухгалтера клиники: касса, акты, расходы, отчёты' },
 ]
 const ROLE_NEEDS = {
   visiting_doctor: { specialization: true, address: true,  clinics: true,  terms: true,  primaryClinic: false, bonusPercent: false },
@@ -330,6 +332,7 @@ const ROLE_NEEDS = {
   deputy_director: { specialization: false,address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: false },
   reg:             { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
   nurse:           { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  accountant:      { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
 }
 
 // ─── Форма добавления сотрудника ────────────────────────────────────────────

@@ -226,3 +226,7 @@ from app.models.engagement import (
     PatientSegment, PushTemplate, PushCampaign,
     EngagementSuggestion, NpsResponse,
 )
+
+# Accountant cabinet — кассовые смены клиники.
+from app.models.cash_shift import CashShift, CashShiftEntry  # noqa: F401
+from app.models.spending import Spending  # noqa: F401
