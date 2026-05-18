@@ -935,10 +935,14 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                     </div>
                   </div>
 
-                  {createdRef.qr_code && (
+                  {/* Показываем patient_qr_code — QR с URL /{slug}/p/{id}?t={token}
+                      открывает ЛК пациента. createdRef.qr_code — это
+                      admin-QR (содержит только UUID для подтверждения скана),
+                      его выводить тут нельзя — пациент не сможет открыть. */}
+                  {(createdRef.patient_qr_code || createdRef.qr_code) && (
                     <img
-                      src={'data:image/png;base64,' + createdRef.qr_code}
-                      alt="QR направления"
+                      src={'data:image/png;base64,' + (createdRef.patient_qr_code || createdRef.qr_code)}
+                      alt="QR для пациента — ссылка на личный кабинет"
                       className="mx-auto mt-4 rounded-2xl"
                       style={{
                         width: 180, height: 180,
