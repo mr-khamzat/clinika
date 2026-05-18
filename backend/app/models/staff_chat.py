@@ -48,6 +48,20 @@ class StaffChatRoom(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
+    # ── Cross-tenant rooms (общие комнаты франшизы) ───────────────────────
+    # franchise_id — если задан, комната «принадлежит» франшизе, и в её members
+    # могут входить пользователи из любого тенанта этой франшизы. tenant_id
+    # при этом остаётся обязательным и равен тенанту инициатора (создателя).
+    franchise_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("franchises.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    # Флаг «это cross-tenant комната»: фильтрация в UI и контрольная проверка
+    # в роутерах (нельзя смешивать с обычными per-tenant комнатами).
+    is_cross_tenant: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False,
+    )
     # direct | clinic | group | broadcast
     type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     # Название (для group/broadcast). Для direct автогенерится из ФИО участников.

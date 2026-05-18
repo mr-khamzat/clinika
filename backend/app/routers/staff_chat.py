@@ -554,17 +554,28 @@ async def list_contacts(
 # ── /rooms ────────────────────────────────────────────────────────────────────
 @router.get("/rooms")
 async def list_rooms(
+    include_cross: bool = False,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """Мои комнаты StaffChat.
+
+    По умолчанию (`include_cross=False`) возвращаются только per-tenant комнаты.
+    Это сохраняет прежнее поведение для существующих UI-клиентов.
+    При `include_cross=True` дополнительно вернутся cross-tenant комнаты,
+    членом которых я являюсь (отдельный endpoint для cross-rooms — в
+    `staff_chat_cross.py`).
+    """
     _ensure_not_patient(user)
     room_ids = await svc.user_room_ids(db, user.id)
     if not room_ids:
         return {"rooms": []}
+    rooms_q = select(StaffChatRoom).where(StaffChatRoom.id.in_(room_ids))
+    if not include_cross:
+        # Отфильтровываем cross-tenant комнаты — у них отдельный UI
+        rooms_q = rooms_q.where(StaffChatRoom.is_cross_tenant == False)  # noqa: E712
     r = await db.execute(
-        select(StaffChatRoom)
-        .where(StaffChatRoom.id.in_(room_ids))
-        .order_by(StaffChatRoom.last_message_at.desc().nullslast())
+        rooms_q.order_by(StaffChatRoom.last_message_at.desc().nullslast())
     )
     rooms = list(r.scalars().all())
     # Все участники всех комнат

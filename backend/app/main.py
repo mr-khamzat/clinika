@@ -82,7 +82,6 @@ from app.routers.visiting_doctor import router as visiting_router
 from app.routers.doctor_ai import router as doctor_ai_router
 from app.routers.announcements import router as announcements_router
 from app.routers.director import router as director_router
-from app.routers.referrals_cross import router as referrals_cross_router  # xref01: cross-clinic referrals
 from app.routers.director_export import router as director_export_router
 from app.routers.inventory_import import router as inventory_import_router
 from app.routers.inventory_batches import router as inventory_batches_router
@@ -154,6 +153,7 @@ from app.routers.manager_subscription_cash import router as manager_subscription
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
 from app.routers.staff_chat import router as staff_chat_router, _bot_router as staff_chat_bot_router
+from app.routers.staff_chat_cross import router as staff_chat_cross_router
 from app.routers.owner_bot_webhook import router as owner_bot_webhook_router
 from app.routers.chat_admin import router as chat_admin_router
 from app.routers.franchise_modules import router as franchise_modules_router
@@ -1543,7 +1543,6 @@ app.include_router(password_reset_router)
 from app.routers.reg_speed import router as reg_speed_router
 app.include_router(reg_speed_router)  # Глава 5: PDF/печать/поиск пациентов для регистратора
 app.include_router(referrals.router)
-app.include_router(referrals_cross_router)  # xref01: cross-clinic referrals (отдельный prefix /referrals-cross)
 app.include_router(bonuses.router)
 app.include_router(clinics.router)
 app.include_router(admins.router)
@@ -1660,6 +1659,7 @@ app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
 app.include_router(staff_chat_router)
 app.include_router(staff_chat_bot_router)
+app.include_router(staff_chat_cross_router)
 app.include_router(owner_bot_webhook_router)
 app.include_router(chat_admin_router)
 # Workflow batch — tenant chat settings (SLA/autoclose) + CRUD message templates
