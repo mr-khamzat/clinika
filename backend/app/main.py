@@ -66,6 +66,7 @@ from app.routers.tenant_api_keys import router as tenant_api_keys_router
 from app.routers.public_api_v1 import router as public_api_v1_router
 from app.routers.ads import router as ads_router
 from app.routers.ads_ai import router as ads_ai_router
+from app.routers.ads_analytics import router as ads_analytics_router
 from app.routers.ads_workflow import router as ads_workflow_router
 from app.routers.commercial import router as commercial_router
 from app.routers.marketplace import router as marketplace_router
@@ -1568,6 +1569,7 @@ app.include_router(tenant_api_keys_router)
 app.include_router(public_api_v1_router)
 app.include_router(ads_router)
 app.include_router(ads_ai_router)
+app.include_router(ads_analytics_router)
 app.include_router(ads_workflow_router)
 app.include_router(commercial_router)
 app.include_router(marketplace_router)
