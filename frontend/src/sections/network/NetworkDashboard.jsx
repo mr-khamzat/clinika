@@ -11,7 +11,7 @@
  *  - Кнопка «Скачать PDF» — GET /api/network/overview/export-pdf
  */
 import { useState, useEffect, useMemo } from 'react'
-import { API_BASE } from '../config'
+import { API_BASE } from '../../config'
 
 const API = API_BASE
 
