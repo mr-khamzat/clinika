@@ -17,6 +17,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Computed,
     Boolean,
     Date,
     DateTime,
@@ -505,15 +506,19 @@ class AppointmentCost(Base):
     overhead_cost: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0"
     )
-    # GENERATED ALWAYS — read-only из приложения.
+    # GENERATED ALWAYS — Postgres сам вычисляет (materials + labor + overhead).
     total_cost: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True
+        Numeric(12, 2),
+        Computed("materials_cost + labor_cost + overhead_cost", persisted=True),
+        nullable=True,
     )
     revenue: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0"
     )
     margin: Mapped[Decimal | None] = mapped_column(
-        Numeric(12, 2), nullable=True
+        Numeric(12, 2),
+        Computed("revenue - materials_cost - labor_cost - overhead_cost", persisted=True),
+        nullable=True,
     )
     margin_pct: Mapped[Decimal | None] = mapped_column(
         Numeric(8, 2), nullable=True
