@@ -61,7 +61,7 @@ async def global_search(
     ]
 
     # ─── Врачи ─── (User.role в DOCTOR/PARTNER_DOCTOR/VISITING_DOCTOR)
-    df = [User.role.in_([UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR])]
+    df = [User.role.in_([UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR, UserRole.LAB_CT, UserRole.LAB_XRAY])]
     if tenant is not None:
         df.append(User.tenant_id == tenant)
     if q_text:

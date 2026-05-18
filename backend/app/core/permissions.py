@@ -75,6 +75,20 @@ ROLE_PERMISSIONS: dict[UserRole, set[str]] = {
         "services:read",
         "consent:own",
     },
+    # Лаборанты КТ и рентгена — те же права что у doctor. Ведут расписание,
+    # принимают записи, обновляют статусы. Отдельный enum — только для UI/фильтрации.
+    UserRole.LAB_CT: {
+        "scheduling:read", "scheduling:write",
+        "referrals:read",
+        "services:read",
+        "consent:own",
+    },
+    UserRole.LAB_XRAY: {
+        "scheduling:read", "scheduling:write",
+        "referrals:read",
+        "services:read",
+        "consent:own",
+    },
     UserRole.NURSE: {
         # Медсестра — помогает врачу с расписанием/витальными
         "scheduling:read",
@@ -107,6 +121,8 @@ EDITABLE_ROLES: list[str] = [
     UserRole.RECRUITER.value,
     UserRole.PARTNER_DOCTOR.value,
     UserRole.VISITING_DOCTOR.value,
+    UserRole.LAB_CT.value,
+    UserRole.LAB_XRAY.value,
 ]
 
 

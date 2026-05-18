@@ -254,9 +254,9 @@ class CreateStaffRequest(BaseModel):
 
 # Иерархия: какие роли может создавать каждая роль (запрет создавать выше себя)
 _ROLE_HIERARCHY = {
-    UserRole.SUPER_ADMIN:     {"reg", "nurse", "doctor", "recruiter", "manager", "franchise_owner", "partner_doctor", "visiting_doctor", "deputy_director"},
-    UserRole.FRANCHISE_OWNER: {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director"},
-    UserRole.MANAGER:         {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director"},
+    UserRole.SUPER_ADMIN:     {"reg", "nurse", "doctor", "recruiter", "manager", "franchise_owner", "partner_doctor", "visiting_doctor", "deputy_director", "accountant", "lab_ct", "lab_xray"},
+    UserRole.FRANCHISE_OWNER: {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director", "accountant", "lab_ct", "lab_xray"},
+    UserRole.MANAGER:         {"reg", "nurse", "doctor", "recruiter", "manager", "partner_doctor", "visiting_doctor", "deputy_director", "accountant", "lab_ct", "lab_xray"},
 }
 
 # Карта строки role → enum UserRole
@@ -270,6 +270,9 @@ _ROLE_MAP = {
     "partner_doctor":   UserRole.PARTNER_DOCTOR,
     "visiting_doctor":  UserRole.VISITING_DOCTOR,
     "deputy_director":  UserRole.DEPUTY_DIRECTOR,
+    "accountant":       UserRole.ACCOUNTANT,
+    "lab_ct":           UserRole.LAB_CT,
+    "lab_xray":         UserRole.LAB_XRAY,
 }
 
 
@@ -348,7 +351,7 @@ async def create_staff_universal(
     )
 
     # Доп. поля для врачей
-    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR):
+    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR, UserRole.LAB_CT, UserRole.LAB_XRAY):
         if hasattr(new_user, "specialization"):
             new_user.specialization = body.specialization
         if hasattr(new_user, "address"):
@@ -381,7 +384,7 @@ async def create_staff_universal(
 
     # ── Привязка к клиникам (DoctorClinicAccess) для всех типов врачей ──
     first_clinic_id: Optional[uuid.UUID] = primary_clinic_id
-    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR):
+    if target_role in (UserRole.DOCTOR, UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR, UserRole.LAB_CT, UserRole.LAB_XRAY):
         for cid_str in body.clinic_ids:
             try:
                 cid = uuid.UUID(cid_str)

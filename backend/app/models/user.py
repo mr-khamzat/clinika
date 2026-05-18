@@ -29,6 +29,10 @@ class UserRole(str, enum.Enum):
     # Видит и ведёт кассовые смены, акты, платежи, расходы. БЕЗ доступа к
     # медицинским данным и без прав на CRUD пользователей.
     ACCOUNTANT = "accountant"
+    # Лаборанты: КТ и рентгенолог. Поведение как у doctor, отдельные роли
+    # нужны для фильтра/UI и читаемого справочника.
+    LAB_CT = "lab_ct"
+    LAB_XRAY = "lab_xray"
 
 class User(Base):
     __tablename__ = "users"

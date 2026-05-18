@@ -163,6 +163,8 @@ ROLE_CHANGE_ALLOWED = {
     UserRole.MANAGER,
     UserRole.REG,
     UserRole.NURSE,
+    UserRole.LAB_CT,
+    UserRole.LAB_XRAY,
 }
 
 
@@ -316,7 +318,7 @@ _STAFF_ROLES_LIST = (
     UserRole.DOCTOR, UserRole.REG, UserRole.NURSE,
     UserRole.MANAGER, UserRole.RECRUITER,
     UserRole.PARTNER_DOCTOR, UserRole.VISITING_DOCTOR,
-    
+    UserRole.LAB_CT, UserRole.LAB_XRAY,
 )
 _ROLE_LABELS = {
     "doctor":              ("Врач",                "doctor"),

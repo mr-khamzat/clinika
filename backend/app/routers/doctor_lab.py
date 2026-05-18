@@ -24,7 +24,7 @@ from app.services import lab_service
 router = APIRouter(prefix="/doctor/lab-orders", tags=["doctor-lab"])
 
 _REQUIRE_DOCTOR = Depends(require_role(
-    UserRole.DOCTOR, UserRole.MANAGER, UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN,
+    UserRole.DOCTOR, UserRole.LAB_CT, UserRole.LAB_XRAY, UserRole.MANAGER, UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN,
 ))
 
 

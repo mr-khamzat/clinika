@@ -46,6 +46,8 @@ const ROLE_META = {
   nurse:           { label: 'Медсестра',        icon: 'medical_services',      color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 6 },
   recruiter:       { label: 'Рекрутер',         icon: 'person_search',         color: '#6d28d9', bg: 'rgba(109, 40, 217, 0.10)', order: 7 },
   accountant:      { label: 'Бухгалтер',         icon: 'calculate',             color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 8 },
+  lab_ct:          { label: 'Лаборант КТ',       icon: 'monitor_heart',         color: '#0891b2', bg: 'rgba(8, 145, 178, 0.10)', order: 2.5 },
+  lab_xray:        { label: 'Лаборант рентген',  icon: 'radiology',             color: '#0e7490', bg: 'rgba(14, 116, 144, 0.10)', order: 2.6 },
 }
 const DEFAULT_ROLE_META = { label: 'Сотрудник', icon: 'person', color: '#4b5563', bg: 'rgba(75, 85, 99, 0.10)', order: 99 }
 
@@ -124,6 +126,7 @@ function QRPopup({ data, onClose }) {
 const ROLE_EDIT_OPTIONS = [
   'doctor', 'visiting_doctor', 'partner_doctor',
   'recruiter', 'manager', 'reg', 'nurse',
+  'lab_ct', 'lab_xray',
 ]
 
 function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
@@ -322,6 +325,8 @@ const STAFF_ROLES = [
   { value: 'reg',             label: 'Регистратор',       icon: 'badge',                  hint: 'Регистратор клиники (приём пациентов)' },
   { value: 'nurse',           label: 'Медсестра',         icon: 'medical_services',       hint: 'Медсестра, ассистирует врачу' },
   { value: 'accountant',      label: 'Бухгалтер',         icon: 'calculate',              hint: 'Кабинет бухгалтера клиники: касса, акты, расходы, отчёты' },
+  { value: 'lab_ct',          label: 'Лаборант КТ',        icon: 'monitor_heart',          hint: 'Ведёт расписание КТ-кабинета, принимает записи (кабинет как у врача)' },
+  { value: 'lab_xray',        label: 'Лаборант рентгенолог', icon: 'radiology',            hint: 'Ведёт расписание рентген-кабинета, принимает записи (кабинет как у врача)' },
 ]
 const ROLE_NEEDS = {
   visiting_doctor: { specialization: true, address: true,  clinics: true,  terms: true,  primaryClinic: false, bonusPercent: false },
@@ -332,6 +337,8 @@ const ROLE_NEEDS = {
   deputy_director: { specialization: false,address: false, clinics: false, terms: false, primaryClinic: false, bonusPercent: false },
   reg:             { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
   nurse:           { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
+  lab_ct:          { specialization: true, address: false, clinics: true,  terms: false, primaryClinic: false, bonusPercent: false },
+  lab_xray:        { specialization: true, address: false, clinics: true,  terms: false, primaryClinic: false, bonusPercent: false },
   accountant:      { specialization: false,address: false, clinics: false, terms: false, primaryClinic: true,  bonusPercent: false },
 }
 
