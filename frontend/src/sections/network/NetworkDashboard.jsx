@@ -110,7 +110,7 @@ export default function NetworkDashboard({ token }) {
   const downloadPdf = async () => {
     setPdfBusy(true)
     try {
-      const res = await fetch(`${API}/api/network/overview/export-pdf?days=${days}`, {
+      const res = await fetch(`${API}/network/overview/export-pdf?days=${days}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
