@@ -118,6 +118,13 @@ function QRPopup({ data, onClose }) {
 
 // ─── EditModal — полная карточка сотрудника ─────────────────────────────────
 // Две вкладки: Профиль и Доступ. Каждая шлёт свой PATCH/POST.
+// Роли, которые менеджер может выставить в EditModal. Должно совпадать с
+// ROLE_CHANGE_ALLOWED в backend/app/routers/manager/recruiter_doctors.py.
+const ROLE_EDIT_OPTIONS = [
+  'doctor', 'visiting_doctor', 'partner_doctor',
+  'recruiter', 'manager', 'reg', 'nurse',
+]
+
 function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
   const [tab, setTab] = useState('profile')
   const [profile, setProfile] = useState({
@@ -128,6 +135,7 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
     address:        doctor.address        || '',
     date_of_birth:  doctor.date_of_birth  || '',
     category:       doctor.category       || '',
+    role:           doctor.role           || '',
   })
   const [creds, setCreds] = useState({ username: doctor.username || '', password: '' })
   const [loading, setLoading] = useState(false)
@@ -247,6 +255,39 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
             <Field label="Телефон"    value={profile.phone_number}   onChange={e => setP('phone_number', e.target.value)} placeholder="+7 900 000 00 00" />
             <Field label="Email"      value={profile.email}          onChange={e => setP('email', e.target.value)}         placeholder="user@mail.ru" />
           </div>
+
+          {/* Роль — менеджер может переводить, например, штатного во внешнего.
+              Если попытаться изменить роль самому себе — backend вернёт 400. */}
+          {ROLE_EDIT_OPTIONS.includes(doctor.role) && (
+            <div className="mb-3">
+              <label className="block mb-1.5" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Роль
+              </label>
+              <select
+                value={profile.role}
+                onChange={e => setP('role', e.target.value)}
+                className="w-full"
+                style={{
+                  padding: '8px 12px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                  color: 'var(--fg)',
+                  fontSize: 14,
+                }}
+              >
+                {STAFF_ROLES.filter(r => ROLE_EDIT_OPTIONS.includes(r.value)).map(r => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+              {profile.role !== doctor.role && (
+                <div className="text-xs mt-1" style={{ color: 'var(--warn, #b45309)' }}>
+                  Роль будет изменена с «{ROLE_META[doctor.role]?.label || doctor.role}» на «{ROLE_META[profile.role]?.label || profile.role}»
+                </div>
+              )}
+            </div>
+          )}
+
           <Field label="Специализация" value={profile.specialization} onChange={e => setP('specialization', e.target.value)} placeholder="Хирург, терапевт..." />
           <Field label="Адрес"        value={profile.address}        onChange={e => setP('address', e.target.value)}        placeholder="Адрес/Организация" />
           <div className="grid grid-cols-2 gap-3">
@@ -486,6 +527,152 @@ function AddModal({ open, clinics, onClose, onDone }) {
   )
 }
 
+// ─── Модалка удаления сотрудника ────────────────────────────────────────────
+// Два режима:
+//   • block — soft-delete (is_active=false, is_suspended=true), DELETE /manager/users/{id}
+//   • hard  — полное удаление строки, требует пароль руководителя
+//             DELETE /manager/users/{id}/hard  body: { password }
+// Если у сотрудника есть FK-связи (направления, история), backend вернёт 409
+// и предложит блокировку вместо удаления.
+function DeleteStaffModal({ doctor, onClose, onDone }) {
+  const [mode, setMode] = useState('block')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const submit = async () => {
+    setError('')
+    if (mode === 'hard' && !password.trim()) {
+      setError('Введите пароль руководителя')
+      return
+    }
+    setLoading(true)
+    try {
+      const path = mode === 'hard'
+        ? `/manager/users/${doctor.id}/hard`
+        : `/manager/users/${doctor.id}`
+      const opts = { method: 'DELETE' }
+      if (mode === 'hard') opts.body = JSON.stringify({ password })
+      const r = await apiFetch(null, path, opts)
+      if (!r.ok && r.status !== 204) {
+        const d = await r.json().catch(() => ({}))
+        throw new Error(d.detail || 'Не удалось выполнить операцию')
+      }
+      onDone()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={!!doctor} onClose={loading ? undefined : onClose} size="sm"
+      title={mode === 'hard' ? '⚠️ Полное удаление' : 'Удаление сотрудника'}
+      actions={
+        <>
+          <Button variant="secondary" size="md" onClick={onClose} disabled={loading}>Отмена</Button>
+          <Button
+            variant={mode === 'hard' ? 'danger' : 'primary'}
+            size="md"
+            onClick={submit}
+            disabled={loading}
+          >
+            {loading ? '…' : (mode === 'hard' ? 'Удалить навсегда' : 'Заблокировать')}
+          </Button>
+        </>
+      }
+    >
+      <div className="mb-3 text-sm" style={{ color: 'var(--fg-2)' }}>
+        Что сделать с сотрудником <b>«{doctor.full_name}»</b>?
+      </div>
+
+      {/* Радио: режим */}
+      <div className="space-y-2 mb-3">
+        <label
+          className="flex items-start gap-3 cursor-pointer"
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: `1px solid ${mode === 'block' ? 'var(--accent, #0097A7)' : 'var(--border)'}`,
+            background: mode === 'block' ? 'var(--accent-soft, rgba(0, 151, 167, 0.06))' : 'transparent',
+          }}
+        >
+          <input
+            type="radio" checked={mode === 'block'} onChange={() => setMode('block')}
+            style={{ marginTop: 3 }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm" style={{ color: 'var(--fg)' }}>
+              Заблокировать вход <span style={{ color: 'var(--good)', fontSize: 11, fontWeight: 600 }}>(рекомендуется)</span>
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--fg-3)' }}>
+              Вход отключён, история записей и аудит сохраняются. Сотрудника можно вернуть.
+            </div>
+          </div>
+        </label>
+
+        <label
+          className="flex items-start gap-3 cursor-pointer"
+          style={{
+            padding: 12,
+            borderRadius: 10,
+            border: `1px solid ${mode === 'hard' ? 'var(--bad, #dc2626)' : 'var(--border)'}`,
+            background: mode === 'hard' ? 'var(--bad-soft, rgba(220, 38, 38, 0.06))' : 'transparent',
+          }}
+        >
+          <input
+            type="radio" checked={mode === 'hard'} onChange={() => setMode('hard')}
+            style={{ marginTop: 3 }}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-sm" style={{ color: 'var(--fg)' }}>
+              Удалить навсегда <span style={{ color: 'var(--bad)', fontSize: 11, fontWeight: 600 }}>(необратимо)</span>
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: 'var(--fg-3)' }}>
+              Строка пользователя полностью удаляется. Возможно только если за сотрудником
+              нет связанных записей (направлений, истории). Иначе используйте блокировку.
+            </div>
+          </div>
+        </label>
+      </div>
+
+      {mode === 'hard' && (
+        <div className="mb-3">
+          <label className="block mb-1.5" style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Подтвердите паролем руководителя
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            placeholder="Ваш пароль"
+            autoFocus
+            disabled={loading}
+            className="w-full"
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+              fontSize: 14,
+            }}
+          />
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg p-2.5 mb-1 text-sm"
+             style={{ background: 'var(--bad-soft)', border: '1px solid var(--bad-soft)', color: 'var(--bad)' }}>
+          {error}
+        </div>
+      )}
+    </Modal>
+  )
+}
+
 // ─── Карточка сотрудника ────────────────────────────────────────────────────
 function StaffCard({ doc, onEdit, onToggle, onDelete, onChat, onCall, onWhatsapp, toggling, deleting }) {
   const meta = ROLE_META[doc.role] || DEFAULT_ROLE_META
@@ -623,7 +810,7 @@ export default function ManagerRecruitDoctors() {
   const [editDoc, setEditDoc]   = useState(null)
   const [qrResult, setQrResult] = useState(null)
   const [toggling, setToggling] = useState(null)
-  const [deleting, setDeleting] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [collapsed, setCollapsed] = useState({})  // { role: true|false }
 
   const load = () => {
@@ -645,18 +832,8 @@ export default function ManagerRecruitDoctors() {
     load(); setToggling(null)
   }
 
-  const deleteStaff = async (doc) => {
-    if (!window.confirm(`Удалить сотрудника «${doc.full_name}»?\n\nВход будет заблокирован, история записей и аудит сохранятся.`)) return
-    setDeleting(doc.id)
-    try {
-      const r = await apiFetch(null, `/manager/users/${doc.id}`, { method: 'DELETE' })
-      if (!r.ok && r.status !== 204) {
-        const d = await r.json().catch(() => ({}))
-        window.alert(d.detail || 'Не удалось удалить сотрудника')
-      }
-      load()
-    } finally { setDeleting(null) }
-  }
+  // Открыть модалку удаления (выбор: блокировка vs полное удаление с паролем).
+  const requestDelete = (doc) => setDeleteTarget(doc)
 
   // ─ Открыть чат КлиникСеть в DM с этим сотрудником ─
   const openChat = (doc) => {
@@ -733,6 +910,13 @@ export default function ManagerRecruitDoctors() {
       )}
       {qrResult && <QRPopup data={qrResult} onClose={() => setQrResult(null)} />}
       <AddModal open={showAdd} clinics={clinics} onClose={() => setShowAdd(false)} onDone={d => { setQrResult(d); setShowAdd(false); load() }} />
+      {deleteTarget && (
+        <DeleteStaffModal
+          doctor={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDone={() => { setDeleteTarget(null); load() }}
+        />
+      )}
 
       {/* Mobile add */}
       <div className="mb-4 sm:hidden">
@@ -829,12 +1013,12 @@ export default function ManagerRecruitDoctors() {
                         key={doc.id} doc={doc}
                         onEdit={setEditDoc}
                         onToggle={toggleActive}
-                        onDelete={deleteStaff}
+                        onDelete={requestDelete}
                         onChat={openChat}
                         onCall={callPhone}
                         onWhatsapp={whatsappPhone}
                         toggling={toggling}
-                        deleting={deleting}
+                        deleting={deleteTarget?.id === doc.id ? doc.id : null}
                       />
                     ))}
                   </div>

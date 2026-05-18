@@ -6,11 +6,14 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.core.deps import require_manager
+from app.core.security import verify_password
 from app.services import audit_service
 from app.services.audit_service import AuditAction
 from app.models.user import User, UserRole
@@ -496,8 +499,8 @@ async def delete_staff_universal(
     """Soft-delete сотрудника: is_active=false + is_suspended=true.
 
     Запись остаётся в БД для сохранения связей (audit_log, appointments,
-    ledger_entries и т.п.), но вход блокирован. Удалить hard можно из
-    SuperAdminUsersSection (только super_admin).
+    ledger_entries и т.п.), но вход блокирован. Hard-delete см. ниже —
+    /users/{id}/hard, требует пароль менеджера.
     """
     target = await db.get(User, user_id)
     if not target:
@@ -511,4 +514,56 @@ async def delete_staff_universal(
     target.is_active = False
     target.is_suspended = True
     await db.commit()
+    return None
+
+
+# ══════════════════════════════════════════════════════════════════
+# Hard-delete сотрудника с подтверждением паролем менеджера.
+# ══════════════════════════════════════════════════════════════════
+
+class HardDeleteRequest(BaseModel):
+    password: str  # пароль текущего менеджера для подтверждения
+
+
+@router.delete("/users/{user_id}/hard", status_code=status.HTTP_204_NO_CONTENT)
+async def hard_delete_staff(
+    user_id: uuid.UUID,
+    body: HardDeleteRequest,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Полное удаление сотрудника (DROP ROW). Требует подтверждения паролем.
+
+    Защита от случайного нажатия: менеджер вводит свой пароль. Если у
+    сотрудника есть связанные записи (направления, audit_log, и пр.),
+    FK-constraints отдадут IntegrityError — тогда возвращаем 409 и просим
+    использовать soft-delete (блокировку).
+    """
+    if not body.password or not verify_password(body.password, current_user.hashed_password):
+        raise HTTPException(status_code=403, detail="Неверный пароль руководителя")
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if target.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Нет доступа")
+    if target.role == UserRole.SUPER_ADMIN:
+        raise HTTPException(status_code=403, detail="Нельзя удалить super_admin")
+    if target.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
+
+    full_name = target.full_name
+    try:
+        await db.delete(target)
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Нельзя удалить «{full_name}» полностью: есть связанные "
+                "записи (направления, история, аудит). Используйте обычное "
+                "удаление — оно заблокирует вход и сохранит связи."
+            ),
+        )
     return None

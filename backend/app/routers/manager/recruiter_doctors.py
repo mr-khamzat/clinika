@@ -149,6 +149,21 @@ class UpdateStaffProfileRequest(BaseModel):
     address:        Optional[str] = None
     date_of_birth:  Optional[str] = None
     category:       Optional[str] = None
+    role:           Optional[str] = None  # смена роли (см. ROLE_CHANGE_ALLOWED)
+
+
+# Роли, между которыми менеджер вправе перемещать сотрудника. Сознательно
+# исключаем super_admin/franchise_owner/director/deputy_director — это
+# административные роли, их меняет только супер-админ или владелец сети.
+ROLE_CHANGE_ALLOWED = {
+    UserRole.DOCTOR,
+    UserRole.VISITING_DOCTOR,
+    UserRole.PARTNER_DOCTOR,
+    UserRole.RECRUITER,
+    UserRole.MANAGER,
+    UserRole.REG,
+    UserRole.NURSE,
+}
 
 
 @router.patch("/recruiter-doctors/{doctor_id}/profile")
@@ -158,7 +173,8 @@ async def update_doctor_profile(
     current_user: User = Depends(require_manager),
     db: AsyncSession = Depends(get_db),
 ):
-    """Полное редактирование профиля сотрудника (без логин/пароль и без смены роли).
+    """Полное редактирование профиля сотрудника (без логин/пароль).
+    Поддерживает смену роли в пределах ROLE_CHANGE_ALLOWED.
     Меняется только то что прислано в body. Менеджер франшизы."""
     doctor = await db.get(User, doctor_id)
     if not doctor or doctor.tenant_id != current_user.tenant_id:
@@ -192,6 +208,19 @@ async def update_doctor_profile(
         doctor.date_of_birth = (payload["date_of_birth"] or None) or None
     if "category" in payload:
         doctor.category = (payload["category"] or None) or None
+    if "role" in payload and payload["role"]:
+        new_role_str = payload["role"]
+        try:
+            new_role = UserRole(new_role_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Неизвестная роль: {new_role_str}")
+        if doctor.id == current_user.id:
+            raise HTTPException(status_code=400, detail="Нельзя менять собственную роль")
+        if doctor.role not in ROLE_CHANGE_ALLOWED:
+            raise HTTPException(status_code=403, detail=f"Роль {doctor.role.value} нельзя менять через этот интерфейс")
+        if new_role not in ROLE_CHANGE_ALLOWED:
+            raise HTTPException(status_code=403, detail=f"Нельзя установить роль {new_role.value} через этот интерфейс")
+        doctor.role = new_role
 
     await db.commit()
     await db.refresh(doctor)
@@ -205,6 +234,7 @@ async def update_doctor_profile(
         "address": doctor.address,
         "date_of_birth": doctor.date_of_birth,
         "category": doctor.category,
+        "role": doctor.role.value if hasattr(doctor.role, "value") else doctor.role,
     }
 
 
