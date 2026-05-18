@@ -51,6 +51,22 @@ class Referral(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     cancelled_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
+    # ── Cross-clinic referrals (xref01) ────────────────────────────────────
+    # Направление пациента из клиники А (referred_by_tenant_id) в клинику Б
+    # (target_tenant_id) внутри одной франшизы. Жизненный цикл — отдельный
+    # cross_clinic_status, не пересекается с обычным ReferralStatus.
+    target_tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    referred_by_tenant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    cross_clinic_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cross_clinic_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inter_clinic_invoice_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
     from_clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="referrals_from", foreign_keys=[from_clinic_id])
     to_clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="referrals_to", foreign_keys=[to_clinic_id])
     service: Mapped["Service"] = relationship("Service", back_populates="referrals")

@@ -82,6 +82,7 @@ from app.routers.visiting_doctor import router as visiting_router
 from app.routers.doctor_ai import router as doctor_ai_router
 from app.routers.announcements import router as announcements_router
 from app.routers.director import router as director_router
+from app.routers.referrals_cross import router as referrals_cross_router  # xref01: cross-clinic referrals
 from app.routers.director_export import router as director_export_router
 from app.routers.inventory_import import router as inventory_import_router
 from app.routers.inventory_batches import router as inventory_batches_router
@@ -1542,6 +1543,7 @@ app.include_router(password_reset_router)
 from app.routers.reg_speed import router as reg_speed_router
 app.include_router(reg_speed_router)  # Глава 5: PDF/печать/поиск пациентов для регистратора
 app.include_router(referrals.router)
+app.include_router(referrals_cross_router)  # xref01: cross-clinic referrals (отдельный prefix /referrals-cross)
 app.include_router(bonuses.router)
 app.include_router(clinics.router)
 app.include_router(admins.router)
