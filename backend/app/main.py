@@ -442,6 +442,7 @@ async def transcription_dispatch_job():
 
 async def engagement_suggestions_job():
     """Каждый час: сканирует тенантов и создаёт pending suggestions для CRM-hub."""
+    import logging
     try:
         from app.jobs.engagement_suggestions_job import run_all_tenants
         stats = await run_all_tenants()
