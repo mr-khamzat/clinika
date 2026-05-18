@@ -6,6 +6,7 @@ const PlatformSection = lazy(() => import('../sections/PlatformSection'))
 const FranchisesSection = lazy(() => import('../sections/FranchisesSection'))
 const WebhooksSection = lazy(() => import('../sections/WebhooksSection'))
 const AdsSection = lazy(() => import('../sections/AdsSection'))
+const PatientEngagement = lazy(() => import('./admin/PatientEngagement'))
 const WikiSection = lazy(() => import('../sections/WikiSection'))
 const AISection = lazy(() => import('../sections/AISection'))
 const PlatformAISection = lazy(() => import('../sections/PlatformAISection'))
@@ -159,6 +160,7 @@ const NAV = [
   { key: 'security',       label: 'Безопасность', icon: 'shield' },
   { key: 'monitoring',     label: 'Мониторинг',   icon: 'monitor_heart' },
   { key: 'ads',            label: 'Реклама',      icon: 'campaign' },
+  { key: 'engagement',     label: 'Пациенты ЛК',  icon: 'groups' },
   { key: 'webhooks',       label: 'Вебхуки',      icon: 'webhook' },
   { key: 'modules_catalog', label: 'Каталог модулей', icon: 'storefront' },
   { key: 'platform_modules', label: 'Модули по тенантам', icon: 'apps' },
@@ -241,6 +243,7 @@ const NAV_GROUP_OF = {
   cms:                'CONTENT',
   branding:           'CONTENT',
   ads:                'CONTENT',
+  engagement:         'MARKETING',
   push_notify:        'CONTENT',
   wiki:               'CONTENT',
 
@@ -279,6 +282,7 @@ const PAGE_TITLES = {
   security:           { title: 'Безопасность',         subtitle: 'Журнал атак, brute-force, нарушений и активные блокировки IP' },
   monitoring:         { title: 'Мониторинг',           subtitle: 'Состояние сервисов и API в реальном времени' },
   ads:                { title: 'Реклама',              subtitle: 'Каналы привлечения и UTM-источники' },
+  engagement:         { title: 'Пациенты ЛК',          subtitle: 'CRM-hub: дашборд, сегменты, push-кампании, подсказки менеджеру' },
   webhooks:           { title: 'Вебхуки',              subtitle: 'Платформенные интеграции и события' },
   modules_catalog:    { title: 'Каталог модулей',      subtitle: 'Подключаемые тарифные модули платформы' },
   platform_modules:   { title: 'Модули по тенантам',    subtitle: 'Heatmap состояния платных модулей всех тенантов' },
@@ -7933,7 +7937,7 @@ const ADMIN_SECTIONS = new Set([
   'home','wiki','settings','analytics','audit','billing','billing_ledger',
   'monitoring','contacts','reviews','modules_catalog','roles','mis_sync',
   'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
-  'ads','ai_analytics','ai_knowledge','super_admin','franchises','branding',
+  'ads','engagement','ai_analytics','ai_knowledge','super_admin','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
   'loyalty','recordings','telemedicine','sms_marketing','inventory','subscription_plans',
 ])
@@ -8090,7 +8094,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const TENANT_OPERATIONAL_KEYS = new Set([
     'doctors', 'mis_sync', 'calls_cfg',
     'push_notify', 'settings', 'branding', 'cms', 'acts', 'reviews',
-    'ads', 'analytics',
+    'ads', 'analytics', 'engagement',
     'loyalty', 'recordings', 'sms_marketing', 'inventory',
   ])
 
@@ -8162,6 +8166,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'push_notify':    return <PushSection token={adminToken} />
       case 'webhooks':       return <Suspense fallback={<SectionLoader />}><WebhooksSection token={adminToken} /></Suspense>
       case 'ads':            return <Suspense fallback={null}><AdsSection token={adminToken} /></Suspense>
+      case 'engagement':     return <Suspense fallback={null}><PatientEngagement token={adminToken} /></Suspense>
       case 'ai_analytics':   return (
         <Suspense fallback={null}>
           {isSuperAdmin ? <PlatformAISection token={adminToken} /> : <AISection token={adminToken} isSuperAdmin={isSuperAdmin} />}

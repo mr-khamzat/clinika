@@ -106,6 +106,7 @@ const DirectorMarketing = lazy(() => import('./pages/director/DirectorMarketing'
 const DirectorClinics   = lazy(() => import('./pages/director/DirectorClinics'))
 const DirectorDoctors   = lazy(() => import('./pages/director/DirectorDoctors'))
 const DirectorServices  = lazy(() => import('./pages/director/DirectorServices'))
+const DirectorPatientEngagement = lazy(() => import('./pages/director/PatientEngagement'))
 const ClinicSchedules = lazy(() => import('./pages/ClinicSchedules'))
 // AdminPanel.jsx удалён — был дубль AdminLayout/AdminRoot
 const AdminRoot = lazy(() => import('./pages/AdminRoot'))
@@ -381,6 +382,7 @@ function MiniApp() {
             <Route path="clinics"   element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorClinics /></Suspense>} />
             <Route path="doctors"   element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorDoctors /></Suspense>} />
             <Route path="services"  element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorServices /></Suspense>} />
+            <Route path="engagement" element={<Suspense fallback={<div style={{minHeight:'40vh'}}/>}><DirectorPatientEngagement /></Suspense>} />
           </Route>
         )}
         {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}

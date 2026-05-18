@@ -49,6 +49,7 @@ import useTheme from '../lib/useTheme'
 const DoctorsSection            = lazy(() => import('../sections/DoctorsSection'))
 const AIKnowledgeSection        = lazy(() => import('../sections/AIKnowledgeSection'))
 const AdsSection                = lazy(() => import('../sections/AdsSection'))
+const PatientEngagement         = lazy(() => import('../sections/engagement/PatientEngagement'))
 const WikiSection               = lazy(() => import('../sections/WikiSection'))
 const ContactsSection           = lazy(() => import('../sections/ContactsSection'))
 const WebhooksSection           = lazy(() => import('../sections/WebhooksSection'))
@@ -135,6 +136,7 @@ const NAV_GROUPS = [
     title: 'Маркетинг',
     items: [
       { id: 'ads',       label: 'Реклама',     icon: 'campaign'              },
+      { id: 'engagement', label: 'Пациенты ЛК', icon: 'groups'               },
       { id: 'wiki',      label: 'База знаний', icon: 'menu_book'             },
       { id: 'cms',       label: 'CMS-страницы', icon: 'article'              },
       { id: 'contacts',  label: 'Заявки',      icon: 'contact_mail'          },
@@ -2057,6 +2059,13 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <AdsSection token={adminToken} />
+        </Suspense>
+      )
+    }
+    if (route === 'engagement') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <PatientEngagement token={adminToken} />
         </Suspense>
       )
     }
