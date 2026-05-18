@@ -43,6 +43,7 @@ class AdEventType:
     IMPRESSION = "impression"  # показ (уникальный per ip_hash per day)
     CLICK      = "click"       # клик по объявлению
     CONVERSION = "conversion"  # целевое действие (регистрация, запись)
+    SCHEDULE_BOOK = "schedule_book"  # явная запись на приём (для отдельной атрибуции)
 
 
 class Ad(Base):
@@ -110,6 +111,25 @@ class Ad(Base):
     # Conversion attribution
     revenue_attributed: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=Decimal("0"), server_default="0")
     attribution_window_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7, server_default="7")
+
+    # === ads02_improvements (2026-05-18) ===
+    # Approval workflow: approved (default, обратная совместимость) / pending / rejected
+    approval_status: Mapped[str] = mapped_column(String(20), default="approved", server_default="approved", nullable=False)
+    approval_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Категория: promo / doctor / reminder / review / other
+    category: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    tags: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
+
+    # Sharing между филиалами франшизы — id исходного баннера
+    share_origin_ad_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
 
     meta: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
