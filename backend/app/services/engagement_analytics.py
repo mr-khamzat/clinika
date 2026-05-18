@@ -4,7 +4,8 @@ from uuid import UUID
 from typing import Optional
 from sqlalchemy import select, func, cast, Date as SADate, text, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.patient_account import PatientAccount, PatientSession
+from app.models.patient_account import PatientAccount
+from app.models.patient_session import PatientSession
 
 
 async def dashboard_summary(db: AsyncSession, tenant_id: UUID) -> dict:
@@ -97,7 +98,8 @@ async def retention_cohorts(db: AsyncSession, weeks: int = 8) -> list[dict]:
             WHERE created_at >= NOW() - INTERVAL '{weeks} weeks'
         ),
         sessions AS (
-            SELECT account_id, DATE_TRUNC('week', created_at)::date AS sess_week FROM patient_sessions
+            SELECT pa.id AS pa_id, DATE_TRUNC('week', s.created_at)::date AS sess_week
+            FROM patient_sessions s JOIN patient_accounts pa ON pa.phone = s.phone
         )
         SELECT
             c.cohort_week,
@@ -107,7 +109,7 @@ async def retention_cohorts(db: AsyncSession, weeks: int = 8) -> list[dict]:
             COUNT(DISTINCT CASE WHEN s.sess_week = c.cohort_week + INTERVAL '3 weeks' THEN c.pa_id END) AS w3,
             COUNT(DISTINCT CASE WHEN s.sess_week = c.cohort_week + INTERVAL '4 weeks' THEN c.pa_id END) AS w4
         FROM cohorts c
-        LEFT JOIN sessions s ON s.account_id = c.pa_id
+        LEFT JOIN sessions s ON s.pa_id = c.pa_id
         GROUP BY c.cohort_week
         ORDER BY c.cohort_week DESC
         LIMIT :weeks
