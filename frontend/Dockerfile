@@ -17,7 +17,7 @@ RUN (apk add --no-cache gzip 2>/dev/null && \
      find /app/dist -type f \( -name '*.js' -o -name '*.css' -o -name '*.woff2' -o -name '*.svg' -o -name '*.json' -o -name '*.html' -o -name '*.map' \) -size +512c \
        -exec sh -c 'gzip -kf9 "$1" 2>/dev/null || true' _ {} \; && \
      echo "=== pre-gzipped OK ===") || echo "=== gzip step skipped (nginx will gzip on the fly) ==="
-RUN du -sh /app/dist /app/dist/assets 2>/dev/null || true
+RUN du -sh /app/dist || echo "size step skipped"
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
