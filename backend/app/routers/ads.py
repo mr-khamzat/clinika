@@ -67,6 +67,8 @@ class CreateAdRequest(BaseModel):
     cta_text: Optional[str] = None       # текст CTA-кнопки (Записаться / Подробнее…)
     cta_style: Optional[str] = None      # primary / outline / ghost
     is_template: Optional[bool] = False  # сохранить как шаблон (status=draft+meta.template=true)
+    tags: Optional[list] = None
+    category: Optional[str] = None
 
 
 class UpdateAdRequest(BaseModel):
@@ -96,6 +98,8 @@ class UpdateAdRequest(BaseModel):
     sort_order: Optional[int] = None
     schedule: Optional[dict] = None
     color_theme: Optional[str] = None
+    tags: Optional[list] = None
+    category: Optional[str] = None
 
 
 class AdEventRequest(BaseModel):
@@ -137,6 +141,10 @@ def _ad_out(ad: Ad) -> dict:
         "cta_text": m.get("cta_text"),
         "cta_style": m.get("cta_style", "primary"),
         "is_template": bool(m.get("is_template")),
+        "tags": list(ad.tags) if ad.tags else [],
+        "category": ad.category,
+        "approval_status": getattr(ad, "approval_status", "approved"),
+        "approval_note": getattr(ad, "approval_note", None),
         # Новые поля из миграции adspro01
         "budget_total": float(ad.budget_total) if ad.budget_total is not None else None,
         "spent_total": float(ad.spent_total or 0),
@@ -647,6 +655,10 @@ async def update_ad(
         "cta_style": body.cta_style,
     })
 
+    if body.tags is not None:
+        ad.tags = body.tags
+    if body.category is not None:
+        ad.category = body.category
     await db.commit()
     await db.refresh(ad)
     return _ad_out(ad)
