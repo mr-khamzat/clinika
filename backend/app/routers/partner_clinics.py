@@ -225,10 +225,15 @@ async def update_contract(
         clinic.bonus_per_referral = (
             Decimal(str(data["bonus_per_referral"])) if data["bonus_per_referral"] is not None else None
         )
+    # Колонка contract_signed_at — TIMESTAMP WITHOUT TIME ZONE.
+    # asyncpg отказывает при tz-aware datetime. Принудительно приводим к naive.
+    def _naive(d):
+        if d is None: return None
+        return d.replace(tzinfo=None) if getattr(d, "tzinfo", None) else d
     if "contract_signed_at" in data:
-        clinic.contract_signed_at = data["contract_signed_at"]
+        clinic.contract_signed_at = _naive(data["contract_signed_at"])
     if "contract_expires_at" in data:
-        clinic.contract_expires_at = data["contract_expires_at"]
+        clinic.contract_expires_at = _naive(data["contract_expires_at"])
     if "revenue_source" in data:
         clinic.revenue_source = data["revenue_source"]
 
