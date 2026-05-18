@@ -140,10 +140,34 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
     date_of_birth:  doctor.date_of_birth  || '',
     category:       doctor.category       || '',
     role:           doctor.role           || '',
+    // Условия договора (visiting_doctor) — подгружаются при открытии карточки
+    price_per_visit: '',
+    doctor_percent:  '',
   })
   const [creds, setCreds] = useState({ username: doctor.username || '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Загрузка текущих условий для visiting_doctor
+  useEffect(() => {
+    if (doctor.role !== 'visiting_doctor') return
+    let alive = true
+    apiFetch(null, `/manager/recruiter-doctors/${doctor.id}/visiting-settings`, { method: 'GET' })
+      .then(r => r.json())
+      .then(d => {
+        if (!alive) return
+        const s = d?.settings
+        if (s) {
+          setProfile(p => ({
+            ...p,
+            price_per_visit: s.price_per_visit != null ? String(s.price_per_visit) : '',
+            doctor_percent:  s.doctor_percent  != null ? String(s.doctor_percent)  : '',
+          }))
+        }
+      })
+      .catch(() => { /* нет настроек — оставляем пустыми */ })
+    return () => { alive = false }
+  }, [doctor.id, doctor.role])
 
   const setP = (k, v) => setProfile(p => ({ ...p, [k]: v }))
   const setC = (k, v) => setCreds(p => ({ ...p, [k]: v }))
@@ -298,6 +322,36 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
             <Field label="Дата рождения" type="date" value={profile.date_of_birth} onChange={e => setP('date_of_birth', e.target.value)} />
             <Field label="Категория"     value={profile.category}    onChange={e => setP('category', e.target.value)} placeholder="высшая, первая…" />
           </div>
+
+          {/* Условия — только для visiting_doctor (цена приёма + % врачу) */}
+          {(profile.role === 'visiting_doctor' || doctor.role === 'visiting_doctor') && (
+            <div className="mt-4 p-3 rounded-xl" style={{ background: 'var(--bg-1)', border: '1px solid var(--border)' }}>
+              <div className="text-sm font-semibold mb-2" style={{ color: 'var(--fg)' }}>
+                Условия договора · приезжий врач
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field
+                  label="Цена приёма, ₽"
+                  type="number"
+                  value={profile.price_per_visit ?? ''}
+                  onChange={e => setP('price_per_visit', e.target.value)}
+                  placeholder="3000"
+                />
+                <Field
+                  label="Доля врача, %"
+                  type="number"
+                  value={profile.doctor_percent ?? ''}
+                  onChange={e => setP('doctor_percent', e.target.value)}
+                  placeholder="70"
+                />
+              </div>
+              {profile.price_per_visit && profile.doctor_percent && (
+                <div className="text-xs mt-2" style={{ color: 'var(--good)' }}>
+                  Врач получит: {Math.round(parseFloat(profile.price_per_visit) * parseFloat(profile.doctor_percent) / 100).toLocaleString('ru-RU')} ₽ за приём
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

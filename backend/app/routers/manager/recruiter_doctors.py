@@ -150,6 +150,11 @@ class UpdateStaffProfileRequest(BaseModel):
     date_of_birth:  Optional[str] = None
     category:       Optional[str] = None
     role:           Optional[str] = None  # смена роли (см. ROLE_CHANGE_ALLOWED)
+    # Условия для visiting_doctor — пишутся в visiting_doctor_settings.
+    # При смене price/percent ищется запись для (doctor_id, current clinic_id),
+    # если нет — создаётся для primary clinic врача.
+    price_per_visit: Optional[float] = None
+    doctor_percent:  Optional[float] = None
 
 
 # Роли, между которыми менеджер вправе перемещать сотрудника. Сознательно
@@ -224,8 +229,77 @@ async def update_doctor_profile(
             raise HTTPException(status_code=403, detail=f"Нельзя установить роль {new_role.value} через этот интерфейс")
         doctor.role = new_role
 
+    # ── Условия для visiting_doctor (price_per_visit / doctor_percent) ────
+    # Хранятся в visiting_doctor_settings (отдельная таблица по clinic).
+    # Если запись для (doctor_id, clinic) есть — обновляем, иначе создаём
+    # под clinic_id текущего врача (primary).
+    vd_changes = {}
+    if "price_per_visit" in payload:
+        vd_changes["price_per_visit"] = payload["price_per_visit"]
+    if "doctor_percent" in payload:
+        vd_changes["doctor_percent"] = payload["doctor_percent"]
+    if vd_changes and doctor.role == UserRole.VISITING_DOCTOR:
+        try:
+            from app.models.external_doctor import VisitingDoctorSettings
+            from decimal import Decimal
+            target_clinic_id = doctor.clinic_id
+            # Если у visiting нет primary clinic — берём из его DoctorClinicAccess
+            if not target_clinic_id:
+                from app.models.doctor_clinic_access import DoctorClinicAccess
+                dca = (await db.execute(
+                    select(DoctorClinicAccess).where(DoctorClinicAccess.doctor_id == doctor.id).limit(1)
+                )).scalar_one_or_none()
+                if dca:
+                    target_clinic_id = dca.clinic_id
+            if target_clinic_id:
+                vds = (await db.execute(
+                    select(VisitingDoctorSettings).where(
+                        VisitingDoctorSettings.doctor_id == doctor.id,
+                        VisitingDoctorSettings.clinic_id == target_clinic_id,
+                    )
+                )).scalar_one_or_none()
+                if not vds:
+                    vds = VisitingDoctorSettings(
+                        id=uuid.uuid4(),
+                        tenant_id=current_user.tenant_id,
+                        doctor_id=doctor.id,
+                        clinic_id=target_clinic_id,
+                        price_per_visit=Decimal("0"),
+                        doctor_percent=Decimal("70"),
+                        is_active=True,
+                        created_by_id=current_user.id,
+                    )
+                    db.add(vds)
+                if "price_per_visit" in vd_changes and vd_changes["price_per_visit"] is not None:
+                    vds.price_per_visit = Decimal(str(vd_changes["price_per_visit"]))
+                if "doctor_percent" in vd_changes and vd_changes["doctor_percent"] is not None:
+                    vds.doctor_percent = Decimal(str(vd_changes["doctor_percent"]))
+        except Exception:
+            # Если модели VisitingDoctorSettings нет — пропускаем тихо
+            pass
+
     await db.commit()
     await db.refresh(doctor)
+
+    # Подтянем актуальные условия visiting (для возврата фронту)
+    vd_out = None
+    if doctor.role == UserRole.VISITING_DOCTOR:
+        try:
+            from app.models.external_doctor import VisitingDoctorSettings
+            vds_q = (await db.execute(
+                select(VisitingDoctorSettings)
+                .where(VisitingDoctorSettings.doctor_id == doctor.id, VisitingDoctorSettings.is_active == True)  # noqa
+                .limit(1)
+            )).scalar_one_or_none()
+            if vds_q:
+                vd_out = {
+                    "clinic_id": str(vds_q.clinic_id),
+                    "price_per_visit": float(vds_q.price_per_visit) if vds_q.price_per_visit is not None else None,
+                    "doctor_percent": float(vds_q.doctor_percent) if vds_q.doctor_percent is not None else None,
+                }
+        except Exception:
+            pass
+
     return {
         "success": True,
         "doctor_id": str(doctor.id),
@@ -237,6 +311,7 @@ async def update_doctor_profile(
         "date_of_birth": doctor.date_of_birth,
         "category": doctor.category,
         "role": doctor.role.value if hasattr(doctor.role, "value") else doctor.role,
+        "visiting_settings": vd_out,
     }
 
 
@@ -256,6 +331,44 @@ class RegisterExternalDoctorRequest(BaseModel):
     password: str
     price_per_visit: Optional[float] = None
     doctor_percent: Optional[float] = 70.0
+
+
+# ─── Read endpoint: текущие условия visiting_doctor ──────────────────────────
+@router.get("/recruiter-doctors/{doctor_id}/visiting-settings")
+async def get_visiting_settings(
+    doctor_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Возвращает условия (цена приёма + % врачу) для visiting_doctor.
+    Если запись в visiting_doctor_settings не создана — возвращает null."""
+    doctor = await db.get(User, doctor_id)
+    if not doctor or doctor.tenant_id != current_user.tenant_id:
+        raise HTTPException(404, "Сотрудник не найден")
+    if doctor.role != UserRole.VISITING_DOCTOR:
+        return {"settings": None, "reason": "Условия применимы только для приезжего врача"}
+    try:
+        from app.models.external_doctor import VisitingDoctorSettings
+        r = await db.execute(
+            select(VisitingDoctorSettings)
+            .where(
+                VisitingDoctorSettings.doctor_id == doctor_id,
+                VisitingDoctorSettings.is_active == True,  # noqa
+            )
+            .limit(1)
+        )
+        vds = r.scalar_one_or_none()
+        if not vds:
+            return {"settings": None}
+        return {
+            "settings": {
+                "clinic_id": str(vds.clinic_id),
+                "price_per_visit": float(vds.price_per_visit) if vds.price_per_visit is not None else None,
+                "doctor_percent": float(vds.doctor_percent) if vds.doctor_percent is not None else None,
+            }
+        }
+    except Exception as e:
+        return {"settings": None, "reason": f"Ошибка чтения: {e}"}
 
 
 @router.get("/all-partner-doctors")
