@@ -15,6 +15,68 @@ function apiFetch(token, path, opts = {}) {
   })
 }
 
+// ── JWT decoder (без верификации, только payload — нужен для роли) ──
+function decodeJwt(token) {
+  if (!token || typeof token !== 'string') return null
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    return JSON.parse(atob(padded))
+  } catch { return null }
+}
+
+// ── WCAG contrast helpers (нужно для ContrastChecker) ──
+function relLum(hex) {
+  const c = (hex || '').replace('#', '')
+  if (c.length < 6) return 1
+  const r = parseInt(c.substr(0, 2), 16) / 255
+  const g = parseInt(c.substr(2, 2), 16) / 255
+  const b = parseInt(c.substr(4, 2), 16) / 255
+  const f = v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+}
+function wcagContrast(a, b) {
+  const la = relLum(a), lb = relLum(b)
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
+}
+
+// Доминантный цвет фона темы (для контраста). Для градиентов берём первый цвет.
+const THEME_BG_HEX = {
+  '':        '#06b6d4',
+  'violet':  '#8b5cf6',
+  'rose':    '#fb7185',
+  'emerald': '#34d399',
+  'amber':   '#fbbf24',
+  'blue':    '#3b82f6',
+}
+
+// Переменные для подстановки в тексте
+const ALLOWED_VARS = [
+  { key: 'patient_name',       label: 'Имя и фамилия пациента' },
+  { key: 'patient_first_name', label: 'Имя пациента' },
+  { key: 'branch_phone',       label: 'Телефон филиала' },
+  { key: 'branch_address',     label: 'Адрес филиала' },
+  { key: 'doctor_name',        label: 'Имя врача' },
+  { key: 'clinic_name',        label: 'Название клиники' },
+  { key: 'service_name',       label: 'Название услуги' },
+  { key: 'city',               label: 'Город' },
+]
+
+// Категории объявлений (для TagsInput / селектора в форме)
+const AD_CATEGORIES = [
+  { value: '',         label: '— без категории —' },
+  { value: 'promo',    label: 'Акция / Промо' },
+  { value: 'doctor',   label: 'Врач' },
+  { value: 'reminder', label: 'Напоминание' },
+  { value: 'review',   label: 'Отзыв / Рекомендация' },
+  { value: 'other',    label: 'Прочее' },
+]
+
+// Цвета для multi-line чарта в CompareModal
+const COMPARE_COLORS = ['#0097A7', '#7c3aed', '#d97706', '#22c55e', '#ef4444', '#a855f7', '#06b6d4', '#f59e0b']
+
 const STATUS_LABELS = { draft: 'Черновик', active: 'Активно', paused: 'Пауза', completed: 'Завершено', cancelled: 'Отменено' }
 const STATUS_COLORS = {
   draft:     'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
@@ -101,6 +163,9 @@ function LivePreview({ form }) {
     ghost:   { bg: 'rgba(255,255,255,0.18)', color: '#fff' },
   }
   const ctaSty = ctaStyles[form.cta_style] || ctaStyles.primary
+  // Контраст: текст белый на фоне темы
+  const bgHex = THEME_BG_HEX[form.color_theme || ''] || '#06b6d4'
+  const ratio = wcagContrast('#ffffff', bgHex)
   return (
     <div className="sticky top-[80px]">
       <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1.5">
@@ -125,6 +190,11 @@ function LivePreview({ form }) {
               {form.image_data ? (
                 <img
                   src={'data:' + (form.image_mime || 'image/png') + ';base64,' + form.image_data}
+                  alt="preview"
+                  style={{ height: Math.min(Number(form.banner_height) || 96, 120), width: '100%', objectFit: 'cover', display: 'block' }} />
+              ) : form.image_url ? (
+                <img
+                  src={form.image_url}
                   alt="preview"
                   style={{ height: Math.min(Number(form.banner_height) || 96, 120), width: '100%', objectFit: 'cover', display: 'block' }} />
               ) : (
@@ -156,6 +226,11 @@ function LivePreview({ form }) {
       <div className="mt-2 text-[10px] text-gray-500 text-center">
         Обновляется в реальном времени
       </div>
+      {ratio < 4.5 && (
+        <div className="mt-2 text-[10px] bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 rounded-lg px-2 py-1.5">
+          ⚠️ Контраст текста {ratio.toFixed(1)} — рекомендуется ≥ 4.5 (WCAG AA). Текст может быть плохо читаем на этой теме.
+        </div>
+      )}
     </div>
   )
 }
@@ -221,8 +296,21 @@ function FormatToolbar({ value, onChange, textareaRef }) {
       ta.selectionEnd = start + before.length + sel.length
     }, 0)
   }
+  // Вставить переменную в позицию курсора
+  const insertVar = (token) => {
+    const ta = textareaRef.current
+    if (!ta) { onChange((value || '') + token); return }
+    const start = ta.selectionStart ?? value.length
+    const end = ta.selectionEnd ?? value.length
+    const newVal = value.slice(0, start) + token + value.slice(end)
+    onChange(newVal)
+    setTimeout(() => {
+      ta.focus()
+      ta.selectionStart = ta.selectionEnd = start + token.length
+    }, 0)
+  }
   return (
-    <div className="inline-flex gap-1 ml-2 align-middle">
+    <div className="inline-flex gap-1 ml-2 align-middle items-center">
       <button type="button" onClick={() => wrap('**')} title="Жирный"
         className="px-2 py-0.5 rounded text-[11px] font-bold border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
         B
@@ -235,6 +323,7 @@ function FormatToolbar({ value, onChange, textareaRef }) {
         className="px-2 py-0.5 rounded text-[11px] border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
         •
       </button>
+      <VariablePicker onPick={insertVar} />
     </div>
   )
 }
@@ -242,20 +331,31 @@ function FormatToolbar({ value, onChange, textareaRef }) {
 const inputCls = 'block w-full mt-1.5 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/40 focus:border-cyan-500 box-border'
 const labelCls = 'text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide'
 
+// Стандартный days_config для ScheduleEditorV2 — 7 дней, по умолчанию все включены 0-23
+function defaultDaysConfig() {
+  return Array.from({ length: 7 }, (_, i) => ({ day: i, hour_from: 9, hour_to: 21, enabled: false }))
+}
+
 const EMPTY_FORM = {
-  title: '', body: '', image_data: null, image_mime: null, banner_height: '96',
+  title: '', body: '', image_data: null, image_mime: null, image_url: '', image_author: '', image_author_url: '',
+  banner_height: '96',
   interval_seconds: '5', link: '', ad_type: 'banner', pricing_model: 'flat',
   start_date: new Date().toISOString().slice(0, 10),
   end_date: addDays(new Date().toISOString().slice(0, 10), 7),
   price: '0', impressions_limit: '', clicks_limit: '',
   sort_order: '0', color_theme: '',
+  // Legacy schedule fields (всё ещё поддерживаем для обратной совместимости)
   schedule_hours_start: '', schedule_hours_end: '', schedule_days: [],
+  // ScheduleEditorV2
+  schedule: { days_config: defaultDaysConfig(), skip_holidays: false, country: 'RU' },
   // Pro (adspro01)
   budget_total: '', freq_per_day: '', freq_per_hour: '',
   auto_pause_idle_days: '7', attribution_window_days: '7',
   audience: { gender: '', age_min: '', age_max: '', city: '', ltv_min: '' },
   cta_text: '', cta_style: 'primary',
   is_template: false,
+  // Phase D
+  tags: [], category: '',
 }
 
 // CTA presets — частые в медицинских объявлениях
@@ -358,10 +458,298 @@ function MiniChart({ series, keys, colors, height = 130 }) {
   )
 }
 
+// ── Вкладки для StatsModal ──
+function StatsTabBar({ value, onChange }) {
+  const tabs = [
+    { id: 'overview', label: 'Общее',     icon: 'analytics' },
+    { id: 'funnel',   label: 'Воронка',   icon: 'filter_alt' },
+    { id: 'heatmap',  label: 'Heatmap',   icon: 'calendar_view_month' },
+    { id: 'conv',     label: 'Конверсии', icon: 'flag' },
+    { id: 'forecast', label: 'Прогноз',   icon: 'trending_up' },
+  ]
+  return (
+    <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto">
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 transition whitespace-nowrap ${value === t.id ? 'border-cyan-600 text-cyan-700 dark:text-cyan-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+          <span className="material-symbols-outlined text-base">{t.icon}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function StatsTabOverview({ stats }) {
+  if (!stats) return <div className="text-center py-12 text-red-400">Нет данных</div>
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: 'Показов',   value: stats.totals.impressions, color: 'text-cyan-600 dark:text-cyan-400' },
+          { label: 'Кликов',    value: stats.totals.clicks,      color: 'text-violet-600 dark:text-violet-400' },
+          { label: 'Конверсий', value: stats.totals.conversions, color: 'text-amber-600 dark:text-amber-400' },
+          { label: 'CTR',       value: stats.totals.ctr + '%',   color: 'text-red-500 dark:text-red-400' },
+        ].map(k => (
+          <div key={k.label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
+            <div className={`text-2xl font-bold ${k.color}`}>{typeof k.value === 'number' ? k.value.toLocaleString('ru') : k.value}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">Показы и клики по дням</div>
+        <div className="flex gap-4 mb-3">
+          {[['#0097A7','Показы'],['#7c3aed','Клики']].map(([c,l]) => (
+            <div key={l} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <div className="w-3 h-3 rounded-full" style={{ background: c }} />{l}
+            </div>
+          ))}
+        </div>
+        <MiniChart series={stats.series} keys={['impressions','clicks']} colors={['#0097A7','#7c3aed']} height={130} />
+      </div>
+      {stats.totals.conversions > 0 && (
+        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
+          <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-3">Конверсии по дням</div>
+          <MiniChart series={stats.series} keys={['conversions']} colors={['#d97706']} height={90} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatsTabFunnel({ ad, token, days }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    apiFetch(token, `/ads/${ad.id}/funnel?days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [ad.id, days, token])
+  if (loading) return <div className="text-center py-12 text-gray-400">Загрузка...</div>
+  if (!data) return <div className="text-center py-12 text-red-400">Ошибка загрузки</div>
+  const stageColors = ['#0097A7', '#7c3aed', '#d97706', '#22c55e']
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[1fr_240px] gap-5">
+      <div>
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-3">Воронка событий</div>
+        <div className="space-y-2">
+          {(data.stages || []).map((st, i) => {
+            const colorBg = stageColors[i % stageColors.length]
+            return (
+              <div key={st.key}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">{st.label}</div>
+                  <div className="text-sm font-bold tabular-nums" style={{ color: colorBg }}>{(st.value || 0).toLocaleString('ru')}</div>
+                </div>
+                <div className="h-9 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700/40 relative">
+                  <div className="h-full rounded-lg flex items-center pl-3 text-white text-xs font-semibold"
+                    style={{
+                      width: ((data.stages[0]?.value || 1) > 0 ? Math.max(8, (st.value || 0) / data.stages[0].value * 100) : 8) + '%',
+                      background: `linear-gradient(90deg, ${colorBg}, ${colorBg}cc)`
+                    }}>
+                    {(st.value || 0).toLocaleString('ru')}
+                  </div>
+                </div>
+                {i < data.stages.length - 1 && st.rate_from_prev != null && (
+                  <div className="text-center my-1.5 text-[11px] text-gray-500 dark:text-gray-400">
+                    ↓ {((st.rate_from_prev || 0) * 100).toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-3 border border-emerald-200 dark:border-emerald-800">
+          <div className="text-[10px] uppercase font-semibold text-emerald-700 dark:text-emerald-400 tracking-wide">Выручка</div>
+          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">{Number(data.revenue || 0).toLocaleString('ru')} ₽</div>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3 border border-amber-200 dark:border-amber-800">
+          <div className="text-[10px] uppercase font-semibold text-amber-700 dark:text-amber-400 tracking-wide">CPA (стоимость конверсии)</div>
+          <div className="text-xl font-bold text-amber-700 dark:text-amber-300 mt-1">{data.cpa != null ? Number(data.cpa).toLocaleString('ru') + ' ₽' : '—'}</div>
+        </div>
+        <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-3 border border-violet-200 dark:border-violet-800">
+          <div className="text-[10px] uppercase font-semibold text-violet-700 dark:text-violet-400 tracking-wide">ROAS (ROI рекламы)</div>
+          <div className="text-xl font-bold text-violet-700 dark:text-violet-300 mt-1">{data.roas != null ? Number(data.roas).toFixed(2) + 'x' : '—'}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatsTabHeatmap({ ad, token, days }) {
+  const [eventType, setEventType] = useState('click')
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    apiFetch(token, `/ads/${ad.id}/heatmap?event_type=${eventType}&days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [ad.id, days, eventType, token])
+  // Грид 7×24
+  const grid = Array.from({ length: 7 }, () => Array.from({ length: 24 }, () => 0))
+  let maxVal = 1
+  if (data?.cells) {
+    for (const c of data.cells) {
+      if (c.day >= 0 && c.day < 7 && c.hour >= 0 && c.hour < 24) {
+        grid[c.day][c.hour] = c.count
+        if (c.count > maxVal) maxVal = c.count
+      }
+    }
+  }
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Тип события:</div>
+        {[['impression','Показы'],['click','Клики'],['conversion','Конверсии']].map(([v, l]) => (
+          <button key={v} onClick={() => setEventType(v)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${eventType === v ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <div className="text-center py-12 text-gray-400">Загрузка...</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="inline-block min-w-full">
+            <div className="flex">
+              <div className="w-10" />
+              <div className="flex-1 grid gap-px text-[9px] text-gray-400 mb-1" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <div key={h} className="text-center">{h % 3 === 0 ? h : ''}</div>
+                ))}
+              </div>
+            </div>
+            {DAYS_OF_WEEK.map((label, d) => (
+              <div key={d} className="flex items-center mb-px">
+                <div className="w-10 text-xs font-semibold text-gray-500 dark:text-gray-400">{label}</div>
+                <div className="flex-1 grid gap-px" style={{ gridTemplateColumns: 'repeat(24, minmax(0, 1fr))' }}>
+                  {grid[d].map((count, h) => {
+                    const intensity = count / maxVal
+                    return (
+                      <div key={h} title={`${label} ${h}:00 — ${count}`}
+                        className="h-5 rounded-sm border border-gray-100 dark:border-gray-700/40"
+                        style={{ backgroundColor: count > 0 ? `rgba(124, 58, 237, ${0.15 + intensity * 0.85})` : 'rgba(124, 58, 237, 0.04)' }} />
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="flex items-center gap-1 mt-3 text-[10px] text-gray-500">
+              <span>Мало</span>
+              {[0.1, 0.3, 0.5, 0.7, 0.95].map(v => (
+                <div key={v} className="w-4 h-3 rounded-sm" style={{ backgroundColor: `rgba(124, 58, 237, ${v})` }} />
+              ))}
+              <span>Много (макс: {maxVal})</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StatsTabConversions({ ad, token }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    apiFetch(token, `/ads/${ad.id}/conversions?limit=50`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [ad.id, token])
+  if (loading) return <div className="text-center py-12 text-gray-400">Загрузка...</div>
+  if (!data || !data.items || data.items.length === 0) {
+    return <div className="text-center py-12 text-gray-400">Пока нет конверсий</div>
+  }
+  return (
+    <div>
+      <div className="text-xs text-gray-500 mb-3">Всего конверсий за период: <span className="font-bold text-gray-700 dark:text-gray-300">{data.count}</span></div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 dark:border-gray-700 text-xs text-gray-500 uppercase">
+              <th className="text-left py-2 pr-2">Дата</th>
+              <th className="text-left py-2 pr-2">Пациент</th>
+              <th className="text-left py-2 pr-2">Услуга</th>
+              <th className="text-right py-2 pr-2">Выручка</th>
+              <th className="text-right py-2">Дней до конв.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map(it => (
+              <tr key={it.event_id} className="border-b border-gray-100 dark:border-gray-800">
+                <td className="py-2 pr-2 text-xs text-gray-500">{(it.created_at || '').slice(0, 16).replace('T', ' ')}</td>
+                <td className="py-2 pr-2 text-gray-800 dark:text-gray-200">{it.patient || '—'}</td>
+                <td className="py-2 pr-2 text-gray-700 dark:text-gray-300">{it.service || '—'}</td>
+                <td className="py-2 pr-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">{Number(it.revenue || 0).toLocaleString('ru')} ₽</td>
+                <td className="py-2 text-right text-gray-500">{it.days_to_convert != null ? it.days_to_convert + ' дн.' : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function StatsTabForecast({ ad, token }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    setLoading(true)
+    apiFetch(token, `/ads/${ad.id}/forecast`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [ad.id, token])
+  if (loading) return <div className="text-center py-12 text-gray-400">Загрузка...</div>
+  if (!data) return <div className="text-center py-12 text-red-400">Ошибка загрузки</div>
+  const banner = {
+    ok:                  { cls: 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 text-emerald-800 dark:text-emerald-200', icon: '✅', text: 'Бюджет расходуется в нормальном темпе' },
+    budget_exhausting:   { cls: 'bg-red-50 dark:bg-red-900/20 border-red-300 text-red-800 dark:text-red-200',          icon: '🔥', text: 'Бюджет кончится раньше срока — реклама встанет на паузу' },
+    budget_underspent:   { cls: 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 text-amber-800 dark:text-amber-200', icon: '⚠️', text: 'Бюджет недозатрачен — попробуйте поднять ставку или расширить аудиторию' },
+  }
+  const b = banner[data.verdict] || banner.ok
+  return (
+    <div className="space-y-4">
+      <div className={`rounded-xl px-4 py-3 border ${b.cls} flex items-center gap-3`}>
+        <span className="text-2xl">{b.icon}</span>
+        <div className="text-sm font-semibold">{b.text}</div>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: 'Дней до конца бюджета',    value: data.days_left_budget != null ? data.days_left_budget + ' дн.' : '∞',                  color: 'text-red-600 dark:text-red-400' },
+          { label: 'Дней до конца кампании',   value: data.days_left_calendar != null ? data.days_left_calendar + ' дн.' : '—',              color: 'text-cyan-600 dark:text-cyan-400' },
+          { label: 'Расход / день (средний)',  value: Number(data.spend_per_day_avg || 0).toLocaleString('ru') + ' ₽',                       color: 'text-violet-600 dark:text-violet-400' },
+          { label: 'Кликов / день (средний)',  value: Number(data.clk_per_day_avg || 0).toLocaleString('ru', { maximumFractionDigits: 1 }),  color: 'text-amber-600 dark:text-amber-400' },
+        ].map(k => (
+          <div key={k.label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
+            <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-3 text-xs text-gray-600 dark:text-gray-400">
+        Показы / день (средний): <span className="font-bold">{Number(data.imp_per_day_avg || 0).toLocaleString('ru')}</span>
+      </div>
+    </div>
+  )
+}
+
 function StatsModal({ ad, token, onClose }) {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(30)
+  const [tab, setTab] = useState('overview')
   const [reporting, setReporting] = useState(false)
 
   useEffect(() => {
@@ -383,11 +771,11 @@ function StatsModal({ ad, token, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[94vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 pb-4 border-b border-gray-100 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
           <div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white">Статистика</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-xs">{ad.title}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate max-w-md">{ad.title}</p>
           </div>
           <div className="flex items-center gap-2">
             <select value={days} onChange={e => setDays(Number(e.target.value))}
@@ -396,51 +784,19 @@ function StatsModal({ ad, token, onClose }) {
             </select>
             <button onClick={openReport} disabled={reporting || !stats}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-semibold rounded-lg transition disabled:opacity-50">
-              <span className="material-symbols-outlined text-sm" style={{fontVariationSettings:"'FILL' 1"}}>description</span>
+              <span className="material-symbols-outlined text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>description</span>
               {reporting ? 'Генерация...' : 'Отчёт PDF'}
             </button>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none ml-1">✕</button>
           </div>
         </div>
         <div className="p-5">
-          {loading ? (
-            <div className="text-center py-12 text-gray-400">Загрузка...</div>
-          ) : !stats ? (
-            <div className="text-center py-12 text-red-400">Ошибка загрузки</div>
-          ) : (
-            <div className="space-y-5">
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { label: 'Показов', value: stats.totals.impressions, color: 'text-cyan-600 dark:text-cyan-400' },
-                  { label: 'Кликов', value: stats.totals.clicks, color: 'text-violet-600 dark:text-violet-400' },
-                  { label: 'Конверсий', value: stats.totals.conversions, color: 'text-amber-600 dark:text-amber-400' },
-                  { label: 'CTR', value: stats.totals.ctr + '%', color: 'text-red-500 dark:text-red-400' },
-                ].map(k => (
-                  <div key={k.label} className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 text-center">
-                    <div className={`text-2xl font-bold ${k.color}`}>{typeof k.value === 'number' ? k.value.toLocaleString('ru') : k.value}</div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{k.label}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
-                <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-2">Показы и клики по дням</div>
-                <div className="flex gap-4 mb-3">
-                  {[['#0097A7','Показы'],['#7c3aed','Клики']].map(([c,l]) => (
-                    <div key={l} className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
-                      <div className="w-3 h-3 rounded-full" style={{background:c}} />{l}
-                    </div>
-                  ))}
-                </div>
-                <MiniChart series={stats.series} keys={['impressions','clicks']} colors={['#0097A7','#7c3aed']} height={130} />
-              </div>
-              {stats.totals.conversions > 0 && (
-                <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4">
-                  <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide mb-3">Конверсии по дням</div>
-                  <MiniChart series={stats.series} keys={['conversions']} colors={['#d97706']} height={90} />
-                </div>
-              )}
-            </div>
-          )}
+          <StatsTabBar value={tab} onChange={setTab} />
+          {tab === 'overview' && (loading ? <div className="text-center py-12 text-gray-400">Загрузка...</div> : <StatsTabOverview stats={stats} />)}
+          {tab === 'funnel'   && <StatsTabFunnel    ad={ad} token={token} days={days} />}
+          {tab === 'heatmap'  && <StatsTabHeatmap   ad={ad} token={token} days={days} />}
+          {tab === 'conv'     && <StatsTabConversions ad={ad} token={token} />}
+          {tab === 'forecast' && <StatsTabForecast  ad={ad} token={token} />}
         </div>
       </div>
     </div>
@@ -512,17 +868,233 @@ function AiSuggestButton({ kind, form, set }) {
   )
 }
 
-function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }) {
+// ── ScheduleEditorV2: 7 строк дней, hour_from/hour_to, skip_holidays ──
+function ScheduleEditorV2({ schedule, onChange }) {
+  const cfg = schedule?.days_config || defaultDaysConfig()
+  const skipHolidays = !!schedule?.skip_holidays
+  const updateDay = (idx, patch) => {
+    const next = cfg.map((d, i) => i === idx ? { ...d, ...patch } : d)
+    onChange({ ...schedule, days_config: next, country: schedule?.country || 'RU' })
+  }
+  // Активно ли сейчас (по локальному времени)
+  const now = new Date()
+  const jsDay = now.getDay()                       // 0=вс
+  const todayIdx = jsDay === 0 ? 6 : jsDay - 1     // → 0=пн..6=вс
+  const hr = now.getHours()
+  const todayCfg = cfg[todayIdx]
+  const isActive = todayCfg?.enabled && hr >= (todayCfg.hour_from || 0) && hr < (todayCfg.hour_to || 24)
+  const anyEnabled = cfg.some(d => d.enabled)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wide">Расписание по дням</div>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${!anyEnabled ? 'bg-gray-100 dark:bg-gray-700 text-gray-500' : isActive ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'}`}>
+          {!anyEnabled ? 'Расписание выключено (показываем всегда)' : isActive ? '● Сейчас активно' : '○ Сейчас неактивно'}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {DAYS_OF_WEEK.map((label, i) => {
+          const d = cfg[i] || { day: i, hour_from: 9, hour_to: 21, enabled: false }
+          return (
+            <div key={i} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${d.enabled ? 'bg-cyan-50 dark:bg-cyan-900/20' : 'bg-gray-50 dark:bg-gray-700/30'}`}>
+              <label className="flex items-center gap-2 w-20 cursor-pointer">
+                <input type="checkbox" checked={!!d.enabled}
+                  onChange={e => updateDay(i, { enabled: e.target.checked })}
+                  className="w-4 h-4 accent-cyan-600" />
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</span>
+              </label>
+              <div className="flex items-center gap-1.5 flex-1">
+                <select value={d.hour_from} disabled={!d.enabled}
+                  onChange={e => updateDay(i, { hour_from: Number(e.target.value) })}
+                  className="text-xs border border-gray-300 dark:border-gray-600 rounded-md px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50">
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                </select>
+                <span className="text-xs text-gray-400">—</span>
+                <select value={d.hour_to} disabled={!d.enabled}
+                  onChange={e => updateDay(i, { hour_to: Number(e.target.value) })}
+                  className="text-xs border border-gray-300 dark:border-gray-600 rounded-md px-1.5 py-0.5 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-50">
+                  {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+                </select>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+        <input type="checkbox" checked={skipHolidays}
+          onChange={e => onChange({ ...schedule, skip_holidays: e.target.checked, country: schedule?.country || 'RU' })}
+          className="w-4 h-4 accent-cyan-600" />
+        <span>Пропускать праздники РФ (выходные и официальные)</span>
+      </label>
+      <p className="text-[11px] text-gray-400 dark:text-gray-500">Если ни один день не включён — реклама показывается во все дни без ограничений.</p>
+    </div>
+  )
+}
+
+// ── VariablePicker: вставка {{var}} в textarea ──
+function VariablePicker({ onPick }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative inline-block">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        title="Вставить переменную"
+        className="text-[10px] px-2 py-0.5 rounded-md border border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/30 leading-none font-semibold">
+        {'{{ }}'}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 z-40 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg p-1.5 w-[240px] max-h-[300px] overflow-y-auto">
+            {ALLOWED_VARS.map(v => (
+              <button type="button" key={v.key}
+                onClick={() => { onPick(`{{${v.key}}}`); setOpen(false) }}
+                className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-violet-50 dark:hover:bg-violet-900/30 transition">
+                <div className="text-sm font-semibold text-violet-700 dark:text-violet-300">{`{{${v.key}}}`}</div>
+                <div className="text-[10px] text-gray-500">{v.label}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── TagsInput: chip-style теги (Enter добавляет, Backspace удаляет) ──
+function TagsInput({ value, onChange, placeholder = 'Добавить тег…' }) {
+  const [draft, setDraft] = useState('')
+  const tags = Array.isArray(value) ? value : []
+  const addTag = (t) => {
+    const v = (t || '').trim().toLowerCase().replace(/\s+/g, '-')
+    if (!v) return
+    if (tags.includes(v)) return
+    onChange([...tags, v])
+    setDraft('')
+  }
+  const removeAt = (i) => onChange(tags.filter((_, idx) => idx !== i))
+  return (
+    <div className={`mt-1.5 flex flex-wrap gap-1.5 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus-within:ring-2 focus-within:ring-cyan-500/40`}>
+      {tags.map((t, i) => (
+        <span key={i} className="inline-flex items-center gap-1 bg-cyan-100 dark:bg-cyan-900/40 text-cyan-800 dark:text-cyan-200 text-xs font-semibold px-2 py-0.5 rounded-full">
+          #{t}
+          <button type="button" onClick={() => removeAt(i)} className="hover:text-red-500" title="Удалить">×</button>
+        </span>
+      ))}
+      <input
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(draft) }
+          else if (e.key === 'Backspace' && !draft && tags.length > 0) { removeAt(tags.length - 1) }
+        }}
+        onBlur={() => draft && addTag(draft)}
+        placeholder={tags.length === 0 ? placeholder : ''}
+        className="flex-1 min-w-[100px] text-sm bg-transparent focus:outline-none text-gray-800 dark:text-gray-200"
+      />
+    </div>
+  )
+}
+
+// ── AIImageButton: prompt → POST /ads/ai-image → подстановка url ──
+function AIImageButton({ token, onPicked }) {
+  const [open, setOpen] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const generate = async () => {
+    if (!prompt.trim()) { setErr('Опишите изображение'); return }
+    setBusy(true); setErr('')
+    try {
+      const r = await apiFetch(token, '/ads/ai-image', { method: 'POST', body: JSON.stringify({ prompt }) })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || d.error) { setErr(d.error || d.detail || 'Не удалось сгенерировать'); setBusy(false); return }
+      if (d.url) { onPicked(d.url, d.provider || 'ai'); setOpen(false); setPrompt('') }
+      else setErr('Пустой ответ')
+    } catch { setErr('Сетевая ошибка') }
+    setBusy(false)
+  }
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}
+        className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-100 transition inline-flex items-center gap-1">
+        ✨ AI картинка
+      </button>
+      {open && (
+        <div className="fixed inset-0 bg-black/50 z-[700] flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md p-5" onClick={e => e.stopPropagation()}>
+            <h4 className="font-bold text-gray-900 dark:text-white mb-3">AI-генерация баннера</h4>
+            <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
+              placeholder="Современная стоматологическая клиника, белые тона, профессиональное освещение…"
+              rows={4} className={inputCls + ' resize-y'} />
+            {err && <div className="mt-2 text-xs text-red-500">{err}</div>}
+            <div className="flex justify-end gap-2 mt-4">
+              <button type="button" onClick={() => setOpen(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">Отмена</button>
+              <button type="button" onClick={generate} disabled={busy}
+                className="px-4 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
+                {busy ? 'Генерация…' : 'Сгенерировать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── StockSearchModal: поиск стоковых картинок ──
+function StockSearchModal({ token, onClose, onPick }) {
+  const [q, setQ] = useState('')
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState('')
+  const search = async () => {
+    if (!q.trim()) return
+    setLoading(true); setErr('')
+    try {
+      const r = await apiFetch(token, `/ads/stock-search?q=${encodeURIComponent(q)}`)
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(d.detail || 'Ошибка поиска'); setItems([]) }
+      else setItems(d.items || [])
+    } catch { setErr('Сетевая ошибка'); setItems([]) }
+    setLoading(false)
+  }
+  return (
+    <Modal title="Поиск стоковых изображений" onClose={onClose} wide>
+      <div className="flex gap-2 mb-3">
+        <input value={q} onChange={e => setQ(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && search()}
+          placeholder="dentist office, smile, medical clinic…"
+          className={inputCls} />
+        <button onClick={search} disabled={loading}
+          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap disabled:opacity-50">
+          {loading ? '…' : 'Найти'}
+        </button>
+      </div>
+      {err && <div className="text-xs text-red-500 mb-2">{err}</div>}
+      {items.length === 0 && !loading && !err && (
+        <div className="text-center text-gray-400 py-6 text-sm">Введите запрос и нажмите Найти. Можно искать на английском (Pexels/Unsplash).</div>
+      )}
+      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
+        {items.map(it => (
+          <button key={it.id} type="button"
+            onClick={() => { onPick(it.full, it.author, it.author_url); onClose() }}
+            className="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-cyan-400 transition">
+            <img src={it.thumb} alt={it.author || ''} className="w-full h-24 object-cover" loading="lazy" />
+            {it.author && <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1 py-0.5 truncate opacity-0 group-hover:opacity-100">© {it.author}</div>}
+          </button>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop, token }) {
   const fileInputRef = useRef(null)
   const days = daysBetween(form.start_date, form.end_date)
   const [showSchedule, setShowSchedule] = useState(false)
+  const [showStock, setShowStock] = useState(false)
   const bodyRef = useRef(null)
-
-  const toggleDay = (idx) => {
-    const curr = form.schedule_days || []
-    const next = curr.includes(idx) ? curr.filter(d => d !== idx) : [...curr, idx].sort((a,b)=>a-b)
-    set('schedule_days', next)
-  }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[1fr_320px] gap-6">
@@ -578,7 +1150,31 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
       </div>
 
       <div>
-        <label className={labelCls}>Изображение баннера</label>
+        <div className="flex items-center justify-between mb-1">
+          <label className={labelCls}>Изображение баннера</label>
+          <div className="flex items-center gap-1.5">
+            <AIImageButton token={token} onPicked={(url) => { set('image_url', url); set('image_author', ''); set('image_author_url', '') }} />
+            <button type="button" onClick={() => setShowStock(true)}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border border-cyan-300 dark:border-cyan-700 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100 transition">
+              🔍 Стоки
+            </button>
+          </div>
+        </div>
+        {/* URL-картинка (от AI/стоков) — отображается если нет загруженной image_data */}
+        {form.image_url && !form.image_data && (
+          <div className="mb-2 rounded-xl border border-cyan-200 dark:border-cyan-700 overflow-hidden bg-white dark:bg-gray-800">
+            <img src={form.image_url} alt="picked" className="w-full object-cover" style={{ height: (form.banner_height || 96) + 'px' }} />
+            <div className="px-3 py-2 flex items-center justify-between text-xs">
+              <span className="text-gray-500 truncate">
+                {form.image_author
+                  ? <>фото by {form.image_author_url ? <a href={form.image_author_url} target="_blank" rel="noopener noreferrer" className="text-cyan-600 hover:underline">{form.image_author}</a> : form.image_author}</>
+                  : 'URL изображения'}
+              </span>
+              <button type="button" onClick={() => { set('image_url', ''); set('image_author', ''); set('image_author_url', '') }}
+                className="text-red-500 hover:text-red-700 ml-2">✕</button>
+            </div>
+          </div>
+        )}
         <div className={`mt-1.5 border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition ${form.image_data ? 'border-green-400 dark:border-green-600 bg-green-50 dark:bg-green-900/20' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 hover:border-cyan-400'}`}
           onClick={() => fileInputRef.current?.click()}>
           {form.image_data ? (
@@ -784,41 +1380,33 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
           className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 dark:bg-gray-700/50 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
           <span className="flex items-center gap-2">
             <span className="material-symbols-outlined text-base text-gray-500">schedule</span>
-            Расписание показа
-            {(form.schedule_days?.length > 0 || form.schedule_hours_start) && (
+            Расписание показа (v2)
+            {form.schedule?.days_config?.some(d => d.enabled) && (
               <span className="text-xs bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-400 px-2 py-0.5 rounded-full">Настроено</span>
             )}
           </span>
           <span className="material-symbols-outlined text-base text-gray-400">{showSchedule ? 'expand_less' : 'expand_more'}</span>
         </button>
         {showSchedule && (
-          <div className="px-4 py-4 space-y-4">
-            <div>
-              <label className={labelCls}>Дни показа (пусто = все дни)</label>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {DAYS_OF_WEEK.map((d, i) => (
-                  <button key={i} type="button" onClick={() => toggleDay(i)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${(form.schedule_days || []).includes(i) ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-cyan-400'}`}>
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Час начала (0–23)</label>
-                <input type="number" value={form.schedule_hours_start} onChange={e => set('schedule_hours_start', e.target.value)}
-                  placeholder="9" min="0" max="23" className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Час окончания (0–23)</label>
-                <input type="number" value={form.schedule_hours_end} onChange={e => set('schedule_hours_end', e.target.value)}
-                  placeholder="21" min="0" max="23" className={inputCls} />
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 dark:text-gray-500">Реклама показывается только в указанные часы и дни</p>
+          <div className="px-4 py-4">
+            <ScheduleEditorV2 schedule={form.schedule} onChange={(s) => set('schedule', s)} />
           </div>
         )}
+      </div>
+
+      {/* Категория + теги */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Категория</label>
+          <select value={form.category || ''} onChange={e => set('category', e.target.value)} className={inputCls}>
+            {AD_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Теги</label>
+          <TagsInput value={form.tags || []} onChange={(t) => set('tags', t)} placeholder="acne, весна-2026, …" />
+          <div className="text-[10px] text-gray-500 mt-1">Enter для добавления. Используются для группировки и фильтрации.</div>
+        </div>
       </div>
 
       <div className="flex justify-end gap-3 pt-2">
@@ -842,18 +1430,383 @@ function AdForm({ form, set, err, saving, onSave, onCancel, isEdit, onOpenCrop }
       <div className="hidden md:block">
         <LivePreview form={form} />
       </div>
+      {showStock && (
+        <StockSearchModal token={token} onClose={() => setShowStock(false)}
+          onPick={(url, author, authorUrl) => { set('image_url', url); set('image_author', author || ''); set('image_author_url', authorUrl || '') }} />
+      )}
     </div>
   )
+}
+
+// ── CompareModal: сравнение нескольких объявлений по выбранной метрике ──
+function CompareModal({ ids, ads, token, onClose }) {
+  const [metric, setMetric] = useState('clicks')
+  const [days, setDays] = useState(30)
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    if (!ids || ids.length < 2) return
+    setLoading(true)
+    apiFetch(token, `/ads/compare?ids=${ids.join(',')}&metric=${metric}&days=${days}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { setData(d); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [ids, metric, days, token])
+  // Превращаем data.series (объект ad_id → {title, points:[{date,value}]}) в плоский series для MiniChart
+  const seriesIds = data?.series ? Object.keys(data.series) : []
+  // Строим объединённый timeline: ключи — даты, поля — ad_id
+  const adKeys = seriesIds  // массив id, по которым рисуем
+  const dateSet = new Set()
+  for (const aid of seriesIds) for (const p of (data.series[aid]?.points || [])) dateSet.add(p.date)
+  const allDates = Array.from(dateSet).sort()
+  const merged = allDates.map(date => {
+    const row = { date }
+    for (const aid of seriesIds) {
+      const pt = (data.series[aid]?.points || []).find(p => p.date === date)
+      row[aid] = pt ? pt.value : 0
+    }
+    return row
+  })
+  const colors = seriesIds.map((_, i) => COMPARE_COLORS[i % COMPARE_COLORS.length])
+  const METRICS = [['clicks', 'Клики'], ['impressions', 'Показы'], ['conversions', 'Конверсии'], ['revenue', 'Выручка']]
+  return (
+    <Modal title={`Сравнение ${ids.length} объявлений`} onClose={onClose} wide>
+      <div className="flex items-center gap-3 flex-wrap mb-4">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">Метрика:</span>
+          {METRICS.map(([v, l]) => (
+            <button key={v} onClick={() => setMetric(v)}
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${metric === v ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <select value={days} onChange={e => setDays(Number(e.target.value))}
+          className="text-xs border border-gray-300 dark:border-gray-600 rounded-lg px-2 py-1 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+          {[7, 14, 30, 60, 90].map(d => <option key={d} value={d}>{d} дней</option>)}
+        </select>
+      </div>
+      {loading ? (
+        <div className="text-center py-12 text-gray-400">Загрузка...</div>
+      ) : !data ? (
+        <div className="text-center py-12 text-red-400">Ошибка загрузки</div>
+      ) : (
+        <>
+          <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 mb-3">
+            {/* Легенда */}
+            <div className="flex flex-wrap gap-3 mb-3">
+              {seriesIds.map((aid, i) => (
+                <div key={aid} className="flex items-center gap-1.5 text-xs">
+                  <div className="w-3 h-3 rounded-full" style={{ background: colors[i] }} />
+                  <span className="text-gray-700 dark:text-gray-300 max-w-[200px] truncate">{data.series[aid]?.title || (ads.find(a => a.id === aid)?.title) || aid.slice(0, 8)}</span>
+                </div>
+              ))}
+            </div>
+            <MiniChart series={merged} keys={adKeys} colors={colors} height={220} />
+          </div>
+          {/* Сводная таблица: сумма по метрике на ad */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-xs uppercase text-gray-500">
+                  <th className="text-left py-2 pr-2">Объявление</th>
+                  <th className="text-right py-2 pr-2">Сумма ({METRICS.find(([v]) => v === metric)?.[1]})</th>
+                </tr>
+              </thead>
+              <tbody>
+                {seriesIds.map((aid, i) => {
+                  const sum = (data.series[aid]?.points || []).reduce((s, p) => s + (p.value || 0), 0)
+                  return (
+                    <tr key={aid} className="border-b border-gray-100 dark:border-gray-800">
+                      <td className="py-2 pr-2 flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: colors[i] }} />
+                        <span className="truncate max-w-[400px]">{data.series[aid]?.title || aid}</span>
+                      </td>
+                      <td className="py-2 pr-2 text-right font-bold tabular-nums">{Number(sum).toLocaleString('ru', { maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+// ── TemplateGalleryModal: категории + список шаблонов + seed ──
+function TemplateGalleryModal({ token, onClose, onUse }) {
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [category, setCategory] = useState('')
+  const [seeding, setSeeding] = useState(false)
+  const reload = async () => {
+    setLoading(true)
+    try {
+      const r = await apiFetch(token, '/ads/templates')
+      if (r.ok) setItems(await r.json())
+    } catch {}
+    setLoading(false)
+  }
+  useEffect(() => { reload() }, [])
+  const filtered = category ? items.filter(t => (t.category || 'other') === category) : items
+  const seed = async () => {
+    setSeeding(true)
+    try {
+      const r = await apiFetch(token, '/ads/templates/seed', { method: 'POST' })
+      if (r.ok) await reload()
+      else alert('Не удалось создать стартовые шаблоны')
+    } catch { alert('Сетевая ошибка') }
+    setSeeding(false)
+  }
+  const useTpl = async (tplId) => {
+    try {
+      const r = await apiFetch(token, `/ads/${tplId}/use-template`, { method: 'POST' })
+      if (r.ok) { const ad = await r.json(); onUse(ad); onClose() }
+    } catch {}
+  }
+  return (
+    <Modal title="Галерея шаблонов" onClose={onClose} wide>
+      <div className="flex items-center gap-2 flex-wrap mb-4">
+        <span className="text-xs text-gray-500">Категория:</span>
+        {[{ value: '', label: 'Все' }, ...AD_CATEGORIES.filter(c => c.value)].map(c => (
+          <button key={c.value} onClick={() => setCategory(c.value)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold border transition ${category === c.value ? 'bg-purple-600 border-purple-600 text-white' : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-purple-400'}`}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+      {loading ? (
+        <div className="py-10 text-center text-gray-400">Загрузка...</div>
+      ) : items.length === 0 ? (
+        <div className="py-10 text-center text-gray-400">
+          <span className="material-symbols-outlined text-5xl block mb-2">bookmark_add</span>
+          <div>Шаблонов ещё нет.</div>
+          <button onClick={seed} disabled={seeding}
+            className="mt-3 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
+            {seeding ? 'Создаём…' : '✨ Создать стартовые шаблоны'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto">
+            {filtered.map(t => (
+              <button key={t.id} type="button" onClick={() => useTpl(t.id)}
+                className="text-left border border-gray-200 dark:border-gray-700 rounded-xl p-3 hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <div className="font-semibold text-gray-900 dark:text-white text-sm flex-1 min-w-0 truncate">{t.title}</div>
+                  {t.category && <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 font-semibold">{(AD_CATEGORIES.find(c => c.value === t.category) || {}).label || t.category}</span>}
+                </div>
+                {t.body && <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{t.body}</div>}
+                <div className="text-[10px] text-gray-400 mt-1.5 flex items-center gap-2">
+                  {t.cta_text && <span>CTA: {t.cta_text}</span>}
+                  {t.audience && <span>🎯 Таргет</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+          {filtered.length === 0 && (
+            <div className="py-6 text-center text-gray-400 text-sm">В этой категории шаблонов нет.</div>
+          )}
+          <div className="mt-3 text-right">
+            <button onClick={seed} disabled={seeding} className="text-xs text-purple-600 hover:text-purple-800 disabled:opacity-50">
+              {seeding ? '…' : '+ Добавить стартовые шаблоны'}
+            </button>
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+// ── BulkGenerateModal: AI генерация N вариантов ──
+function BulkGenerateModal({ token, onClose, onDone }) {
+  const [serviceName, setServiceName] = useState('')
+  const [servicePrice, setServicePrice] = useState('')
+  const [count, setCount] = useState(3)
+  const [busy, setBusy] = useState(false)
+  const [items, setItems] = useState([])
+  const [err, setErr] = useState('')
+  const generate = async () => {
+    if (!serviceName.trim()) { setErr('Укажите название услуги'); return }
+    setBusy(true); setErr('')
+    try {
+      const r = await apiFetch(token, '/ads/bulk-generate', {
+        method: 'POST',
+        body: JSON.stringify({
+          service_name: serviceName.trim(),
+          service_price: servicePrice ? Number(servicePrice) : null,
+          count: Number(count),
+        }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(d.detail || 'Ошибка генерации'); setBusy(false); return }
+      setItems(d.items || [])
+    } catch { setErr('Сетевая ошибка') }
+    setBusy(false)
+  }
+  const activate = async (id) => {
+    try {
+      const r = await apiFetch(token, `/ads/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'active' }) })
+      if (r.ok) { setItems(prev => prev.map(it => it.id === id ? { ...it, status: 'active' } : it)); onDone?.() }
+    } catch {}
+  }
+  const remove = async (id) => {
+    if (!confirm('Удалить этот черновик?')) return
+    try {
+      const r = await apiFetch(token, `/ads/${id}`, { method: 'DELETE' })
+      if (r.ok) { setItems(prev => prev.filter(it => it.id !== id)); onDone?.() }
+    } catch {}
+  }
+  return (
+    <Modal title="🪄 Сгенерировать варианты" onClose={onClose} wide>
+      {items.length === 0 ? (
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Название услуги</label>
+            <input value={serviceName} onChange={e => setServiceName(e.target.value)}
+              placeholder="Профессиональная гигиена полости рта" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Цена, ₽ (опционально)</label>
+            <input type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)}
+              placeholder="3500" className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Количество вариантов: <span className="font-bold text-cyan-600">{count}</span></label>
+            <input type="range" min="1" max="5" value={count}
+              onChange={e => setCount(Number(e.target.value))}
+              className="w-full mt-2 accent-cyan-600" />
+          </div>
+          {err && <div className="text-xs text-red-500">{err}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">Отмена</button>
+            <button type="button" onClick={generate} disabled={busy}
+              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
+              {busy ? 'Генерация…' : 'Сгенерировать'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="text-xs text-gray-500 mb-2">Создано черновиков: {items.length}. Активируйте те, что нравятся; остальные удалите.</div>
+          {items.map(it => (
+            <div key={it.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex items-start gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm text-gray-900 dark:text-white">{it.title}</div>
+                {it.body && <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{it.body}</div>}
+                <div className="text-[10px] text-gray-400 mt-1">Статус: {STATUS_LABELS[it.status] || it.status}</div>
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                {it.status !== 'active' && (
+                  <button onClick={() => activate(it.id)} className="px-3 py-1 text-xs font-semibold rounded-lg bg-green-500 hover:bg-green-600 text-white">Активировать</button>
+                )}
+                <button onClick={() => remove(it.id)} className="px-2 py-1 text-xs rounded-lg bg-red-50 hover:bg-red-100 text-red-600">Удалить</button>
+              </div>
+            </div>
+          ))}
+          <div className="text-right pt-3">
+            <button onClick={onClose} className="px-4 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 text-sm rounded-lg">Готово</button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// ── ShareToBranchModal: копирование в другой филиал франшизы ──
+function ShareToBranchModal({ ad, token, onClose, onDone }) {
+  const [siblings, setSiblings] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [targetId, setTargetId] = useState('')
+  const [activate, setActivate] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    apiFetch(token, '/ads/franchise-siblings')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setSiblings(d || []); setLoading(false) })
+      .catch(() => { setSiblings([]); setLoading(false) })
+  }, [token])
+  const submit = async () => {
+    if (!targetId) { setErr('Выберите филиал'); return }
+    setBusy(true); setErr('')
+    try {
+      const r = await apiFetch(token, `/ads/${ad.id}/share`, {
+        method: 'POST',
+        body: JSON.stringify({ tenant_id: targetId, activate }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(d.detail || 'Не удалось скопировать'); setBusy(false); return }
+      const target = siblings.find(s => s.id === targetId)
+      alert(`Скопировано в «${target?.name || 'филиал'}»`)
+      onDone?.(); onClose()
+    } catch { setErr('Сетевая ошибка') }
+    setBusy(false)
+  }
+  return (
+    <Modal title="📤 Копировать в филиал" onClose={onClose}>
+      {loading ? (
+        <div className="py-8 text-center text-gray-400">Загрузка…</div>
+      ) : siblings.length === 0 ? (
+        <div className="py-8 text-center text-gray-500 text-sm">
+          Этот тенант не входит в франшизу — шаринг недоступен.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="text-sm text-gray-700 dark:text-gray-300 mb-2">Куда скопировать «<b>{ad.title}</b>»?</div>
+          <div className="space-y-1.5 max-h-[40vh] overflow-y-auto">
+            {siblings.map(s => (
+              <label key={s.id} className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition ${targetId === s.id ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'}`}>
+                <input type="radio" name="target" checked={targetId === s.id} onChange={() => setTargetId(s.id)} className="accent-cyan-600" />
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-gray-800 dark:text-gray-200">{s.name}</div>
+                  <div className="text-[11px] text-gray-500">{s.slug}</div>
+                </div>
+              </label>
+            ))}
+          </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={activate} onChange={e => setActivate(e.target.checked)} className="w-4 h-4 accent-cyan-600" />
+            <span>Сразу активировать (потребует одобрения в целевом филиале)</span>
+          </label>
+          {err && <div className="text-xs text-red-500">{err}</div>}
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">Отмена</button>
+            <button type="button" onClick={submit} disabled={busy || !targetId}
+              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold rounded-lg disabled:opacity-50">
+              {busy ? '…' : 'Скопировать'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  )
+}
+
+// ── ApprovalBadge: pending/rejected плашка на карточке ──
+function ApprovalBadge({ status, note }) {
+  if (status === 'pending') {
+    return <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 border border-orange-300 font-semibold" title={note || 'Ожидает одобрения'}>🕒 На проверке</span>
+  }
+  if (status === 'rejected') {
+    return <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border border-gray-300 font-semibold" title={note || 'Отклонено'}>❌ Отклонено</span>
+  }
+  return null
 }
 
 export default function AdsSection({ token }) {
   const [ads, setAds] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
+  const [filterTag, setFilterTag] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [healthIssues, setHealthIssues] = useState(null) // { issues: [...] }
   const [healthBusy, setHealthBusy] = useState(false)
   const [bulkSel, setBulkSel] = useState(new Set())  // bulk-выбор по id
+  const [compareSel, setCompareSel] = useState(new Set())  // multi-select для сравнения
+  const [showCompare, setShowCompare] = useState(false)
   const [editAd, setEditAd] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
@@ -865,22 +1818,67 @@ export default function AdsSection({ token }) {
   const [statsAd, setStatsAd] = useState(null)
   const [dragId, setDragId] = useState(null)
   const [dragOver, setDragOver] = useState(null)
+  const [showGallery, setShowGallery] = useState(false)
+  const [showBulkGen, setShowBulkGen] = useState(false)
+  const [shareAd, setShareAd] = useState(null)
+  const [approveBusy, setApproveBusy] = useState(null)
+
+  // Роль текущего пользователя — для UI approval. director+ может одобрять.
+  const userRole = (() => {
+    const payload = decodeJwt(token)
+    return payload?.role || payload?.user_role || ''
+  })()
+  const canApprove = ['owner', 'director', 'franchise_owner', 'superadmin', 'admin'].includes(userRole)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = filterStatus ? `?status=${filterStatus}` : ''
-      const r = await apiFetch(token, `/ads${params}`)
+      let url
+      if (filterTag.trim()) {
+        url = `/ads/by-tags?tags=${encodeURIComponent(filterTag.trim())}`
+      } else {
+        url = `/ads${filterStatus ? `?status=${filterStatus}` : ''}`
+      }
+      const r = await apiFetch(token, url)
       if (r.ok) setAds(await r.json())
     } catch {}
     setLoading(false)
-  }, [token, filterStatus])
+  }, [token, filterStatus, filterTag])
 
   useEffect(() => { load() }, [load])
 
   const resetForm = () => { setForm(EMPTY_FORM); setErr('') }
+
+  // Конвертирует legacy schedule { days:[0,1,..], hours:[9,10,..] } в days_config v2
+  const legacyToV2 = (schedule) => {
+    if (!schedule) return { days_config: defaultDaysConfig(), skip_holidays: false, country: 'RU' }
+    // Если уже v2 — возвращаем как есть
+    if (Array.isArray(schedule.days_config)) {
+      // Заполняем недостающие дни
+      const byIdx = {}
+      schedule.days_config.forEach(d => { byIdx[d.day] = d })
+      return {
+        days_config: Array.from({ length: 7 }, (_, i) => byIdx[i] || { day: i, hour_from: 9, hour_to: 21, enabled: false }),
+        skip_holidays: !!schedule.skip_holidays,
+        country: schedule.country || 'RU',
+      }
+    }
+    const days = Array.isArray(schedule.days) ? schedule.days : null
+    const hours = Array.isArray(schedule.hours) ? schedule.hours : null
+    const hour_from = hours?.length ? Math.min(...hours) : 9
+    const hour_to = hours?.length ? Math.max(...hours) + 1 : 21
+    const enabledSet = days ? new Set(days) : new Set([0,1,2,3,4,5,6])
+    return {
+      days_config: Array.from({ length: 7 }, (_, i) => ({
+        day: i, hour_from, hour_to,
+        enabled: days ? enabledSet.has(i) : false,
+      })),
+      skip_holidays: false,
+      country: 'RU',
+    }
+  }
 
   const openEdit = (ad) => {
     setEditAd(ad)
@@ -888,6 +1886,7 @@ export default function AdsSection({ token }) {
     setForm({
       title: ad.title || '', body: ad.body || '',
       image_data: ad.image_data || null, image_mime: ad.image_mime || null,
+      image_url: ad.image_url || '', image_author: '', image_author_url: '',
       banner_height: String(ad.banner_height || 96),
       interval_seconds: String(ad.interval_seconds || 5),
       link: ad.link || '', ad_type: ad.ad_type || 'banner',
@@ -912,9 +1911,14 @@ export default function AdsSection({ token }) {
       is_template: !!ad.is_template,
       sort_order: String(ad.sort_order ?? 0),
       color_theme: ad.color_theme || '',
+      // Legacy (для обратной совместимости — не используются в новом UI)
       schedule_days: schedule.days || [],
       schedule_hours_start: schedule.hours?.length ? String(Math.min(...schedule.hours)) : '',
       schedule_hours_end: schedule.hours?.length ? String(Math.max(...schedule.hours)) : '',
+      // v2
+      schedule: legacyToV2(schedule),
+      tags: Array.isArray(ad.tags) ? ad.tags : [],
+      category: ad.category || '',
     })
     setErr('')
   }
@@ -926,6 +1930,28 @@ export default function AdsSection({ token }) {
   }
 
   const buildSchedule = () => {
+    // Приоритет — v2 (days_config). Если ни один день не enabled — расписания нет.
+    const v2 = form.schedule
+    if (v2?.days_config?.some(d => d.enabled)) {
+      // Сохраняем v2 как есть; также формируем legacy-поля days/hours для совместимости с backend
+      const enabledDays = v2.days_config.filter(d => d.enabled).map(d => d.day)
+      // Если у всех включённых дней одинаковый диапазон часов — пишем единый hours-массив
+      const enabledCfgs = v2.days_config.filter(d => d.enabled)
+      const sameRange = enabledCfgs.every(d => d.hour_from === enabledCfgs[0].hour_from && d.hour_to === enabledCfgs[0].hour_to)
+      let hours = null
+      if (sameRange && enabledCfgs.length > 0) {
+        const { hour_from, hour_to } = enabledCfgs[0]
+        if (hour_to > hour_from) hours = Array.from({ length: hour_to - hour_from }, (_, i) => hour_from + i)
+      }
+      return {
+        days_config: v2.days_config,
+        skip_holidays: !!v2.skip_holidays,
+        country: v2.country || 'RU',
+        days: enabledDays.length > 0 ? enabledDays : null,
+        hours,
+      }
+    }
+    // Fallback к legacy полям (если по какой-то причине заполнены)
     const days = form.schedule_days?.length > 0 ? form.schedule_days : null
     let hours = null
     if (form.schedule_hours_start !== '' && form.schedule_hours_end !== '') {
@@ -947,6 +1973,7 @@ export default function AdsSection({ token }) {
     return {
       title: form.title.trim(), body: form.body.trim() || null,
       image_data: form.image_data || null, image_mime: form.image_mime || null,
+      image_url: form.image_url || null,
       banner_height: Number(form.banner_height) || 96,
       interval_seconds: Number(form.interval_seconds) || 5,
       link: form.link.trim() || null, ad_type: form.ad_type,
@@ -967,6 +1994,9 @@ export default function AdsSection({ token }) {
       cta_text: form.cta_text || null,
       cta_style: form.cta_style || 'primary',
       is_template: !!form.is_template,
+      // Phase D: теги и категория
+      tags: Array.isArray(form.tags) && form.tags.length > 0 ? form.tags : null,
+      category: form.category || null,
     }
   }
 
@@ -1073,6 +2103,40 @@ export default function AdsSection({ token }) {
     } catch {}
   }
 
+  // ── Approval workflow ──
+  const approveAd = async (ad) => {
+    setApproveBusy(ad.id)
+    try {
+      const r = await apiFetch(token, `/ads/${ad.id}/approve`, { method: 'POST', body: JSON.stringify({}) })
+      if (r.ok) load()
+      else { const d = await r.json().catch(() => ({})); alert(d.detail || 'Не удалось одобрить') }
+    } catch { alert('Сетевая ошибка') }
+    setApproveBusy(null)
+  }
+  const rejectAd = async (ad) => {
+    const note = prompt('Причина отклонения (≥ 3 символов):', '')
+    if (note == null) return
+    if (note.trim().length < 3) { alert('Причина должна быть не короче 3 символов'); return }
+    setApproveBusy(ad.id)
+    try {
+      const r = await apiFetch(token, `/ads/${ad.id}/reject`, { method: 'POST', body: JSON.stringify({ note: note.trim() }) })
+      if (r.ok) load()
+      else { const d = await r.json().catch(() => ({})); alert(d.detail || 'Не удалось отклонить') }
+    } catch { alert('Сетевая ошибка') }
+    setApproveBusy(null)
+  }
+
+  // ── Compare multi-select ──
+  const toggleCompareSel = (id) => setCompareSel(s => {
+    const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n
+  })
+
+  // ── Использование шаблона из галереи: открываем форму редактирования сразу ──
+  const useTemplateFromGallery = (newAd) => {
+    openEdit(newAd)
+    load()
+  }
+
   const handleDrop = async (targetId) => {
     if (!dragId || dragId === targetId) { setDragId(null); setDragOver(null); return }
     const reordered = [...ads]
@@ -1136,10 +2200,14 @@ export default function AdsSection({ token }) {
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Рекламные объявления</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление баннерами карусели для пациентов</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => { loadTemplates(); setShowTemplates(true) }}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setShowGallery(true)}
             className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-xl text-xs font-semibold hover:bg-purple-100 transition">
-            <span className="material-symbols-outlined text-sm">bookmark</span>Из шаблона
+            <span className="material-symbols-outlined text-sm">collections_bookmark</span>📚 Из шаблона
+          </button>
+          <button onClick={() => setShowBulkGen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 border border-fuchsia-300 bg-fuchsia-50 dark:bg-fuchsia-900/30 text-fuchsia-700 dark:text-fuchsia-300 rounded-xl text-xs font-semibold hover:bg-fuchsia-100 transition">
+            <span className="material-symbols-outlined text-sm">auto_awesome</span>🪄 Варианты
           </button>
           <button onClick={runHealthCheck} disabled={healthBusy}
             className="flex items-center gap-1.5 px-3 py-2 border border-amber-300 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-xl text-xs font-semibold hover:bg-amber-100 transition">
@@ -1228,16 +2296,48 @@ export default function AdsSection({ token }) {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap mb-4">
-        <div className="flex gap-2 flex-wrap flex-1">
+        <div className="flex gap-2 flex-wrap flex-1 items-center">
           {FILTER_BTNS.map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
-              className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${filterStatus === s ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-cyan-400'}`}>
+              disabled={!!filterTag}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${filterStatus === s ? 'bg-cyan-600 border-cyan-600 text-white' : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-cyan-400'} ${filterTag ? 'opacity-40 pointer-events-none' : ''}`}>
               {s ? STATUS_LABELS[s] : 'Все'}
             </button>
           ))}
+          <input
+            type="text"
+            value={filterTag}
+            onChange={e => setFilterTag(e.target.value)}
+            placeholder="🔍 тег"
+            title="Фильтр по тегу (e.g. acne)"
+            className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 w-32 focus:outline-none focus:border-cyan-400"
+          />
+          {filterTag && (
+            <button onClick={() => setFilterTag('')} className="text-[10px] text-gray-400 hover:text-gray-700">✕ Сбросить</button>
+          )}
         </div>
         <span className="text-xs text-gray-400 dark:text-gray-500">↕ Перетащите для сортировки</span>
       </div>
+
+      {/* Compare bar (multi-select) */}
+      {compareSel.size > 0 && (
+        <div className="bg-violet-50 dark:bg-violet-900/20 border border-violet-300 dark:border-violet-700 rounded-xl px-4 py-2 mb-4 flex items-center justify-between">
+          <div className="text-sm text-violet-700 dark:text-violet-300 font-semibold">
+            Выбрано для сравнения: {compareSel.size}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCompare(true)}
+              disabled={compareSel.size < 2}
+              className="text-xs px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-semibold disabled:opacity-40">
+              📊 Сравнить ({compareSel.size})
+            </button>
+            <button onClick={() => setCompareSel(new Set())} className="text-xs px-3 py-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg">
+              Сбросить
+            </button>
+          </div>
+        </div>
+      )}
 
       {err && !showCreate && !editAd && (
         <div className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-sm px-4 py-3 rounded-xl mb-4 border border-red-200 dark:border-red-700">{err}</div>
@@ -1276,11 +2376,20 @@ export default function AdsSection({ token }) {
                       className="mt-1 w-4 h-4 accent-cyan-600 cursor-pointer flex-shrink-0"
                       title="Выбрать для массовой операции"
                     />
+                    <input
+                      type="checkbox"
+                      checked={compareSel.has(ad.id)}
+                      onChange={() => toggleCompareSel(ad.id)}
+                      onClick={e => e.stopPropagation()}
+                      className="mt-1 w-4 h-4 accent-violet-600 cursor-pointer flex-shrink-0"
+                      title="Выбрать для сравнения"
+                    />
                     <span className="material-symbols-outlined text-lg text-gray-300 dark:text-gray-600 mt-0.5 flex-shrink-0">drag_indicator</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1.5">
                         <span className="font-bold text-gray-900 dark:text-white text-sm">{ad.title}</span>
                         <Badge status={ad.status} />
+                        <ApprovalBadge status={ad.approval_status} note={ad.approval_note} />
                         {ad.status === 'paused' && (ad.impressions_limit || ad.clicks_limit) && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-700">⏸ Авто-пауза</span>
                         )}
@@ -1309,6 +2418,17 @@ export default function AdsSection({ token }) {
                           <span className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: (COLOR_THEMES.find(t=>t.id===ad.color_theme)||COLOR_THEMES[0]).grad }} />
                         )}
                         {ad.schedule && <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">📅 Расписание</span>}
+                        {ad.category && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-200">
+                            {(AD_CATEGORIES.find(c => c.value === ad.category) || {}).label || ad.category}
+                          </span>
+                        )}
+                        {Array.isArray(ad.tags) && ad.tags.slice(0, 3).map(tag => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">#{tag}</span>
+                        ))}
+                        {Array.isArray(ad.tags) && ad.tags.length > 3 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-500">+{ad.tags.length - 3}</span>
+                        )}
                         {(ad.freq_per_day || ad.freq_per_hour) && (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400" title={`Частота: ${ad.freq_per_hour||'∞'}/час, ${ad.freq_per_day||'∞'}/день`}>
                             🚦 Cap
@@ -1346,8 +2466,26 @@ export default function AdsSection({ token }) {
                         className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
                         <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>science</span>
                       </button>
+                      <button onClick={() => setShareAd(ad)} title="📤 Поделиться с филиалом"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+                        <span className="material-symbols-outlined text-base" style={{fontVariationSettings:"'FILL' 1"}}>share</span>
+                      </button>
                       <button onClick={() => openEdit(ad)}
                         className="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition">✏️</button>
+                      {canApprove && ad.approval_status === 'pending' && (
+                        <>
+                          <button onClick={() => approveAd(ad)} disabled={approveBusy === ad.id}
+                            title="Одобрить"
+                            className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white transition disabled:opacity-50">
+                            ✅ Одобрить
+                          </button>
+                          <button onClick={() => rejectAd(ad)} disabled={approveBusy === ad.id}
+                            title="Отклонить"
+                            className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-red-500 hover:bg-red-600 text-white transition disabled:opacity-50">
+                            ❌ Отклонить
+                          </button>
+                        </>
+                      )}
                       {ad.status === 'draft' && (
                         <button onClick={() => updateStatus(ad, 'active')} disabled={updatingStatus === ad.id}
                           className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-green-500 text-white hover:bg-green-600 transition whitespace-nowrap">▶ Пуск</button>
@@ -1455,13 +2593,13 @@ export default function AdsSection({ token }) {
 
       {showCreate && (
         <Modal title="Новое объявление" onClose={() => setShowCreate(false)} wide>
-          <AdForm form={form} set={set} err={err} saving={saving} onSave={save} onCancel={() => setShowCreate(false)} isEdit={false} onOpenCrop={src => setCropCtx({ ...src, target: 'create' })} />
+          <AdForm form={form} set={set} err={err} saving={saving} onSave={save} onCancel={() => setShowCreate(false)} isEdit={false} onOpenCrop={src => setCropCtx({ ...src, target: 'create' })} token={token} />
         </Modal>
       )}
 
       {editAd && (
         <Modal title="Редактировать объявление" onClose={() => setEditAd(null)} wide>
-          <AdForm form={form} set={set} err={err} saving={saving} onSave={saveEdit} onCancel={() => setEditAd(null)} isEdit={true} onOpenCrop={src => setCropCtx({ ...src, target: 'edit' })} />
+          <AdForm form={form} set={set} err={err} saving={saving} onSave={saveEdit} onCancel={() => setEditAd(null)} isEdit={true} onOpenCrop={src => setCropCtx({ ...src, target: 'edit' })} token={token} />
         </Modal>
       )}
 
@@ -1486,6 +2624,20 @@ export default function AdsSection({ token }) {
 
       {previewAd && <BannerPreview ad={previewAd} onClose={() => setPreviewAd(null)} />}
       {statsAd && <StatsModal ad={statsAd} token={token} onClose={() => setStatsAd(null)} />}
+
+      {/* Новые модалки фазы UI-апдейта */}
+      {showGallery && (
+        <TemplateGalleryModal token={token} onClose={() => setShowGallery(false)} onUse={useTemplateFromGallery} />
+      )}
+      {showBulkGen && (
+        <BulkGenerateModal token={token} onClose={() => setShowBulkGen(false)} onDone={load} />
+      )}
+      {shareAd && (
+        <ShareToBranchModal ad={shareAd} token={token} onClose={() => setShareAd(null)} onDone={load} />
+      )}
+      {showCompare && compareSel.size >= 2 && (
+        <CompareModal ids={[...compareSel]} ads={ads} token={token} onClose={() => setShowCompare(false)} />
+      )}
     </div>
   )
 }
