@@ -296,26 +296,29 @@ async def current_shift(
 async def shift_history(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники (по умолчанию — все клиники тенанта)"),
     limit: int = Query(50, le=200),
     user: User = Depends(require_accountant),
     db: AsyncSession = Depends(get_db),
 ):
-    """История смен клиники за период. По умолчанию — последние 30 дней."""
-    clinic_id = _user_clinic_id(user)
+    """История смен тенанта за период. По умолчанию — последние 30 дней,
+    все клиники сети. clinic_id query-параметром сужает."""
     if date_from is None:
         date_from = date.today() - timedelta(days=30)
     if date_to is None:
         date_to = date.today() + timedelta(days=1)
 
+    conds = [
+        CashShift.tenant_id == user.tenant_id,
+        CashShift.opened_at >= datetime.combine(date_from, datetime.min.time()),
+        CashShift.opened_at < datetime.combine(date_to, datetime.min.time()),
+    ]
+    if clinic_id:
+        conds.append(CashShift.clinic_id == clinic_id)
+
     rows = (await db.execute(
         select(CashShift)
-        .where(
-            and_(
-                CashShift.clinic_id == clinic_id,
-                CashShift.opened_at >= datetime.combine(date_from, datetime.min.time()),
-                CashShift.opened_at < datetime.combine(date_to, datetime.min.time()),
-            )
-        )
+        .where(and_(*conds))
         .order_by(desc(CashShift.opened_at))
         .limit(limit)
     )).scalars().all()

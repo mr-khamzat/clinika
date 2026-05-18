@@ -82,39 +82,44 @@ EXPENSE_CATEGORIES = ("expense", "salary", "incassation")
 async def pnl(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники (по умолчанию — все клиники тенанта)"),
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> PnLOut:
-    clinic_id = _ensure_clinic(me)
+    """Tenant-wide P&L: бухгалтер видит обороты всех клиник своей сети.
+    clinic_id query-параметром сужается до конкретной клиники."""
     df, dt = _period_bounds(date_from, date_to)
+    tenant_id = me.tenant_id
 
-    # 1) Онлайн-выручка (картой)
+    # 1) Онлайн-выручка (картой) — tenant-wide
+    online_conds = [
+        ClinicPayment.tenant_id == tenant_id,
+        ClinicPayment.status == ClinicPaymentStatus.SUCCEEDED,
+        ClinicPayment.created_at >= df,
+        ClinicPayment.created_at <= dt,
+    ]
+    if clinic_id:
+        online_conds.append(ClinicPayment.clinic_id == clinic_id)
     online_q = await db.execute(
-        select(func.coalesce(func.sum(ClinicPayment.amount), 0)).where(
-            and_(
-                ClinicPayment.clinic_id == clinic_id,
-                ClinicPayment.status == ClinicPaymentStatus.SUCCEEDED,
-                ClinicPayment.created_at >= df,
-                ClinicPayment.created_at <= dt,
-            )
-        )
+        select(func.coalesce(func.sum(ClinicPayment.amount), 0)).where(and_(*online_conds))
     )
     online_card = Decimal(online_q.scalar() or 0)
 
-    # 2) Кассовые приходы / расходы (JOIN cash_shift_entries -> cash_shifts)
+    # 2) Кассовые приходы / расходы (JOIN cash_shift_entries -> cash_shifts) — tenant-wide
+    cash_conds = [
+        CashShift.tenant_id == tenant_id,
+        CashShiftEntry.created_at >= df,
+        CashShiftEntry.created_at <= dt,
+    ]
+    if clinic_id:
+        cash_conds.append(CashShift.clinic_id == clinic_id)
     cash_q = await db.execute(
         select(
             CashShiftEntry.direction,
             func.coalesce(func.sum(CashShiftEntry.amount), 0),
         )
         .join(CashShift, CashShift.id == CashShiftEntry.shift_id)
-        .where(
-            and_(
-                CashShift.clinic_id == clinic_id,
-                CashShiftEntry.created_at >= df,
-                CashShiftEntry.created_at <= dt,
-            )
-        )
+        .where(and_(*cash_conds))
         .group_by(CashShiftEntry.direction)
     )
     cash_in = Decimal("0")
@@ -125,31 +130,33 @@ async def pnl(
         elif direction == "out":
             cash_out = Decimal(total or 0)
 
-    # 3) Выплаты ЗП (withdrawal в ledger), берём -SUM
+    # 3) Выплаты ЗП (withdrawal в ledger), берём -SUM — tenant-wide
+    payroll_conds = [
+        LedgerEntry.tenant_id == tenant_id,
+        LedgerEntry.operation_type == "withdrawal",
+        LedgerEntry.created_at >= df,
+        LedgerEntry.created_at <= dt,
+    ]
+    if clinic_id:
+        payroll_conds.append(LedgerEntry.clinic_id == clinic_id)
     payroll_q = await db.execute(
-        select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(
-            and_(
-                LedgerEntry.clinic_id == clinic_id,
-                LedgerEntry.operation_type == "withdrawal",
-                LedgerEntry.created_at >= df,
-                LedgerEntry.created_at <= dt,
-            )
-        )
+        select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(and_(*payroll_conds))
     )
     payroll_paid = -Decimal(payroll_q.scalar() or 0)
 
-    # 4) Расходы по кассовым записям (expense/salary/incassation)
+    # 4) Расходы по кассовым записям (expense/salary/incassation) — tenant-wide
+    expenses_conds = [
+        CashShift.tenant_id == tenant_id,
+        CashShiftEntry.category.in_(EXPENSE_CATEGORIES),
+        CashShiftEntry.created_at >= df,
+        CashShiftEntry.created_at <= dt,
+    ]
+    if clinic_id:
+        expenses_conds.append(CashShift.clinic_id == clinic_id)
     expenses_q = await db.execute(
         select(func.coalesce(func.sum(CashShiftEntry.amount), 0))
         .join(CashShift, CashShift.id == CashShiftEntry.shift_id)
-        .where(
-            and_(
-                CashShift.clinic_id == clinic_id,
-                CashShiftEntry.category.in_(EXPENSE_CATEGORIES),
-                CashShiftEntry.created_at >= df,
-                CashShiftEntry.created_at <= dt,
-            )
-        )
+        .where(and_(*expenses_conds))
     )
     expenses = Decimal(expenses_q.scalar() or 0)
 
@@ -173,10 +180,11 @@ async def cashflow(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     granularity: Literal["day", "week", "month"] = Query("day"),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники"),
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> list[CashflowRow]:
-    clinic_id = _ensure_clinic(me)
+    """Tenant-wide cashflow по дням/неделям/месяцам."""
     df, dt = _period_bounds(date_from, date_to)
 
     bucket = func.date_trunc(granularity, CashShiftEntry.created_at)
@@ -190,6 +198,14 @@ async def cashflow(
         0,
     )
 
+    cf_conds = [
+        CashShift.tenant_id == me.tenant_id,
+        CashShiftEntry.created_at >= df,
+        CashShiftEntry.created_at <= dt,
+    ]
+    if clinic_id:
+        cf_conds.append(CashShift.clinic_id == clinic_id)
+
     q = await db.execute(
         select(
             bucket.label("period"),
@@ -197,13 +213,7 @@ async def cashflow(
             outflow_expr.label("outflow"),
         )
         .join(CashShift, CashShift.id == CashShiftEntry.shift_id)
-        .where(
-            and_(
-                CashShift.clinic_id == clinic_id,
-                CashShiftEntry.created_at >= df,
-                CashShiftEntry.created_at <= dt,
-            )
-        )
+        .where(and_(*cf_conds))
         .group_by(bucket)
         .order_by(bucket.asc())
     )

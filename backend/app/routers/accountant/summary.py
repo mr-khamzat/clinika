@@ -105,11 +105,12 @@ async def summary(
                 cash_on_hand=shift.cash_start + Decimal(in_sum) - Decimal(out_sum),
             )
 
-    # ── 2) Сегодняшний онлайн-оборот ──
+    # ── 2) Сегодняшний онлайн-оборот по всему тенанту ──
+    # Бухгалтер видит обороты ВСЕХ клиник своей сети, не только своей.
     today = TodayTurnoverOut()
-    if clinic_id:
+    if tenant_id:
         pay_conds = [
-            ClinicPayment.clinic_id == clinic_id,
+            ClinicPayment.tenant_id == tenant_id,
             ClinicPayment.created_at >= today_start,
             ClinicPayment.created_at < today_end,
         ]

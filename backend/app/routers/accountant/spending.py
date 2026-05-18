@@ -116,17 +116,20 @@ async def list_spendings(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     category: Optional[str] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники"),
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> list[SpendingOut]:
-    clinic_id = _ensure_clinic(me)
+    """Tenant-wide список расходов всех клиник сети."""
     df, dt = _period_bounds(date_from, date_to)
 
     conds = [
-        Spending.clinic_id == clinic_id,
+        Spending.tenant_id == me.tenant_id,
         Spending.created_at >= df,
         Spending.created_at <= dt,
     ]
+    if clinic_id:
+        conds.append(Spending.clinic_id == clinic_id)
     if category is not None:
         _validate_category(category)
         conds.append(Spending.category == category)
@@ -228,21 +231,22 @@ async def delete_spending(
 async def summary(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None),
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> SummaryOut:
-    clinic_id = _ensure_clinic(me)
     df, dt = _period_bounds(date_from, date_to)
 
+    conds = [
+        Spending.tenant_id == me.tenant_id,
+        Spending.created_at >= df,
+        Spending.created_at <= dt,
+    ]
+    if clinic_id:
+        conds.append(Spending.clinic_id == clinic_id)
     q = await db.execute(
         select(Spending.category, func.coalesce(func.sum(Spending.amount), 0))
-        .where(
-            and_(
-                Spending.clinic_id == clinic_id,
-                Spending.created_at >= df,
-                Spending.created_at <= dt,
-            )
-        )
+        .where(and_(*conds))
         .group_by(Spending.category)
     )
 

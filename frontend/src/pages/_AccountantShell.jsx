@@ -31,6 +31,7 @@ export const ACC_NAV = [
   { key: 'summary',  label: 'Сводка',   icon: 'dashboard',     path: '/accountant/summary'  },
   { key: 'cash',     label: 'Касса',    icon: 'point_of_sale', path: '/accountant/cash'     },
   { key: 'acts',     label: 'Акты',     icon: 'description',   path: '/accountant/acts'     },
+  { key: 'incoming', label: 'Счета сети', icon: 'mail',        path: '/accountant/incoming-invoices' },
   { key: 'payments', label: 'Платежи',  icon: 'payments',      path: '/accountant/payments' },
   { key: 'payroll',  label: 'Зарплата', icon: 'group',         path: '/accountant/payroll'  },
   { key: 'spending', label: 'Расходы',  icon: 'receipt_long',  path: '/accountant/spending' },

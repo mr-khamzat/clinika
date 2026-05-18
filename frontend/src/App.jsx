@@ -55,6 +55,7 @@ const ManagerVisitingDoctors = lazy(() => import('./pages/ManagerVisitingDoctors
 const ManagerPartnerDoctors = lazy(() => import('./pages/ManagerPartnerDoctors'))
 const ManagerSettings = lazy(() => import('./pages/ManagerSettings'))
 const ManagerInvoices = lazy(() => import('./pages/ManagerInvoices'))
+const ManagerInvoiceApprovals = lazy(() => import('./pages/ManagerInvoiceApprovals'))
 // svcfin01: финансовая модель платформы — 3 таба (Платформе/Сети/Сотрудникам)
 const ManagerFinance = lazy(() => import('./pages/ManagerFinance'))
 // billingledger01: журнал биллинг-операций франшизы (append-only)
@@ -327,6 +328,7 @@ function MiniApp() {
               <Route path="manager/visiting-doctors" element={<ManagerVisitingDoctors />} />
               <Route path="manager/partner-doctors"  element={<ManagerPartnerDoctors />} />
               <Route path="manager/invoices" element={<ManagerInvoices />} />
+              <Route path="manager/invoice-approvals" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInvoiceApprovals /></Suspense>} />
               <Route path="manager/finance" element={<ManagerFinance />} />
               {/* billingledger01: журнал биллинг-операций франшизы */}
               <Route path="manager/finance/ledger" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerBillingLedger /></Suspense>} />

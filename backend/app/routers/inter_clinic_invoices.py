@@ -29,11 +29,39 @@ router = APIRouter(tags=["inter_clinic_invoices"])
 
 MANAGER_ROLES = {UserRole.MANAGER, UserRole.SUPER_ADMIN}
 SUPERVISOR_ROLES = {UserRole.SUPER_ADMIN}
+# Кто может согласовать (approve/reject) счёт за бонусы. Бухгалтер — НЕТ.
+APPROVER_ROLES = {
+    UserRole.MANAGER,
+    UserRole.FRANCHISE_OWNER,
+    UserRole.DIRECTOR,
+    UserRole.DEPUTY_DIRECTOR,
+    UserRole.SUPER_ADMIN,
+}
+# Кто может оплатить согласованный счёт. Бухгалтер — основной актор.
+PAYER_ROLES = {
+    UserRole.ACCOUNTANT,
+    UserRole.MANAGER,
+    UserRole.FRANCHISE_OWNER,
+    UserRole.DIRECTOR,
+    UserRole.SUPER_ADMIN,
+}
 
 
 def _require_manager(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in MANAGER_ROLES:
         raise HTTPException(403, "Требуется роль менеджера или выше")
+    return current_user
+
+
+def _require_approver(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in APPROVER_ROLES:
+        raise HTTPException(403, "Согласование доступно только руководителю клиники или выше")
+    return current_user
+
+
+def _require_payer(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in PAYER_ROLES:
+        raise HTTPException(403, "Только бухгалтер/руководитель может отметить оплату")
     return current_user
 
 
@@ -62,6 +90,13 @@ def _ici_out(inv: InterClinicInvoice, issuer_name: str | None = None, recipient_
         "paid_at": inv.paid_at.isoformat() if inv.paid_at else None,
         "notes": inv.notes,
         "created_at": inv.created_at.isoformat(),
+        # Подпись согласовавшего (Phase: approval workflow)
+        "approved_by_id": str(inv.approved_by_id) if getattr(inv, "approved_by_id", None) else None,
+        "approved_at": inv.approved_at.isoformat() if getattr(inv, "approved_at", None) else None,
+        "approved_by_name": getattr(inv, "approved_by_name", None),
+        "approved_by_role": getattr(inv, "approved_by_role", None),
+        "rejected_at": inv.rejected_at.isoformat() if getattr(inv, "rejected_at", None) else None,
+        "rejection_reason": getattr(inv, "rejection_reason", None),
     }
 
 
@@ -216,21 +251,75 @@ async def send_clinic_invoice(
     return _ici_out(inv)
 
 
-@router.patch("/clinic-invoices/{invoice_id}/pay")
-async def pay_clinic_invoice(
+@router.patch("/clinic-invoices/{invoice_id}/approve")
+async def approve_clinic_invoice(
     invoice_id: uuid.UUID,
-    current_user: User = Depends(_require_manager),
+    current_user: User = Depends(_require_approver),
     db: AsyncSession = Depends(get_db),
 ):
+    """Согласовать счёт. Право — у руководителя клиники-плательщика.
+    Снэпшотим ФИО согласовавшего в approved_by_name (для подписи)."""
     r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
     inv = r.scalar_one_or_none()
     if not inv:
         raise HTTPException(404, "Счёт не найден")
-    # IDOR: только получатель (плательщик) или super_admin может подтвердить оплату
+    if current_user.role != UserRole.SUPER_ADMIN:
+        if str(inv.recipient_tenant_id) != str(current_user.tenant_id):
+            raise HTTPException(403, "Согласовывать может только клиника-плательщик")
+    if inv.status not in (ICIStatus.PENDING_APPROVAL, ICIStatus.SENT):
+        raise HTTPException(409, f"Нельзя согласовать счёт в статусе {inv.status}")
+    role_label = current_user.role.value if hasattr(current_user.role, "value") else current_user.role
+    inv = await ici_svc.mark_approved(
+        db, invoice_id,
+        approver_id=current_user.id,
+        approver_name=current_user.full_name or current_user.username or "—",
+        approver_role=role_label,
+    )
+    await db.commit()
+    return _ici_out(inv)
+
+
+@router.patch("/clinic-invoices/{invoice_id}/reject")
+async def reject_clinic_invoice(
+    invoice_id: uuid.UUID,
+    body: dict | None = None,
+    current_user: User = Depends(_require_approver),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отклонить счёт с указанием причины. Body: { reason?: str }."""
+    r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
+    inv = r.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(404, "Счёт не найден")
+    if current_user.role != UserRole.SUPER_ADMIN:
+        if str(inv.recipient_tenant_id) != str(current_user.tenant_id):
+            raise HTTPException(403, "Отклонять может только клиника-плательщик")
+    if inv.status not in (ICIStatus.PENDING_APPROVAL, ICIStatus.SENT):
+        raise HTTPException(409, f"Нельзя отклонить счёт в статусе {inv.status}")
+    reason = (body or {}).get("reason") if isinstance(body, dict) else None
+    inv = await ici_svc.mark_rejected(db, invoice_id, reason=reason)
+    await db.commit()
+    return _ici_out(inv)
+
+
+@router.patch("/clinic-invoices/{invoice_id}/pay")
+async def pay_clinic_invoice(
+    invoice_id: uuid.UUID,
+    current_user: User = Depends(_require_payer),
+    db: AsyncSession = Depends(get_db),
+):
+    """Отметить счёт оплаченным. Требует, чтобы был согласован руководителем
+    (status='approved'). Legacy 'sent'/'draft' принимаем для обратной совместимости."""
+    r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
+    inv = r.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(404, "Счёт не найден")
     if current_user.role != UserRole.SUPER_ADMIN:
         if str(inv.recipient_tenant_id) != str(current_user.tenant_id) and \
            str(inv.issuer_tenant_id) != str(current_user.tenant_id):
             raise HTTPException(403, "Нет доступа")
+    if inv.status not in (ICIStatus.APPROVED, ICIStatus.SENT, ICIStatus.DRAFT):
+        raise HTTPException(409, f"Счёт нельзя оплатить из статуса {inv.status} — нужно сначала согласование")
     inv = await ici_svc.mark_paid(db, invoice_id, paid_by_id=current_user.id)
     await db.commit()
     return _ici_out(inv)

@@ -10,9 +10,10 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 
-const AccSummary = lazy(() => import('./accountant/AccSummary'))
-const AccCash    = lazy(() => import('./accountant/AccCash'))
-const AccActs    = lazy(() => import('./accountant/AccActs'))
+const AccSummary          = lazy(() => import('./accountant/AccSummary'))
+const AccCash             = lazy(() => import('./accountant/AccCash'))
+const AccActs             = lazy(() => import('./accountant/AccActs'))
+const AccIncomingInvoices = lazy(() => import('./accountant/AccIncomingInvoices'))
 
 // Phase 2 placeholders — отдельный агент допишет реальные модули,
 // пока показываем stub чтобы навигация не падала с ChunkLoadError.
@@ -33,6 +34,7 @@ export default function AccountantCabinet() {
         <Route path="summary"  element={<AccSummary />} />
         <Route path="cash"     element={<AccCash />} />
         <Route path="acts"     element={<AccActs />} />
+        <Route path="incoming-invoices" element={<AccIncomingInvoices />} />
         <Route path="payments" element={<AccPayments />} />
         <Route path="payroll"  element={<AccPayroll />} />
         <Route path="spending" element={<AccSpending />} />

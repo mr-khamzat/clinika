@@ -1,9 +1,10 @@
 """
-/accountant/payments — реестр платежей пациентов (Phase 2).
+/accountant/payments — реестр платежей пациентов.
 
-MVP-уровень: read-only список из ClinicPayment по clinic_id.
-Возвраты в Phase 2.5/3 — нужна интеграция с фискальным шлюзом.
+Tenant-wide по умолчанию. Опциональный clinic_id-фильтр сужает до конкретной клиники.
+Бухгалтер видит ВСЕ обороты внутри своего тенанта (все клиники сети).
 """
+import uuid
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -14,7 +15,7 @@ from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.models.payments_clinic import ClinicPayment
 from app.routers.accountant.deps import require_accountant
 
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/payments", tags=["accountant:payments"])
 
 class PaymentOut(BaseModel):
     id: str
+    clinic_id: Optional[str] = None
     patient_phone: str
     patient_name: Optional[str]
     amount: Decimal
@@ -37,6 +39,7 @@ async def list_payments(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
     status_filter: Optional[str] = Query(None, alias="status"),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники тенанта"),
     limit: int = Query(100, le=500),
     user: User = Depends(require_accountant),
     db: AsyncSession = Depends(get_db),
@@ -51,9 +54,8 @@ async def list_payments(
         ClinicPayment.created_at >= datetime.combine(date_from, datetime.min.time()),
         ClinicPayment.created_at < datetime.combine(date_to, datetime.min.time()),
     ]
-    # Бухгалтер/менеджер видят только свою клинику.
-    if user.role in (UserRole.ACCOUNTANT, UserRole.MANAGER) and user.clinic_id:
-        conds.append(ClinicPayment.clinic_id == user.clinic_id)
+    if clinic_id:
+        conds.append(ClinicPayment.clinic_id == clinic_id)
     if status_filter:
         conds.append(ClinicPayment.status == status_filter)
 
@@ -67,6 +69,7 @@ async def list_payments(
     return [
         PaymentOut(
             id=str(r.id),
+            clinic_id=str(r.clinic_id) if r.clinic_id else None,
             patient_phone=r.patient_phone,
             patient_name=r.patient_name,
             amount=r.amount,

@@ -88,15 +88,20 @@ def _ensure_clinic(user: User) -> uuid.UUID:
 async def list_payroll(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
+    clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники (по умолчанию — все клиники тенанта)"),
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> list[PayrollRow]:
-    clinic_id = _ensure_clinic(me)
+    """Tenant-wide payroll-матрица: бухгалтер видит сотрудников всех клиник своей сети.
+    Параметр clinic_id сужает до конкретной клиники."""
     df, dt = _period_bounds(date_from, date_to)
 
-    # Пользователи клиники
+    # Tenant-wide: все пользователи тенанта (+ опциональный clinic_id-фильтр).
+    user_q_conds = [User.tenant_id == me.tenant_id]
+    if clinic_id:
+        user_q_conds.append(User.clinic_id == clinic_id)
     users_q = await db.execute(
-        select(User).where(User.clinic_id == clinic_id).order_by(User.full_name.asc())
+        select(User).where(and_(*user_q_conds)).order_by(User.full_name.asc())
     )
     users = users_q.scalars().all()
     if not users:
@@ -104,34 +109,26 @@ async def list_payroll(
 
     user_ids = [u.id for u in users]
 
-    # Начисления (положительные суммы по ACCRUAL_OPS)
+    # Начисления (положительные суммы по ACCRUAL_OPS) — фильтр по tenant_id, не clinic_id
+    ledger_base_conds = [
+        LedgerEntry.user_id.in_(user_ids),
+        LedgerEntry.tenant_id == me.tenant_id,
+        LedgerEntry.created_at >= df,
+        LedgerEntry.created_at <= dt,
+    ]
+    if clinic_id:
+        ledger_base_conds.append(LedgerEntry.clinic_id == clinic_id)
+
     accrued_q = await db.execute(
         select(LedgerEntry.user_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
-        .where(
-            and_(
-                LedgerEntry.user_id.in_(user_ids),
-                LedgerEntry.clinic_id == clinic_id,
-                LedgerEntry.operation_type.in_(ACCRUAL_OPS),
-                LedgerEntry.created_at >= df,
-                LedgerEntry.created_at <= dt,
-            )
-        )
+        .where(and_(*ledger_base_conds, LedgerEntry.operation_type.in_(ACCRUAL_OPS)))
         .group_by(LedgerEntry.user_id)
     )
     accrued_map: dict[uuid.UUID, Decimal] = {r[0]: Decimal(r[1] or 0) for r in accrued_q.all()}
 
-    # Выплаты (amount отрицательный → берём -SUM)
     paid_q = await db.execute(
         select(LedgerEntry.user_id, func.coalesce(func.sum(LedgerEntry.amount), 0))
-        .where(
-            and_(
-                LedgerEntry.user_id.in_(user_ids),
-                LedgerEntry.clinic_id == clinic_id,
-                LedgerEntry.operation_type == WITHDRAWAL_OP,
-                LedgerEntry.created_at >= df,
-                LedgerEntry.created_at <= dt,
-            )
-        )
+        .where(and_(*ledger_base_conds, LedgerEntry.operation_type == WITHDRAWAL_OP))
         .group_by(LedgerEntry.user_id)
     )
     paid_map: dict[uuid.UUID, Decimal] = {r[0]: -Decimal(r[1] or 0) for r in paid_q.all()}
@@ -161,22 +158,22 @@ async def mark_paid(
     db: AsyncSession = Depends(get_db),
     me: User = Depends(require_accountant),
 ) -> MarkPaidOut:
-    clinic_id = _ensure_clinic(me)
-
-    # Проверим, что сотрудник из этой же клиники
+    """Отметить выплату сотруднику. Tenant-wide: бухгалтер может выплачивать
+    сотрудникам любой клиники своей сети. clinic_id у ledger-записи берём
+    из clinic_id целевого пользователя."""
     user_q = await db.execute(select(User).where(User.id == user_id))
     target = user_q.scalar_one_or_none()
     if target is None:
         raise HTTPException(status_code=404, detail="user not found")
-    if target.clinic_id != clinic_id:
-        raise HTTPException(status_code=403, detail="user not in your clinic")
+    if target.tenant_id != me.tenant_id:
+        raise HTTPException(status_code=403, detail="user not in your tenant")
+    target_clinic_id = target.clinic_id  # может быть None для tenant-wide ролей
 
-    # Запись withdrawal: amount отрицательный
     entry = LedgerEntry(
         id=uuid.uuid4(),
         tenant_id=me.tenant_id,
         user_id=user_id,
-        clinic_id=clinic_id,
+        clinic_id=target_clinic_id,
         amount=-payload.amount,
         operation_type=WITHDRAWAL_OP,
         reference_type="payroll",
@@ -188,12 +185,12 @@ async def mark_paid(
     db.add(entry)
     await db.commit()
 
-    # Пересчёт по всей истории (без ограничения периода — это «итоговый» баланс по сотруднику)
+    # Пересчёт по всей истории по этому пользователю в этом тенанте
     accrued_q = await db.execute(
         select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(
             and_(
                 LedgerEntry.user_id == user_id,
-                LedgerEntry.clinic_id == clinic_id,
+                LedgerEntry.tenant_id == me.tenant_id,
                 LedgerEntry.operation_type.in_(ACCRUAL_OPS),
             )
         )
@@ -204,7 +201,7 @@ async def mark_paid(
         select(func.coalesce(func.sum(LedgerEntry.amount), 0)).where(
             and_(
                 LedgerEntry.user_id == user_id,
-                LedgerEntry.clinic_id == clinic_id,
+                LedgerEntry.tenant_id == me.tenant_id,
                 LedgerEntry.operation_type == WITHDRAWAL_OP,
             )
         )

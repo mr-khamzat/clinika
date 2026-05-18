@@ -58,18 +58,60 @@ async def create_inter_clinic_invoice(
 
 
 async def mark_sent(db: AsyncSession, invoice_id: uuid.UUID) -> InterClinicInvoice | None:
+    """Отправка счёта — теперь сразу в pending_approval (ждёт согласования
+    руководителя клиники-плательщика). Legacy-данные могут оставаться в 'sent'."""
     r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
     inv = r.scalar_one_or_none()
     if inv and inv.status == ICIStatus.DRAFT:
-        inv.status = ICIStatus.SENT
+        inv.status = ICIStatus.PENDING_APPROVAL
+        await db.flush()
+    return inv
+
+
+async def mark_approved(
+    db: AsyncSession,
+    invoice_id: uuid.UUID,
+    approver_id: uuid.UUID,
+    approver_name: str,
+    approver_role: str,
+) -> InterClinicInvoice | None:
+    """Согласование руководителем клиники-плательщика.
+    Снэпшотим ФИО для подписи на случай если человек уволится."""
+    r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
+    inv = r.scalar_one_or_none()
+    if inv and inv.status in (ICIStatus.PENDING_APPROVAL, ICIStatus.SENT):
+        inv.status = ICIStatus.APPROVED
+        inv.approved_by_id = approver_id
+        inv.approved_at = datetime.utcnow()
+        inv.approved_by_name = approver_name
+        inv.approved_by_role = approver_role
+        await db.flush()
+    return inv
+
+
+async def mark_rejected(
+    db: AsyncSession,
+    invoice_id: uuid.UUID,
+    reason: str | None = None,
+) -> InterClinicInvoice | None:
+    """Отклонение счёта руководителем."""
+    r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
+    inv = r.scalar_one_or_none()
+    if inv and inv.status in (ICIStatus.PENDING_APPROVAL, ICIStatus.SENT):
+        inv.status = ICIStatus.REJECTED
+        inv.rejected_at = datetime.utcnow()
+        if reason:
+            inv.rejection_reason = reason
         await db.flush()
     return inv
 
 
 async def mark_paid(db: AsyncSession, invoice_id: uuid.UUID, paid_by_id: uuid.UUID | None = None) -> InterClinicInvoice | None:
+    """Оплата счёта бухгалтером. Требует, чтобы был согласован руководителем
+    (status='approved'). Legacy 'sent'/'draft' допускаем для обратной совместимости."""
     r = await db.execute(select(InterClinicInvoice).where(InterClinicInvoice.id == invoice_id))
     inv = r.scalar_one_or_none()
-    if inv and inv.status in (ICIStatus.SENT, ICIStatus.DRAFT):
+    if inv and inv.status in (ICIStatus.APPROVED, ICIStatus.SENT, ICIStatus.DRAFT):
         inv.status = ICIStatus.PAID
         inv.paid_at = datetime.utcnow()
         await db.flush()

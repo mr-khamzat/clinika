@@ -12,10 +12,13 @@ from app.database import Base
 
 
 class ICIStatus:
-    DRAFT     = "draft"      # создан, не отправлен
-    SENT      = "sent"       # отправлен получателю
-    PAID      = "paid"       # оплачен
-    CANCELLED = "cancelled"  # отменён
+    DRAFT             = "draft"              # создан, не отправлен
+    SENT              = "sent"               # legacy — старые записи (новые сразу в pending_approval)
+    PENDING_APPROVAL  = "pending_approval"   # ждёт согласования руководителя клиники-плательщика
+    APPROVED          = "approved"           # согласован, видим бухгалтерии для оплаты
+    REJECTED          = "rejected"           # отклонён руководителем
+    PAID              = "paid"               # оплачен
+    CANCELLED         = "cancelled"          # отменён выставителем
 
 
 class ICIType:
@@ -65,6 +68,20 @@ class InterClinicInvoice(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # ── Workflow: approval руководителем (manager) клиники-плательщика ────
+    # Заполняется при PATCH /clinic-invoices/{id}/approve. ФИО снэпшотим в
+    # approved_by_name на случай если человек уволится — подпись остаётся.
+    approved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    approved_by_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    approved_by_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+    # ── Reject ────────────────────────────────────────────────────────────
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_ici_issuer_tenant", "issuer_tenant_id", "status"),

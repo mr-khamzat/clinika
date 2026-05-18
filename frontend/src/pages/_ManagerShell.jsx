@@ -34,6 +34,8 @@ export const MGR_NAV = [
   { key:'history',      label:'История',   icon:'history',      path:'/manager/history',       group:'reports' },
   { key:'settings',     label:'Настройки', icon:'tune',         path:'/manager/settings',      group:'settings' },
   { key:'invoices',     label:'Счета',     icon:'receipt_long', path:'/manager/invoices',      group:'finance' },
+  // Согласование межклиничных счетов (бонусы от других клиник сети)
+  { key:'invoice_approvals', label:'Счета на согласование', icon:'gavel', path:'/manager/invoice-approvals', group:'finance' },
   // svcfin01: финансовая модель платформы — счета платформе/сети/сотрудникам
   { key:'finance',      label:'Финансы',   icon:'account_balance', path:'/manager/finance',    group:'finance' },
   // billingledger01: журнал биллинг-операций франшизы (append-only)
