@@ -276,6 +276,20 @@ def _audience_match(ad_audience: Optional[dict], profile: dict) -> bool:
     if ad_audience.get("ltv_max") is not None:
         if profile.get("ltv", 0) > ad_audience["ltv_max"]:
             return False
+    # Retargeting: пользователь должен был кликнуть хотя бы по одной из требуемых реклам
+    req = ad_audience.get("requires_clicked_ad")
+    if req:
+        required = req if isinstance(req, list) else [req]
+        clicked = set(profile.get("clicked_ad_ids") or [])
+        if not (set(str(x) for x in required) & clicked):
+            return False
+    # Exclude уже записавшихся на конкретные услуги
+    excl = ad_audience.get("exclude_service_appointed")
+    if excl:
+        excluded = excl if isinstance(excl, list) else [excl]
+        appointed = set(profile.get("appointed_service_ids") or [])
+        if set(str(x) for x in excluded) & appointed:
+            return False
     return True
 
 
@@ -356,6 +370,46 @@ async def _load_viewer_profile(
         except Exception:
             pass
 
+
+    # === Phase B: retargeting + exclude_appointed контекст ===
+    # clicked_ad_ids за 30 дней — для requires_clicked_ad
+    try:
+        from app.models.advertising import AdEvent as _AE
+        since_clicks = datetime.utcnow() - timedelta(days=30)
+        clicked_rows = []
+        if viewer_phone:
+            # ip_hash считается per ip+date — не имеем точной связки, поэтому через user_id если найден pa
+            if pa:
+                from app.models.patient_account import PatientAccount as _PA
+                _ev = await db.execute(
+                    select(_AE.ad_id).where(
+                        _AE.event_type == "click",
+                        _AE.created_at >= since_clicks,
+                        _AE.user_id == pa.id if hasattr(pa, "id") else None,
+                    )
+                )
+                clicked_rows = list(_ev.scalars().all())
+        if clicked_rows:
+            profile["clicked_ad_ids"] = [str(x) for x in clicked_rows]
+    except Exception:
+        pass
+
+    # appointed_service_ids за 90 дней — для exclude_service_appointed
+    try:
+        from sqlalchemy import text as _text
+        if viewer_phone and tenant_id:
+            r = await db.execute(_text("""
+                SELECT DISTINCT service_id::text FROM appointments
+                WHERE tenant_id = :tid AND patient_phone = :ph
+                  AND created_at >= NOW() - INTERVAL '90 days'
+                  AND service_id IS NOT NULL
+            """), {"tid": str(tenant_id), "ph": viewer_phone})
+            ids = [row[0] for row in r.fetchall()]
+            if ids:
+                profile["appointed_service_ids"] = ids
+    except Exception:
+        pass
+
     return profile
 
 
@@ -405,18 +459,47 @@ async def list_active_ads(
             db, phone, session_token, tenant_id_for_audience
         )
 
-    # Фильтруем по расписанию + audience
+    # Праздники РФ (lazy import + кэш по дате)
+    _ru_holidays_cache = {}
+    def _is_holiday(d, country="RU"):
+        key = (country, d.year)
+        if key not in _ru_holidays_cache:
+            try:
+                import holidays as _h
+                _ru_holidays_cache[key] = _h.country_holidays(country, years=d.year)
+            except Exception:
+                _ru_holidays_cache[key] = set()
+        return d in _ru_holidays_cache[key]
+
+    # Фильтруем по расписанию + audience + approval
     result = []
     for ad in ads:
+        # Approval: показываем только одобренные (новые баннеры по умолчанию approved
+        # для обратной совместимости — см. server_default в миграции ads02_improvements)
+        if getattr(ad, "approval_status", "approved") != "approved":
+            continue
         m = ad.meta or {}
-        schedule = m.get("schedule")
-        if schedule:
+        schedule = m.get("schedule") or {}
+        days_config = schedule.get("days_config")
+        if days_config:
+            # v2: per-day hours
+            today_cfg = next((d for d in days_config if d.get("day") == now_weekday), None)
+            if not today_cfg or not today_cfg.get("enabled", True):
+                continue
+            hf = int(today_cfg.get("hour_from", 0))
+            ht = int(today_cfg.get("hour_to", 23))
+            if not (hf <= now_hour <= ht):
+                continue
+        elif schedule:
+            # v1 fallback
             hours = schedule.get("hours")
             days  = schedule.get("days")
             if hours and now_hour not in hours:
                 continue
             if days and now_weekday not in days:
                 continue
+        if schedule.get("skip_holidays") and _is_holiday(today, schedule.get("country", "RU")):
+            continue
         # Audience-фильтр: если у ad есть audience и есть профиль — проверяем match.
         # Если профиль НЕ загружен, но audience задан → пропускаем рекламу
         # (строгий режим: не показывать таргетированную рекламу анонимам)
