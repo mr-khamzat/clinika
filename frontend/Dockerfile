@@ -9,6 +9,7 @@ ENV VITE_SENTRY_ENVIRONMENT=$VITE_SENTRY_ENVIRONMENT
 COPY package.json ./
 RUN npm install
 COPY . .
+ENV NODE_OPTIONS=--max-old-space-size=6144
 RUN npm run build
 
 # Pre-gzip ассеты для nginx gzip_static — отдаются без CPU-расходов.
