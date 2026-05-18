@@ -67,6 +67,9 @@ from app.routers.public_api_v1 import router as public_api_v1_router
 from app.routers.ads import router as ads_router
 from app.routers.ads_ai import router as ads_ai_router
 from app.routers.ads_analytics import router as ads_analytics_router
+from app.routers.patient_engagement_analytics import router as engagement_analytics_router
+from app.routers.patient_engagement_segments import router as engagement_segments_router
+from app.routers.patient_engagement_crm import router as engagement_crm_router
 from app.routers.ads_workflow import router as ads_workflow_router
 from app.routers.commercial import router as commercial_router
 from app.routers.marketplace import router as marketplace_router
@@ -434,6 +437,15 @@ async def transcription_dispatch_job():
     except Exception as e:
         logging.getLogger('scheduler').error(f'transcription: {e}')
 
+
+async def engagement_suggestions_job():
+    """Каждый час: сканирует тенантов и создаёт pending suggestions для CRM-hub."""
+    try:
+        from app.jobs.engagement_suggestions_job import run_all_tenants
+        stats = await run_all_tenants()
+        logging.getLogger("scheduler").info(f"engagement_suggestions: {stats}")
+    except Exception as e:
+        logging.getLogger("scheduler").error(f"engagement_suggestions: {e}")
 
 async def ads_attribution_job():
     """Ежедневная привязка конверсий рекламы по кликам пациентов."""
@@ -1060,6 +1072,7 @@ async def lifespan(app: FastAPI):
                       id='subscription_monthly_supply', replace_existing=True)
     scheduler.add_job(ads_attribution_job, 'cron', hour=4, minute=30, id='ads_attribution', replace_existing=True)
     scheduler.add_job(ads_health_pause_job, 'cron', hour=4, minute=0, id='ads_health_pause', replace_existing=True)
+    scheduler.add_job(engagement_suggestions_job, 'cron', minute=15, id='engagement_suggestions', replace_existing=True)  # каждый час в :15
     scheduler.add_job(cleanup_staff_chat_files_job, 'interval', minutes=30, id='staff_chat_files_cleanup', replace_existing=True)
     # Workflow batch — SLA-checker + autoclose чатов пациент↔клиника (раз в минуту)
     from app.services.chat_sla_job import chat_sla_checker_job
@@ -1570,6 +1583,9 @@ app.include_router(public_api_v1_router)
 app.include_router(ads_router)
 app.include_router(ads_ai_router)
 app.include_router(ads_analytics_router)
+app.include_router(engagement_analytics_router)
+app.include_router(engagement_segments_router)
+app.include_router(engagement_crm_router)
 app.include_router(ads_workflow_router)
 app.include_router(commercial_router)
 app.include_router(marketplace_router)
