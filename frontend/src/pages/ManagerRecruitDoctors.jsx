@@ -35,6 +35,24 @@ function apiFetch(_token, path, opts = {}) {
   }))
 }
 
+// Формирует читаемый текст из FastAPI detail: может быть строкой или
+// массивом объектов {loc, msg, type} (Pydantic-валидация 422).
+function formatApiError(data) {
+  if (!data) return ''
+  const d = data.detail
+  if (!d) return ''
+  if (typeof d === 'string') return d
+  if (Array.isArray(d)) {
+    return d.map(item => {
+      if (typeof item === 'string') return item
+      const loc = Array.isArray(item.loc) ? item.loc.filter(x => x !== 'body').join('.') : ''
+      return `${loc ? loc + ': ' : ''}${item.msg || JSON.stringify(item)}`
+    }).join(' · ')
+  }
+  if (typeof d === 'object') return JSON.stringify(d)
+  return String(d)
+}
+
 // ─── Метаданные ролей: лейбл, иконка, цвет бейджа, порядок групп ────────────
 const ROLE_META = {
   manager:         { label: 'Руководитель',     icon: 'admin_panel_settings', color: '#1d4ed8', bg: 'rgba(37, 99, 235, 0.10)',  order: 1 },
@@ -176,15 +194,29 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
     if (!profile.full_name?.trim() || profile.full_name.trim().length < 2) { setError('Введите ФИО'); return }
     setLoading(true); setError('')
     try {
+      // Санитизация: пустые строки → null для числовых полей,
+      // пустые строки → undefined для остальных (не отправляем).
+      const payload = {}
+      for (const [k, v] of Object.entries(profile)) {
+        if (v === '' || v === null || v === undefined) continue
+        if (k === 'price_per_visit' || k === 'doctor_percent') {
+          const n = parseFloat(v)
+          if (!Number.isNaN(n)) payload[k] = n
+        } else {
+          payload[k] = v
+        }
+      }
+
       const r = await apiFetch(null, `/manager/recruiter-doctors/${doctor.id}/profile`, {
-        method: 'PATCH', body: JSON.stringify(profile),
+        method: 'PATCH', body: JSON.stringify(payload),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || 'Ошибка')
+      if (!r.ok) throw new Error(formatApiError(data) || 'Ошибка')
       onProfileSaved?.(data)
     } catch (e) { setError(e.message) }
     setLoading(false)
   }
+
 
   const saveCreds = async () => {
     if (!creds.username?.trim() && !creds.password?.trim()) { setError('Заполните логин или пароль'); return }
@@ -194,7 +226,7 @@ function EditModal({ doctor, onClose, onProfileSaved, onCredentialsReset }) {
         method: 'POST', body: JSON.stringify({ username: creds.username || null, password: creds.password || null }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || 'Ошибка')
+      if (!r.ok) throw new Error(formatApiError(data) || 'Ошибка')
       onCredentialsReset?.(data)
     } catch (e) { setError(e.message) }
     setLoading(false)
@@ -454,7 +486,7 @@ function AddModal({ open, clinics, onClose, onDone }) {
         method: 'POST', body: JSON.stringify(payload),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || 'Ошибка')
+      if (!r.ok) throw new Error(formatApiError(data) || 'Ошибка')
       onDone(data)
     } catch (e) { setError(e.message) }
     setLoading(false)
@@ -620,7 +652,7 @@ function DeleteStaffModal({ doctor, onClose, onDone }) {
       const r = await apiFetch(null, path, opts)
       if (!r.ok && r.status !== 204) {
         const d = await r.json().catch(() => ({}))
-        throw new Error(d.detail || 'Не удалось выполнить операцию')
+        throw new Error(formatApiError(d) || 'Не удалось выполнить операцию')
       }
       onDone()
     } catch (e) {
