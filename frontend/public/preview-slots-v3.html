@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Расписание + Карточка приёма — СклифЛаб (прототип v3)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --border: #e6e8ed;
+  --border-strong: #d4d7de;
+  --text: #1a1d23;
+  --text-soft: #5a6270;
+  --text-mute: #8b92a0;
+  --accent: #0e7490;
+  --accent-light: #e0f7fa;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 12px rgba(15,23,42,0.06);
+  --shadow-lg: 0 20px 50px rgba(15,23,42,0.15);
+}
+html, body { height: 100%; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; color: var(--text); background: var(--bg); font-size: 14px; }
+
+/* ── HEADER ───────────────────────────────────────────── */
+.header { height: 56px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 24px; box-shadow: var(--shadow-sm); z-index: 10; position: relative; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; color: var(--accent); }
+.logo .ti { font-size: 24px; }
+.header-spacer { flex: 1; }
+.header-user { display: flex; align-items: center; gap: 14px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: none; background: transparent; color: var(--text-soft); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; position: relative; }
+.icon-btn:hover { background: var(--bg); }
+.icon-btn .badge { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; border: 2px solid var(--surface); }
+.user-info { display: flex; align-items: center; gap: 10px; padding: 4px 10px 4px 4px; border-radius: 999px; cursor: pointer; }
+.user-info:hover { background: var(--bg); }
+.user-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #14b8a6, #0e7490); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+.user-name { font-size: 13px; font-weight: 500; }
+
+/* ── LAYOUT ───────────────────────────────────────────── */
+.layout { display: flex; height: calc(100vh - 56px); }
+.sidebar { width: 200px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+.nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; color: var(--text-soft); cursor: pointer; transition: all 0.15s; }
+.nav-item .ti { font-size: 18px; }
+.nav-item:hover { background: var(--bg); color: var(--text); }
+.nav-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+.sidebar-footer { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+.work-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* ── WORK HEADER ──────────────────────────────────────── */
+.work-header { height: 60px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+.crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-mute); }
+.crumbs strong { color: var(--text); font-size: 17px; font-weight: 600; }
+.crumbs .ti { font-size: 14px; }
+.btn-primary { padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: inherit; transition: all 0.15s; }
+.btn-primary:hover { background: #0a5b73; box-shadow: var(--shadow-md); }
+.btn-primary .ti { font-size: 17px; }
+.btn-secondary { padding: 8px 16px; background: transparent; color: var(--text-soft); border: 1px solid var(--border); border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: inherit; }
+.btn-secondary:hover { background: var(--bg); color: var(--text); }
+.btn-success { background: #059669; color: white; border: none; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+.btn-success:hover { background: #047857; }
+.btn-danger { background: transparent; color: #dc2626; border: 1px solid #fecaca; padding: 8px 16px; border-radius: 10px; font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+.btn-danger:hover { background: #fef2f2; }
+
+/* ── SCHEDULE LAYOUT ──────────────────────────────────── */
+.schedule { display: flex; flex: 1; min-height: 0; }
+.doctors-panel { width: 220px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+.doctors-search { padding: 12px; border-bottom: 1px solid var(--border); }
+.search-box { position: relative; }
+.search-box .ti { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-mute); font-size: 17px; }
+.search-box input { width: 100%; padding: 8px 10px 8px 34px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; }
+.search-box input:focus { border-color: var(--accent); }
+.doctors-list { flex: 1; overflow-y: auto; padding: 4px; }
+.doctor-card { padding: 10px; border-radius: 10px; cursor: pointer; transition: all 0.15s; display: flex; flex-direction: column; gap: 6px; margin-bottom: 2px; }
+.doctor-card:hover { background: var(--bg); }
+.doctor-card.active { background: var(--accent-light); }
+.doctor-card-row { display: flex; align-items: center; gap: 10px; }
+.doctor-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 12px; flex-shrink: 0; }
+.doctor-meta { flex: 1; min-width: 0; }
+.doctor-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doctor-speciality { font-size: 11px; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.doctor-load { display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+.load-bar { flex: 1; height: 4px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.load-fill { height: 100%; border-radius: 4px; }
+.load-count { font-size: 10px; color: var(--text-mute); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.slots-panel { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+.slots-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
+.slots-doctor { display: flex; align-items: center; gap: 14px; }
+.slots-doctor .doctor-avatar { width: 44px; height: 44px; font-size: 14px; }
+.slots-doctor-info { flex: 1; }
+.slots-doctor-name { font-size: 17px; font-weight: 700; }
+.slots-doctor-speciality { font-size: 13px; color: var(--text-soft); }
+.slots-metrics { display: flex; gap: 24px; }
+.metric { text-align: right; }
+.metric-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.metric-label { font-size: 11px; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+.metric.confirmed .metric-value { color: #059669; }
+.metric.pending .metric-value { color: #d97706; }
+.metric.free .metric-value { color: var(--text-mute); }
+.weekdays { display: flex; gap: 6px; padding-top: 4px; }
+.weekday { flex: 1; padding: 8px 10px; border-radius: 8px; text-align: center; cursor: pointer; border: 1px solid var(--border); background: var(--surface); transition: all 0.15s; }
+.weekday:hover { border-color: var(--accent); }
+.weekday.active { background: var(--accent); border-color: var(--accent); color: white; }
+.weekday-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.weekday.active .weekday-name { color: rgba(255,255,255,0.85); }
+.weekday-date { font-size: 15px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.weekday.today:not(.active) .weekday-date { color: var(--accent); }
+
+/* ── SLOTS GRID (4 на строку) ─────────────────────────── */
+.slots-grid { flex: 1; overflow-y: auto; padding: 16px 20px 24px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-content: start; }
+.slot-cell { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; position: relative; transition: all 0.15s; min-height: 110px; cursor: pointer; }
+.slot-cell.colored { border-left: 4px solid; }
+.slot-cell.colored:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.slot-cell.cancelled { opacity: 0.65; }
+.slot-cell.cancelled .slot-patient-name { text-decoration: line-through; color: var(--text-mute); }
+.slot-cell.completed { background: linear-gradient(180deg, rgba(5,150,105,0.04), transparent); }
+.slot-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.slot-time { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.slot-cell .status-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.slot-cell .status-chip .ti { font-size: 11px; }
+.status-confirmed { background: #ecfdf5; color: #047857; }
+.status-pending { background: #fef3c7; color: #92400e; }
+.status-new { background: #ede9fe; color: #6d28d9; }
+.status-cancelled { background: #f1f5f9; color: #64748b; }
+.status-completed { background: #dbeafe; color: #1d4ed8; }
+.slot-patient-line { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
+.slot-patient-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-patient-age { font-size: 11px; color: var(--text-mute); flex-shrink: 0; }
+.slot-service { font-size: 12px; color: var(--text-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slot-bottom { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: auto; padding-top: 4px; }
+.slot-phone { font-size: 11px; color: var(--text-mute); font-variant-numeric: tabular-nums; }
+.pay-tag { display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 4px; font-size: 10px; font-weight: 600; background: #ecfdf5; color: #047857; flex-shrink: 0; }
+.pay-tag.dms { background: #eff6ff; color: #1d4ed8; }
+.pay-tag .ti { font-size: 11px; }
+.slot-cell.has-emr::after { content: '📄'; position: absolute; bottom: 6px; right: 8px; font-size: 11px; opacity: 0.6; }
+.slot-cell.free { background: transparent; border: 1px dashed var(--border-strong); align-items: center; justify-content: center; color: var(--text-mute); min-height: 110px; }
+.slot-cell.free .slot-top { width: 100%; }
+.slot-cell.free .slot-free-text { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; justify-content: center; }
+.slot-cell.free .ti-plus { font-size: 22px; }
+.slot-cell.free:hover { border-color: var(--accent); border-style: solid; color: var(--accent); background: rgba(14,116,144,0.04); }
+.slot-cell.now { box-shadow: 0 0 0 2px #ef4444, var(--shadow-md); }
+.slot-cell.now::before { content: ''; position: absolute; top: -5px; right: -5px; width: 12px; height: 12px; border-radius: 50%; background: #ef4444; border: 2px solid var(--surface); box-shadow: 0 0 0 4px rgba(239,68,68,0.18); }
+.hour-marker { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 6px 0 2px; font-size: 11px; font-weight: 600; color: var(--text-mute); text-transform: uppercase; letter-spacing: 0.04em; }
+.hour-marker::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.hour-marker:first-child { padding-top: 0; }
+
+/* ── MODAL ────────────────────────────────────────────── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.4); backdrop-filter: blur(2px); z-index: 100; display: flex; justify-content: center; align-items: center; padding: 20px; animation: fadeIn 0.15s; }
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+.modal { width: 100%; max-width: 900px; max-height: 92vh; background: var(--surface); border-radius: 18px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; animation: slideUp 0.2s cubic-bezier(.22,1,.36,1); }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+.modal-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+.modal-header .doctor-avatar { width: 48px; height: 48px; font-size: 14px; }
+.modal-header-info { flex: 1; min-width: 0; }
+.modal-header-name { font-size: 17px; font-weight: 700; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.modal-header-name .age { font-size: 13px; font-weight: 500; color: var(--text-mute); }
+.modal-header-meta { font-size: 13px; color: var(--text-soft); margin-top: 3px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.modal-header-meta .ti { font-size: 14px; vertical-align: -2px; }
+.modal-close { width: 38px; height: 38px; border-radius: 10px; background: transparent; border: none; cursor: pointer; color: var(--text-mute); font-size: 22px; display: flex; align-items: center; justify-content: center; }
+.modal-close:hover { background: var(--bg); color: var(--text); }
+.modal-tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--border); }
+.tab { padding: 12px 14px; background: transparent; border: none; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-soft); cursor: pointer; display: flex; align-items: center; gap: 6px; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+.tab .ti { font-size: 17px; }
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab .badge-count { background: var(--bg); color: var(--text-mute); padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.tab.active .badge-count { background: var(--accent-light); color: var(--accent); }
+.modal-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.modal-footer .group { display: flex; gap: 8px; }
+
+/* ── Tab content ──────────────────────────────────────── */
+.field-group { display: flex; flex-direction: column; gap: 18px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-soft); display: flex; align-items: center; gap: 6px; }
+.field-label .ti { font-size: 14px; }
+.field textarea, .field input[type="text"] { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 90px; line-height: 1.5; outline: none; transition: border 0.15s; background: var(--surface); }
+.field textarea:focus, .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14,116,144,0.12); }
+.field .hint { font-size: 11.5px; color: var(--text-mute); }
+
+/* Files */
+.dropzone { border: 2px dashed var(--border-strong); border-radius: 12px; padding: 24px; text-align: center; color: var(--text-mute); cursor: pointer; transition: all 0.15s; background: var(--bg); }
+.dropzone:hover { border-color: var(--accent); color: var(--accent); background: rgba(14,116,144,0.04); }
+.dropzone .ti { font-size: 32px; display: block; margin-bottom: 8px; }
+.dropzone-title { font-size: 14px; font-weight: 600; }
+.dropzone-hint { font-size: 12px; margin-top: 4px; }
+.files-list { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.file-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.file-icon { width: 36px; height: 36px; border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--accent); flex-shrink: 0; }
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-meta { font-size: 11.5px; color: var(--text-mute); margin-top: 2px; }
+.file-actions { display: flex; gap: 4px; }
+.icon-action { width: 30px; height: 30px; border-radius: 7px; background: transparent; border: none; color: var(--text-mute); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 17px; }
+.icon-action:hover { background: var(--bg); color: var(--text); }
+.icon-action.danger:hover { background: #fef2f2; color: #dc2626; }
+
+/* Направления */
+.referrals-list { display: flex; flex-direction: column; gap: 8px; }
+.referral-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.referral-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-light); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.referral-info { flex: 1; min-width: 0; }
+.referral-title { font-size: 13.5px; font-weight: 600; }
+.referral-target { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
+.referral-status { font-size: 11px; padding: 3px 8px; border-radius: 999px; font-weight: 600; }
+.add-referral-btn { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: 10px; background: transparent; cursor: pointer; color: var(--text-mute); font-family: inherit; font-size: 13.5px; font-weight: 600; width: 100%; justify-content: center; transition: all 0.15s; }
+.add-referral-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(14,116,144,0.04); }
+
+/* История */
+.timeline { display: flex; flex-direction: column; gap: 14px; }
+.timeline-item { display: flex; gap: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.timeline-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; }
+.timeline-content { flex: 1; min-width: 0; }
+.timeline-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.timeline-date { font-size: 13.5px; font-weight: 700; color: var(--text); }
+.timeline-clinic { font-size: 11.5px; color: var(--text-mute); margin-left: 4px; font-weight: 500; }
+.timeline-doctor { font-size: 12.5px; color: var(--text-soft); margin-top: 4px; }
+.timeline-service { font-size: 12.5px; color: var(--text); margin-top: 2px; font-weight: 500; }
+.timeline-conclusion { font-size: 12px; color: var(--text-soft); margin-top: 6px; padding: 8px 10px; background: var(--bg); border-radius: 8px; line-height: 1.5; }
+
+@media (max-width: 1280px) { .slots-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 980px) { .slots-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .doctors-panel { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+  .doctors-list { display: flex; overflow-x: auto; overflow-y: hidden; padding: 12px; gap: 8px; }
+  .doctor-card { flex-shrink: 0; min-width: 200px; }
+  .schedule { flex-direction: column; }
+  .slots-grid { grid-template-columns: 1fr; }
+  .work-header { padding: 0 14px; }
+  .slots-metrics { flex-wrap: wrap; gap: 14px; }
+  .modal { max-height: 100vh; border-radius: 0; }
+  .modal-overlay { padding: 0; }
+  .modal-tabs { padding: 0 14px; overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo"><i class="ti ti-medical-cross-circle"></i>СклифЛаб</div>
+  <div class="header-spacer"></div>
+  <div class="header-user">
+    <button class="icon-btn" title="Поиск"><i class="ti ti-search"></i></button>
+    <button class="icon-btn" title="Уведомления"><i class="ti ti-bell"></i><span class="badge"></span></button>
+    <div class="user-info">
+      <div class="user-avatar">КМ</div>
+      <div class="user-name">д-р Куракаева М.А.</div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="nav-item active"><i class="ti ti-calendar-event"></i>Расписание</div>
+    <div class="nav-item"><i class="ti ti-users"></i>Пациенты</div>
+    <div class="nav-item"><i class="ti ti-files"></i>Документы</div>
+    <div class="nav-item"><i class="ti ti-chart-bar"></i>Аналитика</div>
+    <div class="nav-item"><i class="ti ti-settings"></i>Настройки</div>
+    <div class="sidebar-footer">
+      <div class="nav-item"><i class="ti ti-logout"></i>Выйти</div>
+    </div>
+  </aside>
+
+  <main class="work-area">
+    <div class="work-header">
+      <div class="crumbs">Менеджер<i class="ti ti-chevron-right"></i><strong>Расписание</strong></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn-secondary"><i class="ti ti-printer"></i>Печать</button>
+        <button class="btn-primary"><i class="ti ti-plus"></i>Новая запись</button>
+      </div>
+    </div>
+
+    <section class="schedule">
+      <aside class="doctors-panel">
+        <div class="doctors-search">
+          <div class="search-box">
+            <i class="ti ti-search"></i>
+            <input type="search" placeholder="Найти врача…" id="doctorSearch">
+          </div>
+        </div>
+        <div class="doctors-list" id="doctorsList"></div>
+      </aside>
+
+      <section class="slots-panel">
+        <header class="slots-header">
+          <div class="slots-doctor">
+            <div class="doctor-avatar" id="hdrDocAvatar"></div>
+            <div class="slots-doctor-info">
+              <div class="slots-doctor-name" id="hdrDocName"></div>
+              <div class="slots-doctor-speciality" id="hdrDocSpec"></div>
+            </div>
+            <div class="slots-metrics" id="hdrMetrics"></div>
+          </div>
+          <div class="weekdays" id="weekdays"></div>
+        </header>
+        <div class="slots-grid" id="slotsGrid"></div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<!-- ── MODAL: Карточка приёма ─────────────────────────── -->
+<div class="modal-overlay" id="modalRoot" style="display:none">
+  <div class="modal">
+    <header class="modal-header">
+      <div class="doctor-avatar" id="modalDocAvatar"></div>
+      <div class="modal-header-info">
+        <div class="modal-header-name">
+          <span id="modalPatientName"></span>
+          <span class="age" id="modalPatientAge"></span>
+          <span class="status-chip" id="modalStatusChip"></span>
+        </div>
+        <div class="modal-header-meta">
+          <span><i class="ti ti-calendar"></i> <span id="modalDate"></span></span>
+          <span><i class="ti ti-clock"></i> <span id="modalTime"></span></span>
+          <span><i class="ti ti-stethoscope"></i> <span id="modalDoctor"></span></span>
+          <span><i class="ti ti-medical-cross"></i> <span id="modalService"></span></span>
+          <span><i class="ti ti-phone"></i> <span id="modalPhone"></span></span>
+        </div>
+      </div>
+      <button class="modal-close" id="modalClose"><i class="ti ti-x"></i></button>
+    </header>
+
+    <nav class="modal-tabs">
+      <button class="tab active" data-tab="outcome"><i class="ti ti-clipboard-text"></i>Заключение</button>
+      <button class="tab" data-tab="files"><i class="ti ti-paperclip"></i>Файлы<span class="badge-count" id="filesBadge">3</span></button>
+      <button class="tab" data-tab="referrals"><i class="ti ti-route"></i>Направления<span class="badge-count" id="refsBadge">2</span></button>
+      <button class="tab" data-tab="history"><i class="ti ti-history"></i>История<span class="badge-count" id="histBadge">5</span></button>
+    </nav>
+
+    <div class="modal-body" id="modalBody">
+      <!-- Контент вкладок подставляется JS -->
+    </div>
+
+    <footer class="modal-footer">
+      <div class="group">
+        <button class="btn-danger"><i class="ti ti-x"></i>Отменить приём</button>
+      </div>
+      <div class="group">
+        <button class="btn-secondary" id="modalSaveDraft"><i class="ti ti-device-floppy"></i>Сохранить черновик</button>
+        <button class="btn-success" id="modalComplete"><i class="ti ti-circle-check"></i>Завершить приём</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script>
+const DOCTORS = [
+  { id: 'd1', name: 'Куракаева Медина Ахмадовна', short: 'КМ', speciality: 'ЛОР-врач', color: '#0e7490' },
+  { id: 'd2', name: 'Хачукаева Лизана Абдул-Хамидовна', short: 'ХЛ', speciality: 'Гинеколог', color: '#be185d' },
+  { id: 'd3', name: 'Абдулкаримова Хава Арбиевна', short: 'АХ', speciality: 'Эндокринолог', color: '#7c3aed' },
+  { id: 'd4', name: 'Джабраилова Карина Аднановна', short: 'ДК', speciality: 'Врач УЗД', color: '#15803d' },
+  { id: 'd5', name: 'Терхоева Эльза Булатовна', short: 'ТЭ', speciality: 'Косметолог', color: '#c2410c' },
+]
+const DOC_BY_ID = Object.fromEntries(DOCTORS.map(d => [d.id, d]))
+
+const PAY_CASH = { label: 'Нал', icon: 'ti-cash', cls: '' }
+const PAY_DMS  = { label: 'ДМС', icon: 'ti-shield-check', cls: 'dms' }
+const STATUSES = {
+  confirmed: { label: 'Подтв.',  cls: 'status-confirmed', icon: 'ti-circle-check' },
+  pending:   { label: 'Ожидает', cls: 'status-pending',   icon: 'ti-clock' },
+  new:       { label: 'Новый',   cls: 'status-new',       icon: 'ti-sparkles' },
+  cancelled: { label: 'Отменён', cls: 'status-cancelled', icon: 'ti-x' },
+  completed: { label: 'Выполнен',cls: 'status-completed', icon: 'ti-circle-check-filled' },
+}
+
+function buildSlots(start, end) {
+  const out = []
+  let [h, m] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  while (h < eh || (h === eh && m < em)) {
+    out.push(`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`)
+    m += 30; if (m >= 60) { m -= 60; h += 1 }
+  }
+  return out
+}
+
+// Подробные данные приёма (для модалки) + флаг has_emr (есть ли заключение)
+const APPOINTMENTS = {
+  d1: [
+    { id:'a1',  time:'09:00', patient:'Айшат Висаитова',    age:32, service:'Промывание лакун',      pay:PAY_CASH, status:'completed', phone:'+7 928 003 75 47', has_emr:true,  emr:{ diagnosis:'J35.0 Хронический тонзиллит', complaints:'Боли в горле, температура 37.2, неприятный запах изо рта 4-й день', exam:'Зев гиперемирован, миндалины увеличены II ст., казеозные пробки', conclusion:'Обострение хронического тонзиллита. Проведено промывание лакун раствором фурацилина. Динамика положительная.', recommendations:'Полоскания горла 3 р/день (отвар ромашки). Контрольный приём через 7 дней. При повышении температуры — антибиотики (по результатам мазка из зева).' } },
+    { id:'a2',  time:'09:30', patient:'Беслан Ахмадов',     age:56, service:'Первичный приём',       pay:PAY_DMS,  status:'confirmed', phone:'+7 928 412 11 03', has_emr:false },
+    { id:'a3',  time:'10:30', patient:'Иса Хамзатов',       age:45, service:'Эндоскопия носоглотки', pay:PAY_CASH, status:'pending',   phone:'+7 962 988 17 24', has_emr:false },
+    { id:'a4',  time:'11:30', patient:'Зара Магомедова',    age:33, service:'Удаление серной пробки',pay:PAY_CASH, status:'new',       phone:'+7 928 654 22 88', has_emr:false },
+    { id:'a5',  time:'12:30', patient:'Хеда Алиева',        age:29, service:'Контрольный приём',    pay:PAY_DMS,  status:'cancelled', phone:'+7 928 401 92 17', has_emr:false },
+    { id:'a6',  time:'13:30', patient:'Магомед Сулейманов', age:42, service:'Аудиометрия',           pay:PAY_CASH, status:'confirmed', phone:'+7 938 211 04 56', has_emr:false },
+    { id:'a7',  time:'15:00', patient:'Седа Эдиева',        age:27, service:'Первичный приём',      pay:PAY_CASH, status:'pending',   phone:'+7 928 188 02 44', has_emr:false },
+    { id:'a8',  time:'16:00', patient:'Лариса Бекмурзаева', age:36, service:'Промывание лакун',     pay:PAY_DMS,  status:'confirmed', phone:'+7 938 977 14 02', has_emr:false },
+  ],
+  d2: [
+    { id:'a9',  time:'09:30', patient:'Малика Дудаева',     age:28, service:'Первичный приём',  pay:PAY_DMS,  status:'confirmed', phone:'+7 928 730 41 09', has_emr:false },
+    { id:'a10', time:'10:00', patient:'Мадина Гайтаева',    age:24, service:'УЗИ малого таза',  pay:PAY_CASH, status:'confirmed', phone:'+7 962 401 55 17', has_emr:false },
+    { id:'a11', time:'11:00', patient:'Седа Эдиева',        age:27, service:'Кольпоскопия',     pay:PAY_CASH, status:'pending',   phone:'+7 928 188 02 44', has_emr:false },
+    { id:'a12', time:'12:00', patient:'Зайнаб Эльмурзаева', age:39, service:'Постановка ВМС',   pay:PAY_CASH, status:'new',       phone:'+7 928 660 33 51', has_emr:false },
+    { id:'a13', time:'13:30', patient:'Лариса Бекмурзаева', age:36, service:'Контрольный приём',pay:PAY_DMS,  status:'confirmed', phone:'+7 938 977 14 02', has_emr:false },
+  ],
+  d3: [
+    { id:'a14', time:'09:00', patient:'Иса Хамзатов',       age:45, service:'Контроль СД',          pay:PAY_DMS,  status:'completed', phone:'+7 962 988 17 24', has_emr:true,  emr:{ diagnosis:'E11.9 Сахарный диабет 2 типа', complaints:'Сухость во рту по утрам, слабость, жажда', exam:'Гликемия натощак 8.4 ммоль/л, ИМТ 31, АД 140/90', conclusion:'Декомпенсация СД 2 типа. Рекомендована коррекция терапии: метформин 1000 мг 2 р/д, гликлазид 60 мг 1 р/д. Диета №9.', recommendations:'Контроль гликемии 4 р/д, дневник самоконтроля. ОАК + биохимия через 2 нед. Консультация офтальмолога (глазное дно).' } },
+    { id:'a15', time:'10:00', patient:'Беслан Ахмадов',     age:56, service:'Первичный приём',      pay:PAY_CASH, status:'pending',   phone:'+7 928 412 11 03', has_emr:false },
+    { id:'a16', time:'11:00', patient:'Хеда Алиева',        age:29, service:'Гормональный профиль', pay:PAY_DMS,  status:'confirmed', phone:'+7 928 401 92 17', has_emr:false },
+    { id:'a17', time:'12:30', patient:'Магомед Сулейманов', age:42, service:'УЗИ щитов. железы',   pay:PAY_CASH, status:'new',       phone:'+7 938 211 04 56', has_emr:false },
+    { id:'a18', time:'14:00', patient:'Малика Дудаева',     age:28, service:'Первичный приём',     pay:PAY_DMS,  status:'confirmed', phone:'+7 928 730 41 09', has_emr:false },
+  ],
+  d4: [
+    { id:'a19', time:'09:00', patient:'Ваха Идрисов',       age:51, service:'УЗИ брюшной полости', pay:PAY_DMS,  status:'completed', phone:'+7 928 845 90 11', has_emr:true, emr:{ diagnosis:'K80.2 ЖКБ, стадия камня', complaints:'Боли в правом подреберье после жирной пищи, горечь во рту', exam:'Печень не увеличена. В желчном пузыре — конкремент 8 мм с акустической тенью, стенка 3 мм. Холедох 5 мм.', conclusion:'Желчнокаменная болезнь. Признаки хронического холецистита.', recommendations:'Консультация хирурга. Диета №5. Контрольное УЗИ через 6 месяцев или раньше при болевом синдроме.' } },
+    { id:'a20', time:'09:30', patient:'Зара Магомедова',    age:33, service:'УЗИ суставов',        pay:PAY_CASH, status:'confirmed', phone:'+7 928 654 22 88', has_emr:false },
+    { id:'a21', time:'10:30', patient:'Седа Эдиева',        age:27, service:'УЗИ молочн. желез',   pay:PAY_DMS,  status:'pending',   phone:'+7 928 188 02 44', has_emr:false },
+    { id:'a22', time:'11:30', patient:'Лариса Бекмурзаева', age:36, service:'УЗИ малого таза',     pay:PAY_CASH, status:'new',       phone:'+7 938 977 14 02', has_emr:false },
+    { id:'a23', time:'12:30', patient:'Зайнаб Эльмурзаева', age:39, service:'УЗИ щитов. железы',   pay:PAY_DMS,  status:'confirmed', phone:'+7 928 660 33 51', has_emr:false },
+  ],
+  d5: [
+    { id:'a24', time:'10:00', patient:'Малика Дудаева',     age:28, service:'Биоревитализация',  pay:PAY_CASH, status:'confirmed', phone:'+7 928 730 41 09', has_emr:false },
+    { id:'a25', time:'11:00', patient:'Айшат Висаитова',    age:32, service:'Чистка лица',        pay:PAY_CASH, status:'pending',   phone:'+7 928 003 75 47', has_emr:false },
+    { id:'a26', time:'12:00', patient:'Мадина Гайтаева',    age:24, service:'Мезотерапия',        pay:PAY_CASH, status:'new',       phone:'+7 962 401 55 17', has_emr:false },
+    { id:'a27', time:'13:00', patient:'Зара Магомедова',    age:33, service:'Контурная пластика', pay:PAY_CASH, status:'confirmed', phone:'+7 928 654 22 88', has_emr:false },
+  ],
+}
+
+// История пациента (по телефону) — все его прошлые приёмы во всей сети
+const PATIENT_HISTORY = {
+  '+7 928 003 75 47': [ // Айшат Висаитова
+    { date:'18 апр 2026', clinic:'СклифЛаб', doctor:'Куракаева М.А. · ЛОР', service:'Первичный приём', conclusion:'Острый ринит. Назначены сосудосуживающие капли (нафтизин 0.05% 3 р/д), увлажнение слизистой.' },
+    { date:'02 фев 2026', clinic:'АРЦ', doctor:'Эдиев М.А. · Терапевт', service:'Контрольный приём', conclusion:'ОРВИ. Динамика положительная. Температура нормализовалась.' },
+    { date:'15 ноя 2025', clinic:'СклифЛаб', doctor:'Терхоева Э.Б. · Косметолог', service:'Биоревитализация', conclusion:'Гиалуроновая кислота 2.0 мл, зона лица. Реакции нет.' },
+    { date:'04 окт 2025', clinic:'СклифЛаб', doctor:'Хачукаева Л.А. · Гинеколог', service:'Ежегодный осмотр', conclusion:'Жалоб нет. УЗИ ОМТ — без особенностей.' },
+    { date:'12 авг 2025', clinic:'КС — НЕОМЕД', doctor:'Сулейманова А.К. · Терапевт', service:'Первичный приём', conclusion:'Простудное заболевание. Симптоматическое лечение.' },
+  ],
+  '+7 962 988 17 24': [ // Иса Хамзатов
+    { date:'18 апр 2026', clinic:'СклифЛаб', doctor:'Абдулкаримова Х.А. · Эндокринолог', service:'Контроль СД', conclusion:'Декомпенсация СД 2 типа. Коррекция терапии.' },
+    { date:'05 мар 2026', clinic:'АРЦ', doctor:'Эдиев М.А. · Терапевт', service:'Профосмотр', conclusion:'Гипертония 2 ст. Назначен периндоприл 5 мг утром.' },
+    { date:'20 янв 2026', clinic:'СклифЛаб', doctor:'Джабраилова К.А. · УЗД', service:'УЗИ брюшной полости', conclusion:'Признаки стеатоза печени. Рекомендована диета.' },
+  ],
+  '+7 928 845 90 11': [ // Ваха Идрисов
+    { date:'19 мая 2026', clinic:'СклифЛаб', doctor:'Джабраилова К.А. · УЗД', service:'УЗИ брюшной полости', conclusion:'ЖКБ. Признаки хр. холецистита.' },
+    { date:'12 мар 2026', clinic:'АРЦ', doctor:'Ахматова Т.С. · Гастроэнтеролог', service:'Первичный приём', conclusion:'Хронический гастрит, обострение. Назначено: омепразол 20мг утром, диета №1.' },
+  ],
+}
+
+const FILES_BY_APT = {
+  'a1': [
+    { name:'Рентген придаточных пазух носа.jpg', size:'1.4 МБ', type:'image', uploaded:'18 апр 2026' },
+    { name:'Мазок из зева — результат.pdf',       size:'128 КБ', type:'pdf',   uploaded:'18 апр 2026' },
+    { name:'ОАК 18.04.pdf',                       size:'92 КБ',  type:'pdf',   uploaded:'18 апр 2026' },
+  ],
+  'a14': [
+    { name:'ОАК + биохимия.pdf',     size:'180 КБ', type:'pdf', uploaded:'18 апр 2026' },
+    { name:'Гликемический профиль.xlsx', size:'24 КБ', type:'xls', uploaded:'18 апр 2026' },
+  ],
+  'a19': [
+    { name:'УЗИ — снимок 1.jpg', size:'2.1 МБ', type:'image', uploaded:'19 мая 2026' },
+    { name:'УЗИ — снимок 2.jpg', size:'1.9 МБ', type:'image', uploaded:'19 мая 2026' },
+    { name:'Заключение УЗД.pdf', size:'74 КБ',  type:'pdf',   uploaded:'19 мая 2026' },
+  ],
+}
+
+const REFERRALS_BY_APT = {
+  'a1': [
+    { type:'doctor', label:'К врачу', target:'Терапевт · контроль температуры', status:'scheduled', statusLabel:'Записан' },
+    { type:'lab',    label:'Анализы', target:'Мазок из зева на чувствительность к АБ', status:'done', statusLabel:'Выполнено' },
+  ],
+  'a14': [
+    { type:'doctor', label:'К врачу', target:'Офтальмолог · глазное дно', status:'pending', statusLabel:'Ожидает записи' },
+    { type:'lab',    label:'Анализы', target:'ОАК + биохимия (через 2 нед)', status:'pending', statusLabel:'Ожидает записи' },
+  ],
+  'a19': [
+    { type:'doctor',    label:'К врачу',   target:'Хирург · консультация', status:'pending', statusLabel:'Ожидает записи' },
+    { type:'procedure', label:'Процедура', target:'Контрольное УЗИ через 6 мес', status:'pending', statusLabel:'Запланировано' },
+  ],
+}
+
+const NOW_TIME = '10:30'
+let activeDoctorId = 'd1'
+let activeDay = 'tue'
+let searchQuery = ''
+let activeTab = 'outcome'
+let activeApt = null
+
+function renderDoctors() {
+  const list = document.getElementById('doctorsList')
+  const q = searchQuery.toLowerCase().trim()
+  const filtered = DOCTORS.filter(d => !q || d.name.toLowerCase().includes(q) || d.speciality.toLowerCase().includes(q))
+  list.innerHTML = filtered.map(d => {
+    const appts = APPOINTMENTS[d.id] || []
+    const slotsCount = buildSlots('09:00', '18:00').length
+    const loadPct = Math.min(100, Math.round(appts.length / slotsCount * 100))
+    return `
+      <div class="doctor-card ${d.id === activeDoctorId ? 'active' : ''}" data-id="${d.id}">
+        <div class="doctor-card-row">
+          <div class="doctor-avatar" style="background:${d.color}">${d.short}</div>
+          <div class="doctor-meta">
+            <div class="doctor-name">${d.name}</div>
+            <div class="doctor-speciality">${d.speciality}</div>
+          </div>
+        </div>
+        <div class="doctor-load">
+          <div class="load-bar"><div class="load-fill" style="width:${loadPct}%;background:${d.color}"></div></div>
+          <div class="load-count">${appts.length}/${slotsCount}</div>
+        </div>
+      </div>
+    `
+  }).join('')
+  list.querySelectorAll('.doctor-card').forEach(el => {
+    el.addEventListener('click', () => { activeDoctorId = el.dataset.id; render() })
+  })
+}
+
+function renderHeader() {
+  const d = DOCTORS.find(x => x.id === activeDoctorId)
+  document.getElementById('hdrDocAvatar').textContent = d.short
+  document.getElementById('hdrDocAvatar').style.background = d.color
+  document.getElementById('hdrDocName').textContent = d.name
+  document.getElementById('hdrDocSpec').textContent = d.speciality
+  const appts = APPOINTMENTS[d.id] || []
+  const slotsCount = buildSlots('09:00', '18:00').length
+  const confirmed = appts.filter(a => a.status === 'confirmed' || a.status === 'completed').length
+  const pending = appts.filter(a => a.status === 'pending' || a.status === 'new').length
+  const free = slotsCount - appts.length
+  document.getElementById('hdrMetrics').innerHTML = `
+    <div class="metric"><div class="metric-value">${appts.length}</div><div class="metric-label">Всего</div></div>
+    <div class="metric confirmed"><div class="metric-value">${confirmed}</div><div class="metric-label">Подтв.</div></div>
+    <div class="metric pending"><div class="metric-value">${pending}</div><div class="metric-label">Ожидают</div></div>
+    <div class="metric free"><div class="metric-value">${free}</div><div class="metric-label">Свободно</div></div>
+  `
+}
+
+function renderWeekdays() {
+  const days = [
+    { key:'mon', name:'Пн', date:18 },
+    { key:'tue', name:'Вт', date:19, today:true },
+    { key:'wed', name:'Ср', date:20 },
+    { key:'thu', name:'Чт', date:21 },
+    { key:'fri', name:'Пт', date:22 },
+    { key:'sat', name:'Сб', date:23 },
+    { key:'sun', name:'Вс', date:24 },
+  ]
+  document.getElementById('weekdays').innerHTML = days.map(d => `
+    <div class="weekday ${d.key === activeDay ? 'active' : ''} ${d.today ? 'today' : ''}" data-day="${d.key}">
+      <div class="weekday-name">${d.name}</div>
+      <div class="weekday-date">${d.date}</div>
+    </div>
+  `).join('')
+  document.querySelectorAll('.weekday').forEach(el => {
+    el.addEventListener('click', () => { activeDay = el.dataset.day; renderWeekdays() })
+  })
+}
+
+function renderSlots() {
+  const d = DOCTORS.find(x => x.id === activeDoctorId)
+  const slots = buildSlots('09:00', '18:00')
+  const appts = APPOINTMENTS[d.id] || []
+  const byTime = Object.fromEntries(appts.map(a => [a.time, a]))
+  const grid = document.getElementById('slotsGrid')
+  let html = ''; let lastHour = -1
+  slots.forEach(t => {
+    const h = parseInt(t.slice(0, 2), 10)
+    if (h !== lastHour && h % 2 === 0) {
+      html += `<div class="hour-marker">${String(h).padStart(2,'0')}:00 — ${String(h+2).padStart(2,'0')}:00</div>`
+      lastHour = h
+    }
+    const a = byTime[t]; const isNow = t === NOW_TIME
+    if (a) {
+      const st = STATUSES[a.status]
+      const isCancelled = a.status === 'cancelled'
+      const borderStyle = isCancelled ? '' : `border-left-color:${d.color}`
+      html += `
+        <div class="slot-cell colored ${isCancelled ? 'cancelled' : ''} ${a.status === 'completed' ? 'completed' : ''} ${a.has_emr ? 'has-emr' : ''} ${isNow ? 'now' : ''}" style="${borderStyle}" data-apt="${a.id}">
+          <div class="slot-top">
+            <span class="slot-time">${t}</span>
+            <span class="status-chip ${st.cls}"><i class="ti ${st.icon}"></i>${st.label}</span>
+          </div>
+          <div class="slot-patient-line">
+            <span class="slot-patient-name">${a.patient}</span>
+            <span class="slot-patient-age">${a.age}л</span>
+          </div>
+          <div class="slot-service">${a.service}</div>
+          <div class="slot-bottom">
+            <span class="slot-phone">${a.phone}</span>
+            <span class="pay-tag ${a.pay.cls}"><i class="ti ${a.pay.icon}"></i>${a.pay.label}</span>
+          </div>
+        </div>
+      `
+    } else {
+      html += `
+        <div class="slot-cell free ${isNow ? 'now' : ''}">
+          <div class="slot-top"><span class="slot-time">${t}</span></div>
+          <div class="slot-free-text"><i class="ti ti-plus"></i><span>Свободно</span></div>
+        </div>
+      `
+    }
+  })
+  grid.innerHTML = html
+  grid.querySelectorAll('.slot-cell[data-apt]').forEach(el => {
+    el.addEventListener('click', () => openModal(el.dataset.apt))
+  })
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+function findApt(id) {
+  for (const [docId, list] of Object.entries(APPOINTMENTS)) {
+    const a = list.find(x => x.id === id)
+    if (a) return { apt: a, doctorId: docId }
+  }
+  return null
+}
+
+function openModal(id) {
+  const found = findApt(id); if (!found) return
+  activeApt = found
+  activeTab = 'outcome'
+  const a = found.apt
+  const doc = DOC_BY_ID[found.doctorId]
+  document.getElementById('modalDocAvatar').textContent = doc.short
+  document.getElementById('modalDocAvatar').style.background = doc.color
+  document.getElementById('modalPatientName').textContent = a.patient
+  document.getElementById('modalPatientAge').textContent = `${a.age} лет`
+  const st = STATUSES[a.status]
+  document.getElementById('modalStatusChip').className = `status-chip ${st.cls}`
+  document.getElementById('modalStatusChip').innerHTML = `<i class="ti ${st.icon}"></i>${st.label}`
+  document.getElementById('modalDate').textContent = '19 мая 2026'
+  document.getElementById('modalTime').textContent = a.time
+  document.getElementById('modalDoctor').textContent = `${doc.name.split(' ').slice(0,2).join(' ')} · ${doc.speciality}`
+  document.getElementById('modalService').textContent = a.service
+  document.getElementById('modalPhone').textContent = a.phone
+
+  document.getElementById('filesBadge').textContent = (FILES_BY_APT[a.id] || []).length
+  document.getElementById('refsBadge').textContent = (REFERRALS_BY_APT[a.id] || []).length
+  document.getElementById('histBadge').textContent = (PATIENT_HISTORY[a.phone] || []).length
+
+  // Badge color по статусу: завершен = синий
+  if (a.status === 'completed') {
+    document.getElementById('modalComplete').innerHTML = '<i class="ti ti-rotate"></i>Открыть для правки'
+  } else {
+    document.getElementById('modalComplete').innerHTML = '<i class="ti ti-circle-check"></i>Завершить приём'
+  }
+
+  document.querySelectorAll('.modal-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab))
+  renderTab()
+  document.getElementById('modalRoot').style.display = 'flex'
+}
+
+function closeModal() {
+  document.getElementById('modalRoot').style.display = 'none'
+  activeApt = null
+}
+
+function renderTab() {
+  const a = activeApt.apt
+  const body = document.getElementById('modalBody')
+  if (activeTab === 'outcome') {
+    const emr = a.emr || { diagnosis:'', complaints:'', exam:'', conclusion:'', recommendations:'' }
+    body.innerHTML = `
+      <div class="field-group">
+        <div class="field">
+          <label class="field-label"><i class="ti ti-message-circle"></i>Жалобы пациента</label>
+          <textarea placeholder="Что беспокоит, как давно, что усиливает/облегчает…">${emr.complaints || ''}</textarea>
+        </div>
+        <div class="field">
+          <label class="field-label"><i class="ti ti-stethoscope"></i>Осмотр / объективный статус</label>
+          <textarea placeholder="Данные объективного осмотра, измерений, инструментальных данных…">${emr.exam || ''}</textarea>
+        </div>
+        <div class="field">
+          <label class="field-label"><i class="ti ti-clipboard-check"></i>Диагноз (МКБ-10)</label>
+          <input type="text" placeholder="Например: J35.0 Хронический тонзиллит" value="${emr.diagnosis || ''}">
+          <div class="hint">Можно вводить вручную или выбрать из справочника. AI-помощник предложит варианты на основе жалоб и осмотра.</div>
+        </div>
+        <div class="field">
+          <label class="field-label"><i class="ti ti-notes"></i>Заключение и план</label>
+          <textarea placeholder="Заключение врача, проведённое лечение, динамика…" style="min-height:130px">${emr.conclusion || ''}</textarea>
+        </div>
+        <div class="field">
+          <label class="field-label"><i class="ti ti-medical-cross"></i>Рекомендации пациенту</label>
+          <textarea placeholder="Лечение, режим, диета, контрольный приём, на что обратить внимание…" style="min-height:110px">${emr.recommendations || ''}</textarea>
+        </div>
+      </div>
+    `
+  } else if (activeTab === 'files') {
+    const files = FILES_BY_APT[a.id] || []
+    body.innerHTML = `
+      <div class="dropzone">
+        <i class="ti ti-cloud-upload"></i>
+        <div class="dropzone-title">Перетащите файлы сюда или нажмите для выбора</div>
+        <div class="dropzone-hint">Рентген, УЗИ, анализы, заключения · PDF / JPG / PNG / DOC · до 25 МБ каждый</div>
+      </div>
+      <div class="files-list">
+        ${files.length === 0 ? '<div class="hint" style="text-align:center;padding:16px;color:var(--text-mute)">Файлов пока нет</div>' : files.map(f => `
+          <div class="file-row">
+            <div class="file-icon"><i class="ti ${f.type === 'image' ? 'ti-photo' : f.type === 'pdf' ? 'ti-file-text' : 'ti-file'}"></i></div>
+            <div class="file-info">
+              <div class="file-name">${f.name}</div>
+              <div class="file-meta">${f.size} · загружено ${f.uploaded}</div>
+            </div>
+            <div class="file-actions">
+              <button class="icon-action" title="Скачать"><i class="ti ti-download"></i></button>
+              <button class="icon-action" title="Открыть"><i class="ti ti-eye"></i></button>
+              <button class="icon-action danger" title="Удалить"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `
+  } else if (activeTab === 'referrals') {
+    const refs = REFERRALS_BY_APT[a.id] || []
+    body.innerHTML = `
+      <div class="referrals-list">
+        ${refs.map(r => {
+          const icons = { doctor:'ti-stethoscope', ct:'ti-monitor-heart', mri:'ti-monitor-heart', xray:'ti-radioactive', lab:'ti-test-pipe', procedure:'ti-medical-services' }
+          const statusCls = r.status === 'done' ? 'status-completed' : r.status === 'scheduled' ? 'status-confirmed' : 'status-pending'
+          return `
+            <div class="referral-row">
+              <div class="referral-icon"><i class="ti ${icons[r.type] || 'ti-route'}"></i></div>
+              <div class="referral-info">
+                <div class="referral-title">${r.label}</div>
+                <div class="referral-target">${r.target}</div>
+              </div>
+              <span class="referral-status ${statusCls}">${r.statusLabel}</span>
+            </div>
+          `
+        }).join('')}
+        <button class="add-referral-btn"><i class="ti ti-plus"></i>Добавить направление (врач / КТ / МРТ / рентген / анализы / процедура)</button>
+      </div>
+    `
+  } else if (activeTab === 'history') {
+    const hist = PATIENT_HISTORY[a.phone] || []
+    if (hist.length === 0) {
+      body.innerHTML = `<div class="hint" style="text-align:center;padding:30px;color:var(--text-mute)">У пациента нет предыдущих приёмов в сети клиник</div>`
+    } else {
+      body.innerHTML = `
+        <div class="timeline">
+          ${hist.map(h => {
+            // Цвет точки = по доктору если найдётся в DOCTORS
+            const doc = DOCTORS.find(d => h.doctor.toLowerCase().includes(d.name.split(' ')[0].toLowerCase()))
+            const dotColor = doc ? doc.color : '#94a3b8'
+            return `
+              <div class="timeline-item">
+                <div class="timeline-dot" style="background:${dotColor}"></div>
+                <div class="timeline-content">
+                  <div class="timeline-head">
+                    <div><span class="timeline-date">${h.date}</span><span class="timeline-clinic">· ${h.clinic}</span></div>
+                  </div>
+                  <div class="timeline-doctor">${h.doctor}</div>
+                  <div class="timeline-service">${h.service}</div>
+                  <div class="timeline-conclusion">${h.conclusion}</div>
+                </div>
+              </div>
+            `
+          }).join('')}
+        </div>
+      `
+    }
+  }
+}
+
+document.querySelectorAll('.modal-tabs .tab').forEach(t => {
+  t.addEventListener('click', () => {
+    activeTab = t.dataset.tab
+    document.querySelectorAll('.modal-tabs .tab').forEach(x => x.classList.toggle('active', x === t))
+    renderTab()
+  })
+})
+document.getElementById('modalClose').addEventListener('click', closeModal)
+document.getElementById('modalRoot').addEventListener('click', e => { if (e.target.id === 'modalRoot') closeModal() })
+document.getElementById('modalComplete').addEventListener('click', () => {
+  if (activeApt) {
+    activeApt.apt.status = 'completed'
+    activeApt.apt.has_emr = true
+    renderSlots()
+    closeModal()
+  }
+})
+
+function render() {
+  renderDoctors()
+  renderHeader()
+  renderSlots()
+}
+
+document.getElementById('doctorSearch').addEventListener('input', e => { searchQuery = e.target.value; renderDoctors() })
+renderWeekdays()
+render()
+</script>
+</body>
+</html>

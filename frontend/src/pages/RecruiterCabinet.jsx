@@ -74,11 +74,11 @@ function QRPopup({ data, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
-      <div className="bg-white w-full max-w-md rounded-t-3xl p-6 pb-safe" style={{ paddingBottom:'calc(1.5rem + env(safe-area-inset-bottom))' }}>
-        <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+      <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-3xl p-6 pb-safe" style={{ paddingBottom:'calc(1.5rem + env(safe-area-inset-bottom))' }}>
+        <div className="w-10 h-1 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-5" />
         <div className="text-center mb-4">
-          <div className="text-lg font-bold text-gray-800 mb-1">Врач зарегистрирован!</div>
-          <div className="text-sm text-gray-500">{data.full_name}</div>
+          <div className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1">Врач зарегистрирован!</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">{data.full_name}</div>
         </div>
         {data.qr_code && (
           <img src={`data:image/png;base64,${data.qr_code}`} alt="QR"
@@ -87,19 +87,19 @@ function QRPopup({ data, onClose }) {
         <div className="bg-teal-50 rounded-2xl p-4 mb-4 text-center">
           <p className="text-xs font-bold text-teal-600 uppercase tracking-wider mb-2">Данные для входа</p>
           <div className="space-y-2">
-            <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
-              <span className="text-xs text-gray-500">Логин</span>
+            <div className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl px-3 py-2">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Логин</span>
               <div className="flex items-center gap-2">
-                <span className="font-bold text-gray-800 text-sm">{data.username}</span>
+                <span className="font-bold text-gray-800 dark:text-gray-100 text-sm">{data.username}</span>
                 <button onClick={() => copy(data.username, 'user')}
                   className="text-xs text-teal-600 font-semibold min-h-[44px] px-2">{copied === 'user' ? '✓' : 'Копировать'}</button>
               </div>
             </div>
             {data.temp_password && (
-              <div className="flex items-center justify-between bg-white rounded-xl px-3 py-2">
-                <span className="text-xs text-gray-500">Пароль</span>
+              <div className="flex items-center justify-between bg-white dark:bg-gray-900 rounded-xl px-3 py-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Пароль</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-gray-800 text-sm">{data.temp_password}</span>
+                  <span className="font-bold text-gray-800 dark:text-gray-100 text-sm">{data.temp_password}</span>
                   <button onClick={() => copy(data.temp_password, 'pass')}
                     className="text-xs text-teal-600 font-semibold min-h-[44px] px-2">{copied === 'pass' ? '✓' : 'Копировать'}</button>
                 </div>
@@ -164,31 +164,31 @@ function RegisterTab({ token }) {
           </Card.Header>
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">ФИО *</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">ФИО *</label>
               <input value={form.full_name} onChange={f('full_name')} required placeholder="Иванов Иван Иванович"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 transition" />
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 transition" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Email</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Email</label>
                 <input type="email" value={form.email} onChange={f('email')} placeholder="doctor@mail.ru"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Телефон</label>
+                <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Телефон</label>
                 <input value={form.phone_number} onChange={f('phone_number')} placeholder="+7..."
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                  className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
               </div>
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Специализация</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Специализация</label>
               <input value={form.specialization} onChange={f('specialization')} placeholder="Терапевт, хирург..."
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Адрес</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Адрес</label>
               <input value={form.address} onChange={f('address')} placeholder="г. Грозный, ул. ..."
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
             </div>
           </div>
         </Card>
@@ -202,14 +202,14 @@ function RegisterTab({ token }) {
           </Card.Header>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Логин *</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Логин *</label>
               <input value={form.username} onChange={f('username')} required placeholder="dr_ivanov"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide block mb-1.5">Пароль *</label>
+              <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Пароль *</label>
               <input value={form.password} onChange={f('password')} required placeholder="мин. 4 символа"
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 min-h-[44px] text-sm focus:outline-none focus:border-teal-400 transition" />
             </div>
           </div>
         </Card>
@@ -222,10 +222,10 @@ function RegisterTab({ token }) {
             <div className="space-y-2">
               {clinics.map(c => (
                 <label key={c.id}
-                  className={`flex items-center gap-3 cursor-pointer p-3 min-h-[44px] rounded-xl border-2 transition ${form.clinic_ids.includes(c.id) ? 'border-teal-400 bg-teal-50' : 'border-gray-100 bg-gray-50'}`}>
+                  className={`flex items-center gap-3 cursor-pointer p-3 min-h-[44px] rounded-xl border-2 transition ${form.clinic_ids.includes(c.id) ? 'border-teal-400 bg-teal-50' : 'border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800'}`}>
                   <input type="checkbox" checked={form.clinic_ids.includes(c.id)} onChange={() => toggleClinic(c.id)}
                     className="w-5 h-5 accent-teal-500" />
-                  <span className={`text-sm font-medium ${form.clinic_ids.includes(c.id) ? 'text-teal-700' : 'text-gray-700'}`}>{c.name}</span>
+                  <span className={`text-sm font-medium ${form.clinic_ids.includes(c.id) ? 'text-teal-700' : 'text-gray-700 dark:text-gray-200'}`}>{c.name}</span>
                 </label>
               ))}
             </div>
@@ -269,7 +269,7 @@ function DoctorsTab({ token }) {
         <Card key={d.id}>
           <div className="flex items-center justify-between mb-3">
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-800 text-sm truncate">{d.full_name}</p>
+              <p className="font-bold text-gray-800 dark:text-gray-100 text-sm truncate">{d.full_name}</p>
               {d.specialization && <p className="text-xs font-medium mt-0.5" style={{ color:PRIMARY }}>{d.specialization}</p>}
             </div>
             {/* Статус активности — <Chip> design-system */}
@@ -278,8 +278,8 @@ function DoctorsTab({ token }) {
             </Chip>
           </div>
           <div className="flex flex-wrap gap-2 mb-2">
-            {d.phone_number && <span className="text-xs text-gray-500">📞 {d.phone_number}</span>}
-            {d.email && <span className="text-xs text-gray-500">✉️ {d.email}</span>}
+            {d.phone_number && <span className="text-xs text-gray-500 dark:text-gray-400">📞 {d.phone_number}</span>}
+            {d.email && <span className="text-xs text-gray-500 dark:text-gray-400">✉️ {d.email}</span>}
           </div>
           {d.clinics?.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -288,8 +288,8 @@ function DoctorsTab({ token }) {
               ))}
             </div>
           )}
-          <div className="flex justify-between items-center pt-2 border-t border-gray-100 text-xs text-gray-500">
-            <span>Логин: <strong className="text-gray-700">{d.username || '—'}</strong></span>
+          <div className="flex justify-between items-center pt-2 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+            <span>Логин: <strong className="text-gray-700 dark:text-gray-200">{d.username || '—'}</strong></span>
             <span className="font-bold text-green-600">{Number(d.bonuses_earned || 0).toLocaleString('ru')} ₽</span>
           </div>
         </Card>
@@ -326,8 +326,8 @@ function BonusesTab({ token }) {
         <Card key={b.id}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-base font-bold text-gray-800">{Number(b.amount).toLocaleString('ru')} ₽</p>
-              <p className="text-xs text-gray-500 mt-0.5">{b.doctor_name} · {b.percent_applied}%</p>
+              <p className="text-base font-bold text-gray-800 dark:text-gray-100">{Number(b.amount).toLocaleString('ru')} ₽</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{b.doctor_name} · {b.percent_applied}%</p>
               <p className="text-xs text-gray-300 mt-0.5">{new Date(b.created_at).toLocaleDateString('ru')}</p>
             </div>
             {/* Статус выплаты — <Chip> design-system */}
@@ -354,13 +354,13 @@ function PercentTab({ stats }) {
           {/* Donut-индикатор % — кастомный, оставляем (design-system не имеет аналога) */}
           <div className="w-20 h-20 rounded-full flex items-center justify-center flex-shrink-0"
             style={{ background:`conic-gradient(${PRIMARY} ${myPercent * 3.6}deg, #e0eaec 0deg)` }}>
-            <div className="w-14 h-14 rounded-full bg-white flex items-center justify-center font-black text-lg" style={{ color:DARK }}>
+            <div className="w-14 h-14 rounded-full bg-white dark:bg-gray-900 flex items-center justify-center font-black text-lg" style={{ color:DARK }}>
               {myPercent}%
             </div>
           </div>
           <div>
-            <p className="font-bold text-gray-800 text-sm">Ваш процент: {myPercent}%</p>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">С каждого подтверждённого направления вы получаете {myPercent}% от бонуса врача</p>
+            <p className="font-bold text-gray-800 dark:text-gray-100 text-sm">Ваш процент: {myPercent}%</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">С каждого подтверждённого направления вы получаете {myPercent}% от бонуса врача</p>
           </div>
         </div>
         <div className="bg-teal-50 rounded-2xl p-4 space-y-3">
@@ -372,7 +372,7 @@ function PercentTab({ stats }) {
           ].map(s => (
             <div key={s.step} className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0" style={{ background:PRIMARY }}>{s.step}</div>
-              <p className="text-sm text-gray-700">{s.text}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-200">{s.text}</p>
             </div>
           ))}
         </div>
@@ -424,7 +424,7 @@ function DashboardTab({ stats, onNavigate }) {
           <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center" style={{ background:'linear-gradient(135deg,#0097A7,#004D5F)' }}>
             <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>person_add</span>
           </div>
-          <p className="text-sm font-semibold text-gray-700">Зарегистрировать врача</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Зарегистрировать врача</p>
         </button>
         <button onClick={() => onNavigate('doctors')}
           aria-label="Мои врачи"
@@ -439,7 +439,7 @@ function DashboardTab({ stats, onNavigate }) {
           <div className="w-12 h-12 rounded-2xl mx-auto mb-2 flex items-center justify-center" style={{ background:'linear-gradient(135deg,#7c3aed,#6d28d9)' }}>
             <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>group</span>
           </div>
-          <p className="text-sm font-semibold text-gray-700">Мои врачи</p>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Мои врачи</p>
         </button>
       </div>
     </div>

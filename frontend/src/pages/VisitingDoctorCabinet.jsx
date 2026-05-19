@@ -70,7 +70,7 @@ async function registerPush(token) {
 function DoneModal({ result, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-5 bg-black/70">
-      <div className="bg-white rounded-3xl p-8 text-center max-w-xs w-full" style={{ boxShadow:'0 24px 80px rgba(0,0,0,0.3)' }}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl p-8 text-center max-w-xs w-full" style={{ boxShadow:'0 24px 80px rgba(0,0,0,0.3)' }}>
         <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
           <span className="material-symbols-outlined text-green-700 text-5xl" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
         </div>
@@ -191,7 +191,7 @@ function QRScanner({ onDetect, onClose }) {
 
       {/* Manual input */}
       <div className="bg-[#111] px-4 py-4 flex-shrink-0" style={{ paddingBottom:'max(1rem, env(safe-area-inset-bottom))' }}>
-        <p className="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-2">Или введите код вручную</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold tracking-wider mb-2">Или введите код вручную</p>
         <div className="flex gap-2">
           <input value={manual} onChange={e => setManual(e.target.value.replace(/\D/,'').slice(0,4))}
             placeholder="Код (4 цифры)" maxLength={4} inputMode="numeric"
@@ -219,7 +219,7 @@ function QueueCard({ apt }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-base" style={{ color:D }}>{apt.patient_name || 'Пациент'}</p>
-          <p className="text-sm text-gray-500">{apt.patient_phone}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{apt.patient_phone}</p>
           {apt.doctor_share > 0 && (
             <div className="mt-2 inline-flex">
               {/* Сумма к получению — <Chip> good */}
@@ -401,7 +401,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
                   onChange={e => setManualCode(e.target.value.replace(/\D/,'').slice(0,4))}
                   placeholder="Код пациента (4 цифры)"
                   maxLength={4} inputMode="numeric"
-                  className="flex-1 outline-none text-2xl font-black text-gray-800 bg-transparent min-h-[44px]"
+                  className="flex-1 outline-none text-2xl font-black text-gray-800 dark:text-gray-100 bg-transparent min-h-[44px]"
                   style={{ letterSpacing:8 }}
                   onKeyDown={async e => { if (e.key === 'Enter' && manualCode.length === 4) { await handleQRScan(manualCode); setManualCode('') } }}
                 />
@@ -451,7 +451,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
                       <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-800 text-sm">{v.patient_name || v.patient_phone}</p>
+                      <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{v.patient_name || v.patient_phone}</p>
                       <p className="text-xs text-gray-400">{v.appointment_date} · {v.start_time?.slice(0,5)}</p>
                     </div>
                     {v.doctor_share > 0 && (
@@ -485,7 +485,7 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
                       <span className="material-symbols-outlined text-green-700 text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>payments</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-800 text-sm">{e.patient_name || 'Приём'}</p>
+                      <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm">{e.patient_name || 'Приём'}</p>
                       <p className="text-xs text-gray-400">{fmtDate(e.created_at)}</p>
                     </div>
                     <p className="font-black text-green-600 text-base flex-shrink-0">+{Number(e.amount).toLocaleString('ru')} ₽</p>

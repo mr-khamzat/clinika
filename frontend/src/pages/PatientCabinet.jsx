@@ -423,7 +423,7 @@ function QrFullscreen({ qr, onClose }) {
         <span className="text-white text-2xl font-extrabold tracking-tight">Clinika</span>
       </div>
       <p className="text-blue-200 text-sm mb-6 text-center px-8">Покажите этот QR-код врачу или администратору</p>
-      <div className="bg-white rounded-3xl shadow-2xl" style={{ padding: 16, boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
+      <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl" style={{ padding: 16, boxShadow: '0 0 60px rgba(255,255,255,.2)' }}>
         <img src={`data:image/png;base64,${qr}`} alt="QR" style={{ width: 280, height: 280, display: 'block', borderRadius: 0 }} />
       </div>
       <p className="text-blue-300 text-xs mt-8">Нажмите в любом месте, чтобы закрыть</p>
@@ -527,7 +527,7 @@ function ReferralCard({ referral, index, onQr }) {
   const isActive = referral.status === 'created' || referral.status === 'confirmed'
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden" style={{ boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: '1px solid rgba(0,0,0,.06)' }}>
+    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden" style={{ boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: '1px solid rgba(0,0,0,.06)' }}>
       {/* Compact colour strip */}
       <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
         style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
@@ -545,17 +545,17 @@ function ReferralCard({ referral, index, onQr }) {
       </div>
       {/* Details row */}
       <div className="px-4 py-2.5 space-y-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-[13px] text-gray-400">calendar_today</span>
-            <span className="font-semibold text-gray-700">
+            <span className="font-semibold text-gray-700 dark:text-gray-200">
               {referral.appointment_at ? fmt(referral.appointment_at) : fmt(referral.created_at)}
             </span>
           </span>
           {referral.short_code && (
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[13px] text-gray-400">tag</span>
-              <span className="font-bold text-gray-700 tracking-widest">{referral.short_code}</span>
+              <span className="font-bold text-gray-700 dark:text-gray-200 tracking-widest">{referral.short_code}</span>
             </span>
           )}
           {referral.from_clinic_name && (
@@ -616,14 +616,14 @@ function VisitCard({ visit, patientName }) {
   const canPdf = (services.length > 0) || total > 0
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
+    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
       <div className="flex items-stretch">
         {/* Left color bar */}
         <div className="w-1 flex-shrink-0 rounded-l-2xl" style={{ background: vc.color }} />
         <div className="flex-1 p-4">
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 text-sm leading-snug truncate">{first}</p>
+              <p className="font-bold text-gray-900 dark:text-gray-100 text-sm leading-snug truncate">{first}</p>
               <p className="text-xs text-gray-400 mt-0.5 truncate">{doctor}</p>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -658,8 +658,8 @@ function VisitCard({ visit, patientName }) {
         <div className="px-4 pb-4 space-y-1.5">
           {services.map((s, i) => (
             <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-              <span className="text-xs text-gray-600 flex-1 mr-3 truncate">{s.title || '—'}</span>
-              {(s.value || s.price) && <span className="text-xs font-bold text-gray-800 flex-shrink-0">{parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽</span>}
+              <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 mr-3 truncate">{s.title || '—'}</span>
+              {(s.value || s.price) && <span className="text-xs font-bold text-gray-800 dark:text-gray-100 flex-shrink-0">{parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽</span>}
             </div>
           ))}
         </div>
@@ -717,7 +717,7 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
   }
 
   return (
-    <div className="bg-white rounded-2xl overflow-hidden card-in" style={{ border:'1px solid rgba(0,0,0,.05)', boxShadow:'0 2px 12px rgba(0,0,0,.05)' }}>
+    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden card-in" style={{ border:'1px solid rgba(0,0,0,.05)', boxShadow:'0 2px 12px rgba(0,0,0,.05)' }}>
       <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
         style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)' }}>
         <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full" style={{ background:'rgba(255,255,255,.08)' }} />
@@ -735,15 +735,15 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
         </span>
       </div>
       <div className="px-4 py-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined text-[14px] text-gray-400">calendar_today</span>
-            <span className="font-semibold text-gray-700">{fmtAptDate(apt.appointment_date)}</span>
+            <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAptDate(apt.appointment_date)}</span>
           </span>
           {(startHHMM || endHHMM) && (
             <span className="flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px] text-gray-400">schedule</span>
-              <span className="font-semibold text-gray-700">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</span>
+              <span className="font-semibold text-gray-700 dark:text-gray-200">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</span>
             </span>
           )}
           {apt.clinic_name && (
@@ -813,7 +813,7 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
                 В календарь
               </button>
               {showCal && (
-                <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+                <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white dark:bg-gray-900 shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
                   <button onClick={() => { downloadIcs(apt); setShowCal(false) }}
                     className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">
                     .ics (Apple/Outlook)
@@ -890,7 +890,7 @@ function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
 
   return (
     <>
-      <div className="bg-white rounded-2xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ border:'1px solid rgba(0,0,0,.06)' }}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl p-3 grid grid-cols-1 sm:grid-cols-3 gap-2" style={{ border:'1px solid rgba(0,0,0,.06)' }}>
         <div className="relative">
           <button onClick={() => setShowCal(v => !v)}
             className="w-full h-11 rounded-xl flex items-center justify-center gap-1.5 text-sm font-semibold border transition-all active:scale-[.97]"
@@ -899,7 +899,7 @@ function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
             В календарь
           </button>
           {showCal && (
-            <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white shadow-lg border border-gray-100 overflow-hidden">
+            <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white dark:bg-gray-900 shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
               <button onClick={() => { downloadIcs(apt); setShowCal(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">.ics (Apple/Outlook)</button>
               <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)} className="w-full block text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-50">Google Calendar</a>
             </div>
@@ -1602,12 +1602,12 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-900 text-base">Перенос записи</h3>
+          <h3 className="font-bold text-gray-900 dark:text-gray-100 text-base">Перенос записи</h3>
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
         </div>
-        <p className="text-xs text-gray-500 mb-4">{apt.doctor_name} · {apt.clinic_name}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{apt.doctor_name} · {apt.clinic_name}</p>
 
         <p style={{ fontSize:13, fontWeight:600, color:'#1A2B3C', marginBottom:8 }}>Выберите новую дату:</p>
         {availLoading ? (
@@ -2027,9 +2027,9 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
       <div className="rounded-3xl p-5" style={{ background: '#fff', border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
         <div className="flex items-center gap-2 mb-1">
           <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>policy</span>
-          <h2 className="font-bold text-gray-800">Мои права (152-ФЗ)</h2>
+          <h2 className="font-bold text-gray-800 dark:text-gray-100">Мои права (152-ФЗ)</h2>
         </div>
-        <p className="text-xs text-gray-500 mb-4">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
           В соответствии со ст. 14 и ст. 21 Федерального закона №152-ФЗ
           «О персональных данных» вы имеете право получить копию своих
           персональных данных и потребовать их удаления.
@@ -2088,7 +2088,7 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
           onClick={() => { if (step !== 4) setStep(0) }}
         >
           <div
-            className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5"
+            className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5"
             onClick={e => e.stopPropagation()}
             style={{ paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 20px)' }}
           >
@@ -2096,17 +2096,17 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
               <>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>warning</span>
-                  <h3 className="text-lg font-bold text-gray-900">Удаление данных — шаг 1 из 3</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Удаление данных — шаг 1 из 3</h3>
                 </div>
-                <p className="text-sm text-gray-700 leading-relaxed mb-3">
+                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-3">
                   Внимание! Эта операция <b>необратима</b>. Будут анонимизированы:
                 </p>
-                <ul className="text-sm text-gray-700 list-disc pl-5 space-y-1 mb-3">
+                <ul className="text-sm text-gray-700 dark:text-gray-200 list-disc pl-5 space-y-1 mb-3">
                   <li>имя, телефон, e-mail, дата рождения</li>
                   <li>история согласий получит запись «forgotten»</li>
                   <li>все ваши сессии будут отозваны</li>
                 </ul>
-                <p className="text-sm text-gray-700 leading-relaxed mb-4">
+                <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mb-4">
                   Медицинская карта в МИС остаётся (это внешняя система клиники).
                 </p>
                 <div className="flex gap-2">
@@ -2119,10 +2119,10 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
               <>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>edit</span>
-                  <h3 className="text-lg font-bold text-gray-900">Подтверждение — шаг 2 из 3</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Подтверждение — шаг 2 из 3</h3>
                 </div>
-                <p className="text-sm text-gray-700 mb-3">
-                  Чтобы продолжить, введите слово <code className="px-1 py-0.5 rounded bg-gray-100 font-mono text-red-700">{REQUIRED}</code> в поле ниже:
+                <p className="text-sm text-gray-700 dark:text-gray-200 mb-3">
+                  Чтобы продолжить, введите слово <code className="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 font-mono text-red-700">{REQUIRED}</code> в поле ниже:
                 </p>
                 <input
                   type="text"
@@ -2151,9 +2151,9 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
               <>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-3xl" style={{ color: '#B71C1C' }}>delete_forever</span>
-                  <h3 className="text-lg font-bold text-gray-900">Финальное подтверждение — 3 из 3</h3>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">Финальное подтверждение — 3 из 3</h3>
                 </div>
-                <p className="text-sm text-gray-700 mb-4">
+                <p className="text-sm text-gray-700 dark:text-gray-200 mb-4">
                   Нажимая «Удалить», вы подтверждаете, что понимаете
                   необратимые последствия. После выполнения вы будете
                   перенаправлены на главную страницу.
@@ -2174,7 +2174,7 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
             {step === 4 && (
               <div className="py-6 text-center">
                 <div className="w-10 h-10 mx-auto border-2 border-red-700 border-t-transparent rounded-full animate-spin mb-3" />
-                <p className="text-sm text-gray-700">Удаление данных…</p>
+                <p className="text-sm text-gray-700 dark:text-gray-200">Удаление данных…</p>
               </div>
             )}
           </div>
@@ -2963,7 +2963,7 @@ export default function PatientCabinet() {
                   </div>
                   <div>
                     <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{item.label}</p>
-                    <p className="text-sm font-bold text-gray-800 mt-0.5">{item.value}</p>
+                    <p className="text-sm font-bold text-gray-800 dark:text-gray-100 mt-0.5">{item.value}</p>
                   </div>
                 </div>
               ))}
@@ -3030,7 +3030,7 @@ export default function PatientCabinet() {
             {appointments.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <h2 className="font-bold text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
                     <span className="material-symbols-outlined text-base" style={{ color:'#0097A7', fontVariationSettings:"'FILL' 1" }}>event</span>
                     Мои записи к врачу
                   </h2>
@@ -3129,7 +3129,7 @@ export default function PatientCabinet() {
             {activeRefs.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-bold text-gray-800">Активные направления</h2>
+                  <h2 className="font-bold text-gray-800 dark:text-gray-100">Активные направления</h2>
                   <button onClick={() => goTo('referrals')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
                     Все <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
@@ -3161,7 +3161,7 @@ export default function PatientCabinet() {
             {mis_visits.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <h2 className="font-bold text-gray-800">Последний визит</h2>
+                  <h2 className="font-bold text-gray-800 dark:text-gray-100">Последний визит</h2>
                   <button onClick={() => goTo('history')} className="text-sm font-semibold flex items-center gap-0.5" style={{ color: '#1565C0' }}>
                     История <span className="material-symbols-outlined text-sm">chevron_right</span>
                   </button>
@@ -3178,10 +3178,10 @@ export default function PatientCabinet() {
               Сейчас — закомментированный блок-заглушка ниже.
             */}
             {/*
-            <div className="bg-white rounded-3xl p-5" style={{ border:'1px solid rgba(0,0,0,.06)', boxShadow:'0 2px 12px rgba(0,0,0,.04)' }}>
+            <div className="bg-white dark:bg-gray-900 rounded-3xl p-5" style={{ border:'1px solid rgba(0,0,0,.06)', boxShadow:'0 2px 12px rgba(0,0,0,.04)' }}>
               <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-base" style={{ color:'#0097A7' }}>medication</span>
-                <h2 className="font-bold text-gray-800 text-sm">Мои назначения</h2>
+                <h2 className="font-bold text-gray-800 dark:text-gray-100 text-sm">Мои назначения</h2>
               </div>
               <p className="text-xs text-gray-400 mt-2">Скоро появится: список лекарств с инструкциями, выписанных врачом</p>
             </div>
@@ -3517,11 +3517,11 @@ function MisFamilySuggestions({ ownerPhone, onAdd }) {
       </Button>
     )
   }
-  if (busy) return <div className="text-xs text-gray-500 text-center py-2">Ищем в МИС…</div>
+  if (busy) return <div className="text-xs text-gray-500 dark:text-gray-400 text-center py-2">Ищем в МИС…</div>
   if (!items.length) {
     return (
       <div className="rounded-xl p-3 mb-3 text-center" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
-        <p className="text-xs text-gray-500">{info || 'В МИС связанных пациентов не найдено'}</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">{info || 'В МИС связанных пациентов не найдено'}</p>
         <button onClick={() => { setLoaded(false); setItems([]) }} className="text-[11px] text-blue-600 mt-1">Скрыть</button>
       </div>
     )
@@ -3539,8 +3539,8 @@ function MisFamilySuggestions({ ownerPhone, onAdd }) {
             {(s.name || '?').slice(0,2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-800 truncate">{s.name || s.phone}</p>
-            <p className="text-[11px] text-gray-500">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{s.name || s.phone}</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">
               {s.relation_guess && <span className="font-semibold text-sky-700">{s.relation_guess}</span>}
               {s.relation_guess && ' · '}
               {s.phone}{s.age ? ` · ${s.age}` : ''}
@@ -3641,8 +3641,8 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
         {/* Owner */}
         <div className="rounded-2xl p-3 mb-3" style={{ background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
           <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide">Текущий профиль</p>
-          <p className="text-sm font-bold text-gray-800 mt-0.5">{ownerName || ownerPhone}</p>
-          <p className="text-xs text-gray-500">{ownerPhone}</p>
+          <p className="text-sm font-bold text-gray-800 dark:text-gray-100 mt-0.5">{ownerName || ownerPhone}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{ownerPhone}</p>
         </div>
 
         {/* List */}
@@ -3656,8 +3656,8 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
                   {(m.name || m.phone || '?').slice(0,2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-gray-800 truncate">{m.name || m.phone}</p>
-                  <p className="text-xs text-gray-500 truncate">{m.relation || '—'} · {m.phone}</p>
+                  <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">{m.name || m.phone}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.relation || '—'} · {m.phone}</p>
                 </div>
                 <button onClick={() => { setSwitchTarget(m); setShortCode(''); setErr('') }}
                   className="h-8 px-3 rounded-lg text-xs font-bold"
@@ -3677,11 +3677,11 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
         {showAdd ? (
           <div className="rounded-2xl p-3 space-y-2 mb-3" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
             <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7..."
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Имя"
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
             <input value={relation} onChange={e => setRelation(e.target.value)} placeholder="Кто (Супруг, Ребёнок, ...)"
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 text-sm" />
+              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
             {err && <p className="text-xs text-red-500">{err}</p>}
             {/* Кнопки формы добавления — дизайн-система */}
             <div className="grid grid-cols-2 gap-2">

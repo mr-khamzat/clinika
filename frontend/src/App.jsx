@@ -61,6 +61,7 @@ const ManagerFinance = lazy(() => import('./pages/ManagerFinance'))
 // billingledger01: журнал биллинг-операций франшизы (append-only)
 const ManagerBillingLedger = lazy(() => import('./pages/ManagerBillingLedger'))
 const ManagerAppointments = lazy(() => import('./pages/ManagerAppointments'))
+const ManagerDoctors = lazy(() => import('./pages/ManagerDoctors'))
 // Глава 4 — Manager productivity (lazy load)
 // (reused lazy from top import)
 const ManagerKanban         = lazy(() => import('./pages/ManagerKanban'))
@@ -333,6 +334,7 @@ function MiniApp() {
               {/* billingledger01: журнал биллинг-операций франшизы */}
               <Route path="manager/finance/ledger" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerBillingLedger /></Suspense>} />
               <Route path="manager/appointments" element={<ManagerAppointments />} />
+              <Route path="manager/doctors" element={<ManagerDoctors />} />
               {/* Глава 4 — Manager productivity */}
               <Route path="manager/kanban"       element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerKanban /></Suspense>} />
               <Route path="manager/doctor-load"  element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerDoctorLoadPage /></Suspense>} />

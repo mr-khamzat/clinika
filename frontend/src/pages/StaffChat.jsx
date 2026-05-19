@@ -149,6 +149,11 @@ export default function StaffChat() {
   const messagesEndRef = useRef(null)
   const composerRef = useRef(null)
   const typingTimers = useRef({})
+  // Read receipts (галочки ✓/✓✓): id сообщений, которые попали во вьюпорт и
+  // ждут отправки на /mark-read. Дебаунс 500ms — батчим, а не дёргаем сервер
+  // на каждый scroll.
+  const pendingReadIdsRef = useRef(new Set())
+  const markReadTimerRef = useRef(null)
 
   // ── Загрузка профиля + комнат + контактов ────────────────────────────────
   useEffect(() => {
@@ -317,7 +322,25 @@ export default function StaffChat() {
         setMessages((prev) => prev.map((x) => x.id === id ? { ...x, deleted_at: new Date().toISOString(), body: '' } : x))
       }
     } else if (msg.type === 'read') {
-      // TODO: read receipts UI
+      // Legacy: открытие комнаты другим юзером — раньше TODO. Сейчас
+      // сами галочки приходят через 'read_receipt' (см. ниже).
+    } else if (msg.type === 'read_receipt') {
+      // Новый event: пакетное прочтение конкретных сообщений конкретным юзером.
+      // Обновляем msg.read_by — добавляем туда user_id (без дубликатов).
+      const { room_id, user_id, message_ids, read_at } = msg.data || {}
+      if (room_id !== activeRoomId || !Array.isArray(message_ids) || !user_id) return
+      const idSet = new Set(message_ids)
+      setMessages((prev) => prev.map((m) => {
+        if (!idSet.has(m.id)) return m
+        const prevReadBy = Array.isArray(m.read_by) ? m.read_by : []
+        if (prevReadBy.includes(user_id)) return m
+        const next = { ...m, read_by: [...prevReadBy, user_id] }
+        // Для direct-чата ещё ставим read_at (другой участник прочитал)
+        if (me && m.sender_id === me.id) {
+          next.read_at = next.read_at || read_at || new Date().toISOString()
+        }
+        return next
+      }))
     } else if (msg.type === 'typing') {
       const { room_id, user_id } = msg.data
       setTypingUsers((prev) => {
@@ -341,7 +364,50 @@ export default function StaffChat() {
         return s
       })
     }
+  }, [activeRoomId, me])
+
+  // ── Read receipts: дебаунс отправки прочитанных id ────────────────────────
+  const flushMarkRead = useCallback(() => {
+    if (!activeRoomId) return
+    const ids = Array.from(pendingReadIdsRef.current)
+    if (!ids.length) return
+    pendingReadIdsRef.current = new Set()
+    api.post(`/staff-chat/rooms/${activeRoomId}/mark-read`, { message_ids: ids })
+      .catch(() => {
+        // на ошибке возвращаем в очередь — попробуем ещё раз при следующем триггере
+        for (const id of ids) pendingReadIdsRef.current.add(id)
+      })
   }, [activeRoomId])
+
+  const enqueueMarkRead = useCallback((msgId) => {
+    if (!msgId) return
+    pendingReadIdsRef.current.add(msgId)
+    if (markReadTimerRef.current) clearTimeout(markReadTimerRef.current)
+    markReadTimerRef.current = setTimeout(flushMarkRead, 500)
+  }, [flushMarkRead])
+
+  // ── IntersectionObserver: помечаем прочитанными только видимые сообщения ─
+  useEffect(() => {
+    if (!activeRoomId || !me) return
+    const root = document.querySelector('.sc-messages')
+    if (!root) return
+    const observer = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue
+        const id = e.target.getAttribute('data-msg-id')
+        if (!id) continue
+        // не помечаем свои сообщения
+        const m = messages.find((x) => x.id === id)
+        if (!m || (me && m.sender_id === me.id)) continue
+        // уже прочитано этим юзером? скип
+        if (Array.isArray(m.read_by) && m.read_by.includes(me.id)) continue
+        enqueueMarkRead(id)
+      }
+    }, { root, threshold: 0.6 })
+    const nodes = root.querySelectorAll('.sc-msg-row[data-msg-id]')
+    nodes.forEach((n) => observer.observe(n))
+    return () => observer.disconnect()
+  }, [activeRoomId, messages, me, enqueueMarkRead])
 
   async function downloadAttachment(a) {
     try {
@@ -1193,7 +1259,42 @@ export default function StaffChat() {
                           )}
                         </div>
                       )}
-                      <div className="sc-msg-time">{formatTime(m.created_at)}</div>
+                      <div className="sc-msg-time">
+                        <span>{formatTime(m.created_at)}</span>
+                        {mine && !m.deleted_at && (() => {
+                          // Read receipts (галочки):
+                          //   ✓ серая  = sent (создано на сервере)
+                          //   ✓✓ серая = delivered (≥1 не-sender прочитал; или members-1)
+                          //   ✓✓ синяя = read    (direct: peer прочитал; group: все остальные)
+                          const readBy = Array.isArray(m.read_by) ? m.read_by : []
+                          const delivered = (m.delivered_to || 0) > 0
+                          const isDirect = activeRoom?.type === 'direct'
+                          // need other participants (без отправителя)
+                          const others = members.filter((x) => x.id !== me?.id)
+                          const isReadByAll = isDirect
+                            ? readBy.length >= 1
+                            : (others.length > 0 && others.every((x) => readBy.includes(x.id)))
+                          const isReadByAny = readBy.length > 0
+                          // Tooltip с именами тех кто прочитал
+                          let tip = 'Отправлено'
+                          if (isReadByAll) tip = 'Прочитано всеми'
+                          else if (isReadByAny) {
+                            const names = readBy
+                              .map((uid) => members.find((x) => x.id === uid)?.name || 'Сотрудник')
+                              .join(', ')
+                            tip = 'Прочитано: ' + names
+                          } else if (delivered) tip = 'Доставлено'
+                          return (
+                            <span
+                              className={'sc-msg-ticks' + (isReadByAll ? ' is-read' : '')}
+                              title={tip}
+                              aria-label={tip}
+                            >
+                              {(delivered || isReadByAny) ? '✓✓' : '✓'}
+                            </span>
+                          )
+                        })()}
+                      </div>
                     </div>
                   </div>
                 )
@@ -1978,7 +2079,19 @@ const STAFF_CHAT_CSS = `
   font-size: 10.5px; color: var(--sc-fg-3);
   margin-top: 3px; text-align: right;
   opacity: 0.85;
+  display: inline-flex; align-items: center; gap: 4px;
+  justify-content: flex-end; width: 100%;
 }
+.sc-msg-ticks {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--sc-fg-3);
+  letter-spacing: -1px;
+  margin-left: 2px;
+  font-weight: 600;
+}
+.sc-msg-ticks.is-read { color: #2196f3; }
 .sc-msg-deleted em { color: var(--sc-fg-3); font-style: italic; }
 
 .sc-attach {

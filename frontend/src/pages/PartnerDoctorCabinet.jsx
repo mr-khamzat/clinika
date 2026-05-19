@@ -124,7 +124,7 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
                   {referrals.slice(0, 5).map(r => (
                     <div key={r.id} className="flex items-center gap-3 py-2 border-b last:border-b-0" style={{ borderColor:'var(--border)' }}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{r.to_clinic_name || '—'}</p>
+                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 truncate">{r.to_clinic_name || '—'}</p>
                         <p className="text-xs text-gray-400 truncate">{r.service_name || '—'}</p>
                       </div>
                       <StatusChip status={r.status} />
@@ -155,9 +155,9 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
                     <span className="material-symbols-outlined text-xl" style={{ color:ACCENT, fontVariationSettings:"'FILL' 1" }}>send</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 text-sm truncate">{r.to_clinic_name || '—'}</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm truncate">{r.to_clinic_name || '—'}</p>
                     <p className="text-xs text-gray-400 truncate">{r.service_name}</p>
-                    {r.short_code && <p className="text-xs text-gray-500 mt-0.5 font-mono">#{r.short_code}</p>}
+                    {r.short_code && <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono">#{r.short_code}</p>}
                   </div>
                   <StatusChip status={r.status} />
                 </div>
@@ -197,7 +197,7 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
                     <span className="material-symbols-outlined text-xl" style={{ color:'#d97706', fontVariationSettings:"'FILL' 1" }}>star</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">Бонус</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Бонус</p>
                     <p className="text-xs text-gray-400">{fmt(b.created_at)}</p>
                   </div>
                   <p className="font-bold text-amber-600 text-base">+{b.amount} ₽</p>
@@ -211,7 +211,7 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
                     <span className="material-symbols-outlined text-xl" style={{ color:'#16A34A', fontVariationSettings:"'FILL' 1" }}>payments</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-800">{e.operation_type}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{e.operation_type}</p>
                     <p className="text-xs text-gray-400">{fmt(e.created_at)}</p>
                   </div>
                   <p className="font-bold text-green-600 text-base">+{e.amount} ₽</p>

@@ -73,6 +73,13 @@ class MuteRequest(BaseModel):
     muted: bool
 
 
+class MarkReadRequest(BaseModel):
+    """Список UUID сообщений, которые UI отметил как прочитанные (через
+    IntersectionObserver). Сервер выполняет UPSERT в staff_chat_message_reads
+    и обновляет last_read_at у участника."""
+    message_ids: list[uuid.UUID] = Field(default_factory=list, max_length=500)
+
+
 # ── StaffChat Slack-fundament: каналы / реакции / mentions / pin ──────────────
 class GroupJoinForbidden(Exception):
     """Попытка присоединиться к закрытому каналу без приглашения."""
@@ -778,7 +785,24 @@ async def list_room_messages(
     if not await svc.is_member(db, room_id, user.id):
         raise HTTPException(403, "Вы не участник этой комнаты")
     msgs = await svc.list_messages(db, room_id, before=before, limit=limit)
-    return {"messages": [svc.serialize_message(m) for m in reversed(msgs)]}
+    # Подгружаем reactions, reads и members_count батчем — для read receipts ✓/✓✓
+    message_ids = [m.id for m in msgs]
+    reactions_map = await svc.load_reactions_for_messages(db, message_ids)
+    reads_map = await svc.load_reads_for_messages(db, message_ids)
+    members_count = await svc.count_room_members(db, room_id)
+    room = await svc.get_room(db, room_id)
+    room_type = room.type if room else None
+    out: list[dict] = []
+    for m in reversed(msgs):
+        out.append(svc.serialize_message(
+            m,
+            reactions=reactions_map.get(m.id, []),
+            current_user_id=user.id,
+            reads=reads_map.get(m.id, []),
+            members_count=members_count,
+            room_type=room_type,
+        ))
+    return {"messages": out}
 
 
 @router.post("/rooms/{room_id}/messages", status_code=201)
@@ -820,7 +844,18 @@ async def post_room_message(
     except ValueError as e:
         await db.rollback()
         raise HTTPException(400, str(e))
-    payload_event = svc.serialize_message(msg)
+    # Read receipts: на момент отправки read_by пуст, delivered_to = members-1
+    try:
+        _members_count = await svc.count_room_members(db, room.id)
+    except Exception:
+        _members_count = None
+    payload_event = svc.serialize_message(
+        msg,
+        current_user_id=user.id,
+        reads=[],
+        members_count=_members_count,
+        room_type=room.type,
+    )
     # TG-нотификация upmentioned user'ам — fire-and-forget, после commit'а
     try:
         if mention_ids:
@@ -967,6 +1002,50 @@ async def post_room_read(
         "type": "read",
         "data": {"room_id": str(room_id), "user_id": str(user.id), "at": datetime.utcnow().isoformat()},
     })
+
+
+@router.post("/rooms/{room_id}/mark-read")
+async def post_room_mark_read(
+    room_id: uuid.UUID,
+    payload: MarkReadRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Массовая отметка сообщений прочитанными для read receipts (✓/✓✓).
+
+    Тригерится из UI по IntersectionObserver (debounce 500ms). Идемпотентно:
+    повторный вызов не создаёт дубликатов (UNIQUE (message_id, user_id)).
+
+    После UPSERT'а рассылает WS-событие `read_receipt` всем участникам, чтобы
+    отправитель увидел синие галочки.
+    """
+    _ensure_not_patient(user)
+    if not await svc.is_member(db, room_id, user.id):
+        raise HTTPException(403, "Вы не участник этой комнаты")
+    room = await svc.get_room(db, room_id)
+    if not room:
+        raise HTTPException(404, "Комната не найдена")
+    marked_ids, max_created = await svc.mark_messages_read(
+        db, room, user, payload.message_ids,
+    )
+    await db.commit()
+    now_iso = datetime.utcnow().isoformat()
+    # Бродкаст всем участникам комнаты — чтобы у отправителя посинели галочки.
+    if marked_ids:
+        await ws_hub.broadcast_to_room(room.id, {
+            "type": "read_receipt",
+            "data": {
+                "room_id": str(room.id),
+                "user_id": str(user.id),
+                "message_ids": marked_ids,
+                "read_at": now_iso,
+            },
+        })
+    return {
+        "marked": marked_ids,
+        "read_at": now_iso,
+        "last_read_at": max_created.isoformat() if max_created else None,
+    }
 
 
 @router.post("/rooms/{room_id}/mute", status_code=204)

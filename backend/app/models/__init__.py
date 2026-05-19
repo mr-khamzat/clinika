@@ -205,6 +205,7 @@ from app.models.wellness import WellnessPartner, WellnessPartnerClick
 from app.models.aggregator import AggregatorPartnership, AggregatorLead
 
 from app.models.staff_chat import StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatFile, StaffChatMessageReaction
+from app.models.staff_chat_read import StaffChatMessageRead
 from app.models.chat_global_settings import ChatGlobalSettings
 
 from app.models.franchise_module_grant import FranchiseModuleGrant, FranchiseInternalAct

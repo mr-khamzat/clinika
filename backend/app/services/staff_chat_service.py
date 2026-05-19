@@ -31,6 +31,7 @@ from app.models.staff_chat import (
     StaffChatRoom, StaffChatMember, StaffChatMessage, StaffChatMessageReaction,
     ROOM_TYPE_DIRECT, ROOM_TYPE_CLINIC, ROOM_TYPE_GROUP, ROOM_TYPE_BROADCAST,
 )
+from app.models.staff_chat_read import StaffChatMessageRead
 
 
 # ── RBAC: какие clinic_id видит пользователь ──────────────────────────────────
@@ -441,19 +442,58 @@ def serialize_message(
     *,
     reactions: list | None = None,
     current_user_id: uuid.UUID | None = None,
+    reads: list | None = None,
+    members_count: int | None = None,
+    room_type: str | None = None,
+    delivered_to_override: int | None = None,
 ) -> dict:
     """Сериализатор сообщения.
 
-    Backward-compat: при вызове без kwargs reactions/mentions/pin поля
+    Backward-compat: при вызове без kwargs reactions/mentions/pin/reads поля
     добавляются с дефолтами ([]/None), что не ломает существующие clients.
 
     reactions: список StaffChatMessageReaction (или None — тогда вернётся [])
     current_user_id: для расчёта by_me в reactions
+    reads: список StaffChatMessageRead для этого сообщения (или None → [])
+    members_count: общее число участников комнаты (для расчёта delivered_to);
+        если не задан → delivered_to = max(members_count-1, кол-во read_by)
+        будет приближён эвристикой.
+    room_type: "direct"|"group"|"clinic"|"broadcast" — для read_at (single
+        peer в direct-чате)
+    delivered_to_override: явное значение для delivered_to (например, при
+        отправке нового сообщения без подгрузки членов).
     """
+    reads = reads or []
+    sender_id_str = str(m.sender_id) if m.sender_id else None
+    # read_by — массив user_id (строк), исключая отправителя (он всегда читал своё)
+    read_by_ids: list[str] = []
+    other_read_at: str | None = None
+    for r in reads:
+        uid_str = str(r.user_id) if r.user_id else None
+        if not uid_str or uid_str == sender_id_str:
+            continue
+        read_by_ids.append(uid_str)
+        # Для direct-чата: запоминаем read_at второго участника
+        if room_type == "direct" and other_read_at is None and r.read_at:
+            try:
+                other_read_at = r.read_at.isoformat()
+            except Exception:
+                other_read_at = None
+
+    # delivered_to: эвристика. Если known override — используем его.
+    if delivered_to_override is not None:
+        delivered_val = max(0, int(delivered_to_override))
+    elif members_count is not None:
+        # все участники кроме отправителя
+        delivered_val = max(0, int(members_count) - 1)
+    else:
+        # fallback: хотя бы столько, сколько уже прочитало
+        delivered_val = len(read_by_ids)
+
     return {
         "id": str(m.id),
         "room_id": str(m.room_id),
-        "sender_id": str(m.sender_id) if m.sender_id else None,
+        "sender_id": sender_id_str,
         "body": m.body,
         "attachments": m.attachments,
         "reply_to_id": str(m.reply_to_id) if m.reply_to_id else None,
@@ -465,6 +505,10 @@ def serialize_message(
         "mentioned_user_ids": list(getattr(m, "mentioned_user_ids", None) or []),
         "pinned_at": m.pinned_at.isoformat() if getattr(m, "pinned_at", None) else None,
         "pinned_by_user_id": str(m.pinned_by_user_id) if getattr(m, "pinned_by_user_id", None) else None,
+        # Read receipts (галочки ✓/✓✓):
+        "delivered_to": delivered_val,
+        "read_by": read_by_ids,
+        "read_at": other_read_at,
     }
 
 
@@ -483,6 +527,108 @@ async def load_reactions_for_messages(
     for row in r.scalars().all():
         out.setdefault(row.message_id, []).append(row)
     return out
+
+
+# ── Read receipts (галочки ✓/✓✓) ──────────────────────────────────────────────
+async def load_reads_for_messages(
+    db: AsyncSession, message_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[StaffChatMessageRead]]:
+    """Грузит факты прочтения для списка сообщений батчем.
+
+    Returns {message_id: [StaffChatMessageRead]}.
+    """
+    if not message_ids:
+        return {}
+    r = await db.execute(
+        select(StaffChatMessageRead).where(
+            StaffChatMessageRead.message_id.in_(message_ids),
+        )
+    )
+    out: dict[uuid.UUID, list[StaffChatMessageRead]] = {}
+    for row in r.scalars().all():
+        out.setdefault(row.message_id, []).append(row)
+    return out
+
+
+async def mark_messages_read(
+    db: AsyncSession,
+    room: StaffChatRoom,
+    user: User,
+    message_ids: list[uuid.UUID],
+) -> tuple[list[str], datetime | None]:
+    """Помечает указанные сообщения комнаты прочитанными для пользователя.
+
+    Идемпотентно (UNIQUE по (message_id, user_id) — ON CONFLICT DO NOTHING).
+    Также обновляет StaffChatMember.last_read_at = MAX(message.created_at),
+    но только в сторону увеличения (не откатывает назад).
+
+    Возвращает (effectively_marked_ids: list[str], last_read_at: datetime|None).
+    Сообщения собственного авторства фильтруются (sender == user.id).
+    """
+    if not message_ids:
+        return [], None
+    # Сами сообщения комнаты, не свои, с известным created_at
+    r = await db.execute(
+        select(StaffChatMessage.id, StaffChatMessage.sender_id, StaffChatMessage.created_at)
+        .where(and_(
+            StaffChatMessage.id.in_(message_ids),
+            StaffChatMessage.room_id == room.id,
+        ))
+    )
+    rows = list(r.all())
+    if not rows:
+        return [], None
+    # Отфильтровываем свои (не помечаем как read у sender'а — он уже его написал)
+    target_ids: list[uuid.UUID] = []
+    max_created: datetime | None = None
+    for mid, sender_id, created_at in rows:
+        if sender_id == user.id:
+            continue
+        target_ids.append(mid)
+        if created_at and (max_created is None or created_at > max_created):
+            max_created = created_at
+    if not target_ids:
+        return [], None
+
+    # Идемпотентный bulk-insert через PostgreSQL ON CONFLICT DO NOTHING
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    now = datetime.utcnow()
+    values = [
+        {"message_id": mid, "user_id": user.id, "read_at": now}
+        for mid in target_ids
+    ]
+    stmt = pg_insert(StaffChatMessageRead).values(values)
+    stmt = stmt.on_conflict_do_nothing(
+        index_elements=["message_id", "user_id"],
+    )
+    await db.execute(stmt)
+
+    # Обновляем last_read_at у участника (только вперёд)
+    if max_created is not None:
+        await db.execute(
+            update(StaffChatMember)
+            .where(and_(
+                StaffChatMember.room_id == room.id,
+                StaffChatMember.user_id == user.id,
+                or_(
+                    StaffChatMember.last_read_at.is_(None),
+                    StaffChatMember.last_read_at < max_created,
+                ),
+            ))
+            .values(last_read_at=max_created)
+        )
+
+    return [str(x) for x in target_ids], max_created
+
+
+async def count_room_members(db: AsyncSession, room_id: uuid.UUID) -> int:
+    """Кол-во участников комнаты — для расчёта delivered_to."""
+    r = await db.execute(
+        select(func.count()).select_from(StaffChatMember).where(
+            StaffChatMember.room_id == room_id,
+        )
+    )
+    return int(r.scalar() or 0)
 
 
 def serialize_room(

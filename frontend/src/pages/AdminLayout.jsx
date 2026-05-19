@@ -539,7 +539,7 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
               </div>
               <button type="button" onClick={() => set('is_active', !form.is_active)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
               </button>
             </div>
           )}
@@ -551,7 +551,7 @@ function StaffModal({ token, clinics, existing, onClose, onDone }) {
               </div>
               <button type="button" onClick={() => set('is_active', !form.is_active)}
                 className={`relative w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : ''}`} />
               </button>
             </div>
           )}
@@ -690,7 +690,7 @@ function PushSection({ token }) {
           <div className="flex items-center gap-2 py-1">
             <button type="button" onClick={() => setSendAll(!sendAll)}
               className={"relative w-10 h-5 rounded-full transition-colors " + (sendAll ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600')}>
-              <span className={"absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform " + (sendAll ? 'translate-x-5' : '')} />
+              <span className={"absolute top-0.5 left-0.5 w-4 h-4 bg-white dark:bg-gray-900 rounded-full shadow transition-transform " + (sendAll ? 'translate-x-5' : '')} />
             </button>
             <span className="text-sm text-gray-600 dark:text-gray-300">Отправить всем пациентам</span>
           </div>
@@ -810,15 +810,15 @@ function HomeDashboard({ token, onNavigate }) {
           ) : (
             <div className="space-y-3">
               <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-sm text-gray-500">Доход платформы</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Доход платформы</span>
                 <span className="text-sm font-bold text-emerald-600">{fmtRub(ledger?.platform_income)}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-700">
-                <span className="text-sm text-gray-500">Суммарный оборот</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Суммарный оборот</span>
                 <span className="text-sm font-bold text-gray-800 dark:text-white">{fmtRub(ledger?.total_credit)}</span>
               </div>
               <div className="flex justify-between items-center py-2">
-                <span className="text-sm text-gray-500">Записей в реестре</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Записей в реестре</span>
                 <span className="text-sm font-bold text-gray-800 dark:text-white">
                   {fmt(Object.values(ledger?.breakdown || {}).reduce((s, v) => s + (v.count || 0), 0))}
                 </span>
@@ -1306,7 +1306,7 @@ function CreateClinicManagerModal({ token, clinic, onClose, onCreated }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-700">
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">Назначить управляющего</h3>
-            <p className="text-xs text-gray-500 mt-0.5">{clinic.name}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{clinic.name}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
             <span className="material-symbols-outlined">close</span>
@@ -1315,13 +1315,13 @@ function CreateClinicManagerModal({ token, clinic, onClose, onCreated }) {
         <div className="px-6 py-4 space-y-4">
           {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl px-4 py-3">{error}</div>}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">ФИО</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">ФИО</label>
             <input value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
               placeholder="Иванов Иван Иванович"
               className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Телефон</label>
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Телефон</label>
             <input value={form.phone_number} onChange={e => setForm(f => ({ ...f, phone_number: e.target.value }))}
               placeholder="+7 999 000 00 00"
               className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none" />
@@ -1357,10 +1357,10 @@ function ClinicCredentialsModal({ credentials, onClose }) {
           <div className="bg-gray-50 dark:bg-gray-700/60 rounded-xl p-4 space-y-2.5 font-mono text-sm">
             <div className="flex justify-between"><span className="text-gray-400 text-xs">Клиника</span><span className="font-semibold text-gray-800 dark:text-white">{credentials.clinic_name}</span></div>
             <div className="flex justify-between"><span className="text-gray-400 text-xs">ФИО</span><span className="font-semibold text-gray-800 dark:text-white">{credentials.full_name}</span></div>
-            <div className="border-t border-gray-200 pt-2.5 flex justify-between"><span className="text-gray-400 text-xs">Логин</span><span className="font-bold text-blue-600">{credentials.username}</span></div>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-2.5 flex justify-between"><span className="text-gray-400 text-xs">Логин</span><span className="font-bold text-blue-600">{credentials.username}</span></div>
             <div className="flex justify-between"><span className="text-gray-400 text-xs">Пароль</span><span className="font-bold text-purple-600 tracking-widest">{credentials.password}</span></div>
           </div>
-          <button onClick={copyAll} className="mt-3 w-full bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl py-2.5 text-sm font-medium transition flex items-center justify-center gap-2">
+          <button onClick={copyAll} className="mt-3 w-full bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 text-gray-700 dark:text-gray-200 rounded-xl py-2.5 text-sm font-medium transition flex items-center justify-center gap-2">
             <span className="material-symbols-outlined text-base">{copied ? 'check' : 'content_copy'}</span>
             {copied ? 'Скопировано!' : 'Скопировать всё'}
           </button>
@@ -1492,7 +1492,7 @@ function ClinicsSection({ token, isClinicManager }) {
                   <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3">
                     {!isClinicManager && (
                       <div className="mb-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
-                        <p className="text-xs font-semibold text-gray-500 mb-2">УПРАВЛЯЮЩИЙ</p>
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">УПРАВЛЯЮЩИЙ</p>
                         {isLoadingThis ? null : managerByClinic[c.id] ? (
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
@@ -2748,7 +2748,7 @@ function CommissionSection({ token }) {
               settings?.commission_enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
             }`}
           >
-            <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+            <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${
               settings?.commission_enabled ? 'translate-x-6' : 'translate-x-0.5'
             }`} />
           </button>
@@ -3071,7 +3071,7 @@ function MyPlanSection({ token }) {
     active: { label: 'Активна', color: '#166534', bg: 'bg-emerald-50', icon: 'check_circle' },
     trial_expired: { label: 'Пробный истёк', color: '#ba1a1a', bg: 'bg-red-50', icon: 'error' },
     past_due: { label: 'Просрочена', color: '#ba1a1a', bg: 'bg-red-50', icon: 'error' },
-    cancelled: { label: 'Отменена', color: '#727783', bg: 'bg-gray-50', icon: 'cancel' },
+    cancelled: { label: 'Отменена', color: '#727783', bg: 'bg-gray-50 dark:bg-gray-800', icon: 'cancel' },
   }
   const sc = statusConfig[status] || statusConfig.active
 
@@ -3436,7 +3436,7 @@ function MonitoringSection({ token }) {
           <div className="flex gap-2 flex-wrap">
             {['clinika-backend','clinika-frontend','clinika-db','clinika-redis'].map(c => (
               <button key={c} onClick={() => { setLogsContainer(c); setLogs(null); loadLogs(c) }}
-                className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition ${logsContainer === c ? 'bg-[#1565c0] text-white' : 'bg-white text-[#727783] border border-[#eceef0]'}`}
+                className={`text-xs px-3 py-1.5 rounded-xl font-semibold transition ${logsContainer === c ? 'bg-[#1565c0] text-white' : 'bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0]'}`}
                 style={logsContainer === c ? {boxShadow:'0 4px 12px rgba(21,101,192,0.2)'} : {}}>
                 {c}
               </button>
@@ -3502,7 +3502,7 @@ function MonitoringSection({ token }) {
         <div className="space-y-3">
           <div className="flex justify-end">
             <button onClick={loadDbAnalysis} disabled={dbLoading}
-              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
               style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
               <span className={`material-symbols-outlined text-sm ${dbLoading ? 'animate-spin' : ''}`}>refresh</span>
               Обновить
@@ -3536,7 +3536,7 @@ function MonitoringSection({ token }) {
           <div className="flex justify-between items-center">
             <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">API за 24 часа</p>
             <button onClick={loadApi} disabled={apiLoading}
-              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
               style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
               <span className={`material-symbols-outlined text-sm ${apiLoading ? 'animate-spin' : ''}`}>refresh</span>
               Обновить
@@ -3641,7 +3641,7 @@ function MonitoringSection({ token }) {
           <div className="flex justify-between items-center">
             <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Активные пользователи</p>
             <button onClick={loadUsers} disabled={usersLoading}
-              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
               style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
               <span className={`material-symbols-outlined text-sm ${usersLoading ? 'animate-spin' : ''}`}>refresh</span>
               Обновить
@@ -3748,7 +3748,7 @@ function MonitoringSection({ token }) {
           <div className="flex justify-between items-center">
             <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Бизнес-метрики (live)</p>
             <button onClick={loadBusiness} disabled={businessLoading}
-              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
               style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
               <span className={`material-symbols-outlined text-sm ${businessLoading ? 'animate-spin' : ''}`}>refresh</span>
               Обновить
@@ -3821,7 +3821,7 @@ function MonitoringSection({ token }) {
           <div className="flex justify-between items-center">
             <p className="text-xs font-bold text-[#727783] uppercase tracking-widest">Хранилище</p>
             <button onClick={loadStorage} disabled={storageLoading}
-              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+              className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
               style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
               <span className={`material-symbols-outlined text-sm ${storageLoading ? 'animate-spin' : ''}`}>refresh</span>
               Обновить
@@ -3903,7 +3903,7 @@ function MonitoringSection({ token }) {
                 </button>
               ))}
               <button onClick={() => loadAlerts(alertsSeverity)} disabled={alertsLoading}
-                className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
+                className="text-xs px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-gray-900 text-[#727783] border border-[#eceef0] hover:text-[#1565c0] transition flex items-center gap-1"
                 style={{boxShadow:'0 4px 16px rgba(25,28,30,0.05)'}}>
                 <span className={`material-symbols-outlined text-sm ${alertsLoading ? 'animate-spin' : ''}`}>refresh</span>
               </button>
@@ -4520,7 +4520,7 @@ function PartnersSection({ token }) {
                     className={`flex items-center gap-3 p-4 ${i < invites.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${inv.is_valid ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${inv.is_valid ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'}`}>
                           {inv.is_valid ? 'Активна' : 'Исчерпана'}
                         </span>
                         {inv.clinic_name && (
@@ -4873,7 +4873,7 @@ function DiscountModal({ token, existing, services, clinics, onClose, onDone }) 
             </span>
             <button type="button" onClick={() => set('is_active', !form.is_active)}
               className={`relative inline-flex w-12 h-6 rounded-full transition-colors ${form.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              <span className={`absolute top-0.5 w-5 h-5 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${form.is_active ? 'translate-x-6' : 'translate-x-0.5'}`} />
             </button>
           </div>
 
@@ -5047,7 +5047,7 @@ function DiscountsSection({ token }) {
                         <td className="px-4 py-3">
                           <button onClick={() => handleToggleActive(d)}
                             className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${d.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            <span className={`absolute top-0.5 w-4 h-4 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
                           </button>
                         </td>
                         <td className="px-4 py-3">
@@ -5084,7 +5084,7 @@ function DiscountsSection({ token }) {
                     <div className="flex items-center justify-between mt-2">
                       <button onClick={() => handleToggleActive(d)}
                         className={`relative inline-flex w-10 h-5 rounded-full transition-colors ${d.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${d.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
                       </button>
                       <div className="flex gap-2">
                         <button onClick={() => setEditTarget(d)}
@@ -5180,7 +5180,7 @@ function LedgerSection({ token }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Финансовый реестр</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Append-only журнал всех операций с бонусами</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Append-only журнал всех операций с бонусами</p>
         </div>
         <button onClick={() => setShowAdj(true)}
           className="flex items-center gap-2 px-4 py-2 bg-[#0097A7] text-white rounded-xl text-sm font-semibold hover:bg-[#00838f] transition">
@@ -5202,7 +5202,7 @@ function LedgerSection({ token }) {
               <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
                 <span className="material-symbols-outlined text-lg" style={{ color: c.color, fontVariationSettings: "'FILL' 1" }}>{c.icon}</span>
               </div>
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{c.label}</p>
               <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
                 {(c.value ?? 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₽
               </p>
@@ -5257,7 +5257,7 @@ function LedgerSection({ token }) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+              <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 <th className="px-4 py-3 text-left">Дата</th>
                 <th className="px-4 py-3 text-left">Тип</th>
                 <th className="px-4 py-3 text-right">Сумма</th>
@@ -5270,11 +5270,11 @@ function LedgerSection({ token }) {
                 <tr><td colSpan={5} className="text-center py-8 text-gray-400">Нет операций</td></tr>
               )}
               {history.map(e => {
-                const op = OP_LABELS[e.operation_type] || { label: e.operation_type, color: 'text-gray-600' }
+                const op = OP_LABELS[e.operation_type] || { label: e.operation_type, color: 'text-gray-600 dark:text-gray-300' }
                 const isDebit = e.operation_type === 'manual_debit' || e.operation_type === 'bonus_cancelled'
                 return (
                   <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
-                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
                       {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className={`px-4 py-3 font-medium ${op.color}`}>{op.label}</td>
@@ -5282,7 +5282,7 @@ function LedgerSection({ token }) {
                       {isDebit ? '-' : '+'}{e.amount.toLocaleString('ru-RU')} ₽
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{e.description || '—'}</td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">ID {e.created_by_id || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">ID {e.created_by_id || '—'}</td>
                   </tr>
                 )
               })}
@@ -5354,7 +5354,7 @@ function AnalyticsDrillSection({ token }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Аналитика</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Детальные срезы по всем метрикам платформы</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Детальные срезы по всем метрикам платформы</p>
         </div>
         <div className="flex gap-2">
           {[7, 14, 30, 90].map(d => (
@@ -5370,7 +5370,7 @@ function AnalyticsDrillSection({ token }) {
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit flex-wrap">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             <span className="material-symbols-outlined text-base">{t.icon}</span>
             {t.label}
           </button>
@@ -5393,7 +5393,7 @@ function AnalyticsDrillSection({ token }) {
                     <div className={`w-9 h-9 rounded-xl ${c.bg} flex items-center justify-center mb-3`}>
                       <span className="material-symbols-outlined text-lg" style={{ color: c.color, fontVariationSettings: "'FILL' 1" }}>{c.icon}</span>
                     </div>
-                    <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{c.label}</p>
                     <p className="text-xl font-extrabold text-gray-900 dark:text-white mt-1">
                       {fmtN(c.val)}{c.rub ? ' ₽' : ''}
                     </p>
@@ -5432,7 +5432,7 @@ function AnalyticsDrillSection({ token }) {
                     <div key={i}>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="font-medium text-gray-700 dark:text-gray-300">{step.label}</span>
-                        <span className="text-gray-500">{fmtN(step.count)} {step.rate != null ? `(${fmtP(step.rate)})` : ''}</span>
+                        <span className="text-gray-500 dark:text-gray-400">{fmtN(step.count)} {step.rate != null ? `(${fmtP(step.rate)})` : ''}</span>
                       </div>
                       <div className="bg-gray-100 dark:bg-gray-700 rounded-full h-5 overflow-hidden">
                         <div className={`h-5 rounded-full ${colors[i % colors.length]} transition-all duration-500`} style={{ width: `${pct}%` }} />
@@ -5453,7 +5453,7 @@ function AnalyticsDrillSection({ token }) {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <th className="px-4 py-3 text-left">#</th>
                       <th className="px-4 py-3 text-left">Услуга</th>
                       <th className="px-4 py-3 text-right">Направлений</th>
@@ -5519,7 +5519,7 @@ function AnalyticsDrillSection({ token }) {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       <th className="px-4 py-3 text-left">Клиника</th>
                       <th className="px-4 py-3 text-right">Направлений</th>
                       <th className="px-4 py-3 text-right">Подтверждено</th>
@@ -5644,7 +5644,7 @@ function AuditSection({ token }) {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Журнал аудита</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Полная история действий в системе с до/после изменений</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Полная история действий в системе с до/после изменений</p>
       </div>
 
       {/* Фильтры */}
@@ -5681,7 +5681,7 @@ function AuditSection({ token }) {
           <div className="admin-table-desktop admin-table-wrap">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th className="px-4 py-3 text-left">Дата</th>
                   <th className="px-4 py-3 text-left">Действие</th>
                   <th className="px-4 py-3 text-left">Сущность</th>
@@ -5708,7 +5708,7 @@ function AuditSection({ token }) {
                       onClick={() => canExpand && setExpandedId(isOpen ? null : e.id)}
                       className={`hover:bg-gray-50 dark:hover:bg-gray-700/30 transition align-top ${canExpand ? 'cursor-pointer' : ''}`}
                     >
-                      <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs whitespace-nowrap">
                         {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td className="px-4 py-3">
@@ -5716,7 +5716,7 @@ function AuditSection({ token }) {
                           <span className="inline-flex items-center px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
                             {e.action}
                           </span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-fit ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded w-fit ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
                             {e.source === 'audit' ? 'аудит' : 'активность'}
                           </span>
                         </div>
@@ -5737,7 +5737,7 @@ function AuditSection({ token }) {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-500 max-w-xs">
+                      <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 max-w-xs">
                         {e.after && <pre className="bg-gray-50 dark:bg-gray-900 rounded p-1 text-xs overflow-x-auto max-h-20 max-w-xs">{JSON.stringify(e.after, null, 1)}</pre>}
                       </td>
                     </tr>
@@ -5749,11 +5749,11 @@ function AuditSection({ token }) {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="text-xs space-y-1">
                               <div className="font-semibold text-gray-700 dark:text-gray-300 mb-2">Гео-данные</div>
-                              <div><span className="text-gray-500">Страна:</span> {flag} {e.geo_country_name || e.geo_country || '—'}</div>
-                              <div><span className="text-gray-500">Регион:</span> {e.geo_region || '—'}</div>
-                              <div><span className="text-gray-500">Город:</span> {e.geo_city || '—'}</div>
-                              <div><span className="text-gray-500">Координаты:</span> {hasGeo ? `${e.geo_lat}, ${e.geo_lon}` : '—'}</div>
-                              <div><span className="text-gray-500">User-Agent:</span> <span className="font-mono break-all">{e.user_agent || '—'}</span></div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Страна:</span> {flag} {e.geo_country_name || e.geo_country || '—'}</div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Регион:</span> {e.geo_region || '—'}</div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Город:</span> {e.geo_city || '—'}</div>
+                              <div><span className="text-gray-500 dark:text-gray-400">Координаты:</span> {hasGeo ? `${e.geo_lat}, ${e.geo_lon}` : '—'}</div>
+                              <div><span className="text-gray-500 dark:text-gray-400">User-Agent:</span> <span className="font-mono break-all">{e.user_agent || '—'}</span></div>
                             </div>
                             {hasGeo && (
                               <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700">
@@ -5792,7 +5792,7 @@ function AuditSection({ token }) {
                     <span className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">
                       {new Date(e.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 text-gray-500'}`}>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${e.source === 'audit' ? 'bg-violet-50 text-violet-600' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
                       {e.source === 'audit' ? 'аудит' : 'активность'}
                     </span>
                   </div>
@@ -5901,16 +5901,16 @@ function BillingSection({ token }) {
     trial: 'bg-amber-50 text-amber-700',
     active: 'bg-emerald-50 text-emerald-700',
     past_due: 'bg-red-50 text-red-700',
-    cancelled: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',
     paused: 'bg-blue-50 text-blue-700',
   }
 
   const INV_COLORS = {
-    draft: 'bg-gray-100 text-gray-600',
+    draft: 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300',
     sent: 'bg-blue-50 text-blue-700',
     paid: 'bg-emerald-50 text-emerald-700',
     overdue: 'bg-red-50 text-red-700',
-    void: 'bg-gray-100 text-gray-400',
+    void: 'bg-gray-100 dark:bg-gray-800 text-gray-400',
   }
 
   const PLAN_COLORS = { basic: '#64748b', professional: '#0097A7', enterprise: '#7C3AED' }
@@ -5944,7 +5944,7 @@ function BillingSection({ token }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Биллинг</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Управление подпиской и счетами</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление подпиской и счетами</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setGenInvoiceModal(true)}
@@ -5961,7 +5961,7 @@ function BillingSection({ token }) {
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             <span className="material-symbols-outlined text-base">{t.icon}</span>
             {t.label}
           </button>
@@ -5981,7 +5981,7 @@ function BillingSection({ token }) {
                   </h3>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[sub.status] || 'bg-gray-100 text-gray-600'}`}>
+                  <span className={`px-3 py-1 rounded-full text-sm font-semibold ${STATUS_COLORS[sub.status] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>
                     {sub.status}
                   </span>
                   <button onClick={() => setChangingPlan(true)}
@@ -6020,7 +6020,7 @@ function BillingSection({ token }) {
           <div className="admin-table-desktop admin-table-wrap">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   <th className="px-4 py-3 text-left">Номер</th>
                   <th className="px-4 py-3 text-left">Период</th>
                   <th className="px-4 py-3 text-right">Сумма</th>
@@ -6034,12 +6034,12 @@ function BillingSection({ token }) {
                 {invoices.map(inv => (
                   <tr key={inv.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition">
                     <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">{inv.invoice_number}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
+                    <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
                       {new Date(inv.period_start).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })} — {new Date(inv.period_end).toLocaleDateString('ru-RU', { month: 'short', year: '2-digit' })}
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-gray-800 dark:text-gray-200">{(inv.amount).toLocaleString('ru-RU')} ₽</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${INV_COLORS[inv.status] || 'bg-gray-100 text-gray-600'}`}>{inv.status}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${INV_COLORS[inv.status] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{inv.status}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400">{inv.due_date ? new Date(inv.due_date).toLocaleDateString('ru-RU') : '—'}</td>
                     <td className="px-4 py-3 text-right">
@@ -6064,7 +6064,7 @@ function BillingSection({ token }) {
               <div key={inv.id} className="admin-row-card">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="font-mono text-xs text-gray-700 dark:text-gray-300 truncate">{inv.invoice_number}</div>
-                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 ${INV_COLORS[inv.status] || 'bg-gray-100 text-gray-600'}`}>{inv.status}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium flex-shrink-0 ${INV_COLORS[inv.status] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{inv.status}</span>
                 </div>
                 <div className="admin-row-field">
                   <span className="admin-row-field-label">Период</span>
@@ -6103,7 +6103,7 @@ function BillingSection({ token }) {
               <span className={`text-sm font-semibold transition ${billingCycle === 'monthly' ? 'text-[#191c1e] dark:text-white' : 'text-[#727783]'}`}>Ежемесячно</span>
               <button onClick={() => setBillingCycle(c => c === 'monthly' ? 'annual' : 'monthly')}
                 className={`relative w-12 h-6 rounded-full transition-colors ${billingCycle === 'annual' ? 'bg-[#0097A7]' : 'bg-gray-300 dark:bg-gray-600'}`}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-6' : ''}`} />
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white dark:bg-gray-900 rounded-full shadow transition-transform ${billingCycle === 'annual' ? 'translate-x-6' : ''}`} />
               </button>
               <span className={`text-sm font-semibold transition ${billingCycle === 'annual' ? 'text-[#191c1e] dark:text-white' : 'text-[#727783]'}`}>Годовой</span>
               {billingCycle === 'annual' && <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">Скидка ~{plans[0]?.discount_annual_pct || 17}%</span>}
@@ -6179,7 +6179,7 @@ function BillingSection({ token }) {
                 <button key={p.plan} onClick={() => changePlan(p.plan)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-medium transition ${sub?.plan_name === p.plan ? 'border-[#0097A7] bg-[#e0f7fa] text-[#0097A7]' : 'border-gray-200 dark:border-gray-600 hover:border-[#0097A7] text-gray-700 dark:text-gray-200'}`}>
                   <span>{p.plan?.charAt(0).toUpperCase() + p.plan?.slice(1)}</span>
-                  <span className="text-gray-500">{(p.price_monthly).toLocaleString('ru-RU')} ₽/мес</span>
+                  <span className="text-gray-500 dark:text-gray-400">{(p.price_monthly).toLocaleString('ru-RU')} ₽/мес</span>
                 </button>
               ))}
             </div>
@@ -6231,7 +6231,7 @@ function BillingSection({ token }) {
                   {[7, 30, 90].map(d => (
                     <button key={d}
                       onClick={() => { setLedgerDays(d); loadLedger(d) }}
-                      className={"px-3 py-1 text-xs rounded-full border font-semibold transition " + (ledgerDays === d ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50')}>
+                      className={"px-3 py-1 text-xs rounded-full border font-semibold transition " + (ledgerDays === d ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-50')}>
                       {d}д
                     </button>
                   ))}
@@ -6265,18 +6265,18 @@ function BillingSection({ token }) {
                           <div className={"text-xl font-bold " + s.cls.split(' ')[0]}>
                             {s.noFormat ? s.value : (Number(s.value) || 0).toLocaleString('ru-RU', {maximumFractionDigits: 0}) + ' ₽'}
                           </div>
-                          <div className="text-xs text-gray-500">{s.label}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">{s.label}</div>
                         </div>
                       </div>
                     ))}
                   </div>
                   {ledgerSummary.breakdown && Object.keys(ledgerSummary.breakdown).length > 0 && (
-                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-100 font-semibold text-sm text-gray-700">По типу операций</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
+                      <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-800 font-semibold text-sm text-gray-700 dark:text-gray-200">По типу операций</div>
                       <div className="divide-y divide-gray-50">
                         {Object.entries(ledgerSummary.breakdown).map(([type, data]) => (
                           <div key={type} className="px-4 py-3 flex justify-between items-center text-sm">
-                            <span className="text-gray-500">{type.replace(/_/g, ' ')}</span>
+                            <span className="text-gray-500 dark:text-gray-400">{type.replace(/_/g, ' ')}</span>
                             <span className="font-semibold">{((data && typeof data === 'object' ? (data.amount ?? 0) : (data || 0))).toLocaleString('ru-RU', {maximumFractionDigits:0})} ₽</span>
                           </div>
                         ))}
@@ -6293,7 +6293,7 @@ function BillingSection({ token }) {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-white">Оплата счёта</h3>
-            <p className="text-sm text-gray-500 mb-4">{payModal.invoice_number}</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{payModal.invoice_number}</p>
             <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)}
               placeholder="Сумма оплаты"
               className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-700 dark:text-white mb-4" />
@@ -6515,7 +6515,7 @@ function SchedulingSection({ token }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-extrabold font-headline text-gray-900 dark:text-white">Расписание</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Управление врачами, расписанием и записями пациентов</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Управление врачами, расписанием и записями пациентов</p>
         </div>
         {activeTab === 'doctors' && (
           <button onClick={() => { setDocForm(EMPTY_DOC); setDoctorModal('new') }}
@@ -6530,7 +6530,7 @@ function SchedulingSection({ token }) {
       <div className="flex gap-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl w-fit flex-wrap">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}>
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${activeTab === t.key ? 'bg-white dark:bg-gray-700 text-[#0097A7] shadow-sm' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'}`}>
             <span className="material-symbols-outlined text-base">{t.icon}</span>
             {t.label}
             {t.key === 'appointments' && appointments.filter(a => a.status === 'pending').length > 0 && (
@@ -6564,7 +6564,7 @@ function SchedulingSection({ token }) {
                     <p className="text-xs text-gray-400">{doc.specialty || 'Специальность не указана'}</p>
                     {clinic && <p className="text-xs text-[#0097A7] mt-0.5">{clinic.name}</p>}
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${doc.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${doc.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
                     {doc.is_active ? 'Активен' : 'Неактивен'}
                   </span>
                 </div>
@@ -6628,7 +6628,7 @@ function SchedulingSection({ token }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 uppercase tracking-wider">
+                  <tr className="bg-gray-50 dark:bg-gray-900/50 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     <th className="px-4 py-3 text-left">Пациент</th>
                     <th className="px-4 py-3 text-left">Врач</th>
                     <th className="px-4 py-3 text-left">Дата и время</th>
@@ -6936,8 +6936,8 @@ function SuperAdminSection({ token }) {
     setTenants(prev => prev.map(x => x.id === t.id ? { ...x, is_active: !x.is_active } : x))
   }
 
-  const statusColors = { trial:'bg-blue-100 text-blue-700', active:'bg-green-100 text-green-700', past_due:'bg-yellow-100 text-yellow-700', cancelled:'bg-red-100 text-red-700', paused:'bg-gray-100 text-gray-600' }
-  const planColors = { basic:'bg-slate-100 text-slate-600', professional:'bg-purple-100 text-purple-700', enterprise:'bg-amber-100 text-amber-700' }
+  const statusColors = { trial:'bg-blue-100 text-blue-700', active:'bg-green-100 text-green-700', past_due:'bg-yellow-100 text-yellow-700', cancelled:'bg-red-100 text-red-700', paused:'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300' }
+  const planColors = { basic:'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300', professional:'bg-purple-100 text-purple-700', enterprise:'bg-amber-100 text-amber-700' }
 
   return (
     <div className="space-y-6">
@@ -6978,7 +6978,7 @@ function SuperAdminSection({ token }) {
             ].map((c, i) => (
               <div key={i} className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">{c.label}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 font-medium uppercase tracking-wide">{c.label}</p>
                   <span className={`material-symbols-outlined text-${c.color}-500 text-[22px]`}>{c.icon}</span>
                 </div>
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">{c.val}</p>
@@ -6993,7 +6993,7 @@ function SuperAdminSection({ token }) {
               <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Подписки по статусу</h3>
               {Object.entries(metrics.subscriptions_by_status || {}).map(([s, c]) => (
                 <div key={s} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s] || 'bg-gray-100 text-gray-600'}`}>{s}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{s}</span>
                   <span className="font-bold text-gray-900 dark:text-white">{c}</span>
                 </div>
               ))}
@@ -7003,7 +7003,7 @@ function SuperAdminSection({ token }) {
               <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Тенанты по планам</h3>
               {Object.entries(metrics.tenants_by_plan || {}).map(([p, c]) => (
                 <div key={p} className="flex items-center justify-between py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[p] || 'bg-gray-100 text-gray-600'}`}>{p}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[p] || 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300'}`}>{p}</span>
                   <span className="font-bold text-gray-900 dark:text-white">{c}</span>
                 </div>
               ))}
@@ -7020,7 +7020,7 @@ function SuperAdminSection({ token }) {
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   {['Тенант','Slug','План','Подписка','Клиники','Польз.','Статус','Действия'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -7028,12 +7028,12 @@ function SuperAdminSection({ token }) {
                 {tenants.map(t => (
                   <tr key={t.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                     <td data-label="Тенант" className="px-4 py-3 font-medium text-gray-900 dark:text-white text-sm">{t.name}</td>
-                    <td data-label="Slug" className="px-4 py-3 text-xs text-gray-500 font-mono">{t.slug}</td>
+                    <td data-label="Slug" className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400 font-mono">{t.slug}</td>
                     <td data-label="План" className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[t.plan] || 'bg-gray-100'}`}>{t.plan || '—'}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[t.plan] || 'bg-gray-100 dark:bg-gray-800'}`}>{t.plan || '—'}</span>
                     </td>
                     <td data-label="Подписка" className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[t.subscription_status] || 'bg-gray-100'}`}>{t.subscription_status || '—'}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[t.subscription_status] || 'bg-gray-100 dark:bg-gray-800'}`}>{t.subscription_status || '—'}</span>
                     </td>
                     <td data-label="Клиники" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
                     <td data-label="Польз." className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
@@ -7063,7 +7063,7 @@ function SuperAdminSection({ token }) {
       {!loading && tab === 'billing' && billing && (
         <div className="space-y-4">
           <div className="bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-800">
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">MRR (Monthly Recurring Revenue)</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">MRR (Monthly Recurring Revenue)</p>
             <p className="text-4xl font-bold text-green-600">{billing.mrr.toLocaleString('ru-RU')} ₽</p>
             <p className="text-xs text-gray-400 mt-1">{billing.subscriptions_count} подписок</p>
           </div>
@@ -7073,7 +7073,7 @@ function SuperAdminSection({ token }) {
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     {['Тенант','План','Статус','Сумма/период','Конец периода','Trial до','Создан'].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -7084,8 +7084,8 @@ function SuperAdminSection({ token }) {
                       <td data-label="План" className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${planColors[s.plan] || ''}`}>{s.plan}</span></td>
                       <td data-label="Статус" className="px-3 py-3"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s.status] || ''}`}>{s.status}</span></td>
                       <td data-label="Сумма/период" className="px-3 py-3 text-sm font-mono">{s.amount_per_period.toLocaleString('ru-RU')} ₽</td>
-                      <td data-label="Конец периода" className="px-3 py-3 text-sm text-gray-500">{s.current_period_end}</td>
-                      <td data-label="Trial до" className="px-3 py-3 text-sm text-gray-500">{s.trial_ends_at ? s.trial_ends_at.slice(0,10) : '—'}</td>
+                      <td data-label="Конец периода" className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{s.current_period_end}</td>
+                      <td data-label="Trial до" className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400">{s.trial_ends_at ? s.trial_ends_at.slice(0,10) : '—'}</td>
                       <td data-label="Создан" className="px-3 py-3 text-xs text-gray-400">{s.created_at.slice(0,10)}</td>
                     </tr>
                   ))}
@@ -7325,7 +7325,7 @@ function MisSyncSection({ token }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">МИС Renovatio</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Синхронизация данных из МИС в систему</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Синхронизация данных из МИС в систему</p>
         </div>
         {msg && <div className="bg-blue-600 text-white text-sm px-4 py-2 rounded-xl shadow">{msg}</div>}
       </div>
@@ -7365,7 +7365,7 @@ function MisSyncSection({ token }) {
                     className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition
                       ${isSelected ? 'border-[#0097A7] bg-[#0097A7]/5' : 'border-gray-100 dark:border-gray-700 hover:border-gray-300'}`}>
                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition
-                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300'}`}>
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300 dark:border-gray-600'}`}>
                       {isSelected && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
                     </div>
                     <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: c.color || '#999' }} />
@@ -7425,7 +7425,7 @@ function MisSyncSection({ token }) {
                     className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition
                       ${isSelected ? 'border-[#0097A7] bg-[#0097A7]/5' : 'border-gray-100 dark:border-gray-700 hover:border-gray-200'}`}>
                     <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition flex-shrink-0
-                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300'}`}>
+                      ${isSelected ? 'border-[#0097A7] bg-[#0097A7]' : 'border-gray-300 dark:border-gray-600'}`}>
                       {isSelected && <span className="material-symbols-outlined text-white text-[12px]">check</span>}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -7487,17 +7487,17 @@ function MisSyncSection({ token }) {
             <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setCreateAccForm(null)}>
               <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">Создать кабинет врача</h3>
-                <p className="text-sm text-gray-500 mb-4">{createAccForm.full_name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{createAccForm.full_name}</p>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Логин</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Логин</label>
                     <input value={createAccForm.username}
                       onChange={e => setCreateAccForm(f => ({...f, username: e.target.value}))}
                       placeholder="doctor_ivanov"
                       className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5 text-sm dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0097A7]" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Пароль</label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Пароль</label>
                     <input type="password" value={createAccForm.password}
                       onChange={e => setCreateAccForm(f => ({...f, password: e.target.value}))}
                       placeholder="Минимум 6 символов"
@@ -7527,7 +7527,7 @@ function MisSyncSection({ token }) {
             <h3 className="font-bold text-gray-900 dark:text-white mb-4">Источник и назначение</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Клиника МИС (источник)</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Клиника МИС (источник)</label>
                 <select value={sourceClinicId} onChange={e => { setSourceClinicId(+e.target.value); setMisServices(null) }}
                   className="w-full border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2 text-sm dark:bg-gray-800 dark:text-white">
                   {(misClinics || [{mis_id:1,name:'КС-1'},{mis_id:4,name:'КС-4'},{mis_id:3,name:'КС-3'},{mis_id:24,name:'КС-24'},{mis_id:26,name:'КС-26'}]).map(c => (
@@ -7536,7 +7536,7 @@ function MisSyncSection({ token }) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Наши клиники (назначение)</label>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Наши клиники (назначение)</label>
                 <div className="space-y-1 max-h-32 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-xl p-2">
                   {ourClinics.map(c => (
                     <label key={c.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
@@ -7574,7 +7574,7 @@ function MisSyncSection({ token }) {
                     <button key={cat.name}
                       onClick={() => setSelectedCategories(s => isSelected ? s.filter(x => x !== cat.name) : [...s, cat.name])}
                       className={`text-xs px-3 py-1.5 rounded-full border transition
-                        ${isSelected ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'bg-white dark:bg-gray-800 text-gray-600 border-gray-200 hover:border-[#0097A7]'}`}>
+                        ${isSelected ? 'bg-[#0097A7] text-white border-[#0097A7]' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-[#0097A7]'}`}>
                       {cat.name} ({cat.count})
                     </button>
                   )
@@ -7690,7 +7690,7 @@ function CallsConfigSection({ token }) {
     { value: 'online', label: 'На месте',     color: '#22c55e', bg: 'bg-emerald-50 border-emerald-200', icon: 'circle' },
     { value: 'away',   label: 'Не на месте',  color: '#f59e0b', bg: 'bg-amber-50 border-amber-200',    icon: 'schedule' },
     { value: 'busy',   label: 'Занят',        color: '#ef4444', bg: 'bg-red-50 border-red-200',         icon: 'do_not_disturb_on' },
-    { value: 'offline',label: 'Не в системе', color: '#94a3b8', bg: 'bg-gray-50 border-gray-200',       icon: 'radio_button_unchecked' },
+    { value: 'offline',label: 'Не в системе', color: '#94a3b8', bg: 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700',       icon: 'radio_button_unchecked' },
   ]
 
   const TABS = [
@@ -7704,7 +7704,7 @@ function CallsConfigSection({ token }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Звонки и уведомления</h1>
-          <p className="text-sm text-gray-500 mt-0.5">P2P звонки по ролям, статусы присутствия, SMS и Telegram уведомления</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">P2P звонки по ролям, статусы присутствия, SMS и Telegram уведомления</p>
         </div>
         {msg && (
           <div className={`px-4 py-2 rounded-xl text-sm font-semibold shadow ${msg.ok !== false ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
@@ -7741,7 +7741,7 @@ function CallsConfigSection({ token }) {
       {/* ─── Разрешения звонков ─── */}
       {tab === 'calls' && (
         <div className="space-y-4">
-          <p className="text-xs text-gray-500 font-medium">
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
             Матрица показывает: кто (строки) кому (столбцы) может звонить.
             Чекбокс «Звонок» = разрешить аудио, «Видео» = разрешить видео, «Своя клиника» = только в пределах одной клиники.
           </p>
@@ -7749,9 +7749,9 @@ function CallsConfigSection({ token }) {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50">
-                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">Кто звонит ↓ / Кому →</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Кто звонит ↓ / Кому →</th>
                   {ROLES.map(r => (
-                    <th key={r} className="px-3 py-3 text-center text-xs font-bold text-gray-500 uppercase tracking-wide">
+                    <th key={r} className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                       <div className="flex flex-col items-center gap-1">
                         <span className="material-symbols-outlined text-base text-[#0097A7]">{ROLE_ICONS[r]}</span>
                         {ROLE_LABELS[r]}
@@ -7804,7 +7804,7 @@ function CallsConfigSection({ token }) {
             </table>
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 text-xs text-gray-500 space-y-1">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
             <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-emerald-500 flex-shrink-0"/><span><strong>Звонок</strong> — разрешить аудио звонок от этой роли к другой</span></div>
             <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-blue-500 flex-shrink-0"/><span><strong>Видео</strong> — разрешить видео звонок (требует аудио)</span></div>
             <div className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-amber-500 flex-shrink-0"/><span><strong>Своя клиника</strong> — звонить можно только сотрудникам одной клиники</span></div>
@@ -7817,12 +7817,12 @@ function CallsConfigSection({ token }) {
         <div className="space-y-4 max-w-md">
           <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-800 space-y-4">
             <h3 className="font-bold text-gray-900 dark:text-white">Статус присутствия</h3>
-            <p className="text-xs text-gray-500">Видят все сотрудники вашего тенанта. Влияет на доступность для звонков.</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Видят все сотрудники вашего тенанта. Влияет на доступность для звонков.</p>
             <div className="grid grid-cols-2 gap-2">
               {STATUS_OPTIONS.map(s => (
                 <button key={s.value} onClick={() => updateStatus(s.value)}
                   className={`flex items-center gap-2 px-3 py-3 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    myStatus === s.value ? `${s.bg} border-current` : 'border-gray-200 dark:border-gray-700 text-gray-500 hover:border-gray-300'
+                    myStatus === s.value ? `${s.bg} border-current` : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300'
                   }`} style={myStatus === s.value ? {color: s.color} : {}}>
                   <span className="material-symbols-outlined text-base" style={{color: s.color, fontVariationSettings:"'FILL' 1"}}>{s.icon}</span>
                   {s.label}
@@ -7861,7 +7861,7 @@ function CallsConfigSection({ token }) {
       {/* ─── Уведомления ─── */}
       {tab === 'notifications' && (
         <div className="space-y-4">
-          <p className="text-xs text-gray-500 font-medium">Настройте какие события и по каким каналам получает каждая роль.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Настройте какие события и по каким каналам получает каждая роль.</p>
           {['reg', 'manager', 'partner_doctor'].map(role => {
             const setting = notifSettings.find(s => s.role === role) || { events: {}, channels: {} }
             const events = setting.events || {}
@@ -7886,7 +7886,7 @@ function CallsConfigSection({ token }) {
                 </div>
                 {/* Каналы */}
                 <div className="mb-4">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Каналы доставки</p>
+                  <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Каналы доставки</p>
                   <div className="flex gap-3 flex-wrap">
                     {[
                       { key: 'sms', label: 'SMS', icon: 'sms' },
@@ -7907,7 +7907,7 @@ function CallsConfigSection({ token }) {
                 {/* События */}
                 {EVENT_LIST.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Уведомлять о событиях</p>
+                    <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">Уведомлять о событиях</p>
                     <div className="grid grid-cols-2 gap-2">
                       {EVENT_LIST.map(([key, label]) => (
                         <label key={key} className="flex items-center gap-2 cursor-pointer text-xs text-gray-600 dark:text-gray-400">

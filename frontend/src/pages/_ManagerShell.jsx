@@ -50,6 +50,7 @@ export const MGR_NAV = [
   { key:'mis_webhooks', label:'Интеграции с МИС', icon:'webhook', path:'/manager/integrations/mis', group:'integrations' },
   // Телефония — PSTN-провайдер (Mango/Sipuni/...), DID-номера, история звонков
   { key:'telephony', label:'Телефония', icon:'phone', path:'/manager/telephony', group:'integrations' },
+  { key:'doctors',      label:'Врачи (расписание)', icon:'stethoscope', path:'/manager/doctors',         group:'team' },
   { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors',  group:'team' },
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors', group:'team' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors',  group:'team' },
