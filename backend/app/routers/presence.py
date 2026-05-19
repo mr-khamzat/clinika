@@ -284,23 +284,61 @@ async def get_all_presence(
     Врач видит только свою клинику, менеджер — всех.
     """
     from app.models.user import User as UserModel
+    from app.models.tenant import Tenant as TenantModel
+    from app.models.clinic import Clinic as ClinicModel
     from sqlalchemy import and_
 
     q = select(UserModel, UserPresence).outerjoin(
         UserPresence, UserPresence.user_id == UserModel.id
     )
 
-    # Тенант-фильтр
+    # Тенант-фильтр.
+    # super_admin / franchise_owner с franchise_id видят юзеров всех клиник
+    # своей франшизы (cross-tenant Calls), остальные — свой тенант.
+    tenant_scope = None
     if current_user.tenant_id:
-        q = q.where(UserModel.tenant_id == current_user.tenant_id)
+        my_t = (await db.execute(
+            select(TenantModel).where(TenantModel.id == current_user.tenant_id)
+        )).scalar_one_or_none()
+        my_franchise_id = getattr(my_t, "franchise_id", None) if my_t else None
+        if current_user.role in (UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER) and my_franchise_id:
+            rr = await db.execute(
+                select(TenantModel.id).where(TenantModel.franchise_id == my_franchise_id)
+            )
+            tenant_scope = [row[0] for row in rr.all()]
+            q = q.where(UserModel.tenant_id.in_(tenant_scope))
+        else:
+            tenant_scope = [current_user.tenant_id]
+            q = q.where(UserModel.tenant_id == current_user.tenant_id)
+            # Сотрудник обычной клиники: также видит franchise admin'ов
+            # (super_admin/franchise_owner) из других клиник его франшизы —
+            # чтобы можно было им позвонить.
+            if my_franchise_id:
+                franchise_admin_q = select(TenantModel.id).where(
+                    TenantModel.franchise_id == my_franchise_id
+                )
+                from sqlalchemy import or_ as _or
+                q = select(UserModel, UserPresence).outerjoin(
+                    UserPresence, UserPresence.user_id == UserModel.id
+                ).where(_or(
+                    UserModel.tenant_id == current_user.tenant_id,
+                    and_(
+                        UserModel.tenant_id.in_(franchise_admin_q),
+                        UserModel.role.in_([UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER]),
+                    ),
+                ))
 
     # Исключаем роли, которые не участвуют в звонках по умолчанию (см. call_rules_service)
     from app.services.call_rules_service import EXCLUDED_ROLES
     q = q.where(UserModel.role.not_in([r.value for r in EXCLUDED_ROLES]))
 
-    # Врач видит только свою клинику
+    # Регистратор видит только свою клинику (cross-tenant админы — выше тенантного фильтра уже учтены)
     if current_user.role == UserRole.REG and current_user.clinic_id:
-        q = q.where(UserModel.clinic_id == current_user.clinic_id)
+        from sqlalchemy import or_ as _or2
+        q = q.where(_or2(
+            UserModel.clinic_id == current_user.clinic_id,
+            UserModel.role.in_([UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER]),
+        ))
     elif clinic_id:
         try:
             q = q.where(UserModel.clinic_id == uuid.UUID(clinic_id))
@@ -308,6 +346,18 @@ async def get_all_presence(
             pass
 
     rows = (await db.execute(q)).all()
+
+    # Подгружаем clinic/tenant словари для группировки на фронте
+    tids = {u.tenant_id for u, _ in rows if u.tenant_id}
+    cids = {u.clinic_id for u, _ in rows if u.clinic_id}
+    tmap: dict = {}
+    if tids:
+        tr = await db.execute(select(TenantModel).where(TenantModel.id.in_(tids)))
+        tmap = {t.id: t for t in tr.scalars().all()}
+    cmap: dict = {}
+    if cids:
+        cr = await db.execute(select(ClinicModel).where(ClinicModel.id.in_(cids)))
+        cmap = {c.id: c for c in cr.scalars().all()}
 
     # Авто-offline если не было активности 5 мин
     cutoff = datetime.utcnow() - timedelta(minutes=5)
@@ -331,11 +381,17 @@ async def get_all_presence(
             else:
                 status = "offline"
 
+        c_obj = cmap.get(user.clinic_id) if user.clinic_id else None
+        t_obj = tmap.get(user.tenant_id) if user.tenant_id else None
         result.append({
             "user_id": str(user.id),
             "full_name": user.full_name,
             "role": user.role,
             "clinic_id": str(user.clinic_id) if user.clinic_id else None,
+            "clinic_name": c_obj.name if c_obj else None,
+            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "tenant_name": t_obj.name if t_obj else None,
+            "tenant_slug": getattr(t_obj, "slug", None) if t_obj else None,
             "status": status,
             "status_text": status_text,
             "last_seen_at": last_seen.isoformat() if last_seen else None,

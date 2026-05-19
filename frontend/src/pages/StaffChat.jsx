@@ -119,6 +119,7 @@ export default function StaffChat() {
   const [sidebarTab, setSidebarTab] = useState('chats')
   const [contactSearch, setContactSearch] = useState('')
   const [searchContact, setSearchContact] = useState('')
+  const [collapsedContactGroups, setCollapsedContactGroups] = useState(() => new Set())
   const [plusMenuOpen, setPlusMenuOpen] = useState(false)
   const [createGroupOpen, setCreateGroupOpen] = useState(false)
   const [createBroadcastOpen, setCreateBroadcastOpen] = useState(false)
@@ -769,27 +770,82 @@ export default function StaffChat() {
                     </div>
                   )
                 }
-                return groups.map((g) => (
-                  <div key={g.clinic_id || g.label} className="sc-contact-group">
-                    <div className="sc-contact-group-label">{g.label}</div>
-                    {g.users.map((u) => (
+                // Группировка по тенанту видна только если контакты приходят
+                // из нескольких тенантов (super_admin/franchise_owner). В одном
+                // тенанте — оставляем плоский список клиник как раньше.
+                const tenantIds = new Set(groups.map(g => g.tenant_id).filter(Boolean))
+                const showTenantHeader = tenantIds.size > 1
+                const toggleGroup = (key) => {
+                  setCollapsedContactGroups(prev => {
+                    const n = new Set(prev)
+                    if (n.has(key)) n.delete(key); else n.add(key)
+                    return n
+                  })
+                }
+                const renderGroup = (g) => {
+                  const key = g.clinic_id || g.label
+                  const collapsed = collapsedContactGroups.has(key)
+                  return (
+                    <div key={key} className="sc-contact-group">
                       <button
-                        key={u.id}
-                        className="sc-contact-row sc-contact-clickable"
                         type="button"
-                        onClick={() => startDirectChat(u.id)}
-                        title={`Открыть чат с ${u.name}`}
+                        className={'sc-contact-group-label sc-contact-group-toggle' + (collapsed ? ' is-collapsed' : '')}
+                        onClick={() => toggleGroup(key)}
                       >
-                        <Avatar name={u.name} id={u.id} size={40} online={onlineUsers.has(u.id)} />
-                        <div className="sc-contact-body">
-                          <div className="sc-contact-name">{u.name}</div>
-                          <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
-                        </div>
-                        <span className="sc-contact-arrow">›</span>
+                        <span className="sc-contact-group-caret">{collapsed ? '▶' : '▼'}</span>
+                        <span className="sc-contact-group-name">{g.label}</span>
+                        <span className="sc-contact-group-count">{g.users.length}</span>
                       </button>
-                    ))}
-                  </div>
-                ))
+                      {!collapsed && g.users.map((u) => (
+                        <button
+                          key={u.id}
+                          className="sc-contact-row sc-contact-clickable"
+                          type="button"
+                          onClick={() => startDirectChat(u.id)}
+                          title={`Открыть чат с ${u.name}`}
+                        >
+                          <Avatar name={u.name} id={u.id} size={40} online={onlineUsers.has(u.id)} />
+                          <div className="sc-contact-body">
+                            <div className="sc-contact-name">{u.name}</div>
+                            <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
+                          </div>
+                          <span className="sc-contact-arrow">›</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                }
+                if (!showTenantHeader) {
+                  return groups.map(renderGroup)
+                }
+                // Группируем по tenant_id
+                const byTenant = {}
+                for (const g of groups) {
+                  const tid = g.tenant_id || '__no_tenant__'
+                  if (!byTenant[tid]) byTenant[tid] = { tenant_name: g.tenant_name || 'Без сети', groups: [] }
+                  byTenant[tid].groups.push(g)
+                }
+                const tenantOrder = Object.keys(byTenant).sort((a, b) => (byTenant[a].tenant_name || '').localeCompare(byTenant[b].tenant_name || ''))
+                return tenantOrder.map((tid) => {
+                  const tKey = `tenant:${tid}`
+                  const tCollapsed = collapsedContactGroups.has(tKey)
+                  const t = byTenant[tid]
+                  const totalUsers = t.groups.reduce((s, g) => s + g.users.length, 0)
+                  return (
+                    <div key={tKey} className="sc-contact-tenant">
+                      <button
+                        type="button"
+                        className={'sc-contact-tenant-label' + (tCollapsed ? ' is-collapsed' : '')}
+                        onClick={() => toggleGroup(tKey)}
+                      >
+                        <span className="sc-contact-group-caret">{tCollapsed ? '▶' : '▼'}</span>
+                        <span className="sc-contact-tenant-name">🏥 {t.tenant_name}</span>
+                        <span className="sc-contact-group-count">{totalUsers}</span>
+                      </button>
+                      {!tCollapsed && t.groups.map(renderGroup)}
+                    </div>
+                  )
+                })
               })()}
             </div>
           </>
@@ -2023,6 +2079,32 @@ const STAFF_CHAT_CSS = `
   padding: 8px 14px 4px; font-size: 11.5px; font-weight: 600;
   color: var(--sc-fg-3); text-transform: uppercase; letter-spacing: 0.05em;
 }
+.sc-contact-group-toggle {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; background: transparent; border: none; cursor: pointer;
+  text-align: left; user-select: none;
+}
+.sc-contact-group-toggle:hover { color: var(--sc-fg-1); }
+.sc-contact-group-caret { font-size: 9px; opacity: 0.6; width: 10px; display: inline-block; }
+.sc-contact-group-name { flex: 1; }
+.sc-contact-group-count {
+  font-size: 10.5px; padding: 1px 6px; border-radius: 8px;
+  background: var(--sc-bg); color: var(--sc-fg-3); font-weight: 600;
+  text-transform: none; letter-spacing: 0;
+}
+.sc-contact-tenant { margin-bottom: 16px; }
+.sc-contact-tenant-label {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 10px 14px 6px;
+  font-size: 12.5px; font-weight: 700;
+  color: var(--sc-fg-1);
+  background: transparent; border: none; cursor: pointer;
+  text-align: left; user-select: none;
+  border-bottom: 1px solid var(--sc-border); margin-bottom: 4px;
+}
+.sc-contact-tenant-label:hover { background: var(--sc-bg); }
+.sc-contact-tenant-name { flex: 1; }
+.sc-contact-tenant .sc-contact-group { padding-left: 10px; }
 .sc-contact-row {
   display: flex; gap: 12px; align-items: center;
   width: 100%; padding: 8px 14px;

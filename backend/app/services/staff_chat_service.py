@@ -77,75 +77,125 @@ async def user_clinic_ids(db: AsyncSession, user: User) -> list[uuid.UUID]:
 
 
 # ── RBAC: каких пользователей видит данный ────────────────────────────────────
+async def _user_franchise_id(db: AsyncSession, user: User):
+    """franchise_id тенанта пользователя или None."""
+    if not user.tenant_id:
+        return None
+    from app.models.tenant import Tenant
+    t = (await db.execute(select(Tenant).where(Tenant.id == user.tenant_id))).scalar_one_or_none()
+    return getattr(t, "franchise_id", None) if t else None
+
+
 async def visible_users_for(
     db: AsyncSession, user: User
 ) -> Sequence[User]:
     """
     Возвращает список пользователей, с которыми данный сотрудник может
-    начать чат. Изоляция по tenant. Дополнительные ограничения по клиникам
-    для рядовых ролей.
+    начать чат.
+
+    Видимость:
+      - super_admin / franchise_owner с franchise_id → все юзеры всех клиник
+        своей франшизы (cross-tenant). Без franchise_id → весь свой тенант.
+      - admin / manager / recruiter → все в своём тенанте + админы франшизы
+        (super_admin / franchise_owner) из любых клиник той же франшизы.
+      - doctor / reg / nurse / partner_doctor / visiting_doctor → свои
+        клиники + tenant-wide роли своего тенанта + админы франшизы (другие
+        клиники). Без клиники — никого.
     """
     role = user.role.value if hasattr(user.role, "value") else str(user.role)
     if role == "patient":
         return []
 
-    # Базовый фильтр: только активные не-пациенты в том же тенанте
-    base_conditions = [
+    from app.models.tenant import Tenant
+
+    base_conds = [
         User.id != user.id,
         User.role != UserRole.PATIENT,
-        getattr(User, "is_active", User.id == User.id),  # safe fallback
+        getattr(User, "is_active", User.id == User.id),
     ]
-    if user.tenant_id:
-        base_conditions.append(User.tenant_id == user.tenant_id)
-    elif role != "super_admin":
-        # Не super_admin и без tenant — никого не видит
+
+    my_franchise_id = await _user_franchise_id(db, user)
+    franchise_tenant_subq = None
+    if my_franchise_id:
+        franchise_tenant_subq = select(Tenant.id).where(Tenant.franchise_id == my_franchise_id)
+
+    franchise_admin_roles = (UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER)
+
+    # ── super_admin / franchise_owner ─────────────────────────────────────────
+    if role in ("super_admin", "franchise_owner"):
+        if franchise_tenant_subq is not None:
+            r = await db.execute(select(User).where(and_(*base_conds, User.tenant_id.in_(franchise_tenant_subq))))
+            return r.scalars().all()
+        if user.tenant_id:
+            r = await db.execute(select(User).where(and_(*base_conds, User.tenant_id == user.tenant_id)))
+            return r.scalars().all()
+        if role == "super_admin":
+            r = await db.execute(select(User).where(and_(*base_conds)))
+            return r.scalars().all()
         return []
 
-    # Tenant-wide роли — видят всех в тенанте
-    if role in ("super_admin", "franchise_owner", "admin", "manager", "recruiter"):
-        r = await db.execute(select(User).where(and_(*base_conditions)))
-        return r.scalars().all()
+    # Дальше — обязателен tenant_id у самого юзера.
+    if not user.tenant_id:
+        return []
 
-    # Doctor / reg / nurse / partner_doctor / visiting_doctor —
-    # ограничены своими клиниками + tenant-wide роли (для эскалации)
+    base_conds_t = base_conds + [User.tenant_id == user.tenant_id]
+
+    async def _add_franchise_admins(acc: list[User]):
+        """Добавляет в acc super_admin/franchise_owner других клиник франшизы."""
+        if franchise_tenant_subq is None:
+            return
+        q = select(User).where(and_(
+            *base_conds,
+            User.tenant_id.in_(franchise_tenant_subq),
+            User.tenant_id != user.tenant_id,
+            User.role.in_(franchise_admin_roles),
+        ))
+        acc.extend((await db.execute(q)).scalars().all())
+
+    # ── admin / manager / recruiter ───────────────────────────────────────────
+    if role in ("admin", "manager", "recruiter"):
+        results = list((await db.execute(select(User).where(and_(*base_conds_t)))).scalars().all())
+        await _add_franchise_admins(results)
+        return _dedup_by_id(results)
+
+    # ── doctor / reg / nurse / partner_doctor / visiting_doctor ───────────────
     own_clinics = await user_clinic_ids(db, user)
     if not own_clinics:
         return []
 
-    # Кандидаты: либо принадлежат своей клинике, либо tenant-wide роль
     tenant_wide_roles = (
         UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER,
         UserRole.MANAGER, UserRole.RECRUITER,
     )
-    # Подзапрос: user-ы из тех же клиник через DoctorClinicAccess
+
     same_clinic_user_ids: set[uuid.UUID] = set()
-    # 1) direct clinic_id matches
-    r = await db.execute(
-        select(User.id).where(and_(
-            *base_conditions,
-            User.clinic_id.in_(own_clinics),
-        ))
-    )
+    r = await db.execute(select(User.id).where(and_(*base_conds_t, User.clinic_id.in_(own_clinics))))
     same_clinic_user_ids.update(row[0] for row in r.all())
-    # 2) DoctorClinicAccess linked
     try:
         from app.models.doctor_clinic_access import DoctorClinicAccess
-        r = await db.execute(
-            select(DoctorClinicAccess.doctor_id).where(
-                DoctorClinicAccess.clinic_id.in_(own_clinics),
-            )
-        )
+        r = await db.execute(select(DoctorClinicAccess.doctor_id).where(DoctorClinicAccess.clinic_id.in_(own_clinics)))
         same_clinic_user_ids.update(row[0] for row in r.all())
     except Exception:
         pass
 
-    # Финальный запрос: same-clinic OR tenant-wide role
     cond = or_(
         User.id.in_(same_clinic_user_ids) if same_clinic_user_ids else (User.id == None),  # noqa: E711
         User.role.in_(tenant_wide_roles),
     )
-    r = await db.execute(select(User).where(and_(*base_conditions, cond)))
-    return r.scalars().all()
+    results = list((await db.execute(select(User).where(and_(*base_conds_t, cond)))).scalars().all())
+    await _add_franchise_admins(results)
+    return _dedup_by_id(results)
+
+
+def _dedup_by_id(users: list[User]) -> list[User]:
+    seen: set[uuid.UUID] = set()
+    out: list[User] = []
+    for u in users:
+        if u.id in seen:
+            continue
+        seen.add(u.id)
+        out.append(u)
+    return out
 
 
 # ── Membership + queries ──────────────────────────────────────────────────────
@@ -183,13 +233,24 @@ async def get_or_create_direct_room(
 ) -> StaffChatRoom:
     """Находит или создаёт 1-1 direct-комнату между двумя пользователями.
 
-    Tenant: должен совпадать. Если разные — поднимаем ValueError.
+    Tenant: одинаковый — same-tenant DM. Разный — допустим, если оба в одной
+    франшизе и хотя бы один из них super_admin/franchise_owner (cross-tenant
+    DM админа сети с сотрудником конкретной клиники).
     """
     if user_a.id == user_b.id:
         raise ValueError("cannot create direct chat with self")
-    if user_a.tenant_id != user_b.tenant_id:
-        # Inter-tenant запрещён по политике (см. memory: feedback_no_intertenant)
-        raise ValueError("inter-tenant direct chat not allowed")
+
+    same_tenant = (user_a.tenant_id == user_b.tenant_id)
+    if not same_tenant:
+        # Cross-tenant DM: проверяем франшизу и роль admin'а
+        fa = await _user_franchise_id(db, user_a)
+        fb = await _user_franchise_id(db, user_b)
+        if not fa or fa != fb:
+            raise ValueError("inter-tenant direct chat allowed only within same franchise")
+        admin_roles = (UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER)
+        if user_a.role not in admin_roles and user_b.role not in admin_roles:
+            raise ValueError("inter-tenant direct chat requires franchise admin participant")
+
     tenant_id = user_a.tenant_id or user_b.tenant_id
     if tenant_id is None:
         raise ValueError("both users must have tenant_id")

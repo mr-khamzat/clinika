@@ -31,6 +31,7 @@ export default function CallWidget() {
   const [mode, setMode]         = useState('audio')   // 'audio' | 'video'
   const [open, setOpen]         = useState(false)
   const [contacts, setContacts] = useState([])
+  const [collapsedKeys, setCollapsedKeys] = useState(() => new Set())
 
   const [incoming, setIncoming] = useState(null)   // {caller_id, caller_name, call_type, sdp_offer}
   const [outgoing, setOutgoing] = useState(null)   // {callee_id, callee_name, call_type, status}
@@ -686,40 +687,101 @@ export default function CallWidget() {
               )}
             </div>
 
-            {/* Список */}
-            <div className="max-h-72 overflow-y-auto divide-y divide-gray-50 dark:divide-gray-800">
+            {/* Список — сгруппирован по тенанту → клинике (раскрываемые категории) */}
+            <div className="max-h-96 overflow-y-auto">
               {contacts.length === 0 && (
                 <div className="py-8 text-center text-gray-400 text-sm">Нет контактов</div>
               )}
-              {contacts.map(c => (
-                <div key={c.user_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <div className="relative flex-shrink-0">
-                    <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300">
-                      {(c.full_name || '?')[0].toUpperCase()}
+              {(() => {
+                const toggle = (key) => setCollapsedKeys(prev => {
+                  const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n
+                })
+                // Группируем
+                const byTenant = {}
+                for (const c of contacts) {
+                  const tid = c.tenant_id || '__none__'
+                  if (!byTenant[tid]) byTenant[tid] = { name: c.tenant_name || 'Без сети', clinics: {} }
+                  const cid = c.clinic_id || '__noclinic__'
+                  const cname = c.clinic_name || 'Управление сетью'
+                  if (!byTenant[tid].clinics[cid]) byTenant[tid].clinics[cid] = { name: cname, users: [] }
+                  byTenant[tid].clinics[cid].users.push(c)
+                }
+                const tids = Object.keys(byTenant).sort((a, b) => byTenant[a].name.localeCompare(byTenant[b].name))
+                const showTenantLevel = tids.length > 1
+                const renderUser = (c) => (
+                  <div key={c.user_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <div className="relative flex-shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300">
+                        {(c.full_name || '?')[0].toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${STATUS_COLOR[c.status] || STATUS_COLOR.offline}`} />
                     </div>
-                    <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${STATUS_COLOR[c.status] || STATUS_COLOR.offline}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.full_name}</p>
+                      <p className="text-xs text-gray-400 truncate">{ROLE_LABEL[c.role] || c.role} · {STATUS_LABEL[c.status] || 'Не в сети'}</p>
+                    </div>
+                    <button
+                      onClick={() => c.status === 'online' && startCall(c)}
+                      disabled={c.status !== 'online'}
+                      title={mode === 'video' ? 'Видео звонок' : 'Аудио звонок'}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition flex-shrink-0 ${
+                        c.status === 'online'
+                          ? mode === 'video'
+                            ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                            : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
+                          : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                      }`}>
+                      <span className="material-symbols-outlined text-[17px]" style={{ fontVariationSettings:"'FILL' 1" }}>
+                        {mode === 'video' ? 'videocam' : 'call'}
+                      </span>
+                    </button>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{c.full_name}</p>
-                    <p className="text-xs text-gray-400 truncate">{ROLE_LABEL[c.role] || c.role} · {STATUS_LABEL[c.status] || 'Не в сети'}</p>
-                  </div>
-                  <button
-                    onClick={() => c.status === 'online' && startCall(c)}
-                    disabled={c.status !== 'online'}
-                    title={mode === 'video' ? 'Видео звонок' : 'Аудио звонок'}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition flex-shrink-0 ${
-                      c.status === 'online'
-                        ? mode === 'video'
-                          ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                          : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'
-                        : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    }`}>
-                    <span className="material-symbols-outlined text-[17px]" style={{ fontVariationSettings:"'FILL' 1" }}>
-                      {mode === 'video' ? 'videocam' : 'call'}
-                    </span>
-                  </button>
-                </div>
-              ))}
+                )
+                const renderClinic = (cid, clinic, prefix='') => {
+                  const key = `${prefix}clinic:${cid}`
+                  const collapsed = collapsedKeys.has(key)
+                  const onlineN = clinic.users.filter(u => u.status !== 'offline').length
+                  return (
+                    <div key={key}>
+                      <button
+                        type="button"
+                        onClick={() => toggle(key)}
+                        className="w-full flex items-center gap-2 px-4 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider hover:bg-gray-50 dark:hover:bg-gray-800/60"
+                      >
+                        <span className="text-[9px] opacity-60 w-2">{collapsed ? '▶' : '▼'}</span>
+                        <span className="flex-1 text-left normal-case">{clinic.name}</span>
+                        <span className="text-[10px] font-bold text-gray-400 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">{onlineN}/{clinic.users.length}</span>
+                      </button>
+                      {!collapsed && <div className="divide-y divide-gray-50 dark:divide-gray-800">{clinic.users.map(renderUser)}</div>}
+                    </div>
+                  )
+                }
+                return tids.map(tid => {
+                  const t = byTenant[tid]
+                  const cidsIn = Object.keys(t.clinics).sort((a, b) => t.clinics[a].name.localeCompare(t.clinics[b].name))
+                  if (!showTenantLevel) {
+                    return <div key={`t:${tid}`}>{cidsIn.map(cid => renderClinic(cid, t.clinics[cid]))}</div>
+                  }
+                  const tKey = `tenant:${tid}`
+                  const tCollapsed = collapsedKeys.has(tKey)
+                  const tOnline = cidsIn.reduce((s, cid) => s + t.clinics[cid].users.filter(u => u.status !== 'offline').length, 0)
+                  const tTotal = cidsIn.reduce((s, cid) => s + t.clinics[cid].users.length, 0)
+                  return (
+                    <div key={`t:${tid}`} className="border-b border-gray-100 dark:border-gray-800">
+                      <button
+                        type="button"
+                        onClick={() => toggle(tKey)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm font-bold text-gray-800 dark:text-gray-100 bg-gray-50/70 dark:bg-gray-800/40 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        <span className="text-[10px] opacity-70 w-3">{tCollapsed ? '▶' : '▼'}</span>
+                        <span className="flex-1 text-left">🏥 {t.name}</span>
+                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">{tOnline}/{tTotal}</span>
+                      </button>
+                      {!tCollapsed && <div>{cidsIn.map(cid => renderClinic(cid, t.clinics[cid], `t${tid}:`))}</div>}
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </div>
         </>

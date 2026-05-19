@@ -131,7 +131,16 @@ async def _join_channel_logic(db, user, room):
     if room.type == "group":
         raise GroupJoinForbidden("Это закрытый канал — нужно приглашение")
     if user.tenant_id != room.tenant_id:
-        raise GroupJoinForbidden("Кросс-тенантное присоединение запрещено")
+        # Разрешаем super_admin/franchise_owner присоединяться к каналам своей франшизы
+        from app.models.user import UserRole as _UR
+        if user.role in (_UR.SUPER_ADMIN, _UR.FRANCHISE_OWNER):
+            my_fr = await svc._user_franchise_id(db, user)
+            from app.models.tenant import Tenant as _T
+            t = (await db.execute(select(_T).where(_T.id == room.tenant_id))).scalar_one_or_none()
+            if not (my_fr and t and t.franchise_id == my_fr):
+                raise GroupJoinForbidden("Канал не из вашей франшизы")
+        else:
+            raise GroupJoinForbidden("Кросс-тенантное присоединение запрещено")
     existing = (await db.execute(
         select(StaffChatMember).where(
             StaffChatMember.room_id == room.id,
@@ -188,8 +197,17 @@ async def list_public_channels(
     _ensure_not_patient(user)
     if not user.tenant_id:
         raise HTTPException(403, "Нет тенанта")
+    # super_admin / franchise_owner — все каналы своей франшизы
+    tenant_scope = [user.tenant_id]
+    from app.models.user import UserRole as _UR
+    if user.role in (_UR.SUPER_ADMIN, _UR.FRANCHISE_OWNER):
+        my_fr = await svc._user_franchise_id(db, user)
+        if my_fr:
+            from app.models.tenant import Tenant as _T
+            rr = await db.execute(select(_T.id).where(_T.franchise_id == my_fr))
+            tenant_scope = [row[0] for row in rr.all()]
     stmt = select(StaffChatRoom).where(
-        StaffChatRoom.tenant_id == user.tenant_id,
+        StaffChatRoom.tenant_id.in_(tenant_scope),
         StaffChatRoom.type == "channel",
     )
     if q:
@@ -524,29 +542,59 @@ async def list_contacts(
 ):
     _ensure_not_patient(user)
     users = await svc.visible_users_for(db, user)
-    # Группируем по клинике
+    # Группируем по клинике, дополнительно отдаём tenant_id/tenant_name —
+    # фронт сам решит, делать ли подзаголовок «Тенант» (нужно, если виден
+    # super_admin/franchise_owner: контакты включают несколько клиник из
+    # разных тенантов одной франшизы).
     from app.models.clinic import Clinic
+    from app.models.tenant import Tenant
     clinic_ids = {u.clinic_id for u in users if getattr(u, "clinic_id", None)}
     clinics_map: dict[uuid.UUID, Clinic] = {}
     if clinic_ids:
         r = await db.execute(select(Clinic).where(Clinic.id.in_(clinic_ids)))
         clinics_map = {c.id: c for c in r.scalars().all()}
+    tenant_ids = {u.tenant_id for u in users if getattr(u, "tenant_id", None)}
+    tenant_ids |= {c.tenant_id for c in clinics_map.values() if getattr(c, "tenant_id", None)}
+    tenants_map: dict[uuid.UUID, Tenant] = {}
+    if tenant_ids:
+        r = await db.execute(select(Tenant).where(Tenant.id.in_(tenant_ids)))
+        tenants_map = {t.id: t for t in r.scalars().all()}
     groups: dict[str, dict] = {}
     for u in users:
         cid = getattr(u, "clinic_id", None)
         if cid and cid in clinics_map:
             key = str(cid)
             label = clinics_map[cid].name
+            t_id = getattr(clinics_map[cid], "tenant_id", None) or getattr(u, "tenant_id", None)
         else:
-            key = "tenant-wide"
-            label = "Управление сетью"
+            # tenant-wide роль — группируем по тенанту (а не «Управление сетью» для всех),
+            # чтобы при cross-franchise админах не схлопывались разные клиники.
+            t_id = getattr(u, "tenant_id", None)
+            if t_id:
+                key = f"tenant-wide:{t_id}"
+                tname = tenants_map[t_id].name if t_id in tenants_map else "Управление сетью"
+                label = f"Управление — {tname}"
+            else:
+                key = "tenant-wide"
+                label = "Управление сетью"
+        t = tenants_map.get(t_id) if t_id else None
         if key not in groups:
-            groups[key] = {"clinic_id": key if key != "tenant-wide" else None, "label": label, "users": []}
+            groups[key] = {
+                "clinic_id": str(cid) if cid else None,
+                "label": label,
+                "tenant_id": str(t_id) if t_id else None,
+                "tenant_name": t.name if t else None,
+                "tenant_slug": getattr(t, "slug", None) if t else None,
+                "users": [],
+            }
         groups[key]["users"].append(svc.serialize_user_brief(u))
-    # Сортируем группы: tenant-wide последней
+    # Сортируем: сначала по tenant_name, затем clinic-группы, потом tenant-wide
     groups_list = sorted(
         groups.values(),
-        key=lambda g: (g["clinic_id"] is None, g["label"] or ""),
+        key=lambda g: (
+            (g["tenant_name"] or "я") if g["clinic_id"] else "яя" + (g["tenant_name"] or ""),
+            g["label"] or "",
+        ),
     )
     return {"groups": groups_list, "total": len(users)}
 
