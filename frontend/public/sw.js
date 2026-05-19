@@ -3,8 +3,8 @@
  * Push notifications + offline
  */
 
-// v3 (2026-05-11): bundle-split optimization — bump чтобы юзеры получили новые chunks.
-const CACHE_NAME = 'clinika-portal-v3';
+// v4 (2026-05-19): visiting_doctor edit + 422 fix optimization — bump чтобы юзеры получили новые chunks.
+const CACHE_NAME = 'clinika-portal-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
