@@ -37,36 +37,7 @@ class PresenceManager:
         from app.config import settings
         return aioredis.from_url(settings.redis_url, decode_responses=True)
 
-    
-
-async def _allow_call(db, caller, callee) -> bool:
-    """Разрешён ли звонок caller→callee.
-
-    - same tenant — всегда true
-    - cross-tenant — только если оба тенанта в одной франшизе и у обоих active модуль cross_clinic_audio
-    """
-    if not caller or not callee:
-        return False
-    if caller.tenant_id and callee.tenant_id and caller.tenant_id == callee.tenant_id:
-        return True
-    # Cross-tenant
-    if not caller.tenant_id or not callee.tenant_id:
-        return False
-    from app.models.tenant import Tenant as _T
-    from sqlalchemy import select as _sel
-    rows = (await db.execute(_sel(_T).where(_T.id.in_([caller.tenant_id, callee.tenant_id])))).scalars().all()
-    if len({r.franchise_id for r in rows if r.franchise_id}) != 1:
-        return False  # разные франшизы или одна из них без франшизы
-    # Проверим что у обоих включен cross_clinic_audio
-    from sqlalchemy import text as _text
-    r = await db.execute(_text("""
-        SELECT COUNT(*) FROM tenant_module_subscriptions
-        WHERE tenant_id IN (:a, :b) AND module_key = 'cross_clinic_audio' AND status = 'active'
-    """), {"a": str(caller.tenant_id), "b": str(callee.tenant_id)})
-    cnt = r.scalar() or 0
-    return cnt >= 2
-
-async def connect(self, ws: WebSocket, user_id: str, tenant_id: str | None):
+    async def connect(self, ws: WebSocket, user_id: str, tenant_id: str | None):
         await ws.accept()
         self.connections[user_id] = ws
         tid = tenant_id or "__global__"
