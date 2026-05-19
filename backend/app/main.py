@@ -72,6 +72,7 @@ from app.routers.patient_engagement_analytics import router as engagement_analyt
 from app.routers.patient_engagement_segments import router as engagement_segments_router
 from app.routers.patient_engagement_crm import router as engagement_crm_router
 from app.routers.network_dashboard import router as network_dashboard_router
+from app.routers.franchise_visibility import router as franchise_visibility_router
 from app.routers.ads_workflow import router as ads_workflow_router
 from app.routers.commercial import router as commercial_router
 from app.routers.marketplace import router as marketplace_router
@@ -1594,6 +1595,7 @@ app.include_router(engagement_analytics_router)
 app.include_router(engagement_segments_router)
 app.include_router(engagement_crm_router)
 app.include_router(network_dashboard_router)
+app.include_router(franchise_visibility_router)
 app.include_router(ads_workflow_router)
 app.include_router(commercial_router)
 app.include_router(marketplace_router)

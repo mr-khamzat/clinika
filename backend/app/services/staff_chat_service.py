@@ -86,6 +86,25 @@ async def _user_franchise_id(db: AsyncSession, user: User):
     return getattr(t, "franchise_id", None) if t else None
 
 
+async def _hidden_targets_for_viewer(db: AsyncSession, viewer_tenant_id: uuid.UUID) -> set[uuid.UUID]:
+    """Список target_tenant_id, из которых данный viewer НЕ должен видеть юзеров
+    в StaffChat (по матрице TenantVisibility). Если записей нет — возвращает пустое
+    множество (default — всё видно)."""
+    if not viewer_tenant_id:
+        return set()
+    try:
+        from app.models.tenant_visibility import TenantVisibility
+        r = await db.execute(
+            select(TenantVisibility.target_tenant_id).where(
+                TenantVisibility.viewer_tenant_id == viewer_tenant_id,
+                TenantVisibility.allow_chat == False,  # noqa: E712
+            )
+        )
+        return {row[0] for row in r.all()}
+    except Exception:
+        return set()
+
+
 async def visible_users_for(
     db: AsyncSession, user: User
 ) -> Sequence[User]:
@@ -121,17 +140,25 @@ async def visible_users_for(
 
     franchise_admin_roles = (UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER)
 
+    # Матрица видимости: tenant_id из которых текущий user НЕ должен видеть юзеров в чате
+    hidden_targets = await _hidden_targets_for_viewer(db, user.tenant_id) if user.tenant_id else set()
+
+    def _filter_hidden(users):
+        if not hidden_targets:
+            return users
+        return [u for u in users if u.tenant_id not in hidden_targets]
+
     # ── super_admin / franchise_owner ─────────────────────────────────────────
     if role in ("super_admin", "franchise_owner"):
         if franchise_tenant_subq is not None:
             r = await db.execute(select(User).where(and_(*base_conds, User.tenant_id.in_(franchise_tenant_subq))))
-            return r.scalars().all()
+            return _filter_hidden(r.scalars().all())
         if user.tenant_id:
             r = await db.execute(select(User).where(and_(*base_conds, User.tenant_id == user.tenant_id)))
-            return r.scalars().all()
+            return _filter_hidden(r.scalars().all())
         if role == "super_admin":
             r = await db.execute(select(User).where(and_(*base_conds)))
-            return r.scalars().all()
+            return _filter_hidden(r.scalars().all())
         return []
 
     # Дальше — обязателен tenant_id у самого юзера.
@@ -156,7 +183,7 @@ async def visible_users_for(
     if role in ("admin", "manager", "recruiter"):
         results = list((await db.execute(select(User).where(and_(*base_conds_t)))).scalars().all())
         await _add_franchise_admins(results)
-        return _dedup_by_id(results)
+        return _filter_hidden(_dedup_by_id(results))
 
     # ── doctor / reg / nurse / partner_doctor / visiting_doctor ───────────────
     own_clinics = await user_clinic_ids(db, user)
@@ -184,7 +211,7 @@ async def visible_users_for(
     )
     results = list((await db.execute(select(User).where(and_(*base_conds_t, cond)))).scalars().all())
     await _add_franchise_admins(results)
-    return _dedup_by_id(results)
+    return _filter_hidden(_dedup_by_id(results))
 
 
 def _dedup_by_id(users: list[User]) -> list[User]:

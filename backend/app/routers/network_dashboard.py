@@ -180,6 +180,176 @@ async def network_overview(
     return await _build_overview(db, user, days)
 
 
+@router.get("/patients")
+async def network_patients(
+    q: Optional[str] = Query(None, max_length=200, description="Поиск по имени/телефону"),
+    limit: int = Query(200, ge=1, le=1000),
+    user: User = Depends(require_director_or_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список ЛК-пациентов сети.
+
+    Берём всех patient_accounts, у которых есть хотя бы один appointment в
+    клиниках текущей сети (по `tenant_id` из _scope_tenants). Для каждого
+    считаем: визиты, последний визит, основная клиника (по числу визитов),
+    активность ЛК (last_seen_at).
+    """
+    tenants = await _scope_tenants(db, user)
+    if not tenants:
+        return {"patients": [], "total": 0}
+    tids = [t.id for t in tenants]
+    tmap = {t.id: t for t in tenants}
+
+    # Собираем агрегации по phone (patient_accounts ↔ appointments через phone)
+    q_filter = ""
+    params = {"tids": tuple(str(t) for t in tids)}
+    if q:
+        q_filter = "AND (pa.name ILIKE :qpat OR pa.phone ILIKE :qpat)"
+        params["qpat"] = f"%{q}%"
+
+    rows = (await db.execute(text(f"""
+        WITH appt_agg AS (
+            SELECT
+                a.patient_phone,
+                COUNT(*) AS visits,
+                MAX(a.start_at) AS last_visit_at,
+                a.tenant_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY a.patient_phone
+                    ORDER BY COUNT(*) DESC, MAX(a.start_at) DESC
+                ) AS rn
+            FROM appointments a
+            WHERE a.tenant_id::text = ANY(:tids_arr)
+              AND a.patient_phone IS NOT NULL
+            GROUP BY a.patient_phone, a.tenant_id
+        ),
+        primary_clinic AS (
+            SELECT patient_phone, tenant_id AS primary_tenant_id, visits, last_visit_at
+            FROM appt_agg WHERE rn = 1
+        ),
+        all_visits AS (
+            SELECT patient_phone, SUM(visits) AS total_visits, MAX(last_visit_at) AS last_visit_at
+            FROM appt_agg GROUP BY patient_phone
+        )
+        SELECT
+            pa.id, pa.phone, pa.name, pa.email, pa.birth_date,
+            pa.is_active, pa.created_at, pa.last_seen_at, pa.last_login_at,
+            COALESCE(av.total_visits, 0) AS visits,
+            av.last_visit_at,
+            pc.primary_tenant_id
+        FROM patient_accounts pa
+        LEFT JOIN all_visits av ON av.patient_phone = pa.phone
+        LEFT JOIN primary_clinic pc ON pc.patient_phone = pa.phone
+        WHERE pc.primary_tenant_id::text = ANY(:tids_arr)
+          {q_filter}
+        ORDER BY av.last_visit_at DESC NULLS LAST, pa.created_at DESC
+        LIMIT :limit
+    """), {
+        "tids_arr": [str(t) for t in tids],
+        "limit": limit,
+        **({"qpat": params["qpat"]} if "qpat" in params else {}),
+    })).all()
+
+    patients_out = []
+    for r in rows:
+        t = tmap.get(r.primary_tenant_id)
+        patients_out.append({
+            "id": str(r.id),
+            "phone": r.phone,
+            "name": r.name or "—",
+            "email": r.email,
+            "birth_date": r.birth_date.isoformat() if r.birth_date else None,
+            "is_active": r.is_active,
+            "registered_at": r.created_at.isoformat() if r.created_at else None,
+            "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
+            "last_login_at": r.last_login_at.isoformat() if r.last_login_at else None,
+            "visits": int(r.visits or 0),
+            "last_visit_at": r.last_visit_at.isoformat() if r.last_visit_at else None,
+            "primary_tenant_id": str(r.primary_tenant_id) if r.primary_tenant_id else None,
+            "primary_clinic_name": t.name if t else None,
+            "primary_clinic_slug": t.slug if t else None,
+        })
+    return {"patients": patients_out, "total": len(patients_out)}
+
+
+@router.get("/patients/{patient_id}")
+async def network_patient_details(
+    patient_id: uuid.UUID,
+    user: User = Depends(require_director_or_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детали ЛК-пациента: контакты, регистрация, визиты по клиникам сети,
+    последние записи. Read-only admin-view."""
+    tenants = await _scope_tenants(db, user)
+    tids = [t.id for t in tenants]
+    tmap = {t.id: t for t in tenants}
+
+    r = (await db.execute(text("""
+        SELECT id, phone, name, email, birth_date, is_active,
+               created_at, last_seen_at, last_login_at, login_count, marketing_opt_in
+        FROM patient_accounts WHERE id = :pid
+    """), {"pid": patient_id})).first()
+    if not r:
+        raise HTTPException(404, "Пациент не найден")
+
+    # Визиты пациента по клиникам сети
+    visits = (await db.execute(text("""
+        SELECT a.id, a.start_at, a.end_at, a.tenant_id, a.status,
+               a.doctor_id, u.full_name AS doctor_name
+        FROM appointments a
+        LEFT JOIN users u ON u.id = a.doctor_id
+        WHERE a.patient_phone = :phone
+          AND a.tenant_id::text = ANY(:tids_arr)
+        ORDER BY a.start_at DESC
+        LIMIT 50
+    """), {"phone": r.phone, "tids_arr": [str(t) for t in tids]})).all()
+
+    visits_out = []
+    for v in visits:
+        t = tmap.get(v.tenant_id)
+        visits_out.append({
+            "id": str(v.id),
+            "start_at": v.start_at.isoformat() if v.start_at else None,
+            "end_at": v.end_at.isoformat() if v.end_at else None,
+            "status": v.status,
+            "doctor_name": v.doctor_name,
+            "clinic_name": t.name if t else None,
+            "clinic_slug": t.slug if t else None,
+        })
+
+    # Группировка визитов по клинике (для шапки)
+    clinics_visited: dict = {}
+    for v in visits:
+        t = tmap.get(v.tenant_id)
+        if not t:
+            continue
+        if t.id not in clinics_visited:
+            clinics_visited[t.id] = {
+                "clinic_name": t.name, "clinic_slug": t.slug,
+                "visits": 0, "last_visit_at": None,
+            }
+        clinics_visited[t.id]["visits"] += 1
+        cur_last = clinics_visited[t.id]["last_visit_at"]
+        if v.start_at and (not cur_last or v.start_at.isoformat() > cur_last):
+            clinics_visited[t.id]["last_visit_at"] = v.start_at.isoformat()
+
+    return {
+        "id": str(r.id),
+        "phone": r.phone,
+        "name": r.name or "—",
+        "email": r.email,
+        "birth_date": r.birth_date.isoformat() if r.birth_date else None,
+        "is_active": r.is_active,
+        "registered_at": r.created_at.isoformat() if r.created_at else None,
+        "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
+        "last_login_at": r.last_login_at.isoformat() if r.last_login_at else None,
+        "login_count": r.login_count or 0,
+        "marketing_opt_in": r.marketing_opt_in,
+        "clinics_visited": list(clinics_visited.values()),
+        "visits": visits_out,
+    }
+
+
 @router.get("/overview/export-pdf")
 async def export_overview_pdf(
     days: int = Query(30, ge=1, le=365),

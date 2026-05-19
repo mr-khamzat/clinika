@@ -347,56 +347,107 @@ async def get_all_presence(
 
     rows = (await db.execute(q)).all()
 
-    # Подгружаем clinic/tenant словари для группировки на фронте
-    tids = {u.tenant_id for u, _ in rows if u.tenant_id}
-    cids = {u.clinic_id for u, _ in rows if u.clinic_id}
-    tmap: dict = {}
-    if tids:
-        tr = await db.execute(select(TenantModel).where(TenantModel.id.in_(tids)))
-        tmap = {t.id: t for t in tr.scalars().all()}
+    # Уникальные юзеры (без своего)
+    raw_users = {u.id: (u, p) for u, p in rows if u.id != current_user.id}
+
+    # Multi-clinic привязки через DoctorClinicAccess для юзеров без user.clinic_id
+    ids_no_clinic = [uid for uid, (u, _) in raw_users.items() if not u.clinic_id]
+    user_access_clinics: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if ids_no_clinic:
+        try:
+            from app.models.doctor_clinic_access import DoctorClinicAccess
+            r = await db.execute(
+                select(DoctorClinicAccess.doctor_id, DoctorClinicAccess.clinic_id)
+                .where(DoctorClinicAccess.doctor_id.in_(ids_no_clinic))
+            )
+            for did, cid in r.all():
+                user_access_clinics.setdefault(did, []).append(cid)
+        except Exception:
+            pass
+
+    # Матрица видимости: тенанты которые current_user не видит в Calls
+    hidden_call_targets: set = set()
+    if current_user.tenant_id:
+        try:
+            from app.models.tenant_visibility import TenantVisibility
+            from sqlalchemy import select as _sel
+            hr = await db.execute(
+                _sel(TenantVisibility.target_tenant_id).where(
+                    TenantVisibility.viewer_tenant_id == current_user.tenant_id,
+                    TenantVisibility.allow_calls == False,  # noqa: E712
+                )
+            )
+            hidden_call_targets = {row[0] for row in hr.all()}
+        except Exception:
+            pass
+
+    if hidden_call_targets:
+        raw_users = {uid: (u, p) for uid, (u, p) in raw_users.items() if u.tenant_id not in hidden_call_targets}
+
+    # Подгружаем clinic/tenant словари
+    all_cids = {u.clinic_id for u, _ in raw_users.values() if u.clinic_id}
+    for cids_list in user_access_clinics.values():
+        all_cids.update(cids_list)
+    all_tids = {u.tenant_id for u, _ in raw_users.values() if u.tenant_id}
     cmap: dict = {}
-    if cids:
-        cr = await db.execute(select(ClinicModel).where(ClinicModel.id.in_(cids)))
+    if all_cids:
+        cr = await db.execute(select(ClinicModel).where(ClinicModel.id.in_(all_cids)))
         cmap = {c.id: c for c in cr.scalars().all()}
+    # У клиник может быть свой tenant_id, подключим
+    all_tids |= {c.tenant_id for c in cmap.values() if c.tenant_id}
+    tmap: dict = {}
+    if all_tids:
+        tr = await db.execute(select(TenantModel).where(TenantModel.id.in_(all_tids)))
+        tmap = {t.id: t for t in tr.scalars().all()}
 
     # Авто-offline если не было активности 5 мин
     cutoff = datetime.utcnow() - timedelta(minutes=5)
 
-    result = []
-    for user, presence in rows:
-        if user.id == current_user.id:
-            continue  # себя не показываем (фронт знает)
-
-        # WebSocket онлайн?
-        ws_online = presence_manager.is_online(str(user.id))
+    def _entry_for(u, p, c_id):
+        """Сериализация: один user + одна clinic-привязка → запись в списке."""
+        ws_online = presence_manager.is_online(str(u.id))
         status = "offline"
         status_text = None
         last_seen = None
-
-        if presence:
-            last_seen = presence.last_seen_at
-            if ws_online and presence.last_seen_at > cutoff:
-                status = presence.status
-                status_text = presence.status_text
-            else:
-                status = "offline"
-
-        c_obj = cmap.get(user.clinic_id) if user.clinic_id else None
-        t_obj = tmap.get(user.tenant_id) if user.tenant_id else None
-        result.append({
-            "user_id": str(user.id),
-            "full_name": user.full_name,
-            "role": user.role,
-            "clinic_id": str(user.clinic_id) if user.clinic_id else None,
+        if p:
+            last_seen = p.last_seen_at
+            if ws_online and p.last_seen_at > cutoff:
+                status = p.status
+                status_text = p.status_text
+        c_obj = cmap.get(c_id) if c_id else None
+        # Клиника — основной источник tenant_id (а не user.tenant_id), т.к. для
+        # доступа через DoctorClinicAccess врач может работать в чужом тенанте.
+        t_id = getattr(c_obj, "tenant_id", None) if c_obj else getattr(u, "tenant_id", None)
+        t_obj = tmap.get(t_id) if t_id else None
+        return {
+            "user_id": str(u.id),
+            "full_name": u.full_name,
+            "role": u.role,
+            "clinic_id": str(c_id) if c_id else None,
             "clinic_name": c_obj.name if c_obj else None,
-            "tenant_id": str(user.tenant_id) if user.tenant_id else None,
+            "tenant_id": str(t_id) if t_id else None,
             "tenant_name": t_obj.name if t_obj else None,
             "tenant_slug": getattr(t_obj, "slug", None) if t_obj else None,
             "status": status,
             "status_text": status_text,
             "last_seen_at": last_seen.isoformat() if last_seen else None,
             "ws_online": ws_online,
-        })
+        }
+
+    result = []
+    for uid, (u, p) in raw_users.items():
+        if u.clinic_id:
+            result.append(_entry_for(u, p, u.clinic_id))
+            continue
+        cids_via = user_access_clinics.get(uid, [])
+        if cids_via:
+            # Multi-clinic: одна запись на каждую клинику привязки.
+            # Так врач/visiting_doctor попадает в группу каждой своей клиники.
+            for c_id in cids_via:
+                result.append(_entry_for(u, p, c_id))
+            continue
+        # Admin-роль без клиник → одна запись с пустой клиникой → группа «Управление сетью»
+        result.append(_entry_for(u, p, None))
 
     return {"users": result}
 

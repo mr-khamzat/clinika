@@ -65,6 +65,7 @@ const InterClinicInvoicesSection = lazy(() => import('../sections/InterClinicInv
 const PartnerClinicsSection      = lazy(() => import('../sections/PartnerClinicsSection'))
 // Этап 8 ROADMAP — RBAC как данные: матрица прав по ролям с overrides на тенант.
 const PermissionsMatrixSection   = lazy(() => import('../sections/PermissionsMatrixSection'))
+const VisibilitySection          = lazy(() => import('../sections/VisibilitySection'))
 // LTV-аналитика пациентов (модуль ltv_pro) и cross-clinic directory сотрудников
 const LtvAnalyticsSection        = lazy(() => import('../sections/ltv/LtvAnalyticsSection'))
 const CrossClinicDirectorySection = lazy(() => import('../sections/CrossClinicDirectorySection'))
@@ -170,6 +171,7 @@ const NAV_GROUPS = [
       // Глава 10 — Состояние системы (health-метрики + disaster mode) — для super_admin
       { id: 'system_status', label: 'Состояние системы', icon: 'monitor_heart'    },
       { id: 'roles',      label: 'Роли и права',        icon: 'admin_panel_settings'},
+      { id: 'visibility', label: 'Видимость клиник', icon: 'visibility'        },
       // Глава 7 — Регламент-конструктор: админка для franchise_owner
       { id: 'regulations_admin', label: 'Конструктор регламентов', icon: 'rule_settings' },
       { id: 'webhooks',   label: 'Webhooks',            icon: 'webhook'             },
@@ -205,6 +207,7 @@ const PAGE_TITLES = {
   aggregator_leads: { title: 'Заявки агрегаторов', subtitle: 'Входящие лиды от партнёров-агрегаторов и статистика по источникам' },
   // Глава 10 — Состояние системы (super_admin)
   system_status: { title: 'Состояние системы', subtitle: 'Здоровье БД/Redis/диска, активные подписки и disaster-mode' },
+  visibility: { title: 'Видимость клиник', subtitle: 'Матрица: кто из какой клиники видит кого в чате и звонках' },
   doctors:    { title: 'Сотрудники',       subtitle: 'Все врачи и админы по клиникам сети' },
   partners:   { title: 'Партнёрские врачи',    subtitle: 'Партнёры и приходящие врачи сети' },
   recruiters: { title: 'Рекрутеры',        subtitle: 'Менеджеры по привлечению врачей-партнёров' },
@@ -2195,6 +2198,9 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       return (
         <Suspense fallback={<SectionLoader />}>
           <PermissionsMatrixSection token={adminToken} />
+          {route === 'visibility' && (
+            <VisibilitySection />
+          )}
         </Suspense>
       )
     }

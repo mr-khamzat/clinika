@@ -99,6 +99,14 @@ export default function NetworkDashboard({ token }) {
   const [err, setErr] = useState('')
   const [pdfBusy, setPdfBusy] = useState(false)
 
+  // ── ЛК-пациенты сети ─────────────────────────────────────────────────────
+  const [patients, setPatients] = useState([])
+  const [patientsLoading, setPatientsLoading] = useState(false)
+  const [patientSearch, setPatientSearch] = useState('')
+  const [openPatient, setOpenPatient] = useState(null)
+  const [patientDetails, setPatientDetails] = useState(null)
+  const [detailsLoading, setDetailsLoading] = useState(false)
+
   useEffect(() => {
     setLoading(true)
     setErr('')
@@ -106,6 +114,24 @@ export default function NetworkDashboard({ token }) {
       .then(d => { setData(d); setLoading(false) })
       .catch(e => { setErr(String(e.message || e)); setLoading(false) })
   }, [token, days])
+
+  useEffect(() => {
+    setPatientsLoading(true)
+    const q = patientSearch.trim()
+    const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+    fetchJson(token, `/network/patients${qs}`)
+      .then(d => { setPatients(d.patients || []); setPatientsLoading(false) })
+      .catch(() => setPatientsLoading(false))
+  }, [token, patientSearch])
+
+  const openPatientDrawer = (p) => {
+    setOpenPatient(p)
+    setPatientDetails(null)
+    setDetailsLoading(true)
+    fetchJson(token, `/network/patients/${p.id}`)
+      .then(d => { setPatientDetails(d); setDetailsLoading(false) })
+      .catch(() => setDetailsLoading(false))
+  }
 
   const downloadPdf = async () => {
     setPdfBusy(true)
@@ -242,9 +268,171 @@ export default function NetworkDashboard({ token }) {
         </div>
       </div>
 
+      {/* ЛК-пациенты сети */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">ЛК-пациенты сети</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Все пациенты с записями в клиниках вашей сети ({patients.length})
+            </p>
+          </div>
+          <input
+            type="search"
+            value={patientSearch}
+            onChange={e => setPatientSearch(e.target.value)}
+            placeholder="Поиск по имени или телефону…"
+            className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 w-64"
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 dark:bg-gray-700/50">
+              <tr>
+                <th className="text-left px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Имя</th>
+                <th className="text-left px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Телефон</th>
+                <th className="text-left px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Основная клиника</th>
+                <th className="text-right px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Визитов</th>
+                <th className="text-left px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Последний визит</th>
+                <th className="text-left px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Активен в ЛК</th>
+                <th className="text-right px-4 py-2 font-semibold text-gray-600 dark:text-gray-400">Кабинет</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patientsLoading && (
+                <tr><td colSpan={7} className="text-center py-6 text-gray-400">Загрузка…</td></tr>
+              )}
+              {!patientsLoading && patients.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-8 text-gray-400">
+                  {patientSearch ? 'Никого не найдено' : 'Нет пациентов в сети'}
+                </td></tr>
+              )}
+              {patients.map(p => (
+                <tr key={p.id} className="border-t border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/40">
+                  <td className="px-4 py-2 text-gray-900 dark:text-gray-100 font-medium">{p.name || '—'}</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 font-mono text-xs">{p.phone}</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300">{p.primary_clinic_name || '—'}</td>
+                  <td className="px-4 py-2 text-right text-cyan-700 dark:text-cyan-300 font-semibold">{p.visits}</td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 text-xs">
+                    {p.last_visit_at ? new Date(p.last_visit_at).toLocaleDateString('ru') : '—'}
+                  </td>
+                  <td className="px-4 py-2 text-gray-700 dark:text-gray-300 text-xs">
+                    {p.last_seen_at ? new Date(p.last_seen_at).toLocaleDateString('ru') : 'Не входил'}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <button
+                      onClick={() => openPatientDrawer(p)}
+                      className="text-xs px-3 py-1 bg-cyan-100 hover:bg-cyan-200 dark:bg-cyan-900/40 dark:hover:bg-cyan-900/60 text-cyan-800 dark:text-cyan-200 rounded-lg font-semibold transition"
+                    >
+                      Открыть
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <p className="text-xs text-gray-400 text-center">
         Сгенерировано {data.generated_at?.slice(0, 19).replace('T', ' ')}
       </p>
+
+      {/* Drawer с деталями пациента */}
+      {openPatient && (
+        <div className="fixed inset-0 z-50 flex items-stretch justify-end" onClick={() => setOpenPatient(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-xl bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">{openPatient.name}</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{openPatient.phone}</p>
+              </div>
+              <button onClick={() => setOpenPatient(null)} className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <div className="p-6 space-y-5">
+              {detailsLoading && <div className="text-center text-gray-400 py-8">Загрузка…</div>}
+              {patientDetails && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Email</div>
+                      <div className="text-gray-900 dark:text-gray-100">{patientDetails.email || '—'}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">День рождения</div>
+                      <div className="text-gray-900 dark:text-gray-100">
+                        {patientDetails.birth_date ? new Date(patientDetails.birth_date).toLocaleDateString('ru') : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Зарегистрирован</div>
+                      <div className="text-gray-900 dark:text-gray-100">
+                        {patientDetails.registered_at ? new Date(patientDetails.registered_at).toLocaleDateString('ru') : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Последний вход</div>
+                      <div className="text-gray-900 dark:text-gray-100">
+                        {patientDetails.last_login_at ? new Date(patientDetails.last_login_at).toLocaleDateString('ru') : 'Не входил'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Входов всего</div>
+                      <div className="text-gray-900 dark:text-gray-100">{patientDetails.login_count || 0}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400 font-semibold">Маркетинг</div>
+                      <div className="text-gray-900 dark:text-gray-100">{patientDetails.marketing_opt_in ? 'Разрешён' : 'Запрещён'}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Клиники сети, в которых был</h4>
+                    {patientDetails.clinics_visited?.length ? (
+                      <div className="space-y-1">
+                        {patientDetails.clinics_visited.map((c, i) => (
+                          <div key={i} className="flex items-center justify-between text-sm bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+                            <div className="font-medium text-gray-900 dark:text-gray-100">{c.clinic_name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {c.visits} визитов · {c.last_visit_at ? new Date(c.last_visit_at).toLocaleDateString('ru') : '—'}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="text-sm text-gray-400">Нет визитов</p>}
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">
+                      Последние визиты ({patientDetails.visits?.length || 0})
+                    </h4>
+                    <div className="space-y-1 max-h-72 overflow-y-auto">
+                      {patientDetails.visits?.map(v => (
+                        <div key={v.id} className="border-l-2 border-cyan-400 pl-3 py-1.5">
+                          <div className="text-sm text-gray-900 dark:text-gray-100">
+                            {v.start_at ? new Date(v.start_at).toLocaleString('ru') : '—'}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {v.clinic_name} · {v.doctor_name || 'врач не указан'}
+                            {v.status && <span className="ml-1 px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-[10px]">{v.status}</span>}
+                          </div>
+                        </div>
+                      ))}
+                      {!patientDetails.visits?.length && <p className="text-sm text-gray-400">Нет записей</p>}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

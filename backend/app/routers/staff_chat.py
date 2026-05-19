@@ -542,42 +542,69 @@ async def list_contacts(
 ):
     _ensure_not_patient(user)
     users = await svc.visible_users_for(db, user)
-    # Группируем по клинике, дополнительно отдаём tenant_id/tenant_name —
-    # фронт сам решит, делать ли подзаголовок «Тенант» (нужно, если виден
-    # super_admin/franchise_owner: контакты включают несколько клиник из
-    # разных тенантов одной франшизы).
+    # Группируем по клинике. У врачей/медсестёр обычно User.clinic_id IS NULL —
+    # привязка идёт через DoctorClinicAccess (multi-clinic). Поэтому для
+    # определения клиники юзера сначала смотрим User.clinic_id, затем
+    # пытаемся достать клинику(и) через DoctorClinicAccess. Если ни там
+    # ни там нет — это admin-роль франшизы/тенанта → группа «Управление сетью».
     from app.models.clinic import Clinic
     from app.models.tenant import Tenant
-    clinic_ids = {u.clinic_id for u in users if getattr(u, "clinic_id", None)}
+
+    # 1) direct clinic_id
+    direct_cids = {u.clinic_id for u in users if getattr(u, "clinic_id", None)}
+
+    # 2) clinic ids через DoctorClinicAccess для юзеров без direct clinic_id
+    user_clinic_via_access: dict[uuid.UUID, list[uuid.UUID]] = {}
+    user_ids_no_clinic = [u.id for u in users if not getattr(u, "clinic_id", None)]
+    if user_ids_no_clinic:
+        try:
+            from app.models.doctor_clinic_access import DoctorClinicAccess
+            r = await db.execute(
+                select(DoctorClinicAccess.doctor_id, DoctorClinicAccess.clinic_id)
+                .where(DoctorClinicAccess.doctor_id.in_(user_ids_no_clinic))
+            )
+            for did, cid in r.all():
+                user_clinic_via_access.setdefault(did, []).append(cid)
+        except Exception:
+            pass
+
+    # Собираем все нужные clinic_ids и подгружаем
+    all_cids = set(direct_cids)
+    for cids_list in user_clinic_via_access.values():
+        all_cids.update(cids_list)
     clinics_map: dict[uuid.UUID, Clinic] = {}
-    if clinic_ids:
-        r = await db.execute(select(Clinic).where(Clinic.id.in_(clinic_ids)))
+    if all_cids:
+        r = await db.execute(select(Clinic).where(Clinic.id.in_(all_cids)))
         clinics_map = {c.id: c for c in r.scalars().all()}
+
+    # Тенанты
     tenant_ids = {u.tenant_id for u in users if getattr(u, "tenant_id", None)}
     tenant_ids |= {c.tenant_id for c in clinics_map.values() if getattr(c, "tenant_id", None)}
     tenants_map: dict[uuid.UUID, Tenant] = {}
     if tenant_ids:
         r = await db.execute(select(Tenant).where(Tenant.id.in_(tenant_ids)))
         tenants_map = {t.id: t for t in r.scalars().all()}
+
+    # Роли, которые НЕ привязаны к клинике принципиально — управляют сетью
+    network_roles = {"super_admin", "franchise_owner", "manager", "recruiter"}
+
     groups: dict[str, dict] = {}
-    for u in users:
-        cid = getattr(u, "clinic_id", None)
-        if cid and cid in clinics_map:
-            key = str(cid)
-            label = clinics_map[cid].name
-            t_id = getattr(clinics_map[cid], "tenant_id", None) or getattr(u, "tenant_id", None)
-        else:
-            # tenant-wide роль — группируем по тенанту (а не «Управление сетью» для всех),
-            # чтобы при cross-franchise админах не схлопывались разные клиники.
-            t_id = getattr(u, "tenant_id", None)
-            if t_id:
-                key = f"tenant-wide:{t_id}"
-                tname = tenants_map[t_id].name if t_id in tenants_map else "Управление сетью"
-                label = f"Управление — {tname}"
-            else:
-                key = "tenant-wide"
-                label = "Управление сетью"
+
+    def _add_user_to_group(u, cid, label_override=None):
+        clinic = clinics_map.get(cid) if cid else None
+        t_id = (
+            getattr(clinic, "tenant_id", None) if clinic
+            else getattr(u, "tenant_id", None)
+        )
         t = tenants_map.get(t_id) if t_id else None
+        if cid and clinic:
+            key = str(cid)
+            label = label_override or clinic.name
+        else:
+            # Admin-роль (super_admin / franchise_owner / manager / recruiter)
+            # без привязки к клинике → общая категория «Управление сетью».
+            key = "tenant-wide"
+            label = label_override or "Управление сетью"
         if key not in groups:
             groups[key] = {
                 "clinic_id": str(cid) if cid else None,
@@ -588,14 +615,35 @@ async def list_contacts(
                 "users": [],
             }
         groups[key]["users"].append(svc.serialize_user_brief(u))
-    # Сортируем: сначала по tenant_name, затем clinic-группы, потом tenant-wide
-    groups_list = sorted(
-        groups.values(),
-        key=lambda g: (
-            (g["tenant_name"] or "я") if g["clinic_id"] else "яя" + (g["tenant_name"] or ""),
-            g["label"] or "",
-        ),
-    )
+
+    for u in users:
+        role = u.role.value if hasattr(u.role, "value") else str(u.role)
+        cid = getattr(u, "clinic_id", None)
+        if cid:
+            _add_user_to_group(u, cid)
+            continue
+        # Без direct clinic_id — пытаемся через DoctorClinicAccess
+        cids_via = user_clinic_via_access.get(u.id, [])
+        if cids_via:
+            # Если врач/visiting привязан к нескольким клиникам — показываем его
+            # в КАЖДОЙ из них (это удобнее, чем выбирать одну «основную»).
+            for c_id in cids_via:
+                _add_user_to_group(u, c_id)
+            continue
+        # Ни User.clinic_id, ни DoctorClinicAccess.
+        # network_roles → «Управление сетью»; всё остальное (если случилось) — тоже
+        # сваливаем в network bucket, чтобы не терять контакты.
+        _add_user_to_group(u, None)
+
+    # Сортировка: сначала клиники (по tenant_name → clinic name), затем «Управление сетью»
+    def _sort_key(g):
+        is_network = g["clinic_id"] is None
+        return (
+            1 if is_network else 0,
+            (g["tenant_name"] or "").lower(),
+            (g["label"] or "").lower(),
+        )
+    groups_list = sorted(groups.values(), key=_sort_key)
     return {"groups": groups_list, "total": len(users)}
 
 
