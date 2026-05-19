@@ -47,6 +47,7 @@ import {
   useToast,
 } from '../design'
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
+import SlotBoardSection from '../sections/scheduling/SlotBoardSection'
 // Глава 6: AI-инструменты врача
 import DoctorBriefingPanel from '../components/doctor/DoctorBriefingPanel'
 import DoctorTreatmentPlanEditor from '../components/doctor/DoctorTreatmentPlanEditor'
@@ -369,8 +370,10 @@ function TodayPage({ token, doctorId, doctorInfo }) {
 // SCHEDULE · уже premium (внешний компонент)
 // ─────────────────────────────────────────────────────────────────────
 function SchedulePage({ token, doctorId, doctorName }) {
+  // Новый 4-колоночный SlotBoard в self-режиме — единый дизайн с менеджером.
+  // (старый WeekScheduleSection пока оставлен в импорте для отката, если нужно)
   return (
-    <WeekScheduleSection
+    <SlotBoardSection
       token={token}
       mode="self"
       selfDoctorId={doctorId}

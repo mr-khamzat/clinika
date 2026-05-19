@@ -314,6 +314,11 @@ function MiniApp() {
             </>
           )}
 
+          {/* ─── Расписание/слоты доступны менеджеру И регистратору ─── */}
+          {(user?.role === 'manager' || user?.role === 'reg') && (
+            <Route path="manager/appointments" element={<ManagerAppointments />} />
+          )}
+
           {/* ─── Маршруты только для менеджера ─── */}
           {user?.role === 'manager' && (
             <>
@@ -333,7 +338,7 @@ function MiniApp() {
               <Route path="manager/finance" element={<ManagerFinance />} />
               {/* billingledger01: журнал биллинг-операций франшизы */}
               <Route path="manager/finance/ledger" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerBillingLedger /></Suspense>} />
-              <Route path="manager/appointments" element={<ManagerAppointments />} />
+              {/* manager/appointments вынесен выше — доступен также для reg */}
               <Route path="manager/doctors" element={<ManagerDoctors />} />
               {/* Глава 4 — Manager productivity */}
               <Route path="manager/kanban"       element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerKanban /></Suspense>} />

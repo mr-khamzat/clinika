@@ -561,11 +561,53 @@ function CreateReferralForm({ apptId, doctors, sourceDoctorId, onCancel, onCreat
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
+  // Свободные слоты целевого врача — для немедленной записи
+  const [weekData, setWeekData] = useState(null) // {days: [{date, slots: [{time, appointment}]}]}
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date()
+    const wd = d.getDay() === 0 ? 7 : d.getDay()
+    d.setDate(d.getDate() - wd + 1) // понедельник этой недели
+    d.setHours(0,0,0,0)
+    return d
+  })
+  const [pickedSlot, setPickedSlot] = useState(null) // {date: 'YYYY-MM-DD', time: 'HH:MM'}
+  const [slotsLoading, setSlotsLoading] = useState(false)
+
   // Список врачей: исключаем самого себя
   const filteredDoctors = useMemo(
     () => (doctors || []).filter(d => d.id !== sourceDoctorId),
     [doctors, sourceDoctorId]
   )
+
+  // Грузим недельный график целевого врача после его выбора
+  useEffect(() => {
+    if (targetType !== 'doctor' || !targetDoctorId) { setWeekData(null); setPickedSlot(null); return }
+    const ws = weekStart.toISOString().slice(0, 10)
+    setSlotsLoading(true)
+    api.get(`/doctors/${targetDoctorId}/week`, { params: { start_date: ws } })
+      .then(r => { setWeekData(r.data); setSlotsLoading(false) })
+      .catch(() => { setWeekData({ days: [] }); setSlotsLoading(false) })
+  }, [targetType, targetDoctorId, weekStart])
+
+  const shiftWeek = (delta) => {
+    const d = new Date(weekStart)
+    d.setDate(d.getDate() + delta * 7)
+    setWeekStart(d)
+    setPickedSlot(null)
+  }
+
+  // Извлекаем свободные слоты из недельных данных. Формат week-endpoint в
+  // нашем коде: { days: [{ date, slots: [{ start_time, end_time, appointment? }] }] }
+  // Если структура другая — fallback на пустой массив.
+  const freeSlotsByDate = useMemo(() => {
+    const out = {}
+    const days = (weekData && weekData.days) || []
+    for (const d of days) {
+      const ds = (d.slots || []).filter(s => !s.appointment && !s.is_busy)
+      out[d.date] = ds
+    }
+    return out
+  }, [weekData])
 
   const submit = async () => {
     setErr('')
@@ -580,6 +622,8 @@ function CreateReferralForm({ apptId, doctors, sourceDoctorId, onCancel, onCreat
         target_doctor_id: targetType === 'doctor' ? targetDoctorId : null,
         target_service: targetType !== 'doctor' ? targetService : null,
         notes: notes || null,
+        scheduled_date: pickedSlot?.date || null,
+        scheduled_time: pickedSlot?.time || null,
       })
       onCreated && onCreated()
     } catch (e) {
@@ -617,23 +661,119 @@ function CreateReferralForm({ apptId, doctors, sourceDoctorId, onCancel, onCreat
       </div>
 
       {targetType === 'doctor' ? (
-        <select
-          value={targetDoctorId}
-          onChange={e => setTargetDoctorId(e.target.value)}
-          className="text-sm"
-          style={{
-            padding: '10px 12px', borderRadius: 10,
-            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
-            minHeight: 44,
-          }}
-        >
-          <option value="">— выберите врача —</option>
-          {filteredDoctors.map(d => (
-            <option key={d.id} value={d.id}>
-              {d.full_name}{d.specialty ? ` · ${d.specialty}` : ''}
-            </option>
-          ))}
-        </select>
+        <>
+          <select
+            value={targetDoctorId}
+            onChange={e => { setTargetDoctorId(e.target.value); setPickedSlot(null) }}
+            className="text-sm"
+            style={{
+              padding: '10px 12px', borderRadius: 10,
+              border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--fg)',
+              minHeight: 44,
+            }}
+          >
+            <option value="">— выберите врача —</option>
+            {filteredDoctors.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.full_name}{d.specialty ? ` · ${d.specialty}` : ''}
+              </option>
+            ))}
+          </select>
+
+          {targetDoctorId && (
+            <div
+              style={{
+                padding: 10, borderRadius: 10, border: '1px solid var(--border)',
+                background: 'var(--surface)',
+              }}
+              className="flex flex-col gap-2"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold" style={{ color: 'var(--fg-2)' }}>
+                  Свободные окна (необязательно — можно создать без записи)
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(-1)}
+                    style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 11, color: 'var(--fg-2)' }}
+                  >← Пред.</button>
+                  <span className="text-xs" style={{ color: 'var(--fg-3)', minWidth: 110, textAlign: 'center' }}>
+                    {weekStart.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })} — {new Date(weekStart.getTime() + 6*86400000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => shiftWeek(1)}
+                    style={{ padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 11, color: 'var(--fg-2)' }}
+                  >След. →</button>
+                </div>
+              </div>
+
+              {slotsLoading ? (
+                <div className="text-xs text-center py-3" style={{ color: 'var(--fg-3)' }}>Загрузка свободных окон…</div>
+              ) : Object.keys(freeSlotsByDate).length === 0 ? (
+                <div className="text-xs text-center py-3" style={{ color: 'var(--fg-3)' }}>
+                  Расписание врача не задано или окон нет
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 6 }}>
+                  {Object.entries(freeSlotsByDate).map(([dateStr, slots]) => {
+                    const d = new Date(dateStr)
+                    const isToday = new Date().toISOString().slice(0,10) === dateStr
+                    return (
+                      <div key={dateStr} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div
+                          style={{
+                            fontSize: 10, fontWeight: 700, textAlign: 'center',
+                            color: isToday ? 'var(--accent)' : 'var(--fg-2)',
+                            textTransform: 'uppercase', letterSpacing: '0.04em',
+                            padding: '4px 0',
+                          }}
+                        >
+                          {d.toLocaleDateString('ru-RU', { weekday: 'short' })}<br/>
+                          <span style={{ fontSize: 12 }}>{d.getDate()}</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 180, overflowY: 'auto' }}>
+                          {slots.length === 0 && (
+                            <div style={{ fontSize: 10, color: 'var(--fg-3)', textAlign: 'center', padding: 4 }}>—</div>
+                          )}
+                          {slots.map(s => {
+                            const t = s.start_time || s.time
+                            const isPicked = pickedSlot && pickedSlot.date === dateStr && pickedSlot.time === t
+                            return (
+                              <button
+                                type="button"
+                                key={`${dateStr}-${t}`}
+                                onClick={() => setPickedSlot(isPicked ? null : { date: dateStr, time: t })}
+                                style={{
+                                  padding: '4px 6px',
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  borderRadius: 6,
+                                  border: `1px solid ${isPicked ? 'var(--accent)' : 'var(--border)'}`,
+                                  background: isPicked ? 'var(--accent)' : 'var(--surface)',
+                                  color: isPicked ? '#fff' : 'var(--fg)',
+                                  cursor: 'pointer',
+                                  fontVariantNumeric: 'tabular-nums',
+                                }}
+                              >{t}</button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {pickedSlot && (
+                <div className="text-xs" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                  ✓ Пациент будет записан на {new Date(pickedSlot.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} в {pickedSlot.time}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <input
           type="text"

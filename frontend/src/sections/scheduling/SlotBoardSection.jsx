@@ -85,9 +85,15 @@ const STATUSES = {
 // ──────────────────────────────────────────────────────────────────────────────
 // БЛОК: главный компонент
 // ──────────────────────────────────────────────────────────────────────────────
-export default function SlotBoardSection({ token }) {
+export default function SlotBoardSection({ token, mode = 'full', selfDoctorId = null, selfDoctorName = null }) {
+  // mode:
+  //   'full' — менеджер/регистратор/админ: левая панель врачей видна, можно
+  //            выбирать любого врача клиники.
+  //   'self' — врач: левая панель скрыта, виден только собственный календарь.
+  const isSelf = mode === 'self'
+
   const [doctors, setDoctors] = useState([])
-  const [activeDoctorId, setActiveDoctorId] = useState('')
+  const [activeDoctorId, setActiveDoctorId] = useState(isSelf ? (selfDoctorId || '') : '')
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date()))
   const [activeDate, setActiveDate] = useState(new Date())
   const [weekData, setWeekData] = useState(null)
@@ -102,7 +108,16 @@ export default function SlotBoardSection({ token }) {
   const [detailsModal, setDetailsModal] = useState(null)   // { appointment, date, start_time }
 
   // ── Загрузка списка врачей ────────────────────────────────────────────────
+  // В self-режиме не грузим — у нас только свой doctorId (передан пропом).
   useEffect(() => {
+    if (isSelf) {
+      // Минимальная заглушка из props — для шапки/прогресса
+      if (selfDoctorId) {
+        setDoctors([{ id: selfDoctorId, full_name: selfDoctorName || 'Я', specialty: '' }])
+        setActiveDoctorId(selfDoctorId)
+      }
+      return
+    }
     api.get('/doctors')
       .then(r => {
         const list = Array.isArray(r.data) ? r.data : []
@@ -111,7 +126,7 @@ export default function SlotBoardSection({ token }) {
       })
       .catch(() => setError('Не удалось загрузить список врачей'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [isSelf, selfDoctorId, selfDoctorName])
 
   // ── Загрузка недельных данных активного врача ────────────────────────────
   const loadWeek = useCallback(async () => {
@@ -322,7 +337,8 @@ export default function SlotBoardSection({ token }) {
       )}
 
       <section className="sb-schedule">
-        {/* ── Левая панель: список врачей ─────────────────────────────── */}
+        {/* ── Левая панель: список врачей (скрывается в self-режиме) ─── */}
+        {!isSelf && (
         <aside className="sb-doctors-panel">
           <div className="sb-doctors-search">
             <div className="sb-search-box">
@@ -384,6 +400,7 @@ export default function SlotBoardSection({ token }) {
             )}
           </div>
         </aside>
+        )}
 
         {/* ── Правая панель: шапка + сетка слотов ─────────────────────── */}
         <section className="sb-slots-panel">

@@ -14,7 +14,7 @@
 """
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, date, time as dtime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -91,6 +91,11 @@ class ReferralIn(BaseModel):
     target_doctor_id: Optional[uuid.UUID] = None
     target_service: Optional[str] = None
     notes: Optional[str] = None
+    # Опционально: сразу записать пациента на свободный слот целевого врача.
+    # Если оба поля переданы (для target_type='doctor'), создаётся Appointment
+    # и referral.status переключается в 'scheduled'.
+    scheduled_date: Optional[date] = None
+    scheduled_time: Optional[str] = None  # HH:MM
 
 
 class ReferralOut(BaseModel):
@@ -379,6 +384,58 @@ async def create_internal_referral(
         created_by_id=current_user.id,
     )
     db.add(ref)
+    await db.flush()  # получаем ref.id до создания appointment
+
+    # Если врач выбрал конкретный свободный слот целевого врача — сразу создаём
+    # Appointment и связываем с направлением. Регистратор не нужен.
+    if (
+        target_type == "doctor"
+        and data.target_doctor_id
+        and data.scheduled_date
+        and data.scheduled_time
+    ):
+        try:
+            hh, mm = data.scheduled_time.split(":")
+            start_t = dtime(int(hh), int(mm))
+        except Exception:
+            raise HTTPException(400, "scheduled_time должно быть HH:MM")
+        # Длительность слота — slot_duration целевого врача (по умолчанию 30)
+        slot_min = getattr(d, "slot_duration", 30) or 30
+        end_total = int(hh) * 60 + int(mm) + slot_min
+        end_t = dtime((end_total // 60) % 24, end_total % 60)
+        # clinic_id — из таблицы doctors
+        target_clinic_id = d.clinic_id
+        # Проверка что слот не занят (двойная запись запрещена)
+        existing = (await db.execute(
+            select(Appointment).where(
+                Appointment.doctor_id == data.target_doctor_id,
+                Appointment.appointment_date == data.scheduled_date,
+                Appointment.start_time == start_t,
+                Appointment.status.in_(["pending", "confirmed"]),
+            )
+        )).scalar_one_or_none()
+        if existing:
+            await db.rollback()
+            raise HTTPException(409, "Этот слот уже занят — выберите другой")
+
+        new_appt = Appointment(
+            tenant_id=appt.tenant_id,
+            doctor_id=data.target_doctor_id,
+            clinic_id=target_clinic_id,
+            patient_phone=appt.patient_phone,
+            patient_name=appt.patient_name,
+            appointment_date=data.scheduled_date,
+            start_time=start_t,
+            end_time=end_t,
+            status="pending",
+            notes=f"Направление от д-ра {current_user.full_name or 'врача'} (приём {appt.id})",
+            created_by_id=current_user.id,
+        )
+        db.add(new_appt)
+        await db.flush()
+        ref.scheduled_appointment_id = new_appt.id
+        ref.status = "scheduled"
+
     await db.commit()
     await db.refresh(ref)
 
