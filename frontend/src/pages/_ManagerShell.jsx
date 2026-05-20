@@ -54,6 +54,8 @@ export const MGR_NAV = [
   { key:'recruit',      label:'Сотрудники',     icon:'groups',         path:'/manager/recruit-doctors',  group:'team' },
   { key:'visiting',     label:'Приезжие врачи', icon:'travel_explore', path:'/manager/visiting-doctors', group:'team' },
   { key:'partners',     label:'Врачи-партнёры', icon:'handshake',      path:'/manager/partner-doctors',  group:'team' },
+  // partneroffers01 — Партнёрский прайс: категории + офферы (для бонусов внешним врачам)
+  { key:'partner_offers', label:'Партнёрский прайс', icon:'price_change', path:'/manager/partner-offers', group:'team' },
   { key:'appointments', label:'Записи',    icon:'event',        path:'/manager/appointments',  group:'schedule' },
   // Глава 4 — Manager productivity
   { key:'kanban',       label:'Kanban-расписание', icon:'view_kanban',  path:'/manager/kanban',      group:'schedule' },
