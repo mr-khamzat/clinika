@@ -37,12 +37,7 @@ router = APIRouter(prefix="", tags=["partner-offers"])
 # Роли, имеющие право управлять партнёрским прайсом своей клиники.
 # В Clinika: MANAGER = системный администратор, REG = администратор клиники,
 # FRANCHISE_OWNER = владелец сети, SUPER_ADMIN = глобал.
-MANAGER_ROLES = {
-    UserRole.MANAGER,
-    UserRole.REG,
-    UserRole.FRANCHISE_OWNER,
-    UserRole.SUPER_ADMIN,
-}
+MANAGER_ROLES = {UserRole.MANAGER, UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN}
 
 
 def _require_manager(user: User) -> None:
