@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
-from sqlalchemy import String, Integer, DateTime, ForeignKey, Enum as SAEnum, Text
+from decimal import Decimal
+from sqlalchemy import String, Integer, DateTime, ForeignKey, Enum as SAEnum, Text, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import enum
@@ -66,6 +67,15 @@ class Referral(Base):
     cross_clinic_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     cross_clinic_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     inter_clinic_invoice_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+    # Партнёрский оффер, по которому начислялся бонус (snapshot для аудита/иммутабельности)
+    partner_offer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("partner_service_offers.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    bonus_snapshot_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
 
     from_clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="referrals_from", foreign_keys=[from_clinic_id])
     to_clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="referrals_to", foreign_keys=[to_clinic_id])

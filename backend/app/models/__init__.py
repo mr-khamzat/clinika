@@ -77,6 +77,7 @@ from app.models.cms import TenantCmsPage
 
 from app.models.review import Review
 from app.models.inter_clinic_invoice import InterClinicInvoice
+from app.models.partner_offer import PartnerCategory, PartnerServiceOffer  # noqa: F401
 from app.models.contact_request import ContactRequest
 
 # Семейный аккаунт пациента
