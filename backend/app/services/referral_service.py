@@ -2,7 +2,6 @@ import logging
 import uuid
 import random
 from datetime import datetime
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -89,19 +88,16 @@ async def create_referral(
         and referral.from_clinic_id != referral.to_clinic_id
     )
     if is_external and referral.service_id:
-        from app.models.partner_offer import PartnerServiceOffer as _PSO
+        from app.models.partner_offer import PartnerServiceOffer as _Offer
         offer = (await db.execute(
-            select(_PSO).where(
-                _PSO.clinic_id == referral.to_clinic_id,
-                _PSO.service_id == referral.service_id,
-                _PSO.is_active.is_(True),
+            select(_Offer).where(
+                _Offer.clinic_id == referral.to_clinic_id,
+                _Offer.service_id == referral.service_id,
+                _Offer.is_active.is_(True),
             )
         )).scalar_one_or_none()
         if not offer:
-            raise HTTPException(
-                status_code=422,
-                detail="Услуга не входит в партнёрский прайс этой клиники",
-            )
+            raise ValueError("Услуга не входит в партнёрский прайс этой клиники")
         referral.partner_offer_id = offer.id
         referral.bonus_snapshot_amount = offer.payout_amount
     # QR для администратора (подтверждение по скану)
@@ -353,7 +349,7 @@ async def _finalize_bonus_and_ledger(
         # Приоритет — snapshot из partner_service_offer (записан при create_referral).
         # Это гарантирует иммутабельность: изменение payout оффера задним числом
         # не меняет уже созданные направления.
-        if getattr(referral, "bonus_snapshot_amount", None) is not None:
+        if referral.bonus_snapshot_amount is not None:
             payout_amount = float(referral.bonus_snapshot_amount)
         elif service.referral_payout is not None:
             # Legacy fallback (направления, созданные до partner_offers).

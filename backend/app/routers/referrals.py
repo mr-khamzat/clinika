@@ -189,25 +189,28 @@ async def create_new_referral(
     if _rtype == "lab" and not (data.lab_tests and data.lab_tests.strip()):
         raise HTTPException(status_code=400, detail="Для типа 'lab' укажите список анализов")
 
-    referral = await create_referral(
-        db=db,
-        from_clinic_id=from_clinic_id,
-        to_clinic_id=data.to_clinic_id,
-        service_id=data.service_id,
-        patient_phone=data.patient_phone,
-        patient_name=data.patient_name,
-        mis_patient_id=data.mis_patient_id,
-        mis_doctor_id=getattr(data, "mis_doctor_id", None),
-        created_by_admin_id=current_user.id,
-        notes=data.notes,
-        appointment_at=data.appointment_at,
-        tenant_id=current_user.tenant_id,
-        tenant_slug=_tenant_slug,
-        base_url=_base_url,
-        referral_type=_rtype,
-        target_doctor_id=data.target_doctor_id,
-        lab_tests=data.lab_tests,
-    )
+    try:
+        referral = await create_referral(
+            db=db,
+            from_clinic_id=from_clinic_id,
+            to_clinic_id=data.to_clinic_id,
+            service_id=data.service_id,
+            patient_phone=data.patient_phone,
+            patient_name=data.patient_name,
+            mis_patient_id=data.mis_patient_id,
+            mis_doctor_id=getattr(data, "mis_doctor_id", None),
+            created_by_admin_id=current_user.id,
+            notes=data.notes,
+            appointment_at=data.appointment_at,
+            tenant_id=current_user.tenant_id,
+            tenant_slug=_tenant_slug,
+            base_url=_base_url,
+            referral_type=_rtype,
+            target_doctor_id=data.target_doctor_id,
+            lab_tests=data.lab_tests,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     await _log(db, current_user, "Создано направление", "referral", referral.id)
     if current_user.tenant_id:
         await webhook_service.send_event(db, current_user.tenant_id, "referral_created",
