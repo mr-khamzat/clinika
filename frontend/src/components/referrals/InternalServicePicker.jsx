@@ -4,7 +4,7 @@ import api from '../../api'
 // ─────────────────────────────────────────────────────────────────────
 // InternalServicePicker — выбор услуги из собственного каталога клиники.
 // Используется в CreateReferralWizard (режим internal).
-// API: GET /clinics/services — каталог "своих" услуг текущей клиники.
+// API: GET /manager/services/?for_referrals=true — каталог "своих" услуг текущей клиники.
 // ─────────────────────────────────────────────────────────────────────
 export default function InternalServicePicker({ value, onChange }) {
   const [services, setServices] = useState([])
@@ -14,7 +14,7 @@ export default function InternalServicePicker({ value, onChange }) {
 
   useEffect(() => {
     setLoading(true)
-    api.get('/clinics/services', { params: { limit: 5000 } })
+    api.get('/manager/services/', { params: { limit: 5000, for_referrals: true } })
       .then(r => {
         setServices(r.data?.items || r.data || [])
         setLoading(false)
