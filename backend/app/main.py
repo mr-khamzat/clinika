@@ -30,6 +30,8 @@ from app.database import engine, Base, AsyncSessionLocal
 from sqlalchemy import text
 import asyncio
 from app.routers import auth, referrals, bonuses, clinics, admins, integrations
+# Партнёрский прайс (partneroffers01): категории + офферы услуг для cross-clinic направлений
+from app.routers import partner_offers
 from app.routers.password_reset import router as password_reset_router, cleanup_expired_password_reset_tokens
 from app.routers.manager import router as manager_router
 from app.routers.accountant import router as accountant_router
@@ -1545,6 +1547,7 @@ from app.routers.reg_speed import router as reg_speed_router
 app.include_router(reg_speed_router)  # Глава 5: PDF/печать/поиск пациентов для регистратора
 app.include_router(referrals.router)
 app.include_router(bonuses.router)
+app.include_router(partner_offers.router)  # /clinics/me/partner-* и /clinics/{id}/partner-offers
 app.include_router(clinics.router)
 app.include_router(admins.router)
 app.include_router(manager_router)
