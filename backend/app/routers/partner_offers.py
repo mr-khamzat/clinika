@@ -1,7 +1,7 @@
 """CRUD: partner_categories и partner_service_offers.
 
 Доступ:
-  - manage (POST/PATCH/DELETE) — manager/super_admin/franchise_owner/reg своей клиники
+  - manage (POST/PATCH/DELETE) — MANAGER / FRANCHISE_OWNER / SUPER_ADMIN
   - read свои (GET /clinics/me/...) — те же роли
   - read чужие (GET /clinics/{clinic_id}/partner-offers) — staff внутри того же tenant
 """
@@ -35,8 +35,8 @@ router = APIRouter(prefix="", tags=["partner-offers"])
 # --- Helpers ---------------------------------------------------------------
 
 # Роли, имеющие право управлять партнёрским прайсом своей клиники.
-# В Clinika: MANAGER = системный администратор, REG = администратор клиники,
-# FRANCHISE_OWNER = владелец сети, SUPER_ADMIN = глобал.
+# MANAGER = системный администратор, FRANCHISE_OWNER = владелец сети,
+# SUPER_ADMIN = глобал.
 MANAGER_ROLES = {UserRole.MANAGER, UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN}
 
 
@@ -253,11 +253,13 @@ async def create_my_offers(
     await db.commit()
     for off in created:
         await db.refresh(off)
+    svc_ids = {o.service_id for o in created}
     svc_map = {}
-    for sid in {o.service_id for o in created}:
-        svc_map[sid] = (await db.execute(
-            select(Service).where(Service.id == sid)
-        )).scalar_one()
+    if svc_ids:
+        svc_rows = (await db.execute(
+            select(Service).where(Service.id.in_(svc_ids))
+        )).scalars().all()
+        svc_map = {s.id: s for s in svc_rows}
     cat_obj = None
     if body.category_id:
         cat_obj = (await db.execute(
