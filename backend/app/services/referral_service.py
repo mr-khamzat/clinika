@@ -2,6 +2,7 @@ import logging
 import uuid
 import random
 from datetime import datetime
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -82,6 +83,27 @@ async def create_referral(
     )
     db.add(referral)
     await db.flush()
+    # ── Snapshot партнёрского payout для cross-clinic направлений ──────────
+    is_external = bool(
+        referral.from_clinic_id and referral.to_clinic_id
+        and referral.from_clinic_id != referral.to_clinic_id
+    )
+    if is_external and referral.service_id:
+        from app.models.partner_offer import PartnerServiceOffer as _PSO
+        offer = (await db.execute(
+            select(_PSO).where(
+                _PSO.clinic_id == referral.to_clinic_id,
+                _PSO.service_id == referral.service_id,
+                _PSO.is_active.is_(True),
+            )
+        )).scalar_one_or_none()
+        if not offer:
+            raise HTTPException(
+                status_code=422,
+                detail="Услуга не входит в партнёрский прайс этой клиники",
+            )
+        referral.partner_offer_id = offer.id
+        referral.bonus_snapshot_amount = offer.payout_amount
     # QR для администратора (подтверждение по скану)
     referral.qr_code = generate_qr_image_base64(str(referral.id))
     # ── Короткий 5-значный код: фикс #8 ───────────────────────────────────
@@ -239,11 +261,22 @@ async def _apply_confirmation(
                 if _pt:
                     referral.mis_patient_id = _pt.get("patient_id") or _pt.get("id")
                 else:
+                    # Резолвим mis_id принимающей клиники — Renovatio может
+                    # привязать создаваемого пациента к ней (если поддерживает).
+                    _mis_clinic_id_for_add: int | None = None
+                    if referral.to_clinic_id:
+                        from app.models.clinic import Clinic as _ClinicAdd
+                        _tcl = (await db.execute(
+                            select(_ClinicAdd).where(_ClinicAdd.id == referral.to_clinic_id)
+                        )).scalar_one_or_none()
+                        if _tcl and _tcl.mis_id:
+                            _mis_clinic_id_for_add = int(_tcl.mis_id)
                     _new = await _mis_add(
                         referral.patient_phone,
                         full_name=referral.patient_name or "",
                         api_url=_api_url2,
                         api_key=_api_key2,
+                        clinic_id=_mis_clinic_id_for_add,
                     )
                     if _new and _new.get("patient_id"):
                         referral.mis_patient_id = int(_new["patient_id"])
@@ -280,6 +313,13 @@ async def _finalize_bonus_and_ledger(
     confirmed_by_admin_id: uuid.UUID | None,
 ) -> None:
     """Все денежные эффекты подтверждения направления — в одном месте."""
+    # ── Guard: бонус только за наружные направления ────────────────────────
+    is_external = bool(
+        referral.from_clinic_id and referral.to_clinic_id
+        and referral.from_clinic_id != referral.to_clinic_id
+    )
+    if not is_external:
+        return  # внутреннее направление — Bonus / ICI / RecruiterBonus не создаём
     from decimal import Decimal as _D
 
     # Сервис (если type=service)
@@ -310,9 +350,13 @@ async def _finalize_bonus_and_ledger(
             payout_amount = intermediate
             use_cascade = True
     elif service is not None:
-        # Фикс #7: единая логика выбора суммы для service-направления —
-        # та же, что в ручном confirm: referral_payout с fallback на bonus_amount.
-        if service.referral_payout is not None:
+        # Приоритет — snapshot из partner_service_offer (записан при create_referral).
+        # Это гарантирует иммутабельность: изменение payout оффера задним числом
+        # не меняет уже созданные направления.
+        if getattr(referral, "bonus_snapshot_amount", None) is not None:
+            payout_amount = float(referral.bonus_snapshot_amount)
+        elif service.referral_payout is not None:
+            # Legacy fallback (направления, созданные до partner_offers).
             payout_amount = float(service.referral_payout)
         else:
             payout_amount = float(service.bonus_amount or 0)
