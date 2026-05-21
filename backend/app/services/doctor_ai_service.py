@@ -5,17 +5,15 @@ AI-сервис для кабинета врача (Глава 6).
   • generate_briefing(payload) — pre-visit briefing (саммари пациента к приёму).
   • generate_treatment_plan(payload) — структурированный план лечения.
 
-Обе работают одинаково:
-  1. Если задан settings.gemini_api_key → пробуем реальный AI-вызов через
-     обёртку gemini_service.chat_completion, ожидаем строгий JSON в ответе,
-     парсим. Если парсинг или сетевой вызов падает → fallback.
-  2. Иначе сразу fallback на rule-based генератор: собирает структуру из
-     входных данных без AI.
+Приоритет провайдеров:
+  1. Claude (settings.anthropic_api_key) — основной, claude-sonnet-4-6.
+  2. Gemini (settings.gemini_api_key) — резервный.
+  3. Rule-based генератор — fallback без AI.
 
 Возвращается унифицированный dict:
     {
       "data": <структурированный результат>,
-      "ai_provider": "gemini" | "rule-based",
+      "ai_provider": "claude" | "gemini" | "rule-based",
       "tokens_in": int | None,
       "tokens_out": int | None,
       "latency_ms": int,
@@ -31,7 +29,8 @@ import time
 from typing import Any
 
 from app.config import settings
-from app.services.gemini_service import chat_completion
+from app.services.gemini_service import chat_completion as gemini_chat_completion
+from app.services import claude_service
 
 log = logging.getLogger("doctor_ai_service")
 
@@ -40,43 +39,73 @@ log = logging.getLogger("doctor_ai_service")
 # Утилиты
 # ─────────────────────────────────────────────────────────────────────
 def _has_gemini() -> bool:
-    """Доступен ли реальный AI-провайдер."""
     return bool((settings.gemini_api_key or "").strip())
 
 
-_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", re.DOTALL)
+async def _ai_chat(messages: list[dict], system: str, max_tokens: int) -> tuple[str, dict]:
+    """
+    Унифицированный вызов AI: Claude → Gemini → исключение.
+    Возвращает (provider_name, raw_result_dict).
+    """
+    if claude_service.has_claude():
+        result = await claude_service.chat_completion(
+            messages=messages, system=system, max_tokens=max_tokens
+        )
+        return "claude", result
+    if _has_gemini():
+        result = await gemini_chat_completion(
+            messages=messages, system=system, model="gemini-2.5-flash", max_tokens=max_tokens
+        )
+        return "gemini", result
+    raise RuntimeError("Нет ни одного AI-провайдера (ANTHROPIC_API_KEY / GEMINI_API_KEY)")
+
+
+_FENCE_OPEN_RE = re.compile(r"^```(?:json|JSON)?\s*\n?", re.IGNORECASE)
+_FENCE_CLOSE_RE = re.compile(r"\n?```\s*$")
 
 
 def _try_parse_json(text: str) -> Any | None:
     """
     Пытаемся вытащить JSON из ответа модели.
-    Допускаем оборачивание в ```json … ```.
+    Допускаем оборачивание в ```json … ``` (Gemini/Claude любят так оборачивать).
     """
     if not text:
         return None
     text = text.strip()
-    # Уберём fence, если он есть
-    m = _JSON_FENCE_RE.search(text)
-    if m:
-        text = m.group(1)
-    # Найдём первую {…} или […]
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    # Грубый bracket-scan
+    # Сначала убираем code-fence обёртку, если она есть — простой strip, надёжнее regex с nested braces
+    stripped = _FENCE_OPEN_RE.sub("", text)
+    stripped = _FENCE_CLOSE_RE.sub("", stripped).strip()
+    if stripped:
+        try:
+            return json.loads(stripped)
+        except Exception:
+            pass
+    # Грубый bracket-scan — ищем первый сбалансированный { … } или [ … ]
     for opener, closer in (("{", "}"), ("[", "]")):
-        i = text.find(opener)
+        i = stripped.find(opener)
         if i == -1:
             continue
         depth = 0
-        for j in range(i, len(text)):
-            if text[j] == opener:
+        in_str = False
+        esc = False
+        for j in range(i, len(stripped)):
+            ch = stripped[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == opener:
                 depth += 1
-            elif text[j] == closer:
+            elif ch == closer:
                 depth -= 1
                 if depth == 0:
-                    chunk = text[i : j + 1]
+                    chunk = stripped[i : j + 1]
                     try:
                         return json.loads(chunk)
                     except Exception:
@@ -171,7 +200,7 @@ async def generate_briefing_recommendations(context: dict) -> dict:
     """
     started = time.monotonic()
 
-    if not _has_gemini():
+    if not (claude_service.has_claude() or _has_gemini()):
         return {
             "data": {"ai_recommendations": _rule_based_briefing(context)},
             "ai_provider": "rule-based",
@@ -182,11 +211,10 @@ async def generate_briefing_recommendations(context: dict) -> dict:
         }
 
     try:
-        result = await chat_completion(
+        provider, result = await _ai_chat(
             messages=[{"role": "user", "content": _briefing_user_prompt(context)}],
             system=_BRIEFING_SYSTEM,
-            model="gemini-1.5-flash",
-            max_tokens=600,
+            max_tokens=1200,
         )
         parsed = _try_parse_json(result.get("text", ""))
         if isinstance(parsed, dict):
@@ -214,14 +242,14 @@ async def generate_briefing_recommendations(context: dict) -> dict:
 
         return {
             "data": {"ai_recommendations": clean},
-            "ai_provider": "gemini",
+            "ai_provider": provider,
             "tokens_in": result.get("tokens_in"),
             "tokens_out": result.get("tokens_out"),
             "latency_ms": result.get("latency_ms") or int((time.monotonic() - started) * 1000),
             "success": True,
         }
     except Exception as e:
-        log.warning("Gemini briefing failed, fallback: %s", e)
+        log.warning("AI briefing failed, fallback: %s", e)
         return {
             "data": {"ai_recommendations": _rule_based_briefing(context)},
             "ai_provider": "rule-based",
@@ -321,7 +349,7 @@ async def generate_treatment_plan(diagnosis: str, symptoms: str, approach: str, 
     """Генерация плана лечения. Возвращает {data, ai_provider, tokens..., success}."""
     started = time.monotonic()
 
-    if not _has_gemini():
+    if not (claude_service.has_claude() or _has_gemini()):
         return {
             "data": _rule_based_plan(diagnosis, symptoms, approach, context),
             "ai_provider": "rule-based",
@@ -332,11 +360,10 @@ async def generate_treatment_plan(diagnosis: str, symptoms: str, approach: str, 
         }
 
     try:
-        result = await chat_completion(
+        provider, result = await _ai_chat(
             messages=[{"role": "user", "content": _plan_user_prompt(diagnosis, symptoms, approach, context)}],
             system=_PLAN_SYSTEM,
-            model="gemini-1.5-flash",
-            max_tokens=1500,
+            max_tokens=3000,
         )
         parsed = _try_parse_json(result.get("text", ""))
         if not isinstance(parsed, dict):
@@ -355,14 +382,14 @@ async def generate_treatment_plan(diagnosis: str, symptoms: str, approach: str, 
 
         return {
             "data": plan,
-            "ai_provider": "gemini",
+            "ai_provider": provider,
             "tokens_in": result.get("tokens_in"),
             "tokens_out": result.get("tokens_out"),
             "latency_ms": result.get("latency_ms") or int((time.monotonic() - started) * 1000),
             "success": True,
         }
     except Exception as e:
-        log.warning("Gemini plan failed, fallback: %s", e)
+        log.warning("AI plan failed, fallback: %s", e)
         return {
             "data": _rule_based_plan(diagnosis, symptoms, approach, context),
             "ai_provider": "rule-based",

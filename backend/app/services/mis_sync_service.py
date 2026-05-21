@@ -278,10 +278,19 @@ async def poll_and_confirm_referrals(db: AsyncSession) -> dict:
     """
     Polling МИС: приёмы со статусом completed за последние 2 часа.
     Ищем соответствующее направление по phone → авто-подтверждаем.
+
+    Архитектура (per-tenant): итерируемся по тенантам и опрашиваем только их
+    собственные mis_clinic_ids со своим api_key. Раньше был захардкоженый
+    список [1,4,26,3,24] + глобальный api_key из .env — это пробивало изоляцию
+    франшиз. Теперь каждый тенант видит только свои клиники.
+
     Возвращает статистику.
     """
     from datetime import datetime, timedelta
     from app.models.referral import Referral, ReferralStatus
+    from app.models.tenant import Tenant
+    from app.services.settings_service import get_setting as _get_s
+    from app.utils.phone import phone_variants
     from sqlalchemy import and_
     import re
 
@@ -292,48 +301,75 @@ async def poll_and_confirm_referrals(db: AsyncSession) -> dict:
     confirmed = 0
     errors = 0
 
-    for clinic_mis_id in [1, 4, 26, 3, 24]:
+    # Берём всех активных тенантов с настроенным МИС
+    tenants = (await db.execute(
+        select(Tenant).where(Tenant.is_active == True)
+    )).scalars().all()
+
+    for tenant in tenants:
+        tenant_clinic_ids = tenant.mis_clinic_ids or []
+        if not tenant_clinic_ids:
+            continue
+
+        # MIS-настройки тенанта
         try:
-            result = await _post(
-                "getAppointments",
-                clinic_id=clinic_mis_id,
-                date_updated_from=date_from,
-                date_updated_to=date_to,
-            )
-            appts = result.get("data") or []
-
-            for appt in appts:
-                if appt.get("status") != "completed":
-                    continue
-
-                raw_phone = appt.get("patient_phone", "")
-                if not raw_phone:
-                    continue
-
-                digits = re.sub(r"\D", "", raw_phone)
-                if digits.startswith("8"):
-                    digits = "7" + digits[1:]
-
-                # Ищем активное направление
-                from app.utils.phone import phone_variants
-                for variant in phone_variants(raw_phone):
-                    ref_result = await db.execute(
-                        select(Referral).where(
-                            and_(
-                                Referral.status == ReferralStatus.CREATED,
-                                Referral.patient_phone == variant,
-                            )
-                        ).order_by(Referral.created_at.desc()).limit(1)
-                    )
-                    ref = ref_result.scalar_one_or_none()
-                    if ref:
-                        ref.status = ReferralStatus.CONFIRMED
-                        ref.confirmed_at = datetime.utcnow()
-                        await db.flush()
-                        confirmed += 1
-                        break
+            api_url = await _get_s(db, "mis_api_url", "", tenant_id=tenant.id)
+            api_key = await _get_s(db, "mis_api_key", "", tenant_id=tenant.id)
         except Exception:
-            errors += 1
+            api_url, api_key = "", ""
+
+        if not api_key:
+            # У тенанта МИС не настроен — пропускаем
+            continue
+
+        for clinic_mis_id_raw in tenant_clinic_ids:
+            try:
+                clinic_mis_id = int(clinic_mis_id_raw)
+            except (TypeError, ValueError):
+                continue
+
+            try:
+                result = await _post(
+                    "getAppointments",
+                    api_url=api_url, api_key=api_key,
+                    clinic_id=clinic_mis_id,
+                    date_updated_from=date_from,
+                    date_updated_to=date_to,
+                )
+                appts = result.get("data") or []
+
+                for appt in appts:
+                    if appt.get("status") != "completed":
+                        continue
+
+                    raw_phone = appt.get("patient_phone", "")
+                    if not raw_phone:
+                        continue
+
+                    digits = re.sub(r"\D", "", raw_phone)
+                    if digits.startswith("8"):
+                        digits = "7" + digits[1:]
+
+                    # Ищем активное направление ТОЛЬКО в рамках этого тенанта
+                    for variant in phone_variants(raw_phone):
+                        ref_result = await db.execute(
+                            select(Referral).where(
+                                and_(
+                                    Referral.status == ReferralStatus.CREATED,
+                                    Referral.patient_phone == variant,
+                                    Referral.tenant_id == tenant.id,
+                                )
+                            ).order_by(Referral.created_at.desc()).limit(1)
+                        )
+                        ref = ref_result.scalar_one_or_none()
+                        if ref:
+                            ref.status = ReferralStatus.CONFIRMED
+                            ref.confirmed_at = datetime.utcnow()
+                            await db.flush()
+                            confirmed += 1
+                            break
+            except Exception:
+                errors += 1
 
     await db.commit()
     return {"confirmed": confirmed, "errors": errors, "polled_at": now.isoformat()}

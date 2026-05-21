@@ -349,6 +349,8 @@ async def create_doctor_account(
     new_user = User(
         username=body.username,
         password_hash=hash_password(body.password),
+        # pwdmust01: пароль задал админ → требуем смену при первом входе
+        password_must_change=True,
         full_name=body.full_name or doctor.full_name,
         role=UserRole.DOCTOR,
         clinic_id=doctor.clinic_id,

@@ -122,11 +122,17 @@ async def add_patient(
     full_name: str = "",
     api_url: str = "",
     api_key: str = "",
+    clinic_id: int | None = None,
 ) -> dict | None:
     """Создать пациента в МИС Renovatio. Возвращает dict с patient_id или None.
 
     full_name парсится: первое слово -> last_name, второе -> first_name, третье -> third_name.
     Если данные неполные, передаём только то что есть. mobile обязателен.
+
+    clinic_id (опционально) — Renovatio может привязать создаваемого пациента к
+    конкретной клинике франшизы. Если параметр не передан — пациент создаётся
+    глобально (как сейчас). Renovatio игнорирует неизвестные параметры, поэтому
+    передавать безопасно даже если их версия не поддерживает.
     """
     from app.utils.phone import normalize_phone
     digits = normalize_phone(phone)
@@ -140,6 +146,8 @@ async def add_patient(
     if last_name:  payload["last_name"]  = last_name
     if first_name: payload["first_name"] = first_name
     if third_name: payload["third_name"] = third_name
+    if clinic_id is not None:
+        payload["clinic_id"] = int(clinic_id)
     try:
         result = await _post("addPatient", api_url=api_url, api_key=api_key,
                              ssl_verify=settings.mis_ssl_verify, **payload)

@@ -42,6 +42,8 @@ import {
 import CallRulesSection from '../sections/CallRulesSection'
 import PlatformInvoicesSection from '../sections/PlatformInvoicesSection'
 import AppointmentsStatsSection from '../sections/AppointmentsStatsSection'
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 // Единый хук переключения темы (общий для всех кабинетов)
 import useTheme from '../lib/useTheme'
 
@@ -1921,6 +1923,16 @@ function SettingsSection({ adminToken }) {
 export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
   // Единая тема для кабинета (общий хук с другими кабинетами)
   const { isDark, toggle: toggleTheme } = useTheme()
+  // Личный профиль (avatar01)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = api.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
   // ── Состояние страницы / навигации ────────────────────────────────────────
   const [route, setRoute] = useState('overview')
   const [analytics, setAnalytics] = useState(null)
@@ -2299,6 +2311,8 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
             user={user}
             onLogout={onLogout}
             me={me}
+            onProfileClick={() => setProfileOpen(true)}
+            avatarSrc={myAvatarSrc}
           />
         )}
 
@@ -2326,6 +2340,8 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
                 user={user}
                 onLogout={onLogout}
                 me={me}
+                onProfileClick={() => { setDrawerOpen(false); setProfileOpen(true) }}
+                avatarSrc={myAvatarSrc}
               />
             </aside>
           </div>
@@ -2435,7 +2451,16 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
               <Icon name="logout" size={18} />
             </button>
 
-            <Avatar name={user?.full_name || 'F'} size="md" />
+            {/* Аватар → ProfileModal (avatar01) */}
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              aria-label="Мой профиль"
+              title="Мой профиль"
+              style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              <Avatar src={myAvatarSrc} name={user?.full_name || 'F'} size="md" />
+            </button>
           </header>
 
           {/* Content */}
@@ -2475,12 +2500,18 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
       <style>{`
         @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
       `}</style>
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
     </Page>
   )
 }
 
 // ── Sidebar (выделен, чтобы переиспользовать в drawer) ─────────────────────
-function Sidebar({ collapsed, route, onRoute, user, onLogout, me }) {
+function Sidebar({ collapsed, route, onRoute, user, onLogout, me, onProfileClick, avatarSrc }) {
   return (
     <aside
       className="flex flex-col"
@@ -2562,10 +2593,17 @@ function Sidebar({ collapsed, route, onRoute, user, onLogout, me }) {
         </div>
       ))}
 
-      {/* Подвал */}
+      {/* Подвал — клик по аватарке открывает ProfileModal (avatar01) */}
       <div className="mt-auto" style={{ padding: collapsed ? '8px 0 0' : '12px 4px 0', borderTop: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-2.5" style={{ padding: collapsed ? '6px 0' : '8px' }}>
-          <Avatar name={user?.full_name || 'F'} size="md" />
+        <button
+          type="button"
+          onClick={() => onProfileClick && onProfileClick()}
+          aria-label="Мой профиль"
+          title="Мой профиль"
+          className="flex items-center gap-2.5 text-left"
+          style={{ padding: collapsed ? '6px 0' : '8px', background:'transparent', border:0, cursor:'pointer', width:'100%' }}
+        >
+          <Avatar src={avatarSrc} name={user?.full_name || 'F'} size="md" />
           {!collapsed && (
             <div className="flex-1 min-w-0">
               <div className="font-semibold truncate" style={{ fontSize: 12.5, color: 'var(--fg)' }}>
@@ -2574,7 +2612,7 @@ function Sidebar({ collapsed, route, onRoute, user, onLogout, me }) {
               <div className="truncate" style={{ fontSize: 11, color: 'var(--fg-3)' }}>franchise owner</div>
             </div>
           )}
-        </div>
+        </button>
         {!collapsed && (
           <button
             onClick={onLogout}

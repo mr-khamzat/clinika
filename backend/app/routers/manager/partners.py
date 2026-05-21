@@ -74,6 +74,9 @@ async def create_partner(
     new_partner = User(
         telegram_id=body.telegram_id or None, username=body.username or None,
         password_hash=hash_password(body.password) if body.password else None,
+        # pwdmust01: пароль задал админ → требуем смену при первом входе.
+        # Если пароля нет (telegram-only) — флаг бесполезен, ставим False.
+        password_must_change=bool(body.password),
         full_name=body.full_name, phone_number=body.phone_number,
         clinic_id=clinic_id, role=UserRole.PARTNER_DOCTOR, is_active=True,
     )
@@ -103,7 +106,10 @@ async def update_partner(
         raise HTTPException(status_code=404, detail="Партнёр не найден")
     if body.full_name is not None: partner.full_name = body.full_name
     if body.username is not None: partner.username = body.username
-    if body.password: partner.password_hash = hash_password(body.password)
+    if body.password:
+        partner.password_hash = hash_password(body.password)
+        # pwdmust01: руководитель сбросил пароль → требуем смену при следующем входе
+        partner.password_must_change = True
     if 'phone_number' in body.model_fields_set: partner.phone_number = body.phone_number
     if body.is_active is not None: partner.is_active = body.is_active
     await db.commit()

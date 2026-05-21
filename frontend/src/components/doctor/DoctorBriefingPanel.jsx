@@ -85,6 +85,9 @@ export default function DoctorBriefingPanel({ appointmentId, onClose }) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefr] = useState(false)
   const [error, setError]     = useState(null)
+  const [complaintsDraft, setComplaintsDraft] = useState('')
+  const [savingNotes, setSavingNotes]         = useState(false)
+  const [noteError, setNoteError]             = useState('')
 
   const load = useCallback(
     async (refresh = false) => {
@@ -110,6 +113,27 @@ export default function DoctorBriefingPanel({ appointmentId, onClose }) {
   useEffect(() => {
     load(false)
   }, [load])
+
+  useEffect(() => {
+    if (data) setComplaintsDraft(data.complaints || '')
+  }, [data])
+
+  const saveComplaints = useCallback(async () => {
+    if (!appointmentId) return
+    const next = complaintsDraft.trim()
+    if (next === (data?.complaints || '').trim()) return
+    setSavingNotes(true)
+    setNoteError('')
+    try {
+      await api.patch(`/appointments/${appointmentId}`, { notes: next })
+      setData(d => (d ? { ...d, complaints: next } : d))
+      load(true)
+    } catch (e) {
+      setNoteError(e?.response?.data?.detail || 'Не удалось сохранить жалобы')
+    } finally {
+      setSavingNotes(false)
+    }
+  }, [appointmentId, complaintsDraft, data, load])
 
   if (loading) {
     return (
@@ -159,8 +183,8 @@ export default function DoctorBriefingPanel({ appointmentId, onClose }) {
           <Card.Subtitle>
             {p.full_name || '—'} {p.age ? `· ${p.age} лет` : ''}
             {' · '}
-            <span style={{ color: provider === 'gemini' ? 'var(--accent)' : 'var(--fg-3)' }}>
-              {provider === 'gemini' ? 'AI (Gemini)' : 'rule-based'}
+            <span style={{ color: provider === 'rule-based' ? 'var(--fg-3)' : 'var(--accent)' }}>
+              {provider === 'claude' ? 'AI (Claude)' : provider === 'gemini' ? 'AI (Gemini)' : 'rule-based'}
             </span>
             {data.from_cache && <span style={{ marginLeft: 6, fontSize: 11 }}>· из кеша</span>}
           </Card.Subtitle>
@@ -273,20 +297,32 @@ export default function DoctorBriefingPanel({ appointmentId, onClose }) {
         )}
       </Section>
 
-      {/* Жалобы */}
+      {/* Жалобы — редактируемое поле, сохраняем в appointments.notes */}
       <Section title="Жалобы по текущей записи" source="appointments.notes">
-        <div
+        <textarea
+          value={complaintsDraft}
+          onChange={e => setComplaintsDraft(e.target.value)}
+          onBlur={saveComplaints}
+          placeholder="Опишите жалобы пациента. Сохранится автоматически при выходе из поля."
+          rows={3}
+          disabled={savingNotes}
           style={{
+            width: '100%',
             padding: '10px 12px',
             background: 'var(--bg-2)',
             borderRadius: 8,
             fontSize: 13,
-            color: data.complaints ? 'var(--fg)' : 'var(--fg-3)',
-            whiteSpace: 'pre-wrap',
-            minHeight: 38,
+            color: 'var(--fg)',
+            border: '1px solid var(--line)',
+            outline: 'none',
+            resize: 'vertical',
+            minHeight: 70,
+            fontFamily: 'inherit',
           }}
-        >
-          {data.complaints || 'Не указано'}
+        />
+        <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--fg-3)' }}>
+          <span>{savingNotes ? 'Сохраняю…' : 'После сохранения нажмите «Перегенерировать», чтобы обновить AI-рекомендации.'}</span>
+          {noteError && <span style={{ color: '#b91c1c' }}>{noteError}</span>}
         </div>
       </Section>
 

@@ -57,6 +57,9 @@ import { API_BASE, BASE_PATH, SLUG } from '../config'
 import CallWidget from '../components/CallWidget'
 import { loadTheme } from '../utils/ThemeLoader'
 import useTheme from '../lib/useTheme'
+import useAuthStore from '../store/auth'
+// pwdmust01: блокирующая модалка для принудительной смены временного пароля
+import ForcePasswordChangeModal from '../components/ForcePasswordChangeModal'
 
 // Проверяем — вдруг это страница принятия приглашения: /invite/{token}
 function getInviteToken() {
@@ -75,6 +78,8 @@ export default function AdminRoot() {
   const [adminToken, setAdminToken] = useState(() => localStorage.getItem('clinika_admin_token_' + SLUG))
   const [user, setUser] = useState(null)
   const [checking, setChecking] = useState(!!adminToken)
+  // pwdmust01: показывать ли блокирующую модалку смены пароля
+  const [forcePwdOpen, setForcePwdOpen] = useState(false)
 
   // Единая тема для всей панели (хук читает localStorage и применяет класс dark)
   useTheme()
@@ -107,6 +112,19 @@ export default function AdminRoot() {
         }
 
         setUser(u)
+        // pwdmust01: при каждом входе показываем блокирующую модалку, если
+        // бек сообщил, что временный пароль ещё не сменён. Закрываем её
+        // ТОЛЬКО после успешного PATCH /profile/me (см. handleForcePwdSuccess).
+        if (u.password_must_change) {
+          setForcePwdOpen(true)
+        }
+        // Синхронизируем zustand-стор — CallWidget, SupportChat и другие компоненты
+        // используют useAuthStore. Без этого они видят token=null и не рендерятся
+        // (особенно при impersonate из super-admin в роль doctor/reg/nurse).
+        try {
+          useAuthStore.setState({ token: adminToken, user: u })
+          localStorage.setItem('clinika_token_' + SLUG, adminToken)
+        } catch (_e) { /* noop */ }
       })
       .catch(err => {
         if (err?.response?.status === 401) {
@@ -153,40 +171,58 @@ export default function AdminRoot() {
     return <AdminLogin />
   }
 
+  // pwdmust01: блокирующая модалка — нужна во ВСЕХ ролевых ветках, поэтому
+  // выделяем в переменную и добавляем её к каждому return ниже. Закрытие
+  // невозможно (нет onClose) — единственный способ убрать модалку — успешно
+  // сменить пароль через PATCH /profile/me, после чего onSuccess сбросит
+  // флаг локально и закроет модалку.
+  const forceModal = (
+    <ForcePasswordChangeModal
+      open={forcePwdOpen}
+      onSuccess={() => {
+        setForcePwdOpen(false)
+        setUser({ ...user, password_must_change: false })
+      }}
+    />
+  )
+
   const role = user.role
 
   // ── Врач → личный кабинет врача
   if (role === 'doctor') {
-    return <><DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return <><DoctorLayout adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget />{forceModal}</>
   }
 
   // ── Регистратор / Медсестра → операционный кабинет
   if (role === 'reg' || role === 'nurse') {
-    return <><OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return <><OperationalCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget />{forceModal}</>
   }
 
   // ── Врач-партнёр (бывший external_doctor)
   if (role === 'partner_doctor') {
-    return <PartnerDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><PartnerDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />{forceModal}</>
   }
 
   // ── Выездной врач
   if (role === 'visiting_doctor') {
-    return <VisitingDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+    return <><VisitingDoctorCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />{forceModal}</>
   }
 
   // ── Пациент → личный кабинет пациента
   if (role === 'patient') {
     return (
-      <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
-        <PatientCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
-      </Suspense>
+      <>
+        <Suspense fallback={<div style={{ minHeight: '100vh', background: 'var(--bg, #f6f7fa)' }} />}>
+          <PatientCabinet adminToken={adminToken} user={user} onLogout={handleLogout} />
+        </Suspense>
+        {forceModal}
+      </>
     )
   }
 
   // ── Рекрутер → кабинет рекрутера
   if (role === 'recruiter') {
-    return <><RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget /></>
+    return <><RecruiterCabinet adminToken={adminToken} user={user} onLogout={handleLogout} /><CallWidget />{forceModal}</>
   }
 
   // ── Владелец франшизы → отдельный кабинет (НЕ AdminLayout — это платформа).
@@ -197,11 +233,14 @@ export default function AdminRoot() {
       <>
         <FranchiseOwnerWithOnboarding adminToken={adminToken} user={user} onLogout={handleLogout} />
         <CallWidget />
+        {forceModal}
       </>
     )
   }
 
   // ── Руководитель → кабинет управляющего (/{slug}/manager)
+  // Модалку здесь НЕ показываем — сразу редиректим. Модалка появится в
+  // MiniApp (см. App.jsx) после загрузки /admins/me на /{slug}/manager.
   if (role === 'manager') {
     const slug = user.tenant_slug || SLUG
     localStorage.setItem('clinika_token_' + slug, adminToken)
@@ -215,25 +254,29 @@ export default function AdminRoot() {
       <AdminErrorBoundary>
         <AdminLayout adminToken={adminToken} user={user} onLogout={handleLogout} />
         <CallWidget />
+        {forceModal}
       </AdminErrorBoundary>
     )
   }
 
   // Неизвестная роль
   return (
-    <div className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: 'linear-gradient(135deg, #004D5F 0%, #00A7AA 100%)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
-        <div className="text-5xl mb-4">🚫</div>
-        <h1 className="text-xl font-bold text-gray-800 mb-2">Нет доступа</h1>
-        <p className="text-gray-500 text-sm mb-2">Роль: <span className="font-mono">{role}</span></p>
-        <p className="text-gray-400 text-xs mb-6">Обратитесь к администратору платформы</p>
-        <button onClick={handleLogout}
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl py-3 text-sm transition">
-          Выйти
-        </button>
+    <>
+      <div className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: 'linear-gradient(135deg, #004D5F 0%, #00A7AA 100%)' }}>
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm text-center">
+          <div className="text-5xl mb-4">🚫</div>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">Нет доступа</h1>
+          <p className="text-gray-500 text-sm mb-2">Роль: <span className="font-mono">{role}</span></p>
+          <p className="text-gray-400 text-xs mb-6">Обратитесь к администратору платформы</p>
+          <button onClick={handleLogout}
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl py-3 text-sm transition">
+            Выйти
+          </button>
+        </div>
       </div>
-    </div>
+      {forceModal}
+    </>
   )
 }
 

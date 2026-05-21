@@ -16,6 +16,10 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import useAuthStore from './store/auth'
 import { authTelegram, getMe } from './api'
 import Layout from './components/Layout'
+// pwdmust01: блокирующая модалка для принудительной смены временного пароля.
+// Появляется по центру экрана при каждом входе, пока сотрудник не сменит
+// пароль, заданный администратором. Закрытие невозможно (нет onClose у Modal).
+import ForcePasswordChangeModal from './components/ForcePasswordChangeModal'
 // Optim 2026-05-11: переводим ВСЕ страницы кроме лёгких на lazy.
 // Цель — уменьшить index.js с 1.17 MB → <500 KB. Каждый кабинет/роль
 // загружает только свои страницы; PatientCabinet больше не тащит Manager*.
@@ -167,6 +171,17 @@ import { ToastProvider } from './design'
 function MiniApp() {
   const { token, setToken, setUser, user } = useAuthStore()
   const [loading, setLoading] = useState(true)
+  // pwdmust01: блокирующая модалка смены временного пароля.
+  // Открывается при каждом входе сотрудника, у которого
+  // user.password_must_change === true (флаг приходит из /admins/me).
+  const [forcePwdOpen, setForcePwdOpen] = useState(false)
+
+  // Синхронизируем с user.password_must_change при каждой загрузке /me.
+  // Эффект следит за конкретно этим полем — модалка появится сразу после
+  // успешной авторизации и не закроется, пока сотрудник не сменит пароль.
+  useEffect(() => {
+    if (user?.password_must_change) setForcePwdOpen(true)
+  }, [user?.password_must_change])
 
   // ─── Инициализация: веб-сессия первой, Telegram — опционально ───
   // Порядок важен: сначала проверяем токен (веб-режим, нет задержки),
@@ -274,6 +289,20 @@ function MiniApp() {
 
   // ─── Основные маршруты приложения ───
   return (
+    <>
+    {/* pwdmust01: блокирующая модалка поверх всего кабинета.
+        Рендерится вне BrowserRouter, чтобы перекрывать любые экраны
+        (managerDashboard, OperationalCabinet, DoctorLayout и т.д.).
+        Закрытие невозможно — сотрудник обязан сменить временный пароль. */}
+    <ForcePasswordChangeModal
+      open={forcePwdOpen}
+      onSuccess={() => {
+        setForcePwdOpen(false)
+        // Обновляем user в zustand, чтобы password_must_change стал false
+        // и эффект не открыл модалку снова при перерендере.
+        if (user) setUser({ ...user, password_must_change: false })
+      }}
+    />
     <BrowserRouter basename={"/" + SLUG}>
       <Suspense fallback={<div style={{ background: 'var(--bg, #f8fafc)', minHeight: '100vh' }} />}>
       <Routes>
@@ -429,6 +458,7 @@ function MiniApp() {
       </Routes>
       </Suspense>
     </BrowserRouter>
+    </>
   )
 }
 

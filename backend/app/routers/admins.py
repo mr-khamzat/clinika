@@ -33,6 +33,15 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
     data["tenant_slug"] = tenant_slug
     data["tenant_id"] = str(current_user.tenant_id) if current_user.tenant_id else None
     data["is_super"] = is_super
+    # avatar_url + email — для отображения аватарки сотрудника в шапке кабинета.
+    # UserResponse их не сериализует (исторически — это manager-side schema),
+    # поэтому добавляем явно (avatar01).
+    data["avatar_url"] = current_user.avatar_url
+    data["email"] = current_user.email
+    # pwdmust01: фронт показывает блокирующую <ForcePasswordChangeModal>,
+    # если True. Сбрасывается в FALSE автоматически в PATCH /profile/me и
+    # /password_reset, когда сотрудник сам задаёт новый пароль.
+    data["password_must_change"] = bool(getattr(current_user, "password_must_change", False))
     if is_super:
         data["redirect_url"] = "/admin"
     elif role == "manager" and tenant_slug:

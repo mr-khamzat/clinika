@@ -1,12 +1,63 @@
+/**
+ * ========================================
+ * Создание направления · Premium Redesign
+ * ========================================
+ * Дизайн-система: design-preview-2 (CSS-tokens, оттенки accent/bg-1/surface/border/fg/…).
+ * Эталон: DoctorBriefingPanel.jsx, DoctorLayout.jsx (Card + Card.Header + MIcon + Hint).
+ *
+ * Бизнес-логика API не изменена:
+ *   GET /clinics
+ *   GET /clinics/{id}/services
+ *   GET /clinics/{id}/schedule
+ *   GET /mis/doctors
+ *   POST /referrals
+ *   GET/POST /manager/referral-templates[/{id}/use]
+ *   verifyPatientInMis()
+ *
+ * НОВОЕ (рефактор 2026-05-20):
+ *   - Логика и JSX вынесены во внутренний компонент `<CreateReferralForm />`.
+ *   - `<CreateReferral />` — это страничный wrapper (Page + PageHeader),
+ *     который остаётся доступным по маршруту `/arc/create` (обратная совместимость).
+ *   - `<CreateReferralForm />` экспортируется именованно и используется
+ *     в кабинете врача как inline-модалка (DoctorLayout.jsx, ReferralsPage)
+ *     и в перспективе — в OperationalCabinet / других кабинетах.
+ *
+ *   Props `<CreateReferralForm />`:
+ *     mode          — 'page' | 'modal' (по умолч. 'modal')
+ *                     'page'  — submit-кнопка фиксированная снизу (как раньше)
+ *                     'modal' — submit-кнопка inline, в конце формы
+ *     initialPhone  — префилл телефона пациента
+ *     initialName   — префилл ФИО пациента
+ *     onSuccess(id) — колбэк после успешного создания (получает id направления);
+ *                     если не задан — fallback на window.location.assign('/<SLUG>/qr/{id}')
+ *     onClose       — колбэк отмены/закрытия модалки (опционален)
+ *
+ *   ВАЖНО: внутренний компонент НЕ использует useNavigate / useSearchParams —
+ *   это нужно, чтобы его можно было рендерить в AdminRoot (вне BrowserRouter),
+ *   см. memory feedback_admin_root_no_router.
+ * ========================================
+ */
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getClinics, getClinicServices, createReferral, verifyPatientInMis } from '../api'
 import api from '../api'
+import { SLUG } from '../config'
 import useAuthStore from '../store/auth'
-import { useToast, Modal, Button } from '../design'
+import {
+  Page,
+  PageHeader,
+  Card,
+  Chip,
+  Button,
+  Modal,
+  useToast,
+} from '../design'
 
 const DAY_NAMES = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
+// ─────────────────────────────────────────────────────────────────────
+// Утилиты расписания / форматирования
+// ─────────────────────────────────────────────────────────────────────
 function getAvailableDates(schedule) {
   const activeDays = new Set(schedule.filter(d => d.is_active).map(d => d.day_of_week))
   const dates = []
@@ -27,6 +78,9 @@ function formatDateShort(d) {
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// Локальные шаблоны (в localStorage)
+// ─────────────────────────────────────────────────────────────────────
 const TEMPLATES_KEY = 'clinika_referral_templates'
 function loadTemplates() {
   try { return JSON.parse(localStorage.getItem(TEMPLATES_KEY)) || [] } catch { return [] }
@@ -35,29 +89,97 @@ function saveTemplates(tpls) {
   localStorage.setItem(TEMPLATES_KEY, JSON.stringify(tpls))
 }
 
-// Секция-карточка
-function Section({ icon, iconBg, iconColor, title, badge, children }) {
+// ─────────────────────────────────────────────────────────────────────
+// Микрокомпоненты UI
+// ─────────────────────────────────────────────────────────────────────
+function MIcon({ name, size = 18, fill = false, color }) {
   return (
-    <div className="bg-white rounded-3xl p-5" style={{ boxShadow: '0 4px 20px rgba(25,28,30,0.06)' }}>
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${iconBg}`}>
-            <span className="material-symbols-outlined text-xl" style={{ color: iconColor, fontVariationSettings: "'FILL' 1" }}>{icon}</span>
-          </div>
-          <h2 className="text-base font-bold text-[#191c1e] font-headline">{title}</h2>
-        </div>
-        {badge}
-      </div>
+    <span
+      className="material-symbols-outlined"
+      style={{
+        fontSize: size,
+        color,
+        fontVariationSettings: fill ? "'FILL' 1" : "'FILL' 0",
+        lineHeight: 1,
+      }}
+    >
+      {name}
+    </span>
+  )
+}
+
+// Иконка-«пилюля» слева от заголовка карточки — в стиле Hint из DoctorLayout
+function SectionIcon({ icon, tone = 'accent' }) {
+  const tones = {
+    accent: { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+    muted:  { bg: 'var(--bg-2)',        fg: 'var(--fg-2)' },
+  }
+  const t = tones[tone] || tones.accent
+  return (
+    <span
+      className="grid place-items-center flex-shrink-0"
+      style={{ width: 36, height: 36, borderRadius: 10, background: t.bg, color: t.fg }}
+    >
+      <MIcon name={icon} size={18} fill />
+    </span>
+  )
+}
+
+// Лейбл «caps» над полем — единый стиль для всех инпутов
+function FieldLabel({ children }) {
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.05em',
+        color: 'var(--fg-3)',
+        marginBottom: 6,
+        marginLeft: 2,
+      }}
+    >
       {children}
     </div>
   )
 }
 
-// Стиль для input
-const inputCls = 'w-full bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-[#191c1e] text-sm outline-none border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white transition-all placeholder-[#727783]'
-const selectCls = 'w-full bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-[#191c1e] text-sm outline-none border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white transition-all appearance-none disabled:opacity-50'
+// ─────────────────────────────────────────────────────────────────────
+// Стили инпутов через CSS-токены (заменяют inputCls/selectCls на hex'ах)
+// ─────────────────────────────────────────────────────────────────────
+const FIELD_BASE = {
+  width: '100%',
+  padding: '12px 14px',
+  background: 'var(--bg-1)',
+  color: 'var(--fg)',
+  fontSize: 14,
+  border: '1px solid var(--border)',
+  borderRadius: 12,
+  outline: 'none',
+  transition: 'border-color .15s, background .15s',
+}
 
-export default function CreateReferral() {
+// Хелпер фокуса — выделяем var(--accent)
+function focusOn(e) {
+  e.target.style.borderColor = 'var(--accent)'
+  e.target.style.background = 'var(--surface)'
+}
+function focusOff(e) {
+  e.target.style.borderColor = 'var(--border)'
+  e.target.style.background = 'var(--bg-1)'
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Внутренний компонент формы — переиспользуется в page + modal.
+// НЕ использует useNavigate / useSearchParams (можно рендерить в AdminRoot).
+// ─────────────────────────────────────────────────────────────────────
+export function CreateReferralForm({
+  mode = 'modal',
+  initialPhone = '',
+  initialName  = '',
+  onSuccess,
+  onClose,
+}) {
   // Замена alert/prompt на Toast и Modal
   const { toast } = useToast()
   // Modal-prompt для названия шаблона (заменяет нативный prompt)
@@ -71,7 +193,10 @@ export default function CreateReferral() {
   const [loadingServices, setLoadingServices] = useState(false)
   const [form, setForm] = useState({
     from_clinic_id: '', to_clinic_id: '', service_id: '',
-    patient_phone: '', patient_name: '', mis_patient_id: null, mis_doctor_id: null, notes: '', appointment_date: '', appointment_time: ''
+    patient_phone: initialPhone || '',
+    patient_name:  initialName  || '',
+    mis_patient_id: null, mis_doctor_id: null,
+    notes: '', appointment_date: '', appointment_time: ''
   })
   const [loading, setLoading] = useState(false)
   const [templates, setTemplates] = useState(loadTemplates)
@@ -103,7 +228,6 @@ export default function CreateReferral() {
   const [serviceCategory, setServiceCategory] = useState('')
   const [serviceSearch, setServiceSearch] = useState('')
   const { user } = useAuthStore()
-  const nav = useNavigate()
   const isManager = user?.role === 'manager' && !user?.clinic_id
 
   useEffect(() => {
@@ -111,20 +235,6 @@ export default function CreateReferral() {
       setAllClinics(r.data)
       setClinics(r.data.filter(c => c.id !== user?.clinic_id))
     })
-  }, [])
-
-  // Prefill из URL (например, переход из чата клиники: ?patient_phone=&patient_name=)
-  const [searchParams] = useSearchParams()
-  useEffect(() => {
-    const phone = searchParams.get('patient_phone') || ''
-    const name  = searchParams.get('patient_name') || ''
-    if (!phone && !name) return
-    setForm(f => ({
-      ...f,
-      patient_phone: phone || f.patient_phone,
-      patient_name:  name  || f.patient_name,
-    }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleToClinicChange = async (clinicId) => {
@@ -177,6 +287,14 @@ export default function CreateReferral() {
     ? availableDates.find(d => d.date.toISOString().slice(0, 10) === form.appointment_date)
     : null
 
+  // Навигация на /qr/{id} — fallback, если onSuccess не передан.
+  // Используем window.location.assign (а не useNavigate), чтобы форма
+  // работала и в AdminRoot (вне BrowserRouter).
+  const goToQr = (refId) => {
+    try { window.location.assign('/' + SLUG + '/qr/' + refId) }
+    catch { window.location.href = '/' + SLUG + '/qr/' + refId }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -195,7 +313,11 @@ export default function CreateReferral() {
         payload.appointment_at = `${form.appointment_date}T${form.appointment_time}:00`
       }
       const res = await createReferral(payload)
-      nav(`/qr/${res.data.id}`)
+      if (typeof onSuccess === 'function') {
+        onSuccess(res.data.id, res.data)
+      } else {
+        goToQr(res.data.id)
+      }
     } catch (err) {
       toast(err.response?.data?.detail || 'Ошибка создания направления', 'error')
     } finally {
@@ -245,9 +367,29 @@ export default function CreateReferral() {
     return true
   })
 
+  // Текущая выбранная услуга (для бейджа с суммой)
+  const selectedService = form.service_id ? services.find(s => s.id === form.service_id) : null
+  const selectedPayout  = selectedService
+    ? (selectedService.referral_payout != null ? selectedService.referral_payout : selectedService.bonus_amount)
+    : null
+
+  // Кнопка «Сохранить шаблон» — над формой (видна и в page, и в modal mode).
+  // Раньше жила в PageHeader (только page); теперь общая.
+  const saveTemplateBtn = (form.to_clinic_id && form.service_id) ? (
+    <Button
+      variant="secondary"
+      size="sm"
+      leftIcon={<MIcon name="bookmark_add" size={16} />}
+      onClick={handleSaveTemplate}
+      title="Сохранить шаблон"
+    >
+      Шаблон
+    </Button>
+  ) : null
+
   return (
-    <div className="bg-[#f7f9fb] min-h-screen pb-32">
-      {/* Modal-prompt для названия шаблона направления */}
+    <>
+      {/* Modal-prompt для названия шаблона направления (вложенная модалка). */}
       <Modal
         open={tplPromptOpen}
         onClose={() => setTplPromptOpen(false)}
@@ -265,310 +407,626 @@ export default function CreateReferral() {
           value={tplPromptValue}
           onChange={e => setTplPromptValue(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') confirmSaveTemplate() }}
+          onFocus={focusOn}
+          onBlur={focusOff}
           placeholder="Например: Терапевт → УЗИ"
-          className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"
+          style={FIELD_BASE}
         />
       </Modal>
-      {/* Шапка */}
-      <header className="sticky top-14 z-10 flex items-center px-4 h-14 bg-white/80" style={{ backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(194,198,212,0.3)' }}>
-        <button onClick={() => nav(-1)} className="w-10 h-10 flex items-center justify-center text-[#727783] hover:text-[#191c1e] rounded-full hover:bg-[#eceef0] transition -ml-2">
-          <span className="material-symbols-outlined">arrow_back</span>
-        </button>
-        <h1 className="font-bold text-[#191c1e] font-headline text-base ml-2">Новое направление</h1>
-        {form.to_clinic_id && form.service_id && (
-          <button type="button" onClick={handleSaveTemplate} title="Сохранить шаблон"
-            className="ml-auto w-10 h-10 flex items-center justify-center text-[#727783] hover:text-[#1565c0] rounded-full hover:bg-[#dae5ff] transition">
-            <span className="material-symbols-outlined text-xl">bookmark_add</span>
-          </button>
-        )}
-      </header>
 
-      <div className="px-4 pt-4 space-y-3">
+      {/* Серверные шаблоны (Глава 4 — общие на тенант / клинику) */}
+      {serverTemplates.length > 0 && (
+        <div
+          className="flex gap-2 overflow-x-auto pb-2 mb-3"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {serverTemplates.map(tpl => (
+            <button
+              key={tpl.id}
+              type="button"
+              onClick={() => applyServerTemplate(tpl)}
+              title={tpl.description || tpl.name}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 flex-shrink-0 text-xs font-semibold transition-colors"
+              style={{
+                background: 'var(--accent-soft)',
+                color: 'var(--accent)',
+                border: '1px solid var(--accent-line)',
+              }}
+            >
+              <MIcon name="dynamic_form" size={14} />
+              <span>{tpl.name}</span>
+              {tpl.usage_count > 0 && (
+                <span style={{ fontSize: 10, opacity: 0.7 }}>· {tpl.usage_count}×</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
-        {/* Глава 4 — серверные шаблоны (общие на тенант / клинику) */}
-        {serverTemplates.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {serverTemplates.map(tpl => (
-              <button key={tpl.id} type="button" onClick={() => applyServerTemplate(tpl)}
-                title={tpl.description || tpl.name}
-                className="flex items-center gap-1 rounded-full px-3 py-1.5 flex-shrink-0 text-xs font-semibold"
-                style={{ background: 'oklch(0.95 0.04 250)', color: 'oklch(0.40 0.16 250)' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>dynamic_form</span>
+      {/* Локальные шаблоны (localStorage) + inline-кнопка «Сохранить шаблон» */}
+      {(templates.length > 0 || saveTemplateBtn) && (
+        <div
+          className="flex gap-2 overflow-x-auto pb-2 mb-3 items-center"
+          style={{ scrollbarWidth: 'none' }}
+        >
+          {templates.map(tpl => (
+            <div
+              key={tpl.id}
+              className="flex items-center gap-1 rounded-full px-3 py-1.5 flex-shrink-0"
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--border)' }}
+            >
+              <button
+                type="button"
+                onClick={() => handleApplyTemplate(tpl)}
+                className="text-xs font-semibold"
+                style={{ color: 'var(--fg)' }}
+              >
                 {tpl.name}
-                {tpl.usage_count > 0 && (
-                  <span style={{ fontSize: 9, opacity: 0.7 }}>· {tpl.usage_count}×</span>
-                )}
               </button>
-            ))}
-          </div>
-        )}
-        {/* Шаблоны */}
-        {templates.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {templates.map(tpl => (
-              <div key={tpl.id} className="flex items-center gap-1 bg-[#dae5ff] rounded-full px-3 py-1.5 flex-shrink-0">
-                <button type="button" onClick={() => handleApplyTemplate(tpl)} className="text-xs font-semibold text-[#1565c0]">
-                  {tpl.name}
-                </button>
-                <button type="button" onClick={() => handleDeleteTemplate(tpl.id)} className="text-[#727783] hover:text-[#ba1a1a] ml-0.5">
-                  <span className="material-symbols-outlined text-sm leading-none">close</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-3">
-
-          {/* Пациент */}
-          <Section icon="person" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Пациент">
-            <div className="space-y-3">
-              {/* Телефон */}
-              <div>
-                <label className="block text-[11px] font-semibold text-[#424752] uppercase tracking-widest mb-1.5 ml-1">Номер телефона</label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#727783] text-xl select-none">call</span>
-                    <input required type="tel" placeholder="+7 (___) ___-__-__"
-                      value={form.patient_phone}
-                      onChange={e => { setForm({ ...form, patient_phone: e.target.value, patient_name: '' }); setMisPatient(null); setMisLinked(false) }}
-                      className="w-full bg-[#f2f4f6] rounded-2xl py-3.5 pl-12 pr-4 text-[#191c1e] text-sm outline-none border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white transition-all placeholder-[#727783]"
-                    />
-                  </div>
-                  <button type="button" disabled={!form.patient_phone || misChecking}
-                    onClick={async () => {
-                      setMisChecking(true)
-                      try {
-                        const r = await verifyPatientInMis(form.patient_phone)
-                        setMisPatient(r.data)
-                      } catch { setMisPatient({ found: false }) }
-                      finally { setMisChecking(false) }
-                    }}
-                    className="px-4 py-3 rounded-2xl bg-[#f2f4f6] text-sm font-semibold text-[#424752] hover:bg-[#eceef0] disabled:opacity-40 transition whitespace-nowrap border-2 border-transparent focus:border-[#1565c0]/30 outline-none">
-                    {misChecking ? '...' : 'МИС'}
-                  </button>
-                </div>
-              </div>
-
-              {/* МИС результат */}
-              {misPatient && (
-                <div className={`px-4 py-3 rounded-2xl text-sm ${misPatient.found ? 'bg-[#dcfce7]' : 'bg-amber-50'}`}>
-                  {misPatient.found ? (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-[#166534]">
-                        {misPatient.name}{misPatient.birth_date ? ` · ${misPatient.birth_date}` : ''}
-                      </span>
-                      {!misLinked ? (
-                        <button type="button"
-                          onClick={() => { setForm(f => ({ ...f, patient_name: misPatient.name, mis_patient_id: misPatient.mis_patient_id || null })); setMisLinked(true) }}
-                          className="flex-shrink-0 bg-[#166534] hover:bg-[#14532d] text-white rounded-xl px-3 py-1 text-xs font-bold transition">
-                          Привязать
-                        </button>
-                      ) : (
-                        <span className="text-[#166534] font-bold text-xs">Привязан ✓</span>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="font-medium text-amber-700">Пациент не найден в МИС — введите ФИО ниже</span>
-                  )}
-                </div>
-              )}
-
-              {/* ФИО */}
-              {(!misPatient?.found || !misLinked) && (
-                <div>
-                  <label className="block text-[11px] font-semibold text-[#424752] uppercase tracking-widest mb-1.5 ml-1">ФИО пациента</label>
-                  <input type="text" placeholder="Иванов Иван Иванович"
-                    value={form.patient_name} onChange={e => setForm({ ...form, patient_name: e.target.value })} required
-                    className={inputCls} />
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => handleDeleteTemplate(tpl.id)}
+                className="ml-0.5 transition-colors"
+                style={{ color: 'var(--fg-3)' }}
+              >
+                <MIcon name="close" size={14} />
+              </button>
             </div>
-          </Section>
+          ))}
+          {saveTemplateBtn && <span className="ml-auto flex-shrink-0">{saveTemplateBtn}</span>}
+        </div>
+      )}
 
-          {/* Клиника-отправитель (только менеджер) */}
-          {isManager && (
-            <Section icon="local_hospital" iconBg="bg-[#f3e8ff]" iconColor="#7c3aed" title="Клиника-отправитель">
-              <div className="relative">
-                <select required value={form.from_clinic_id} onChange={e => handleFromClinicChange(e.target.value)} className={selectCls}>
-                  <option value="">Выберите клинику</option>
-                  {allClinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-xl">expand_more</span>
-              </div>
-            </Section>
-          )}
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
 
-          {/* Услуга
-              Финансовая модель: при создании направления показываем сумму, которую
-              получит создающий (referral_payout). Менеджер видит ещё и цену пациенту. */}
-          <Section icon="medical_services" iconBg="bg-[#dcfce7]" iconColor="#166534" title="Услуга"
-            badge={(() => {
-              const svc = form.service_id ? services.find(s => s.id === form.service_id) : null
-              if (!svc) return null
-              // referral_payout — приоритет, fallback на bonus_amount.
-              const payout = svc.referral_payout != null ? svc.referral_payout : svc.bonus_amount
-              return (
-                <div className="flex items-center gap-1.5">
-                  <span className="bg-[#dcfce7] text-[#166534] text-xs font-bold px-3 py-1 rounded-full">
-                    Получите: {Number(payout || 0).toLocaleString('ru-RU')} ₽
-                  </span>
-                  {/* Менеджеру (роль создаёт cross-clinic направление) — показываем цену пациенту */}
-                  {isManager && svc.price != null && (
-                    <span className="bg-[#dae5ff] text-[#1565c0] text-[11px] font-semibold px-2.5 py-1 rounded-full">
-                      Цена: {Number(svc.price).toLocaleString('ru-RU')} ₽
-                    </span>
-                  )}
-                </div>
-              )
-            })()}>
+        {/* ── Пациент ───────────────────────────────────────────── */}
+        <Card>
+          <Card.Header>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon="person" />
+              <Card.Title>Пациент</Card.Title>
+            </div>
+          </Card.Header>
 
-            {/* Фильтры */}
-            {services.length > 0 && cats.length > 0 && (
-              <div className="flex gap-2 mb-3">
+          <div className="flex flex-col gap-3">
+            {/* Телефон */}
+            <div>
+              <FieldLabel>Номер телефона</FieldLabel>
+              <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <select value={serviceCategory} onChange={e => { setServiceCategory(e.target.value); setForm(f => ({ ...f, service_id: '' })) }}
-                    className="w-full bg-[#f2f4f6] rounded-2xl px-4 py-2.5 text-sm text-[#191c1e] outline-none appearance-none border-2 border-transparent focus:border-[#1565c0]/30">
-                    <option value="">Все категории</option>
-                    {cats.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-lg">expand_more</span>
+                  <span
+                    className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 select-none"
+                    style={{ color: 'var(--fg-3)', fontSize: 20 }}
+                  >
+                    call
+                  </span>
+                  <input
+                    required
+                    type="tel"
+                    placeholder="+7 (___) ___-__-__"
+                    value={form.patient_phone}
+                    onChange={e => {
+                      setForm({ ...form, patient_phone: e.target.value, patient_name: '' })
+                      setMisPatient(null)
+                      setMisLinked(false)
+                    }}
+                    onFocus={focusOn}
+                    onBlur={focusOff}
+                    style={{ ...FIELD_BASE, paddingLeft: 44 }}
+                  />
                 </div>
-                <input type="text" placeholder="Поиск"
-                  value={serviceSearch} onChange={e => { setServiceSearch(e.target.value); setForm(f => ({ ...f, service_id: '' })) }}
-                  className="flex-1 bg-[#f2f4f6] rounded-2xl px-4 py-2.5 text-sm text-[#191c1e] outline-none border-2 border-transparent focus:border-[#1565c0]/30 placeholder-[#727783]" />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!form.patient_phone || misChecking}
+                  onClick={async () => {
+                    setMisChecking(true)
+                    try {
+                      const r = await verifyPatientInMis(form.patient_phone)
+                      setMisPatient(r.data)
+                    } catch { setMisPatient({ found: false }) }
+                    finally { setMisChecking(false) }
+                  }}
+                >
+                  {misChecking ? '…' : 'МИС'}
+                </Button>
+              </div>
+            </div>
+
+            {/* МИС результат */}
+            {misPatient && (
+              <div
+                className="px-4 py-3 rounded-xl text-sm flex items-center justify-between gap-2"
+                style={
+                  misPatient.found
+                    ? { background: 'var(--accent-soft)', border: '1px solid var(--accent-line)', color: 'var(--accent)' }
+                    : { background: 'var(--bg-2)', border: '1px solid var(--border)', color: 'var(--fg-2)' }
+                }
+              >
+                {misPatient.found ? (
+                  <>
+                    <span className="font-semibold" style={{ color: 'var(--fg)' }}>
+                      {misPatient.name}{misPatient.birth_date ? ` · ${misPatient.birth_date}` : ''}
+                    </span>
+                    {!misLinked ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setForm(f => ({ ...f, patient_name: misPatient.name, mis_patient_id: misPatient.mis_patient_id || null }))
+                          setMisLinked(true)
+                        }}
+                      >
+                        Привязать
+                      </Button>
+                    ) : (
+                      <Chip variant="good">Привязан</Chip>
+                    )}
+                  </>
+                ) : (
+                  <span className="font-medium">Пациент не найден в МИС — введите ФИО ниже</span>
+                )}
               </div>
             )}
 
-            <div className="relative">
-              <select required value={form.service_id} onChange={e => setForm({ ...form, service_id: e.target.value })}
-                disabled={!form.to_clinic_id || loadingServices}
-                className={selectCls}>
-                {!form.to_clinic_id ? <option value="">Сначала выберите клинику</option>
-                  : loadingServices ? <option value="">Загрузка...</option>
-                  : services.length === 0 ? <option value="">Нет настроенных услуг</option>
-                  : filteredServices.length === 0 ? <option value="">Ничего не найдено</option>
-                  : (
-                    <>
-                      <option value="">Выберите услугу ({filteredServices.length})</option>
-                      {filteredServices.map(s => {
-                        const payout = s.referral_payout != null ? s.referral_payout : s.bonus_amount
-                        // Партнёру/админу показываем только payout. Менеджеру — обе суммы.
-                        const label = isManager && s.price != null
-                          ? `${s.name} — Цена ${s.price} ₽ / Партнёру ${payout} ₽`
-                          : `${s.name} (+${payout} ₽)`
-                        return <option key={s.id} value={s.id}>{label}</option>
-                      })}
-                    </>
-                  )
-                }
-              </select>
-              <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-xl">expand_more</span>
-            </div>
-          </Section>
-
-          {/* Клиника назначения */}
-          <Section icon="local_hospital" iconBg="bg-[#dae5ff]" iconColor="#1565c0" title="Клиника назначения">
-            <div className="relative">
-              <select required value={form.to_clinic_id} onChange={e => handleToClinicChange(e.target.value)}
-                disabled={isManager && !form.from_clinic_id}
-                className={selectCls}>
-                <option value="">Выберите клинику</option>
-                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-xl">expand_more</span>
-            </div>
-          </Section>
-
-          {/* Запись на приём */}
-          {availableDates.length > 0 && (
-            <Section icon="schedule" iconBg="bg-orange-50" iconColor="#c2410c" title="Время приёма">
-              <div className="flex gap-2 overflow-x-auto pb-1 mb-3" style={{ scrollbarWidth: 'none' }}>
-                <button type="button" onClick={() => setForm(f => ({ ...f, appointment_date: '', appointment_time: '' }))}
-                  className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold border-2 transition-colors ${!selectedDate ? 'bg-[#1565c0] text-white border-[#1565c0]' : 'border-[#eceef0] text-[#727783] bg-white'}`}>
-                  Без записи
-                </button>
-                {availableDates.map(({ date, dow, schedule: s }) => {
-                  const iso = date.toISOString().slice(0, 10)
-                  const isSel = form.appointment_date === iso
-                  return (
-                    <button key={iso} type="button" onClick={() => setForm(f => ({ ...f, appointment_date: iso, appointment_time: s?.open_time || '09:00' }))}
-                      className={`flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border-2 text-xs font-semibold transition-colors min-w-[52px] ${isSel ? 'bg-[#1565c0] text-white border-[#1565c0]' : 'border-[#eceef0] text-[#424752] bg-white'}`}>
-                      <span>{DAY_NAMES[dow]}</span>
-                      <span className="opacity-80 mt-0.5">{formatDateShort(date)}</span>
-                    </button>
-                  )
-                })}
+            {/* ФИО */}
+            {(!misPatient?.found || !misLinked) && (
+              <div>
+                <FieldLabel>ФИО пациента</FieldLabel>
+                <input
+                  type="text"
+                  placeholder="Иванов Иван Иванович"
+                  value={form.patient_name}
+                  onChange={e => setForm({ ...form, patient_name: e.target.value })}
+                  onFocus={focusOn}
+                  onBlur={focusOff}
+                  required
+                  style={FIELD_BASE}
+                />
               </div>
-              {selectedDate && (
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <label className="block text-[11px] text-[#727783] mb-1">
-                      Время ({selectedDate.schedule?.open_time}–{selectedDate.schedule?.close_time})
-                    </label>
-                    <input type="time"
-                      min={selectedDate.schedule?.open_time} max={selectedDate.schedule?.close_time}
-                      value={form.appointment_time} onChange={e => setForm(f => ({ ...f, appointment_time: e.target.value }))}
-                      className={inputCls} />
-                  </div>
-                  <div className="text-center text-xs text-[#424752] pt-5">
-                    <p className="font-bold">{DAY_NAMES[selectedDate.dow]},</p>
-                    <p>{formatDateShort(selectedDate.date)}</p>
-                  </div>
-                </div>
-              )}
-            </Section>
-          )}
-
-          {/* Врач МИС */}
-          {form.appointment_date && misDoctors.length > 0 && (
-            <Section icon="stethoscope" iconBg="bg-teal-50" iconColor="#0097A7" title="Врач (МИС)">
-              {loadingDoctors ? (
-                <div className="text-xs text-gray-400">Загрузка врачей...</div>
-              ) : (
-                <div className="relative">
-                  <select
-                    value={form.mis_doctor_id || ''}
-                    onChange={e => setForm(f => ({ ...f, mis_doctor_id: e.target.value ? parseInt(e.target.value) : null }))}
-                    className="w-full appearance-none bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-sm text-[#191c1e] outline-none border-2 border-transparent focus:border-[#0097A7]/30 focus:bg-white transition-all pr-10">
-                    <option value="">— Не выбран (без записи в МИС) —</option>
-                    {misDoctors.map(d => (
-                      <option key={d.mis_id} value={d.mis_id}>
-                        {d.name}{d.specialty ? ` · ${d.specialty}` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-[#727783] pointer-events-none text-xl">expand_more</span>
-                </div>
-              )}
-              {form.mis_doctor_id && (
-                <p className="text-xs text-teal-600 mt-2 font-medium">
-                  ✓ Запись будет создана в МИС автоматически
-                </p>
-              )}
-            </Section>
-          )}
-
-          {/* Примечание */}
-          <Section icon="edit_note" iconBg="bg-[#f2f4f6]" iconColor="#727783" title="Примечание">
-            <textarea placeholder="Дополнительная информация..."
-              value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
-              rows={2} className="w-full bg-[#f2f4f6] rounded-2xl px-4 py-3.5 text-[#191c1e] text-sm outline-none border-2 border-transparent focus:border-[#1565c0]/30 focus:bg-white transition-all resize-none placeholder-[#727783]" />
-          </Section>
-
-          {/* Кнопка */}
-          <div className="fixed bottom-16 left-0 right-0 px-4 pb-4 bg-gradient-to-t from-[#f7f9fb] via-[#f7f9fb] to-transparent pt-6 z-10">
-            <button type="submit" disabled={submitDisabled}
-              className="w-full h-14 rounded-2xl text-white font-bold text-base disabled:opacity-50 transition-all active:scale-[0.98]"
-              style={{ background: 'linear-gradient(90deg, #1565c0, #1e6fe8)', boxShadow: '0 8px 24px rgba(21,101,192,0.25)' }}>
-              {loading ? 'Создание...' : 'Создать направление'}
-            </button>
-            <p className="text-[11px] text-center text-[#c2c6d4] font-semibold uppercase tracking-wider mt-2">
-              Направление действует 30 дней
-            </p>
+            )}
           </div>
-        </form>
+        </Card>
+
+        {/* ── Клиника-отправитель (только менеджер) ─────────────── */}
+        {isManager && (
+          <Card>
+            <Card.Header>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon="domain" tone="muted" />
+                <Card.Title>Клиника-отправитель</Card.Title>
+              </div>
+            </Card.Header>
+            <div className="relative">
+              <select
+                required
+                value={form.from_clinic_id}
+                onChange={e => handleFromClinicChange(e.target.value)}
+                onFocus={focusOn}
+                onBlur={focusOff}
+                style={{ ...FIELD_BASE, appearance: 'none', paddingRight: 40 }}
+              >
+                <option value="">Выберите клинику</option>
+                {allClinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <span
+                className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: 'var(--fg-3)', fontSize: 20 }}
+              >
+                expand_more
+              </span>
+            </div>
+          </Card>
+        )}
+
+        {/* ── Услуга ────────────────────────────────────────────
+            Финансовая модель: показываем referral_payout (что получит создающий),
+            для менеджера — дополнительно цену пациенту. */}
+        <Card>
+          <Card.Header>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon="medical_services" />
+              <Card.Title>Услуга</Card.Title>
+            </div>
+            {selectedService && selectedPayout != null && (
+              <div className="flex items-center gap-1.5">
+                <Chip variant="good">
+                  Получите: {Number(selectedPayout || 0).toLocaleString('ru-RU')} ₽
+                </Chip>
+                {isManager && selectedService.price != null && (
+                  <Chip variant="accent">
+                    Цена: {Number(selectedService.price).toLocaleString('ru-RU')} ₽
+                  </Chip>
+                )}
+              </div>
+            )}
+          </Card.Header>
+
+          {/* Фильтры */}
+          {services.length > 0 && cats.length > 0 && (
+            <div className="flex gap-2 mb-3">
+              <div className="relative flex-1">
+                <select
+                  value={serviceCategory}
+                  onChange={e => { setServiceCategory(e.target.value); setForm(f => ({ ...f, service_id: '' })) }}
+                  onFocus={focusOn}
+                  onBlur={focusOff}
+                  style={{ ...FIELD_BASE, padding: '10px 14px', paddingRight: 36, appearance: 'none', fontSize: 13 }}
+                >
+                  <option value="">Все категории</option>
+                  {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <span
+                  className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--fg-3)', fontSize: 18 }}
+                >
+                  expand_more
+                </span>
+              </div>
+              <input
+                type="text"
+                placeholder="Поиск"
+                value={serviceSearch}
+                onChange={e => { setServiceSearch(e.target.value); setForm(f => ({ ...f, service_id: '' })) }}
+                onFocus={focusOn}
+                onBlur={focusOff}
+                style={{ ...FIELD_BASE, padding: '10px 14px', fontSize: 13, flex: 1 }}
+              />
+            </div>
+          )}
+
+          <div className="relative">
+            <select
+              required
+              value={form.service_id}
+              onChange={e => setForm({ ...form, service_id: e.target.value })}
+              disabled={!form.to_clinic_id || loadingServices}
+              onFocus={focusOn}
+              onBlur={focusOff}
+              style={{
+                ...FIELD_BASE,
+                appearance: 'none',
+                paddingRight: 40,
+                opacity: (!form.to_clinic_id || loadingServices) ? 0.5 : 1,
+                cursor: (!form.to_clinic_id || loadingServices) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {!form.to_clinic_id ? <option value="">Сначала выберите клинику</option>
+                : loadingServices ? <option value="">Загрузка...</option>
+                : services.length === 0 ? <option value="">Нет настроенных услуг</option>
+                : filteredServices.length === 0 ? <option value="">Ничего не найдено</option>
+                : (
+                  <>
+                    <option value="">Выберите услугу ({filteredServices.length})</option>
+                    {filteredServices.map(s => {
+                      const payout = s.referral_payout != null ? s.referral_payout : s.bonus_amount
+                      // Партнёру/админу — только payout. Менеджеру — обе суммы.
+                      const label = isManager && s.price != null
+                        ? `${s.name} — Цена ${s.price} ₽ / Партнёру ${payout} ₽`
+                        : `${s.name} (+${payout} ₽)`
+                      return <option key={s.id} value={s.id}>{label}</option>
+                    })}
+                  </>
+                )
+              }
+            </select>
+            <span
+              className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: 'var(--fg-3)', fontSize: 20 }}
+            >
+              expand_more
+            </span>
+          </div>
+        </Card>
+
+        {/* ── Клиника назначения ────────────────────────────────
+            СОХРАНЕНО: cross-tenant optgroup — «Моя клиника» + «🏥 {tenant_name}». */}
+        <Card>
+          <Card.Header>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon="local_hospital" />
+              <Card.Title>Клиника назначения</Card.Title>
+            </div>
+          </Card.Header>
+          <div className="relative">
+            <select
+              required
+              value={form.to_clinic_id}
+              onChange={e => handleToClinicChange(e.target.value)}
+              disabled={isManager && !form.from_clinic_id}
+              onFocus={focusOn}
+              onBlur={focusOff}
+              style={{
+                ...FIELD_BASE,
+                appearance: 'none',
+                paddingRight: 40,
+                opacity: (isManager && !form.from_clinic_id) ? 0.5 : 1,
+                cursor: (isManager && !form.from_clinic_id) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <option value="">Выберите клинику</option>
+              {(() => {
+                // Группируем по тенанту: своя клиника без префикса, чужая — с пометкой «🏥 Тенант · Клиника»
+                const own  = clinics.filter(c => c.is_own_tenant !== false)
+                const cross = clinics.filter(c => c.is_own_tenant === false)
+                const byTenant = {}
+                cross.forEach(c => {
+                  const key = c.tenant_name || 'Другая клиника'
+                  ;(byTenant[key] = byTenant[key] || []).push(c)
+                })
+                return (
+                  <>
+                    {own.length > 0 && (
+                      <optgroup label="Моя клиника">
+                        {own.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                    )}
+                    {Object.entries(byTenant).map(([tname, list]) => (
+                      <optgroup key={tname} label={`🏥 ${tname}`}>
+                        {list.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </optgroup>
+                    ))}
+                  </>
+                )
+              })()}
+            </select>
+            <span
+              className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"
+              style={{ color: 'var(--fg-3)', fontSize: 20 }}
+            >
+              expand_more
+            </span>
+          </div>
+        </Card>
+
+        {/* ── Время приёма ──────────────────────────────────────── */}
+        {availableDates.length > 0 && (
+          <Card>
+            <Card.Header>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon="schedule" />
+                <Card.Title>Время приёма</Card.Title>
+              </div>
+            </Card.Header>
+
+            <div
+              className="flex gap-2 overflow-x-auto pb-1 mb-3"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, appointment_date: '', appointment_time: '' }))}
+                className="flex-shrink-0 px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+                style={
+                  !selectedDate
+                    ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
+                    : { background: 'var(--surface)', color: 'var(--fg-2)', border: '1px solid var(--border)' }
+                }
+              >
+                Без записи
+              </button>
+              {availableDates.map(({ date, dow, schedule: s }) => {
+                const iso = date.toISOString().slice(0, 10)
+                const isSel = form.appointment_date === iso
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, appointment_date: iso, appointment_time: s?.open_time || '09:00' }))}
+                    className="flex-shrink-0 flex flex-col items-center px-3 py-2 rounded-xl text-xs font-semibold transition-colors"
+                    style={{
+                      minWidth: 56,
+                      ...(isSel
+                        ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
+                        : { background: 'var(--surface)', color: 'var(--fg-2)', border: '1px solid var(--border)' }),
+                    }}
+                  >
+                    <span>{DAY_NAMES[dow]}</span>
+                    <span style={{ opacity: 0.8, marginTop: 2 }}>{formatDateShort(date)}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {selectedDate && (
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <FieldLabel>
+                    Время ({selectedDate.schedule?.open_time}–{selectedDate.schedule?.close_time})
+                  </FieldLabel>
+                  <input
+                    type="time"
+                    min={selectedDate.schedule?.open_time}
+                    max={selectedDate.schedule?.close_time}
+                    value={form.appointment_time}
+                    onChange={e => setForm(f => ({ ...f, appointment_time: e.target.value }))}
+                    onFocus={focusOn}
+                    onBlur={focusOff}
+                    style={FIELD_BASE}
+                  />
+                </div>
+                <div
+                  className="text-center"
+                  style={{ fontSize: 12, color: 'var(--fg-2)', paddingBottom: 6 }}
+                >
+                  <p className="font-bold" style={{ color: 'var(--fg)' }}>{DAY_NAMES[selectedDate.dow]},</p>
+                  <p>{formatDateShort(selectedDate.date)}</p>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* ── Врач МИС ─────────────────────────────────────────── */}
+        {form.appointment_date && misDoctors.length > 0 && (
+          <Card>
+            <Card.Header>
+              <div className="flex items-center gap-3">
+                <SectionIcon icon="stethoscope" />
+                <Card.Title>Врач (МИС)</Card.Title>
+              </div>
+            </Card.Header>
+
+            {loadingDoctors ? (
+              <div style={{ fontSize: 12, color: 'var(--fg-3)' }}>Загрузка врачей…</div>
+            ) : (
+              <div className="relative">
+                <select
+                  value={form.mis_doctor_id || ''}
+                  onChange={e => setForm(f => ({ ...f, mis_doctor_id: e.target.value ? parseInt(e.target.value) : null }))}
+                  onFocus={focusOn}
+                  onBlur={focusOff}
+                  style={{ ...FIELD_BASE, appearance: 'none', paddingRight: 40 }}
+                >
+                  <option value="">— Не выбран (без записи в МИС) —</option>
+                  {misDoctors.map(d => (
+                    <option key={d.mis_id} value={d.mis_id}>
+                      {d.name}{d.specialty ? ` · ${d.specialty}` : ''}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--fg-3)', fontSize: 20 }}
+                >
+                  expand_more
+                </span>
+              </div>
+            )}
+            {form.mis_doctor_id && (
+              <p
+                className="font-medium mt-2"
+                style={{ fontSize: 12, color: 'var(--accent)' }}
+              >
+                ✓ Запись будет создана в МИС автоматически
+              </p>
+            )}
+          </Card>
+        )}
+
+        {/* ── Примечание ───────────────────────────────────────── */}
+        <Card>
+          <Card.Header>
+            <div className="flex items-center gap-3">
+              <SectionIcon icon="edit_note" tone="muted" />
+              <Card.Title>Примечание</Card.Title>
+            </div>
+          </Card.Header>
+          <textarea
+            placeholder="Дополнительная информация..."
+            value={form.notes}
+            onChange={e => setForm({ ...form, notes: e.target.value })}
+            onFocus={focusOn}
+            onBlur={focusOff}
+            rows={3}
+            style={{ ...FIELD_BASE, resize: 'vertical', minHeight: 80, fontFamily: 'inherit' }}
+          />
+        </Card>
+
+        {/* ── Submit ───────────────────────────────────────────── */}
+        {mode === 'page' ? (
+          // Page-mode: фиксированная кнопка снизу (как в исходном дизайне).
+          <div
+            className="fixed bottom-16 left-0 right-0 px-4 pb-4 pt-6 z-10"
+            style={{
+              background: 'linear-gradient(to top, var(--bg) 60%, transparent)',
+            }}
+          >
+            <div className="max-w-3xl mx-auto">
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                disabled={submitDisabled}
+                className="w-full"
+                style={{
+                  width: '100%',
+                  height: 52,
+                  fontSize: 15,
+                  borderRadius: 14,
+                }}
+              >
+                {loading ? 'Создание…' : 'Создать направление'}
+              </Button>
+              <p
+                className="text-center mt-2"
+                style={{
+                  fontSize: 11,
+                  color: 'var(--fg-4)',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                }}
+              >
+                Направление действует 30 дней
+              </p>
+            </div>
+          </div>
+        ) : (
+          // Modal-mode: inline-кнопка в конце формы (Modal сам прокручивает body).
+          <div className="flex items-center justify-end gap-2 pt-2">
+            {onClose && (
+              <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
+                Отмена
+              </Button>
+            )}
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              disabled={submitDisabled}
+              style={{ minWidth: 220, height: 48, fontSize: 14, borderRadius: 12 }}
+            >
+              {loading ? 'Создание…' : 'Создать направление'}
+            </Button>
+          </div>
+        )}
+      </form>
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Page-wrapper (для маршрута /arc/create — обратная совместимость).
+// ─────────────────────────────────────────────────────────────────────
+export default function CreateReferral() {
+  const nav = useNavigate()
+  const [searchParams] = useSearchParams()
+  const phone = searchParams.get('patient_phone') || ''
+  const name  = searchParams.get('patient_name')  || ''
+
+  return (
+    <Page className="pb-32">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+        <PageHeader
+          title="Новое направление"
+          subtitle="Заполните данные пациента и выберите клинику назначения"
+          actions={
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 16, fontVariationSettings: "'FILL' 0", lineHeight: 1 }}
+                >
+                  arrow_back
+                </span>
+              }
+              onClick={() => nav(-1)}
+            >
+              Назад
+            </Button>
+          }
+        />
+
+        <CreateReferralForm
+          mode="page"
+          initialPhone={phone}
+          initialName={name}
+          onSuccess={(id) => nav(`/qr/${id}`)}
+        />
       </div>
-    </div>
+    </Page>
   )
 }

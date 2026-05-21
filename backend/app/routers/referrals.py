@@ -93,9 +93,19 @@ async def verify_patient(
     если найден по ФИО, но в МИС записан другой телефон. Дубликаты по patient_id убираются.
     """
     from app.services.mis_client import find_patient_by_phone, _post as _mis_post
+    from app.services.mis_resolver import resolve_mis_creds
 
     if not phone and not full_name:
         return {"matches": [], "error": "Укажите телефон или ФИО"}
+
+    # Разрешаем МИС-credentials с уровня клиники → тенанта.
+    # Без этого все запросы шли с глобальным settings.mis_api_key из .env —
+    # пациенты других клиник франшизы не находились.
+    api_url, api_key, _mis_type = await resolve_mis_creds(
+        db,
+        clinic_id=current_user.clinic_id,
+        tenant_id=current_user.tenant_id,
+    )
 
     matches: list[dict] = []
     seen_ids: set = set()
@@ -103,7 +113,7 @@ async def verify_patient(
     # 1) Поиск по телефону
     if phone:
         try:
-            p = await find_patient_by_phone(phone)
+            p = await find_patient_by_phone(phone, api_url=api_url, api_key=api_key)
             if p:
                 pid = p.get("patient_id") or p.get("id")
                 if pid not in seen_ids:
@@ -120,7 +130,7 @@ async def verify_patient(
         if len(parts) >= 2: kwargs["first_name"] = parts[1]
         if len(parts) >= 3: kwargs["third_name"] = parts[2]
         try:
-            r = await _mis_post("getPatient", **kwargs)
+            r = await _mis_post("getPatient", api_url=api_url, api_key=api_key, **kwargs)
             if r.get("error") == 0 and r.get("data"):
                 data = r["data"]
                 items = data if isinstance(data, list) else [data]
@@ -146,13 +156,40 @@ class CreatePatientInMisRequest(BaseModel):
 async def mis_add_patient(
     body: CreatePatientInMisRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Создать нового пациента в МИС (addPatient). Возвращает patient_id."""
+    """Создать нового пациента в МИС (addPatient). Возвращает patient_id.
+
+    Передаём clinic_id (mis_id текущей клиники пользователя) — если Renovatio
+    поддерживает привязку пациента к клинике при создании, он использует это
+    поле; иначе — игнорирует.
+    """
     from app.services.mis_client import add_patient
+    from app.services.mis_resolver import resolve_mis_creds
+    from app.models.clinic import Clinic
     if not body.phone:
         raise HTTPException(status_code=400, detail="Укажите телефон")
+    api_url, api_key, _mis_type = await resolve_mis_creds(
+        db,
+        clinic_id=current_user.clinic_id,
+        tenant_id=current_user.tenant_id,
+    )
+    # Резолвим mis_id клиники текущего пользователя (если он к ней привязан)
+    mis_clinic_id: int | None = None
+    if current_user.clinic_id:
+        _c = (await db.execute(
+            select(Clinic).where(Clinic.id == current_user.clinic_id)
+        )).scalar_one_or_none()
+        if _c and _c.mis_id:
+            mis_clinic_id = int(_c.mis_id)
     try:
-        new = await add_patient(body.phone, full_name=body.full_name)
+        new = await add_patient(
+            body.phone,
+            full_name=body.full_name,
+            api_url=api_url,
+            api_key=api_key,
+            clinic_id=mis_clinic_id,
+        )
     except Exception:
         raise HTTPException(status_code=502, detail="МИС недоступна")
     if not new or not new.get("patient_id"):

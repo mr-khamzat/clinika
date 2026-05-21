@@ -18,13 +18,21 @@ class UserResponse(BaseModel):
     username: str | None
     full_name: str
     phone_number: str | None
+    email: str | None = None
     category: str | None
     date_of_birth: str | None
     role: UserRole
     specialization: str | None = None
+    # Аватарка сотрудника (avatar01) — чтобы шапки кабинетов и списки админов
+    # сразу получали URL без дополнительного запроса.
+    avatar_url: str | None = None
     is_active: bool
     created_at: datetime
     is_superadmin: bool = False
+    # Флаг «нужна смена пароля» (pwdmust01). Передаётся фронту, чтобы при
+    # каждом входе показывать блокирующую модалку, пока сотрудник не сменит
+    # временный пароль, установленный администратором.
+    password_must_change: bool | None = None
 
     @model_validator(mode='after')
     def set_superadmin(self):

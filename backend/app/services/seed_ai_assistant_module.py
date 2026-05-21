@@ -32,7 +32,7 @@ PAYLOAD = {
     "config_schema": {
         "trial_days": 14,
         "billing_cycle": "monthly",
-        "model": "gemini-1.5-flash",
+        "model": "gemini-2.5-flash",
         "max_messages_per_day": 50,
         "escalation_threshold": 0.7,
         "system_prompt": (

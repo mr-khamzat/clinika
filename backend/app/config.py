@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     owner_bot_token: str = ""  # Owner-bot — для адресных сообщений (chat→admin, /contact)
     owner_telegram_id: str = ""  # chat_id владельца для owner-bot
     gemini_api_key: str = ""  # Google Gemini AI API key (GET /ai/insights)
+    anthropic_api_key: str = ""  # Anthropic Claude API key (приоритетный AI-провайдер для doctor_ai)
     mini_app_url: str = "http://localhost:8901"
     backend_url: str = "http://localhost:8900"
     # Telegram IDs через запятую — эти пользователи автоматически получают роль manager

@@ -497,6 +497,8 @@ class AppointmentMove(BaseModel):
     notes: Optional[str] = None
     patient_name: Optional[str] = None
     priority: Optional[str] = None  # normal | high | urgent
+    # Перенос на другого врача (опционально). Тенант-ограничение проверяется в эндпоинте.
+    doctor_id: Optional[uuid.UUID] = None
 
 
 @router.patch("/appointments/{appointment_id}", dependencies=_FEAT)
@@ -555,6 +557,34 @@ async def move_appointment(
 
     from datetime import datetime
     appt.updated_at = datetime.utcnow()
+
+    # Если в патче пришёл doctor_id — это перенос на другого врача.
+    # Проверяем, что новый врач принадлежит тому же тенанту, и считаем
+    # конфликт с уже существующими записями этого врача на новую дату/время.
+    new_doctor_id = getattr(data, 'doctor_id', None)
+    if new_doctor_id and new_doctor_id != appt.doctor_id:
+        new_doc = (await db.execute(select(Doctor).where(Doctor.id == new_doctor_id))).scalar_one_or_none()
+        if not new_doc:
+            raise HTTPException(404, "Новый врач не найден")
+        if current_user.tenant_id and new_doc.tenant_id != current_user.tenant_id:
+            raise HTTPException(403, "Чужой тенант")
+        conflict_doc = (await db.execute(
+            select(Appointment).where(
+                Appointment.doctor_id == new_doctor_id,
+                Appointment.appointment_date == appt.appointment_date,
+                Appointment.start_time == appt.start_time,
+                Appointment.id != appointment_id,
+                Appointment.status.in_([AppointmentStatus.PENDING, AppointmentStatus.CONFIRMED]),
+            )
+        )).scalar_one_or_none()
+        if conflict_doc:
+            raise HTTPException(409, "У выбранного врача этот слот уже занят")
+        # Пересчёт end_time из slot_duration нового врача
+        from datetime import datetime as _dt2, timedelta as _td2
+        new_end_dt2 = _dt2.combine(appt.appointment_date, appt.start_time) + _td2(minutes=new_doc.slot_duration)
+        appt.end_time = new_end_dt2.time()
+        appt.doctor_id = new_doctor_id
+
     await db.commit()
     return {
         "id": str(appt.id),
@@ -564,6 +594,67 @@ async def move_appointment(
         "end_time": appt.end_time.strftime("%H:%M"),
         "status": appt.status,
     }
+
+
+# ── Удаление (отмена) записи — только manager/franchise_owner/super_admin ────
+
+@router.delete("/appointments/{appointment_id}", dependencies=_FEAT)
+async def delete_appointment(
+    appointment_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Удалить (мягко) ошибочную запись: ставит статус 'cancelled' и пишет в
+    аудит-журнал. Жёсткое удаление не делаем — нужны связи с заключениями,
+    направлениями, бонусами. Tenant-isolated. Доступ — только системный
+    администратор / владелец франшизы / super_admin (через require_manager).
+    """
+    appt = (await db.execute(select(Appointment).where(Appointment.id == appointment_id))).scalar_one_or_none()
+    if not appt:
+        raise HTTPException(404, "Запись не найдена")
+    if current_user.tenant_id and appt.tenant_id != current_user.tenant_id:
+        raise HTTPException(403, "Чужой тенант")
+
+    # Состояние «до» для аудита
+    before_snapshot = {
+        "doctor_id": str(appt.doctor_id) if appt.doctor_id else None,
+        "patient_name": appt.patient_name,
+        "patient_phone": appt.patient_phone,
+        "appointment_date": appt.appointment_date.isoformat() if appt.appointment_date else None,
+        "start_time": appt.start_time.strftime("%H:%M") if appt.start_time else None,
+        "status": str(appt.status) if appt.status else None,
+    }
+
+    # Мягкое удаление — переводим в cancelled. Это сохраняет историю
+    # (заключения, направления, оплаты) и не ломает FK.
+    from datetime import datetime as _dt_now
+    appt.status = AppointmentStatus.CANCELLED
+    appt.updated_at = _dt_now.utcnow()
+
+    # Аудит-журнал (best-effort: не валим запрос если audit-сервис упал)
+    try:
+        from app.services import audit_service
+        await audit_service.write(
+            db,
+            action="appointment.deleted",
+            actor_id=current_user.id,
+            actor_name=getattr(current_user, "full_name", None) or getattr(current_user, "username", None),
+            entity_type="appointment",
+            entity_id=appt.id,
+            before=before_snapshot,
+            after={"status": "cancelled"},
+            comment="Удаление ошибочной записи менеджером",
+            tenant_id=appt.tenant_id,
+        )
+    except Exception as _e:  # noqa: BLE001
+        import logging as _logging
+        _logging.getLogger("appointments").warning(
+            "audit write (appointment.deleted) failed: %s", _e
+        )
+
+    await db.commit()
+    return {"id": str(appt.id), "status": "cancelled", "deleted": True}
 
 
 # ── Неделя расписания врача (агрегированно) ──────────────────────────────────

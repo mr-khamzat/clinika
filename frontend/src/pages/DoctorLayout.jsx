@@ -30,8 +30,9 @@
  * базовые компоненты из ../design.
  * ========================================
  */
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react'
 import api from '../api'
+import { SLUG } from '../config'
 import {
   Page,
   PageHeader,
@@ -44,8 +45,13 @@ import {
   Avatar,
   EmptyState,
   Sparkline,
+  Modal,
   useToast,
 } from '../design'
+// Inline-модалка «Новое направление» внутри кабинета врача —
+// переиспользуем форму со страницы /arc/create (CreateReferralForm).
+// См. рефактор 2026-05-20: форма не использует useNavigate, поэтому безопасна в AdminRoot.
+import { CreateReferralForm } from './CreateReferral'
 import WeekScheduleSection from '../sections/scheduling/WeekScheduleSection'
 import SlotBoardSection from '../sections/scheduling/SlotBoardSection'
 // Глава 6: AI-инструменты врача
@@ -56,6 +62,8 @@ import useTheme from '../lib/useTheme'
 // W3: глобальный поиск Cmd+K и центр уведомлений
 import CommandPalette from '../components/CommandPalette'
 import NotificationsBell from '../components/NotificationsBell'
+// Личный профиль сотрудника — модалка для смены телефона/email/пароля + аватарка (avatar01)
+import ProfileModal from '../components/ProfileModal'
 // Глава 7: Мои регламенты (читатель)
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 // Глава 9: Чат врача с пациентами (премиум-чат клиники)
@@ -523,6 +531,25 @@ function ReferralsPage({ token }) {
   const [refs, setRefs] = useState([])
   const [loading, setLoading] = useState(true)
   const { toast } = useToast()
+  // Inline-модалка «Новое направление» (внутри кабинета врача).
+  // Раньше кнопка вела на /arc/create (отдельную страницу), теперь —
+  // открывает форму прямо здесь, чтобы не покидать кабинет.
+  const [createOpen, setCreateOpen] = useState(false)
+  // ВАЖНО: DoctorLayout рендерится в AdminRoot, который ВНЕ BrowserRouter.
+  // useNavigate() здесь бросает invariant. Используем window.location.assign.
+  // См. memory feedback_admin_root_no_router.
+  const nav = useCallback((path) => {
+    try { window.location.assign('/' + SLUG + path) }
+    catch { window.location.href = '/' + SLUG + path }
+  }, [])
+
+  // После успешного создания направления — закрываем модалку и обновляем список.
+  // Опционально открываем QR-страницу нового направления (как было на /arc/create).
+  const reload = useCallback(() => {
+    apiFetch('get', '/manager/referrals/?limit=50', token)
+      .then(r => setRefs(Array.isArray(r.data) ? r.data : r.data?.referrals || []))
+      .catch(() => {})
+  }, [token])
 
   useEffect(() => {
     apiFetch('get', '/manager/referrals/?limit=50', token)
@@ -547,12 +574,11 @@ function ReferralsPage({ token }) {
         title="Направления"
         subtitle={`${refs.length} ${pluralize(refs.length, ['направление', 'направления', 'направлений'])} в журнале`}
         actions={
-          // TODO: открывать <Modal> с формой создания направления (Этап 5+)
           <Button
             variant="secondary"
             size="sm"
             leftIcon={<MIcon name="add" size={15} />}
-            onClick={() => toast('Создание направлений — в разработке', 'info', 3000)}
+            onClick={() => setCreateOpen(true)}
           >
             новое направление
           </Button>
@@ -607,6 +633,27 @@ function ReferralsPage({ token }) {
           </div>
         </Card>
       )}
+
+      {/* Inline-модалка «Новое направление» — переиспользует форму из /arc/create.
+          После создания: закрываем модалку, обновляем список направлений
+          и открываем QR-страницу нового направления (как раньше). */}
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Новое направление"
+        size="lg"
+      >
+        <CreateReferralForm
+          mode="modal"
+          onClose={() => setCreateOpen(false)}
+          onSuccess={(refId) => {
+            setCreateOpen(false)
+            reload()
+            // QR-страница нового направления (с кодом / QR-кодом для пациента).
+            if (refId) nav('/qr/' + refId)
+          }}
+        />
+      </Modal>
     </>
   )
 }
@@ -923,18 +970,81 @@ function AIToolsPage({ token, doctorId }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// CHAT
+// CHAT — переключатель между чатом с пациентами и внутренним чатом клиники.
+// Чат с клиникой подгружается через iframe из /staff-chat,
+// чтобы не дублировать тяжёлую логику StaffChat и не трогать ClinicChatSection.
 // ─────────────────────────────────────────────────────────────────────
+function ChatModeTab({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '8px 14px',
+        minHeight: 36,
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        background: active ? 'var(--accent-soft)' : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--fg-2)',
+        border: active ? '1px solid var(--accent-soft)' : '1px solid var(--border)',
+        cursor: 'pointer',
+        transition: 'background-color .15s, color .15s',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
+
 function ChatPage() {
+  const [chatMode, setChatMode] = useState('patients') // 'patients' | 'staff'
+  const isPatients = chatMode === 'patients'
   return (
     <>
       <SectionHeader
-        title="Чат с пациентами"
-        subtitle="Защищённый канал по 152-ФЗ"
+        title={isPatients ? 'Чат с пациентами' : 'Чат с клиникой'}
+        subtitle={isPatients ? 'Защищённый канал по 152-ФЗ' : 'Внутренний чат сотрудников'}
       />
-      <Suspense fallback={<Spinner />}>
-        <ClinicChatSection role="doctor" />
-      </Suspense>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <ChatModeTab active={isPatients} onClick={() => setChatMode('patients')}>
+          С пациентами
+        </ChatModeTab>
+        <ChatModeTab active={!isPatients} onClick={() => setChatMode('staff')}>
+          С клиникой
+        </ChatModeTab>
+      </div>
+      {isPatients ? (
+        <Suspense fallback={<Spinner />}>
+          <ClinicChatSection role="doctor" />
+        </Suspense>
+      ) : (
+        <iframe
+          /* Передаём токен текущего пользователя через URL hash — иначе iframe берёт
+             stale-токен из localStorage (другой ключ для пустого SLUG), что приводит
+             к видимости чужой истории чата при смене аккаунта. */
+          src={'/staff-chat#access_token=' + encodeURIComponent(
+            localStorage.getItem('clinika_admin_token_' + SLUG)
+            || localStorage.getItem('clinika_token_' + SLUG)
+            || ''
+          ) + (localStorage.getItem('clinika_admin_refresh_token_' + SLUG)
+              || localStorage.getItem('clinika_refresh_token_' + SLUG)
+              ? '&refresh_token=' + encodeURIComponent(
+                  localStorage.getItem('clinika_admin_refresh_token_' + SLUG)
+                  || localStorage.getItem('clinika_refresh_token_' + SLUG)
+                )
+              : '')}
+          title="Чат с клиникой"
+          style={{
+            width: '100%',
+            height: 'calc(100vh - 220px)',
+            minHeight: 480,
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            background: 'var(--bg-1, #f8fafc)',
+          }}
+        />
+      )}
     </>
   )
 }
@@ -972,6 +1082,16 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
   const [route, setRoute] = useState('today')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [doctorInfo, setDoctorInfo] = useState(null)
+  // Личный профиль (avatar01): открывается из шапки и сайдбара по клику на аватар
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [profile, setProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setProfile(r.data)).catch(() => {})
+  }, [])
+  const _avatarBase = api.defaults.baseURL || ''
+  const avatarSrc = profile?.avatar_url
+    ? (profile.avatar_url.startsWith('http') ? profile.avatar_url : `${_avatarBase}${profile.avatar_url}`)
+    : null
   // Единый переключатель темы (синхронизация с другими кабинетами)
   const { isDark, toggle: toggleTheme } = useTheme()
 
@@ -1065,25 +1185,30 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
             </div>
           </div>
 
-          {/* Профиль */}
-          <div
-            className="flex items-center gap-3"
+          {/* Профиль — клик по карточке открывает ProfileModal (avatar01) */}
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            title="Открыть мой профиль"
+            className="flex items-center gap-3 text-left"
             style={{
               padding: 12,
               background: 'var(--surface)',
               border: '1px solid var(--border)',
               borderRadius: 10,
               marginBottom: 6,
+              cursor: 'pointer',
+              width: '100%',
             }}
           >
-            <Avatar name={userName} size="md" />
+            <Avatar src={avatarSrc} name={userName} size="md" />
             <div className="min-w-0 flex-1">
               <div className="font-semibold truncate" style={{ fontSize: 12.5, color: 'var(--fg)' }}>{userName}</div>
               <div className="truncate" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
                 {doctorInfo?.specialty || 'врач'}
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Навигация */}
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--fg-4)', textTransform: 'uppercase', padding: '12px 10px 4px' }}>
@@ -1170,7 +1295,16 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
             >
               <MIcon name={isDark ? 'light_mode' : 'dark_mode'} size={18} />
             </button>
-            <Avatar name={userName} size="md" />
+            {/* Аватар → ProfileModal (avatar01) */}
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              aria-label="Мой профиль"
+              title="Мой профиль"
+              style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              <Avatar src={avatarSrc} name={userName} size="md" />
+            </button>
           </header>
 
           {/* DESKTOP TOPBAR */}
@@ -1190,6 +1324,16 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
                 {activeNav.label}
               </div>
             </div>
+            {/* Аватар → ProfileModal (avatar01); ФИО снаружи остаётся как Chip */}
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              aria-label="Мой профиль"
+              title="Мой профиль"
+              style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+            >
+              <Avatar src={avatarSrc} name={userName} size="md" />
+            </button>
             <Chip variant="default" dot>{userName}</Chip>
             {/* W3: центр уведомлений (общий dropdown) */}
             <NotificationsBell size={36} variant="square" />
@@ -1268,22 +1412,25 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
               </button>
             </div>
 
-            {/* Профиль */}
-            <div
-              className="flex items-center gap-3"
+            {/* Профиль — клик открывает ProfileModal (avatar01) */}
+            <button
+              type="button"
+              onClick={() => { setSidebarOpen(false); setProfileOpen(true) }}
+              className="flex items-center gap-3 text-left"
               style={{
                 padding: 12, background: 'var(--surface)',
                 border: '1px solid var(--border)', borderRadius: 10, marginBottom: 6,
+                cursor: 'pointer', width: '100%',
               }}
             >
-              <Avatar name={userName} size="md" />
+              <Avatar src={avatarSrc} name={userName} size="md" />
               <div className="min-w-0 flex-1">
                 <div className="font-semibold truncate" style={{ fontSize: 13, color: 'var(--fg)' }}>{userName}</div>
                 <div className="truncate" style={{ fontSize: 11, color: 'var(--fg-3)' }}>
                   {doctorInfo?.specialty || 'врач'}
                 </div>
               </div>
-            </div>
+            </button>
 
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', color: 'var(--fg-4)', textTransform: 'uppercase', padding: '12px 10px 4px' }}>
               Работа
@@ -1368,6 +1515,12 @@ export default function DoctorLayout({ adminToken, user, onLogout }) {
       </nav>
       {/* W3: глобальный поиск Cmd+K — слушает hotkey на window */}
       <CommandPalette />
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setProfile(p)}
+      />
     </Page>
   )
 }

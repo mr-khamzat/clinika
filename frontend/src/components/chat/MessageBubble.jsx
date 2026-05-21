@@ -85,7 +85,7 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
         <div style={{ width: 32, flexShrink: 0 }}>
           {showAvatar && (
             <div
-              className="grid place-items-center font-bold text-white"
+              className="grid place-items-center font-bold text-white overflow-hidden"
               style={{
                 width: 32, height: 32, borderRadius: 10,
                 background: `linear-gradient(135deg, ${color}, ${color}AA)`,
@@ -93,7 +93,17 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
               }}
               aria-hidden
             >
-              {initials}
+              {/* avatar01: если у отправителя есть avatar_url — показываем картинку. */}
+              {message.sender_avatar_url ? (
+                <img
+                  src={message.sender_avatar_url}
+                  alt={name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => { e.currentTarget.style.display = 'none' }}
+                />
+              ) : (
+                initials
+              )}
             </div>
           )}
         </div>

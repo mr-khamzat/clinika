@@ -37,7 +37,7 @@ export default defineConfig({
   // Удаляем console.* и debugger из production-сборки (Фаза 5).
   // esbuild drop срабатывает на стадии минификации.
   esbuild: {
-    drop: ['console', 'debugger'],
+    drop: ["debugger"],
   },
   build: {
     sourcemap: false,

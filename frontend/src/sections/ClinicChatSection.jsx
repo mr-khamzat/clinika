@@ -16,9 +16,48 @@
  * врача / менеджера / регистратора.
  * ========================================
  */
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Component, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import api from '../api'
+import { SLUG } from '../config'
+
+class ChatErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null, info: null } }
+  static getDerivedStateFromError(error) { return { error } }
+  componentDidCatch(error, info) {
+    this.setState({ info })
+    try { console.error('[ChatErrorBoundary]', error, info) } catch (_e) { /* noop */ }
+  }
+  render() {
+    if (this.state.error) {
+      const e = this.state.error
+      const dump = (() => {
+        try {
+          const keys = Object.getOwnPropertyNames(e || {})
+          const obj = {}
+          for (const k of keys) {
+            try { obj[k] = e[k] } catch { obj[k] = '[unreadable]' }
+          }
+          return JSON.stringify(obj, null, 2)
+        } catch { return '[dump failed]' }
+      })()
+      return (
+        <div style={{ padding: 20, margin: 16, background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 12, color: '#7f1d1d', fontFamily: 'monospace', fontSize: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Чат — ошибка рендеринга (для отладки)</div>
+          <div><b>Сообщение:</b> {String(e?.message || '(пусто)')}</div>
+          <div><b>Тип:</b> {e?.name || typeof e}</div>
+          <div><b>toString:</b> {String(e)}</div>
+          <div style={{ marginTop: 10 }}><b>Stack:</b></div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, background: '#fff', padding: 8, borderRadius: 6, maxHeight: 280, overflow: 'auto' }}>{e?.stack || '(нет)'}</pre>
+          <div style={{ marginTop: 10 }}><b>Component stack:</b></div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, background: '#fff', padding: 8, borderRadius: 6, maxHeight: 280, overflow: 'auto' }}>{this.state.info?.componentStack || '(нет)'}</pre>
+          <div style={{ marginTop: 10 }}><b>Own props (JSON):</b></div>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11, background: '#fff', padding: 8, borderRadius: 6, maxHeight: 200, overflow: 'auto' }}>{dump}</pre>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import { useToast } from '../design'
 import MessageBubble from '../components/chat/MessageBubble'
 import ThreadListItem from '../components/chat/ThreadListItem'
@@ -153,9 +192,19 @@ function AssignDoctorModal({ open, onClose, onAssign, clinicId }) {
 }
 
 // ── Главный компонент ────────────────────────────────────────────────────────
-export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdProp }) {
+export default function ClinicChatSectionExported(props) {
+  return <ChatErrorBoundary><ClinicChatSectionInner {...props} /></ChatErrorBoundary>
+}
+
+function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
   const { toast } = useToast() || {}
-  const nav = useNavigate()
+  // ВАЖНО: ClinicChatSection монтируется в AdminRoot, который рендерится БЕЗ BrowserRouter
+  // (см. App.jsx → AdminRoot ветка). Поэтому useNavigate() бросает invariant. Используем
+  // window.location.assign — full reload не страшен, переход всё равно за пределы текущего экрана.
+  const nav = useCallback((path) => {
+    try { window.location.assign('/' + SLUG + path) }
+    catch { window.location.href = '/' + SLUG + path }
+  }, [])
 
   const [threads, setThreads] = useState([])
   const [loadingList, setLoadingList] = useState(true)
@@ -188,7 +237,16 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
   const [pushState, setPushState] = useState('default')  // default|granted|denied|unsupported
 
   useEffect(() => {
-    getPushPermissionState().then(setPushState)
+    // Защита от unhandled rejection: в некоторых embedded webview Notification API недоступен,
+    // и getPushPermissionState() может выкинуть исключение. В этом случае считаем 'unsupported'
+    // и просто скрываем push-кнопку.
+    try {
+      getPushPermissionState()
+        .then((s) => setPushState(s || 'unsupported'))
+        .catch(() => setPushState('unsupported'))
+    } catch {
+      setPushState('unsupported')
+    }
   }, [])
 
   const bottomRef = useRef(null)
@@ -224,10 +282,14 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
       if (clinicIdProp) params.clinic_id = clinicIdProp
       const r = await api.get('/clinic/chat/threads', { params })
       let list = Array.isArray(r.data) ? r.data : (r.data?.threads || [])
+      // Защита: если backend вернул что-то странное (null/object), нормализуем в массив.
+      if (!Array.isArray(list)) list = []
+      // Отсеиваем null/undefined элементы — иначе t.assigned_doctor_id уронит .filter().
+      list = list.filter(Boolean)
       if (doctorFilter === 'mine') {
-        list = list.filter(t => t.assigned_doctor_id && t.is_mine)
+        list = list.filter(t => t?.assigned_doctor_id && t?.is_mine)
       } else if (doctorFilter) {
-        list = list.filter(t => String(t.assigned_doctor_id) === String(doctorFilter))
+        list = list.filter(t => String(t?.assigned_doctor_id) === String(doctorFilter))
       }
       setThreads(list)
       setListErr('')
@@ -245,7 +307,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
     try {
       const r = await api.get(`/clinic/chat/threads/${id}`)
       setActive(r.data)
-      setThreads(prev => prev.map(t => t.id === id ? { ...t, unread_for_clinic: 0 } : t))
+      setThreads(prev => (Array.isArray(prev) ? prev : []).map(t => (t && t.id === id) ? { ...t, unread_for_clinic: 0 } : t))
       api.post(`/clinic/chat/threads/${id}/read`).catch(() => {})
     } catch (e) {
       if (!silent) toast?.(e?.response?.data?.detail || 'Не удалось загрузить тред', 'error')
@@ -453,7 +515,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
     return out
   }, [active])
 
-  const hasThreads = threads.length > 0
+  const hasThreads = Array.isArray(threads) && threads.length > 0
 
   return (
     <>
@@ -562,7 +624,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                   </div>
                 </div>
               )}
-              {!loadingList && hasThreads && threads.map(t => (
+              {!loadingList && hasThreads && (threads || []).filter(Boolean).map(t => (
                 <ThreadListItem
                   key={t.id}
                   thread={t}
@@ -633,7 +695,7 @@ export default function ClinicChatSection({ role = 'doctor', clinicId: clinicIdP
                               }}
                               title={`SLA нарушен — эскалирован до ${active.thread.sla_breached_level}`}>
                           <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>warning</span>
-                          SLA: {active.thread.sla_breached_level.toUpperCase()}
+                          SLA: {String(active.thread.sla_breached_level).toUpperCase()}
                         </span>
                       )}
                     </div>

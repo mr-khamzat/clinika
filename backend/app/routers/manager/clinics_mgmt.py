@@ -144,6 +144,8 @@ async def onboard_clinic_manager(
         phone_number=phone or None,
         username=username,
         password_hash=hash_password(password),
+        # pwdmust01: пароль задал админ → требуем смену при первом входе
+        password_must_change=True,
         role=UserRole.MANAGER,
         is_active=True,
     )

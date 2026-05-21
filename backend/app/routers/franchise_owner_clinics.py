@@ -464,6 +464,8 @@ async def create_clinic_manager(
         phone_number=(body.phone or "").strip() or None,
         email=email_norm,
         password_hash=hash_password(plain_password),
+        # pwdmust01: пароль задал владелец франшизы → требуем смену при первом входе
+        password_must_change=True,
         role=UserRole.MANAGER,
         is_active=True,
     )
@@ -543,6 +545,8 @@ async def reset_manager_password(
 
     new_password = _gen_password(12)
     manager.password_hash = hash_password(new_password)
+    # pwdmust01: пароль задал владелец → требуем смену при первом входе
+    manager.password_must_change = True
 
     await audit_service.write_safe(
         db, "user.password_reset",

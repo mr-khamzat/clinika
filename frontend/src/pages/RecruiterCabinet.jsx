@@ -17,11 +17,14 @@
  * ========================================
  */
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import api from '../api'
 import { API_BASE } from '../config'
 // Дизайн-система: Card / Button / Chip / KpiCard / KpiRow / EmptyState
 import { Card, Button, Chip, KpiCard, KpiRow, EmptyState } from '../design'
 // Глава 7: Мои регламенты (читатель)
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 
 const PRIMARY = '#0097A7'
 const DARK    = '#004D5F'
@@ -451,6 +454,16 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
   const [tab, setTab] = useState('dashboard')
   const [stats, setStats] = useState(null)
   const [statsError, setStatsError] = useState(false)
+  // Личный профиль (avatar01)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = api.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
 
   const loadStats = useCallback(() => {
     setStatsError(false)
@@ -480,10 +493,27 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
         style={{ background:'linear-gradient(135deg,#004D5F 0%,#0097A7 100%)' }}>
         <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/5 pointer-events-none" />
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)' }}>
-            <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>person_search</span>
-          </div>
+          {/* Аватар → ProfileModal (avatar01). При отсутствии — иконка person_search. */}
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Мой профиль"
+            title="Мой профиль"
+            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)', cursor:'pointer', padding:0, border:0 }}
+          >
+            {myAvatarSrc ? (
+              <img
+                src={myAvatarSrc}
+                alt={user?.full_name || ''}
+                width={44}
+                height={44}
+                style={{ width:44, height:44, borderRadius:'50%', objectFit:'cover' }}
+              />
+            ) : (
+              <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>person_search</span>
+            )}
+          </button>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base truncate">{user?.full_name || 'Рекрутер'}</p>
             <p className="text-white/70 text-xs">Кабинет рекрутера</p>
@@ -547,6 +577,12 @@ export default function RecruiterCabinet({ adminToken, user, onLogout }) {
           ))}
         </div>
       </div>
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
     </div>
   )
 }

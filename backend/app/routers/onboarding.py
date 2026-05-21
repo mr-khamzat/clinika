@@ -383,6 +383,12 @@ async def complete_onboarding(
                                     full_name=m.full_name,
                                     username=m.username,
                                     password_hash=_hp(m.password) if m.password else None,
+                                    # pwdmust01: пароль задал владелец в мастере → требуем
+                                    # смену при первом входе сотрудника. Если пароля нет
+                                    # (telegram-only сотрудник) — флаг бесполезен, но
+                                    # ставим True для единообразия (он всё равно не
+                                    # сможет залогиниться без пароля).
+                                    password_must_change=bool(m.password),
                                     role=role_enum,
                                     clinic_id=clinic.id,
                                     phone_number=m.phone,

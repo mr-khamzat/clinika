@@ -19,6 +19,8 @@ import api from '../api'
 import { API_BASE, SLUG } from '../config'
 // Дизайн-система: Card / KpiCard / KpiRow / Chip / EmptyState
 import { Card, KpiCard, KpiRow, Chip, EmptyState } from '../design'
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 // Глава 6: Direct billing — счета пациентам, статистика, PDF
 import ExternalDoctorBillingSection from '../components/doctor/ExternalDoctorBillingSection'
 // Глава 7: Мои регламенты (читатель)
@@ -60,6 +62,16 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
   const [referrals, setReferrals] = useState([])
   const [bonuses, setBonuses] = useState([])
   const [income, setIncome] = useState([])
+  // Личный профиль (avatar01) — открывается по клику на аватарку в шапке
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = api.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
 
   useEffect(() => {
     if (tab === 'referrals' || tab === 'dashboard') {
@@ -84,10 +96,27 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
         style={{ background:'linear-gradient(135deg,#1565C0 0%,#0097A7 100%)' }}>
         <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/5 pointer-events-none" />
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
-            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)' }}>
-            <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
-          </div>
+          {/* Аватар → ProfileModal (avatar01). При отсутствии — иконка stethoscope. */}
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Мой профиль"
+            title="Мой профиль"
+            className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)', cursor:'pointer', padding:0, border:0 }}
+          >
+            {myAvatarSrc ? (
+              <img
+                src={myAvatarSrc}
+                alt={user?.full_name || ''}
+                width={44}
+                height={44}
+                style={{ width:44, height:44, borderRadius:'50%', objectFit:'cover' }}
+              />
+            ) : (
+              <span className="material-symbols-outlined text-white text-2xl" style={{ fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
+            )}
+          </button>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-base truncate">{user?.full_name}</p>
             <p className="text-white/70 text-xs">Врач-партнёр</p>
@@ -250,6 +279,12 @@ export default function PartnerDoctorCabinet({ adminToken, user, onLogout }) {
           ))}
         </div>
       </div>
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
     </div>
   )
 }

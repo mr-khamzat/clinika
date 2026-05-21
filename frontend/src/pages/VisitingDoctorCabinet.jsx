@@ -25,6 +25,8 @@ import { Card, KpiCard, Chip, Button, EmptyState, useToast } from '../design'
 import ExternalDoctorBillingSection from '../components/doctor/ExternalDoctorBillingSection'
 // Глава 7: Мои регламенты (читатель)
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 
 const P  = '#0097A7'
 const D  = '#004D5F'
@@ -243,6 +245,17 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
   // hdr() оставлен для обратной совместимости — больше не нужен (api подкладывает Bearer сам)
   const hdr = useCallback(() => ({}), [])
 
+  // Личный профиль (avatar01)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = api.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
+
   const [tab,      setTab]      = useState('queue')
   const [queue,    setQueue]    = useState([])
   const [history,  setHistory]  = useState([])
@@ -349,10 +362,27 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
         style={{ background:`linear-gradient(135deg,${D} 0%,#006070 100%)` }}>
         <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full bg-white/5 pointer-events-none" />
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
-            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)' }}>
-            <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
-          </div>
+          {/* Аватар → ProfileModal (avatar01). При отсутствии — иконка medical_services. */}
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Мой профиль"
+            title="Мой профиль"
+            className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ background:'rgba(255,255,255,0.18)', backdropFilter:'blur(10px)', cursor:'pointer', padding:0, border:0 }}
+          >
+            {myAvatarSrc ? (
+              <img
+                src={myAvatarSrc}
+                alt={user?.full_name || ''}
+                width={40}
+                height={40}
+                style={{ width:40, height:40, borderRadius:'50%', objectFit:'cover' }}
+              />
+            ) : (
+              <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
+            )}
+          </button>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{user?.full_name}</p>
             <p className="text-white/70 text-xs">Приезжий врач</p>
@@ -547,6 +577,12 @@ export default function VisitingDoctorCabinet({ adminToken, user, onLogout }) {
           ))}
         </div>
       </div>
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
     </div>
   )
 }

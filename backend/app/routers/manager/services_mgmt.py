@@ -229,6 +229,7 @@ async def sync_services_from_mis(
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.mis_client import get_services
+    from app.services.mis_resolver import resolve_mis_creds
     q = select(Clinic).where(Clinic.mis_id.isnot(None))
     if current_user.tenant_id is not None:
         q = q.where(Clinic.tenant_id == current_user.tenant_id)
@@ -241,7 +242,13 @@ async def sync_services_from_mis(
     total_added = total_updated = 0
     details = []
     for clinic in clinics:
-        mis_services = await get_services(clinic.mis_id)
+        # Берём кредениалы по конкретной клинике (fallback на tenant). Раньше
+        # вызов get_services(clinic.mis_id) шёл с глобальным settings.mis_api_key
+        # из .env — все тенанты опрашивали один и тот же МИС.
+        api_url, api_key, _ = await resolve_mis_creds(
+            db, clinic_id=clinic.id, tenant_id=clinic.tenant_id,
+        )
+        mis_services = await get_services(clinic.mis_id, api_url=api_url, api_key=api_key)
         added = updated = 0
         for svc in mis_services:
             mis_svc_id = svc["service_id"]

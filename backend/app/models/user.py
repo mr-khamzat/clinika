@@ -77,6 +77,18 @@ class User(Base):
         nullable=True,
         index=True,
     )
+    # Аватарка сотрудника (миграция avatar01). Хранится относительный URL вида
+    # "/uploads/avatars/<uuid>.<ext>?v=<ts>"; файл лежит в /app/uploads/avatars/.
+    # Загрузка/удаление — через /profile/me/avatar в кабинете сотрудника.
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Флаг «нужна смена пароля» (миграция pwdmust01). Выставляется TRUE во всех
+    # admin-side endpoint-ах создания/сброса пароля сотрудника. Фронт при
+    # любом входе показывает блокирующую модалку <ForcePasswordChangeModal>,
+    # пока сотрудник не сменит пароль через PATCH /profile/me. Сбрасывается
+    # в FALSE автоматически в /profile/me и /password_reset.
+    password_must_change: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     clinic: Mapped["Clinic"] = relationship("Clinic", back_populates="users")

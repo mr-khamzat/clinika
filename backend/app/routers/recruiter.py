@@ -227,6 +227,8 @@ async def register_doctor_direct(
         email=body.email,
         username=body.username,
         password_hash=hash_password(body.password),
+        # pwdmust01: пароль задал рекрутер → требуем смену при первом входе
+        password_must_change=True,
         phone_number=body.phone_number,
         role=UserRole.DOCTOR,
         tenant_id=current_user.tenant_id,
@@ -447,6 +449,8 @@ async def accept_invite(
         recruiter_id=invite.recruiter_id,
         is_active=True,
     )
+    # pwdmust01: invite-flow — врач сам ввёл пароль в форме приглашения, флаг
+    # принудительной смены НЕ ставим (это не admin-side).
     db.add(doctor)
     await db.flush()
 

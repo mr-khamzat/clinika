@@ -422,6 +422,9 @@ async def get_all_presence(
         return {
             "user_id": str(u.id),
             "full_name": u.full_name,
+            # Аватарка из /profile/me/avatar (avatar01). Может быть None →
+            # фронт нарисует инициалы через <Avatar name=... />.
+            "avatar_url": getattr(u, "avatar_url", None),
             "role": u.role,
             "clinic_id": str(c_id) if c_id else None,
             "clinic_name": c_obj.name if c_obj else None,

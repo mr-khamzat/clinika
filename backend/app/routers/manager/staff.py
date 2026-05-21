@@ -84,6 +84,10 @@ async def create_admin(
     new_user = User(
         telegram_id=body.telegram_id or None, username=body.username or None,
         password_hash=hash_password(body.password) if body.password else None,
+        # pwdmust01: руководитель задал пароль → требуем смену при первом входе.
+        # Если пароля нет (telegram-only) — флаг тоже True для единообразия,
+        # но без пароля сотрудник не может залогиниться, так что не критично.
+        password_must_change=bool(body.password),
         full_name=body.full_name, phone_number=body.phone_number,
         date_of_birth=body.date_of_birth, clinic_id=body.clinic_id,
         role=body.role, is_active=True, category=body.category,
@@ -128,7 +132,10 @@ async def update_admin(
     }
     if body.full_name is not None: admin.full_name = body.full_name
     if body.username is not None: admin.username = body.username
-    if body.password: admin.password_hash = hash_password(body.password)
+    if body.password:
+        admin.password_hash = hash_password(body.password)
+        # pwdmust01: руководитель сбросил пароль → требуем смену при следующем входе
+        admin.password_must_change = True
     if "phone_number" in body.model_fields_set: admin.phone_number = body.phone_number
     if body.date_of_birth is not None: admin.date_of_birth = body.date_of_birth
     if body.role is not None: admin.role = body.role
@@ -340,6 +347,8 @@ async def create_staff_universal(
         full_name=body.full_name.strip(),
         username=body.username.strip(),
         password_hash=hash_password(body.password),
+        # pwdmust01: руководитель задал пароль → требуем смену при первом входе
+        password_must_change=True,
         phone_number=body.phone_number,
         email=body.email,
         date_of_birth=body.date_of_birth,

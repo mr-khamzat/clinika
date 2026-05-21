@@ -49,7 +49,12 @@ function initials(name) {
   return parts[0].slice(0, 2).toUpperCase()
 }
 
-function Avatar({ name, id, size = 36, online = false }) {
+function Avatar({ name, id, size = 36, online = false, avatarUrl = null }) {
+  // avatar01: если у пользователя есть avatar_url — рисуем картинку, иначе инициалы.
+  // Относительный URL разворачиваем через API_BASE (см. config.js).
+  const src = avatarUrl
+    ? (avatarUrl.startsWith('http') ? avatarUrl : `${API_BASE}${avatarUrl}`)
+    : null
   return (
     <div
       style={{
@@ -63,10 +68,22 @@ function Avatar({ name, id, size = 36, online = false }) {
         flexShrink: 0,
         position: 'relative',
         userSelect: 'none',
+        overflow: 'hidden',
       }}
       title={name}
     >
-      {initials(name)}
+      {src ? (
+        <img
+          src={src}
+          alt={name || ''}
+          width={size}
+          height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
+      ) : (
+        initials(name)
+      )}
       {online && (
         <span style={{
           position: 'absolute', right: -1, bottom: -1,
@@ -870,7 +887,7 @@ export default function StaffChat() {
                           onClick={() => startDirectChat(u.id)}
                           title={`Открыть чат с ${u.name}`}
                         >
-                          <Avatar name={u.name} id={u.id} size={40} online={onlineUsers.has(u.id)} />
+                          <Avatar name={u.name} id={u.id} size={40} online={onlineUsers.has(u.id)} avatarUrl={u.avatar_url} />
                           <div className="sc-contact-body">
                             <div className="sc-contact-name">{u.name}</div>
                             <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
@@ -940,7 +957,7 @@ export default function StaffChat() {
                   onContextMenu={(e) => { e.preventDefault(); openRoomContextMenu(e, r) }}
                   className={'sc-room' + (isActive ? ' is-active' : '')}
                 >
-                  <Avatar name={r.name} id={peerId || r.id} size={42} online={isOnline} />
+                  <Avatar name={r.name} id={peerId || r.id} size={42} online={isOnline} avatarUrl={r.avatar_url || r.peer_avatar_url} />
                   <div className="sc-room-body">
                     <div className="sc-room-row">
                       <span className="sc-room-name">
@@ -1026,7 +1043,7 @@ export default function StaffChat() {
               onClick={() => setGroupInfoOpen(true)}
               title="Открыть информацию"
             >
-              <Avatar name={activeRoom.name} id={peer?.id || activeRoom.id} size={40} online={peerOnline} />
+              <Avatar name={activeRoom.name} id={peer?.id || activeRoom.id} size={40} online={peerOnline} avatarUrl={peer?.avatar_url || activeRoom.peer_avatar_url || activeRoom.avatar_url} />
               <div className="sc-conv-head-body">
                 <div className="sc-conv-head-name">{activeRoom.name}</div>
                 <div className="sc-conv-head-sub">
@@ -1074,7 +1091,7 @@ export default function StaffChat() {
                   <div key={m.id} data-msg-id={m.id} className={'sc-msg-row' + (mine ? ' is-mine' : '')}>
                     {!mine && (
                       <div className="sc-msg-avatar">
-                        {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} /> : <div style={{ width: 32 }} />}
+                        {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} avatarUrl={sender?.avatar_url} /> : <div style={{ width: 32 }} />}
                       </div>
                     )}
                     <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '') + (m.pinned_at ? ' is-pinned' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
@@ -1538,7 +1555,7 @@ export default function StaffChat() {
                   <div className="sc-contact-group-label">{g.label}</div>
                   {g.users.map((u) => (
                     <button key={u.id} className="sc-contact-row" onClick={() => startDirectChat(u.id)}>
-                      <Avatar name={u.name} id={u.id} size={36} online={onlineUsers.has(u.id)} />
+                      <Avatar name={u.name} id={u.id} size={36} online={onlineUsers.has(u.id)} avatarUrl={u.avatar_url} />
                       <div className="sc-contact-body">
                         <div className="sc-contact-name">{u.name}</div>
                         <div className="sc-contact-meta">
@@ -1577,7 +1594,7 @@ function GroupInfoPanel({ room, members, me, onlineUsers, onClose, onRename, onA
           <div className="sc-info-head-title">{isGroup ? 'Информация о группе' : 'Профиль'}</div>
         </header>
         <div className="sc-info-hero">
-          <Avatar name={room.name} id={peer?.id || room.id} size={104} online={peer ? onlineUsers.has(peer.id) : false} />
+          <Avatar name={room.name} id={peer?.id || room.id} size={104} online={peer ? onlineUsers.has(peer.id) : false} avatarUrl={peer?.avatar_url || room.peer_avatar_url || room.avatar_url} />
           <div className="sc-info-title">{room.name}</div>
           <div className="sc-info-sub">
             {isGroup
@@ -1604,7 +1621,7 @@ function GroupInfoPanel({ room, members, me, onlineUsers, onClose, onRename, onA
             <div className="sc-info-section-title">{members.length} участник(а)</div>
             {members.map((m) => (
               <div key={m.id} className="sc-info-member">
-                <Avatar name={m.name} id={m.id} size={40} online={onlineUsers.has(m.id)} />
+                <Avatar name={m.name} id={m.id} size={40} online={onlineUsers.has(m.id)} avatarUrl={m.avatar_url} />
                 <div className="sc-info-member-body">
                   <div className="sc-info-member-name">{m.name}</div>
                   <div className="sc-info-member-role">
@@ -1761,7 +1778,7 @@ function CreateGroupModal({ broadcast, contacts, onlineUsers, onClose, onSubmit 
                 <label key={u.id} className={'sc-contact-row sc-pick ' + (selected.has(u.id) ? 'is-picked' : '')}
                   onClick={(e) => { if (e.target.tagName !== 'INPUT') toggle(u.id) }}>
                   <input type="checkbox" checked={selected.has(u.id)} readOnly />
-                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} />
+                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} avatarUrl={u.avatar_url} />
                   <div className="sc-contact-body">
                     <div className="sc-contact-name">{u.name}</div>
                     <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>
@@ -1815,7 +1832,7 @@ function AddMembersModal({ room, members, contacts, onlineUsers, onClose, onSubm
                 <label key={u.id} className={'sc-contact-row sc-pick ' + (selected.has(u.id) ? 'is-picked' : '')}
                   onClick={(e) => { if (e.target.tagName !== 'INPUT') toggle(u.id) }}>
                   <input type="checkbox" checked={selected.has(u.id)} readOnly />
-                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} />
+                  <Avatar name={u.name} id={u.id} size={32} online={onlineUsers.has(u.id)} avatarUrl={u.avatar_url} />
                   <div className="sc-contact-body">
                     <div className="sc-contact-name">{u.name}</div>
                     <div className="sc-contact-role">{ROLE_LABELS[u.role] || u.role}</div>

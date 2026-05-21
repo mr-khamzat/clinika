@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.clinic import Clinic
 from app.models.clinic_schedule import ClinicSchedule
 from app.models.service import Service
+from app.models.tenant import Tenant
 from app.schemas.clinic import ClinicResponse
 from app.core.deps import get_current_user, require_reports_access
 from app.core.region_lock import enforce_region_lock
@@ -16,17 +17,58 @@ from pydantic import BaseModel
 router = APIRouter(prefix="/clinics", tags=["clinics"])
 
 
-@router.get("/", response_model=list[ClinicResponse])
+async def _franchise_tenant_ids(user: User, db: AsyncSession) -> set[uuid.UUID]:
+    """Множество tenant_id, доступных пользователю.
+
+    Если у тенанта пользователя задан franchise_id — возвращаем все tenant_id
+    франшизы (для cross-clinic направлений между клиниками одной сети).
+    Иначе — только свой tenant_id (классическая изоляция).
+    """
+    if user.tenant_id is None:
+        return set()
+    own_tenant = await db.get(Tenant, user.tenant_id)
+    if not own_tenant or not own_tenant.franchise_id:
+        return {user.tenant_id}
+    rows = (await db.execute(
+        select(Tenant.id).where(Tenant.franchise_id == own_tenant.franchise_id)
+    )).all()
+    ids = {r[0] for r in rows}
+    ids.add(user.tenant_id)
+    return ids
+
+
+@router.get("/")
 async def list_clinics(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Tenant isolation: фильтруем по tenant_id текущего пользователя
-    q = select(Clinic).where(Clinic.is_active == True)
+    """Список клиник для текущего пользователя.
+
+    Включает все клиники тенантов той же франшизы, чтобы регистратор/менеджер
+    одной клиники мог создать направление в другую клинику сети.
+    """
+    q = select(Clinic, Tenant).join(Tenant, Tenant.id == Clinic.tenant_id, isouter=True).where(Clinic.is_active == True)
     if current_user.tenant_id is not None:
-        q = q.where(Clinic.tenant_id == current_user.tenant_id)
-    result = await db.execute(q)
-    return result.scalars().all()
+        allowed = await _franchise_tenant_ids(current_user, db)
+        if allowed:
+            q = q.where(Clinic.tenant_id.in_(allowed))
+    rows = (await db.execute(q)).all()
+    return [
+        {
+            "id": str(c.id),
+            "name": c.name,
+            "address": c.address,
+            "phone": c.phone,
+            "is_active": c.is_active,
+            "mis_id": c.mis_id,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "tenant_id": str(c.tenant_id) if c.tenant_id else None,
+            "tenant_name": (t.name if t else None),
+            "tenant_slug": (t.slug if t else None),
+            "is_own_tenant": (c.tenant_id == current_user.tenant_id) if current_user.tenant_id else True,
+        }
+        for c, t in rows
+    ]
 
 
 @router.get("/{clinic_id}/services")
@@ -37,13 +79,16 @@ async def get_clinic_services(
 ):
     """
     Услуги клиники для формы создания направления.
-    Фильтр: is_active=True AND visible_for_referrals=True
-    (раньше — bonus_amount>0, что мешало показывать услуги без бонуса).
+    Фильтр: is_active=True AND visible_for_referrals=True.
+    Доступ: своя клиника или клиника другой клиники той же франшизы.
     """
-    # Tenant isolation: проверяем что клиника принадлежит тенанту пользователя
     clinic_obj = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
-    if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
+    if not clinic_obj:
         raise HTTPException(status_code=404, detail="Клиника не найдена")
+    if current_user.tenant_id is not None:
+        allowed = await _franchise_tenant_ids(current_user, db)
+        if allowed and clinic_obj.tenant_id not in allowed:
+            raise HTTPException(status_code=404, detail="Клиника не найдена")
     result = await db.execute(
         select(Service).where(
             Service.clinic_id == clinic_id,
@@ -79,10 +124,13 @@ async def get_clinic_schedule(
     db: AsyncSession = Depends(get_db)
 ):
     """Возвращает расписание клиники (7 дней). Отсутствующие дни — выходные."""
-    # Tenant isolation
     clinic_obj = (await db.execute(select(Clinic).where(Clinic.id == clinic_id))).scalar_one_or_none()
-    if not clinic_obj or (current_user.tenant_id is not None and clinic_obj.tenant_id != current_user.tenant_id):
+    if not clinic_obj:
         raise HTTPException(status_code=404, detail="Клиника не найдена")
+    if current_user.tenant_id is not None:
+        allowed = await _franchise_tenant_ids(current_user, db)
+        if allowed and clinic_obj.tenant_id not in allowed:
+            raise HTTPException(status_code=404, detail="Клиника не найдена")
     result = await db.execute(
         select(ClinicSchedule)
         .where(ClinicSchedule.clinic_id == clinic_id)

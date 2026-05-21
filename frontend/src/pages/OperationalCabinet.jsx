@@ -42,6 +42,8 @@ import useRegHotkeys from '../hooks/useRegHotkeys'
 const RegulationsReaderSection = lazy(() => import('../sections/RegulationsReaderSection'))
 // ─── Глава 9: Чат с пациентами (премиум-чат клиники) ───
 const ClinicChatSection = lazy(() => import('../sections/ClinicChatSection'))
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 
 // LocalStorage-ключ «последнее напечатанное направление» — для Alt+P и Quick-bar «Печать»
 const LAST_PRINT_KEY = 'reg_last_print_ref'
@@ -92,8 +94,20 @@ function Icon({ name, size = 20, fill = 1, className = '', style = {} }) {
 export default function OperationalCabinet({ adminToken, user, onLogout }) {
   // Замена alert на Toast
   const { toast } = useToast()
+  // ─── Личный профиль (avatar01) ───
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    apiClient.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = apiClient.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
   // ─── Текущая вкладка и UI-состояние ───
   const [tab, setTab] = useState('dashboard')
+  // ─── Под-режим чата: 'patients' (с пациентами) | 'staff' (с клиникой через iframe /staff-chat) ───
+  const [chatMode, setChatMode] = useState('patients')
   const [stats, setStats] = useState(null)
   const [referrals, setReferrals] = useState([])
   const [bonuses, setBonuses] = useState([])
@@ -153,6 +167,15 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
   const [quickPatientOpen, setQuickPatientOpen] = useState(false)
   const [referralListFilter, setReferralListFilter] = useState('') // строка поиска в направлениях
   const referralSearchRef = useRef(null)
+
+  // ─── Все записи (tab='appointments'): полный список как у руководителя/доктора ───
+  const [appointments, setAppointments] = useState([])
+  const [appointmentsLoading, setAppointmentsLoading] = useState(false)
+  const [doctorsAll, setDoctorsAll] = useState([])              // справочник врачей тенанта для имени
+  const [apptDateFilter, setApptDateFilter] = useState('today') // today|week|all
+  const [apptClinicFilter, setApptClinicFilter] = useState('')  // clinic_id | ''
+  const [apptStatusFilter, setApptStatusFilter] = useState('all') // all|pending|confirmed|completed|cancelled|in_progress|no_show
+  const [apptSearch, setApptSearch] = useState('')              // фильтр по пациенту/телефону
   const [lastPrintRefId, setLastPrintRefId] = useState(() => {
     try { return localStorage.getItem(LAST_PRINT_KEY) || '' } catch { return '' }
   })
@@ -161,11 +184,12 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
 
   useEffect(() => { loadStats(); loadClinics(); loadServices() }, [])
   useEffect(() => {
-    if (tab === 'referrals') loadReferrals()
-    if (tab === 'bonuses')   loadBonuses()
-    if (tab === 'doctors')   loadDoctors()
-    if (tab === 'visiting')  loadVisiting()
-  }, [tab])
+    if (tab === 'referrals')    loadReferrals()
+    if (tab === 'bonuses')      loadBonuses()
+    if (tab === 'doctors')      loadDoctors()
+    if (tab === 'visiting')     loadVisiting()
+    if (tab === 'appointments') loadAppointments()
+  }, [tab, apptDateFilter, apptClinicFilter, apptStatusFilter])
 
   // ─── Загрузка внешних врачей (только справочно) ───
   async function loadDoctors() {
@@ -193,6 +217,39 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
       setVisitingApts(Array.isArray(aptRes.data) ? aptRes.data : [])
     } catch {}
     setVisitingAptLoading(false)
+  }
+
+  // ─── Все записи: список приёмов тенанта (как у руководителя/доктора) ───
+  async function loadAppointments() {
+    setAppointmentsLoading(true)
+    try {
+      // Параметры фильтра (даты/клиника/статус)
+      const params = {}
+      const today = new Date()
+      const iso = d => d.toISOString().slice(0, 10)
+      if (apptDateFilter === 'today') {
+        params.appointment_date = iso(today)
+      } else if (apptDateFilter === 'week') {
+        const wkStart = new Date(today); wkStart.setDate(today.getDate() - 6)
+        const wkEnd   = new Date(today); wkEnd.setDate(today.getDate() + 7)
+        params.from_date = iso(wkStart)
+        params.to_date   = iso(wkEnd)
+      }
+      if (apptClinicFilter) params.clinic_id = apptClinicFilter
+      if (apptStatusFilter && apptStatusFilter !== 'all') params.status = apptStatusFilter
+
+      // Параллельно: записи + справочник врачей (для отображения имён)
+      const [apRes, docRes] = await Promise.all([
+        a.get('/appointments', params).catch(() => ({ data:[] })),
+        // /doctors уже мог быть загружен через loadDoctorsForClinic, но нам нужен общий список
+        a.get('/doctors').catch(() => ({ data:[] })),
+      ])
+      setAppointments(Array.isArray(apRes.data) ? apRes.data : [])
+      setDoctorsAll(Array.isArray(docRes.data) ? docRes.data : [])
+    } catch {
+      setAppointments([])
+    }
+    setAppointmentsLoading(false)
   }
 
   async function saveBookVisit(e) {
@@ -383,12 +440,13 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
     { key:'chat',        label:'Чат пациентов', icon:'forum' },
   ]
 
-  // ─── Bottom nav (для reg есть «Запись», для nurse — Приезжие) ───
+  // ─── Bottom nav (для reg есть «Запись» + «Все записи», для nurse — Приезжие) ───
   const navItems = isReg ? [
-    { key:'dashboard', label:'Главная',     icon:'dashboard'   },
-    { key:'create',    label:'Создать',     icon:'add_circle'  },
-    { key:'referrals', label:'Направления', icon:'list_alt'    },
-    { key:'visiting',  label:'Запись',      icon:'event_available' },
+    { key:'dashboard',    label:'Главная',     icon:'dashboard'        },
+    { key:'create',       label:'Создать',     icon:'add_circle'       },
+    { key:'referrals',    label:'Направления', icon:'list_alt'         },
+    { key:'appointments', label:'Все записи',  icon:'event_note'       },
+    { key:'visiting',     label:'Запись',      icon:'event_available'  },
   ] : [
     { key:'dashboard', label:'Главная',     icon:'dashboard'   },
     { key:'create',    label:'Создать',     icon:'add_circle'  },
@@ -605,17 +663,35 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
       {/* ─── Hero / Topbar ─── */}
       <div className="ks-hero px-4 pt-12 pb-6 sm:px-6">
         <div className="flex items-center gap-3 max-w-3xl mx-auto">
-          <div
+          {/* Клик по аватарке открывает ProfileModal (avatar01).
+              Если аватарки нет — <Avatar> рисует инициалы по name. */}
+          <button
+            type="button"
+            onClick={() => setProfileOpen(true)}
+            aria-label="Мой профиль"
+            title="Мой профиль"
             className="grid place-items-center rounded-2xl"
             style={{
               width: 48, height: 48,
               background: 'oklch(1 0 0 / 0.14)',
               border: '1px solid oklch(1 0 0 / 0.20)',
               backdropFilter: 'blur(10px)',
+              cursor: 'pointer',
+              padding: 0,
             }}
           >
-            <Icon name={roleIcon} size={22} />
-          </div>
+            {myAvatarSrc ? (
+              <img
+                src={myAvatarSrc}
+                alt={user.full_name || ''}
+                width={44}
+                height={44}
+                style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover' }}
+              />
+            ) : (
+              <Icon name={roleIcon} size={22} />
+            )}
+          </button>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <p className="font-semibold text-[15px] truncate">{user.full_name || 'Кабинет'}</p>
@@ -1635,6 +1711,244 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           </div>
         )}
 
+        {/* ───── ВСЕ ЗАПИСИ (полная таблица как у руководителя/доктора) ───── */}
+        {tab === 'appointments' && (
+          <div className="space-y-4">
+            {/* Фильтры */}
+            <Card>
+              <Card.Header>
+                <div>
+                  <Card.Title>Все записи</Card.Title>
+                  <Card.Subtitle>Запись пациентов к врачам — общий журнал клиники</Card.Subtitle>
+                </div>
+                <Chip variant="default">{appointments.length}</Chip>
+              </Card.Header>
+
+              <div className="grid gap-3" style={{ gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                {/* Дата */}
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color:'var(--fg-3)' }}>
+                    Период
+                  </div>
+                  <Tabs
+                    items={[
+                      { id:'today', label:'Сегодня' },
+                      { id:'week',  label:'Неделя'  },
+                      { id:'all',   label:'Все'     },
+                    ]}
+                    value={apptDateFilter}
+                    onChange={setApptDateFilter}
+                  />
+                </div>
+
+                {/* Клиника */}
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color:'var(--fg-3)' }}>
+                    Клиника
+                  </div>
+                  <select
+                    className="w-full px-3 py-2 rounded-xl text-[13.5px]"
+                    style={{
+                      background:'var(--bg-1)',
+                      border:'1px solid var(--border)',
+                      color:'var(--fg)',
+                      minHeight:40,
+                    }}
+                    value={apptClinicFilter}
+                    onChange={e => setApptClinicFilter(e.target.value)}
+                  >
+                    <option value="">Все клиники</option>
+                    {clinics.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Статус */}
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color:'var(--fg-3)' }}>
+                    Статус
+                  </div>
+                  <select
+                    className="w-full px-3 py-2 rounded-xl text-[13.5px]"
+                    style={{
+                      background:'var(--bg-1)',
+                      border:'1px solid var(--border)',
+                      color:'var(--fg)',
+                      minHeight:40,
+                    }}
+                    value={apptStatusFilter}
+                    onChange={e => setApptStatusFilter(e.target.value)}
+                  >
+                    <option value="all">Все статусы</option>
+                    <option value="pending">Ожидает</option>
+                    <option value="confirmed">Подтверждено</option>
+                    <option value="in_progress">На приёме</option>
+                    <option value="completed">Завершено</option>
+                    <option value="cancelled">Отменено</option>
+                    <option value="no_show">Не пришёл</option>
+                  </select>
+                </div>
+
+                {/* Поиск */}
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color:'var(--fg-3)' }}>
+                    Поиск
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Имя или телефон"
+                    value={apptSearch}
+                    onChange={e => setApptSearch(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-[13.5px]"
+                    style={{
+                      background:'var(--bg-1)',
+                      border:'1px solid var(--border)',
+                      color:'var(--fg)',
+                      minHeight:40,
+                    }}
+                  />
+                </div>
+              </div>
+            </Card>
+
+            {/* Таблица записей */}
+            {appointmentsLoading ? (
+              <div className="space-y-3">
+                {[1,2,3,4].map(i => <div key={i} className="ks-skeleton h-[64px]" />)}
+              </div>
+            ) : (() => {
+              // Локальный фильтр по поиску
+              const q = apptSearch.trim().toLowerCase()
+              const filtered = q
+                ? appointments.filter(a =>
+                    (a.patient_name || '').toLowerCase().includes(q) ||
+                    (a.patient_phone || '').toLowerCase().includes(q))
+                : appointments
+
+              if (filtered.length === 0) {
+                return (
+                  <Card>
+                    <EmptyState
+                      icon={<Icon name="event_busy" size={28} />}
+                      title="Нет записей"
+                      message={q
+                        ? 'Ничего не найдено по запросу — измените фильтры'
+                        : 'По выбранным фильтрам записей нет'}
+                    />
+                  </Card>
+                )
+              }
+
+              // helper: имя врача и клиники по id
+              const docName = id => {
+                const d = doctorsAll.find(x => x.id === id)
+                return d ? d.full_name : '—'
+              }
+              const clinicName = id => {
+                const c = clinics.find(x => x.id === id)
+                return c ? c.name : '—'
+              }
+              const statusChipApt = s => {
+                if (s === 'completed')   return <Chip variant="good"    dot>Завершено</Chip>
+                if (s === 'confirmed')   return <Chip variant="accent"  dot>Подтверждено</Chip>
+                if (s === 'in_progress') return <Chip variant="accent"  dot>На приёме</Chip>
+                if (s === 'pending')     return <Chip variant="warn"    dot>Ожидает</Chip>
+                if (s === 'cancelled')   return <Chip variant="bad"     dot>Отменено</Chip>
+                if (s === 'no_show')     return <Chip variant="bad"     dot>Не пришёл</Chip>
+                return <Chip variant="default" dot>{s || '—'}</Chip>
+              }
+
+              return (
+                <>
+                  {/* Десктоп-таблица */}
+                  <Card className="hidden md:block">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[13px]" style={{ borderCollapse:'collapse' }}>
+                        <thead>
+                          <tr style={{ borderBottom:'1px solid var(--border)' }}>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Дата</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Время</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Пациент</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Телефон</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Врач</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Услуга</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Клиника</th>
+                            <th className="text-left py-2 px-3 font-semibold" style={{ color:'var(--fg-3)' }}>Статус</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map(apt => (
+                            <tr
+                              key={apt.id}
+                              style={{ borderBottom:'1px solid var(--border)', cursor:'pointer' }}
+                              className="hover:bg-[var(--bg-1)]"
+                              onClick={() => toast(
+                                `${apt.appointment_date} ${apt.start_time}–${apt.end_time} · ${apt.patient_name || apt.patient_phone} · ${docName(apt.doctor_id)} · ${clinicName(apt.clinic_id)}`,
+                                'info', 5000
+                              )}
+                            >
+                              <td className="py-2 px-3 tabular-nums" style={{ color:'var(--fg)' }}>{fmtDate(apt.appointment_date)}</td>
+                              <td className="py-2 px-3 tabular-nums" style={{ color:'var(--fg)' }}>{apt.start_time}–{apt.end_time}</td>
+                              <td className="py-2 px-3 font-medium" style={{ color:'var(--fg)' }}>{apt.patient_name || '—'}</td>
+                              <td className="py-2 px-3 tabular-nums" style={{ color:'var(--fg-2)' }}>{apt.patient_phone || '—'}</td>
+                              <td className="py-2 px-3" style={{ color:'var(--fg-2)' }}>{docName(apt.doctor_id)}</td>
+                              <td className="py-2 px-3" style={{ color:'var(--fg-3)' }}>{apt.notes || '—'}</td>
+                              <td className="py-2 px-3" style={{ color:'var(--fg-2)' }}>{clinicName(apt.clinic_id)}</td>
+                              <td className="py-2 px-3">{statusChipApt(apt.status)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+
+                  {/* Мобильные карточки */}
+                  <div className="space-y-2 md:hidden">
+                    {filtered.map(apt => (
+                      <div
+                        key={apt.id}
+                        className="ks-row"
+                        onClick={() => toast(
+                          `${apt.appointment_date} ${apt.start_time}–${apt.end_time} · ${apt.patient_name || apt.patient_phone} · ${docName(apt.doctor_id)} · ${clinicName(apt.clinic_id)}`,
+                          'info', 5000
+                        )}
+                        style={{ cursor:'pointer' }}
+                      >
+                        <div
+                          className="grid place-items-center rounded-xl flex-shrink-0"
+                          style={{
+                            width: 56, height: 56,
+                            background: 'var(--accent-soft)',
+                            color: 'var(--accent)',
+                          }}
+                        >
+                          <div className="text-[15px] font-bold tabular-nums leading-none">{apt.start_time}</div>
+                          <div className="text-[10px] font-semibold mt-0.5">{(apt.appointment_date || '').slice(5)}</div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[13.5px] font-semibold truncate" style={{ color:'var(--fg)' }}>
+                            {apt.patient_name || apt.patient_phone}
+                          </div>
+                          <div className="text-[11.5px] truncate" style={{ color:'var(--fg-3)' }}>
+                            {docName(apt.doctor_id)} · {clinicName(apt.clinic_id)}
+                          </div>
+                          {apt.notes && (
+                            <div className="text-[11px] truncate" style={{ color:'var(--fg-3)' }}>
+                              {apt.notes}
+                            </div>
+                          )}
+                        </div>
+                        {statusChipApt(apt.status)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            })()}
+          </div>
+        )}
+
         {/* ───── БОНУСЫ ───── */}
         {tab === 'bonuses' && (
           <div className="space-y-4">
@@ -1763,11 +2077,68 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
           </Suspense>
         )}
 
-        {/* Глава 9: Чат с пациентами (премиум-чат клиники) */}
+        {/* Глава 9: Чат — переключатель «С пациентами» / «С клиникой».
+            Внутренний чат сотрудников встраивается через iframe из /staff-chat,
+            чтобы не дублировать логику StaffChat и не трогать ClinicChatSection. */}
         {tab === 'chat' && (
-          <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
-            <ClinicChatSection role={user?.role || 'reg'} />
-          </Suspense>
+          <>
+            <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setChatMode('patients')}
+                style={{
+                  padding: '8px 14px', minHeight: 36, borderRadius: 8,
+                  fontSize: 13, fontWeight: chatMode === 'patients' ? 600 : 500,
+                  background: chatMode === 'patients' ? 'var(--accent-soft)' : 'transparent',
+                  color: chatMode === 'patients' ? 'var(--accent)' : 'var(--fg-2)',
+                  border: '1px solid ' + (chatMode === 'patients' ? 'var(--accent-soft)' : 'var(--border)'),
+                  cursor: 'pointer',
+                }}
+              >С пациентами</button>
+              <button
+                type="button"
+                onClick={() => setChatMode('staff')}
+                style={{
+                  padding: '8px 14px', minHeight: 36, borderRadius: 8,
+                  fontSize: 13, fontWeight: chatMode === 'staff' ? 600 : 500,
+                  background: chatMode === 'staff' ? 'var(--accent-soft)' : 'transparent',
+                  color: chatMode === 'staff' ? 'var(--accent)' : 'var(--fg-2)',
+                  border: '1px solid ' + (chatMode === 'staff' ? 'var(--accent-soft)' : 'var(--border)'),
+                  cursor: 'pointer',
+                }}
+              >С клиникой</button>
+            </div>
+            {chatMode === 'patients' ? (
+              <Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--fg-3)' }}>Загрузка…</div>}>
+                <ClinicChatSection role={user?.role || 'reg'} />
+              </Suspense>
+            ) : (
+              <iframe
+                /* Передаём токен явно через hash — иначе iframe (с пустым SLUG) читает
+                   stale-токен от прошлой сессии и показывает чужие чаты. */
+                src={'/staff-chat#access_token=' + encodeURIComponent(
+                  localStorage.getItem('clinika_admin_token_' + SLUG)
+                  || localStorage.getItem('clinika_token_' + SLUG)
+                  || ''
+                ) + (localStorage.getItem('clinika_admin_refresh_token_' + SLUG)
+                    || localStorage.getItem('clinika_refresh_token_' + SLUG)
+                    ? '&refresh_token=' + encodeURIComponent(
+                        localStorage.getItem('clinika_admin_refresh_token_' + SLUG)
+                        || localStorage.getItem('clinika_refresh_token_' + SLUG)
+                      )
+                    : '')}
+                title="Чат с клиникой"
+                style={{
+                  width: '100%',
+                  height: 'calc(100vh - 220px)',
+                  minHeight: 480,
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  background: 'var(--bg-1, #f8fafc)',
+                }}
+              />
+            )}
+          </>
         )}
 
       </div>
@@ -2228,6 +2599,12 @@ ${code ? `<div class="code">${code}</div>` : ''}
           smsModuleEnabled={false}
         />
       )}
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
     </Page>
   )
 }

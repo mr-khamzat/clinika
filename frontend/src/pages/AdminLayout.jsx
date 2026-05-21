@@ -92,6 +92,8 @@ import {
   useToast,
   useConfirm,
 } from '../design'
+// Личный профиль сотрудника (avatar01)
+import ProfileModal from '../components/ProfileModal'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -7980,6 +7982,16 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
   const { isDark: dark, toggle: toggleDark } = useTheme()
   // const [helpOpen, setHelpOpen]   = useState(false) // ушло на /wiki
   const [branding, setBranding]   = useState(null)
+  // Личный профиль (avatar01) — открывается из шапки/сайдбара
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [myProfile, setMyProfile] = useState(null)
+  useEffect(() => {
+    api.get('/profile/me').then((r) => setMyProfile(r.data)).catch(() => {})
+  }, [])
+  const _apiBase = api.defaults.baseURL || ''
+  const myAvatarSrc = myProfile?.avatar_url
+    ? (myProfile.avatar_url.startsWith('http') ? myProfile.avatar_url : `${_apiBase}${myProfile.avatar_url}`)
+    : null
 
   // ── Sidebar: expanded (≥1024px) → collapsed (641-1023px) → mobile (≤640px) ─
   // Mobile-first (W3): на ≤640 sidebar открывается drawer'ом, иконки 44×44
@@ -8398,11 +8410,15 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           background: 'var(--bg-1)',
         }}
       >
-        <div
-          className="flex items-center gap-2.5"
-          style={{ padding: sidebarCollapsed ? '6px 0' : '8px' }}
+        <button
+          type="button"
+          onClick={() => setProfileOpen(true)}
+          aria-label="Мой профиль"
+          title="Мой профиль"
+          className="flex items-center gap-2.5 text-left"
+          style={{ padding: sidebarCollapsed ? '6px 0' : '8px', background:'transparent', border:0, cursor:'pointer', width:'100%' }}
         >
-          <DSAvatar name={userName} size="md" />
+          <DSAvatar src={myAvatarSrc} name={userName} size="md" />
           {!sidebarCollapsed && (
             <div className="flex-1 min-w-0">
               <div className="font-semibold truncate" style={{ fontSize: 12.5, color: 'var(--fg)' }}>
@@ -8413,7 +8429,7 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               </div>
             </div>
           )}
-        </div>
+        </button>
         {!sidebarCollapsed && (
           <div className="flex gap-1 mt-2">
             <button
@@ -8663,17 +8679,33 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
               <span className="material-symbols-outlined" style={{ fontSize: 19 }}>logout</span>
             </button>
 
-            {/* Аватар + имя (только sm+) */}
+            {/* Аватар + имя (только sm+) — клик по аватару открывает ProfileModal */}
             <div className="hidden md:flex items-center gap-2.5 flex-shrink-0 pl-1">
               <div className="text-right">
                 <div className="font-semibold leading-tight" style={{ fontSize: 13, color: 'var(--fg)' }}>{userName}</div>
                 <div style={{ fontSize: 11, color: 'var(--fg-4)' }}>{roleLabel}</div>
               </div>
-              <DSAvatar name={userName} size="md" />
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                aria-label="Мой профиль"
+                title="Мой профиль"
+                style={{ background:'transparent', border:0, padding:0, cursor:'pointer' }}
+              >
+                <DSAvatar src={myAvatarSrc} name={userName} size="md" />
+              </button>
             </div>
             {/* Аватар (mobile) */}
             <div className="md:hidden flex-shrink-0">
-              <DSAvatar name={userName} size="sm" />
+              <button
+                type="button"
+                onClick={() => setProfileOpen(true)}
+                aria-label="Мой профиль"
+                title="Мой профиль"
+                style={{ background:'transparent', border:0, padding:0, cursor:'pointer' }}
+              >
+                <DSAvatar src={myAvatarSrc} name={userName} size="sm" />
+              </button>
             </div>
           </header>
 
@@ -8878,6 +8910,13 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
           определяет, есть ли BrowserRouter (useInRouterContext) и в /admin
           (вне Router'а) использует window.location.assign вместо useNavigate. */}
       <CommandPalette />
+
+      {/* Личный профиль сотрудника (avatar01) */}
+      <ProfileModal
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        onSaved={(p) => setMyProfile(p)}
+      />
 
       {/* ─── inline keyframes для drawer ─── */}
       <style>{`

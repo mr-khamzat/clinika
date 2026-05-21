@@ -73,7 +73,7 @@ def _strip_marker(text: str) -> str:
 async def chat_completion(
     messages: list[dict],
     system: str,
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-2.5-flash",
     max_tokens: int = 600,
 ) -> dict:
     """Вызов Gemini API.

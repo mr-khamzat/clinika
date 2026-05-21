@@ -153,6 +153,8 @@ async def invite_external_doctor(
         full_name=body.full_name,
         username=body.username,
         password_hash=hash_password(body.password),
+        # pwdmust01: пароль задал админ → требуем смену при первом входе
+        password_must_change=True,
         phone_number=body.phone_number,
         email=body.email,
         specialization=body.specialization,
@@ -276,6 +278,8 @@ async def invite_acquisition_manager(
         full_name=body.full_name,
         username=body.username,
         password_hash=hash_password(body.password),
+        # pwdmust01: пароль задал админ → требуем смену при первом входе
+        password_must_change=True,
         phone_number=body.phone_number,
         email=body.email,
         role=role,

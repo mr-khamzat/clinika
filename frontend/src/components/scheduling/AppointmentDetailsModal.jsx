@@ -14,6 +14,13 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import api from '../../api'
 import { Modal, Button, Tabs, Chip, Avatar } from '../../design'
+import useAuthStore from '../../store/auth'
+
+// ── Роли с правом «удалить запись / перенести / отменить направление» ──────
+// manager      — системный администратор клиники
+// franchise_owner — владелец франшизы
+// super_admin  — платформа
+const MANAGER_LIKE_ROLES = new Set(['manager', 'franchise_owner', 'super_admin'])
 
 // ── Метаданные target_type для направлений ─────────────────────────────────
 const TARGET_TYPES = [
@@ -75,8 +82,33 @@ export default function AppointmentDetailsModal({ ctx, onClose, onChanged }) {
   const [localStatus, setLocalStatus] = useState(appt.status || 'pending')
   const [localPriority, setLocalPriority] = useState(appt.priority || 'normal')
   const [busy, setBusy] = useState(null)
+  // ── Менеджерские действия (Перенести / Удалить) ──────────────────────────
+  // Видны только manager/franchise_owner/super_admin (см. MANAGER_LIKE_ROLES).
+  // На backend это дополнительно проверяется через require_manager.
+  const authUser = useAuthStore(s => s.user)
+  const canManage = !!(authUser && MANAGER_LIKE_ROLES.has(authUser.role))
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   if (!apptId) return null
+
+  // ── Удалить (мягкое удаление — статус cancelled) ─────────────────────────
+  async function handleDelete() {
+    const who = appt.patient_name || appt.patient_phone || 'без имени'
+    if (!window.confirm(`Удалить запись пациента «${who}»?\nЭто действие будет записано в журнал аудита.`)) {
+      return
+    }
+    setDeleting(true)
+    try {
+      await api.delete(`/appointments/${apptId}`)
+      if (onChanged) onChanged()
+      onClose && onClose()
+    } catch (e) {
+      window.alert('Не удалось удалить: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   async function changeStatus(s) {
     if (busy || s === localStatus) return
@@ -136,6 +168,51 @@ export default function AppointmentDetailsModal({ ctx, onClose, onChanged }) {
         />
       </div>
 
+      {/* ─── Менеджерские действия: Перенести / Удалить ─────────────────────
+           Видны только для системного администратора / владельца франшизы /
+           super_admin. Не дублируют статус (отмена пациентом — это статус
+           cancelled через тогглы выше), а решают сценарий «ошибочная запись
+           — нужно физически удалить или перенести к другому врачу/дате». */}
+      {canManage && (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-2"
+          style={{
+            background: 'var(--bg-1)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 10,
+          }}
+        >
+          <span
+            className="text-[11px] uppercase font-bold tracking-wide"
+            style={{ color: 'var(--fg-3)', minWidth: 70 }}
+          >
+            Управление
+          </span>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setMoveOpen(true)}
+            disabled={deleting}
+            leftIcon={<span className="material-symbols-outlined" style={{ fontSize: 18 }}>swap_horiz</span>}
+          >
+            Перенести
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={handleDelete}
+            disabled={deleting}
+            leftIcon={<span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>}
+          >
+            {deleting ? 'Удаляю…' : 'Удалить'}
+          </Button>
+          <span className="text-[11px]" style={{ color: 'var(--fg-3)', marginLeft: 'auto' }}>
+            Действия логируются в журнал аудита
+          </span>
+        </div>
+      )}
+
       {/* Toggle статуса и приоритета — всегда виден на всех вкладках */}
       <div className="mb-3 flex flex-col gap-2" style={{ background: 'var(--bg-1)', border: '1px solid var(--border)', borderRadius: 12, padding: 10 }}>
         <div className="flex flex-wrap gap-2 items-center">
@@ -166,8 +243,249 @@ export default function AppointmentDetailsModal({ ctx, onClose, onChanged }) {
 
       {tab === 'outcome'     && <OutcomeTab     apptId={apptId} onChanged={onChanged} />}
       {tab === 'attachments' && <AttachmentsTab apptId={apptId} onChanged={onChanged} />}
-      {tab === 'referrals'   && <ReferralsTab   apptId={apptId} appt={appt} onChanged={onChanged} />}
+      {tab === 'referrals'   && <ReferralsTab   apptId={apptId} appt={appt} canManage={canManage} onChanged={onChanged} />}
       {tab === 'history'     && <HistoryTab     phone={appt.patient_phone} />}
+
+      {/* Модалка переноса записи — отдельная модалка поверх (z-index управляется
+          компонентом Modal). Закрывается на успех/отмену. */}
+      {moveOpen && (
+        <MoveAppointmentModal
+          appt={appt}
+          ctxDate={ctx?.date}
+          ctxTime={ctx?.start_time}
+          onClose={() => setMoveOpen(false)}
+          onMoved={() => {
+            setMoveOpen(false)
+            if (onChanged) onChanged()
+            // Закроем основную модалку — данные приёма (дата/время/врач) могли поменяться.
+            onClose && onClose()
+          }}
+        />
+      )}
+    </Modal>
+  )
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// БЛОК: MoveAppointmentModal — перенос записи на другую дату/время/врача.
+// Только для manager/franchise_owner/super_admin. Backend гарантирует доступ
+// дополнительно. На UI кнопка-триггер уже спрятана под canManage.
+// ─────────────────────────────────────────────────────────────────────────
+
+function MoveAppointmentModal({ appt, ctxDate, ctxTime, onClose, onMoved }) {
+  // Текущие значения как стартовая точка
+  const initDate = (() => {
+    if (ctxDate) {
+      try { return new Date(ctxDate).toISOString().slice(0, 10) } catch { /* fallthrough */ }
+    }
+    if (appt?.appointment_date) {
+      try { return new Date(appt.appointment_date).toISOString().slice(0, 10) } catch { /* fallthrough */ }
+    }
+    return new Date().toISOString().slice(0, 10)
+  })()
+  const initTime = (ctxTime || appt?.start_time || '').slice(0, 5)
+
+  const [newDate, setNewDate] = useState(initDate)
+  const [newTime, setNewTime] = useState(initTime)
+  const [newDoctorId, setNewDoctorId] = useState(appt?.doctor_id || '')
+  const [doctors, setDoctors] = useState([])
+  const [doctorsLoading, setDoctorsLoading] = useState(true)
+  // Свободные слоты выбранного врача на выбранную дату — для подсказки
+  const [freeSlots, setFreeSlots] = useState([])
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [err, setErr] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  // Загрузка списка врачей тенанта
+  useEffect(() => {
+    let alive = true
+    setDoctorsLoading(true)
+    api.get('/doctors')
+      .then(r => { if (alive) setDoctors(r.data || []) })
+      .catch(() => { if (alive) setDoctors([]) })
+      .finally(() => { if (alive) setDoctorsLoading(false) })
+    return () => { alive = false }
+  }, [])
+
+  // Подгружаем расписание выбранного врача на неделю выбранной даты,
+  // чтобы предложить свободные слоты в этот день.
+  useEffect(() => {
+    if (!newDoctorId || !newDate) { setFreeSlots([]); return }
+    // Понедельник недели newDate
+    const d = new Date(newDate + 'T00:00:00')
+    const dow = (d.getDay() + 6) % 7
+    const monday = new Date(d)
+    monday.setDate(d.getDate() - dow)
+    const ws = monday.toISOString().slice(0, 10)
+    setSlotsLoading(true)
+    api.get(`/doctors/${newDoctorId}/week`, { params: { start_date: ws } })
+      .then(r => {
+        const days = r.data?.days || []
+        const day = days.find(x => x.date === newDate)
+        const slots = (day?.slots || [])
+          .filter(s => !s.appointment && !s.is_busy)
+          .map(s => (s.start_time || '').slice(0, 5))
+          .filter(Boolean)
+        setFreeSlots(slots)
+      })
+      .catch(() => setFreeSlots([]))
+      .finally(() => setSlotsLoading(false))
+  }, [newDoctorId, newDate])
+
+  const submit = async () => {
+    setErr('')
+    if (!newDate)  { setErr('Укажите дату'); return }
+    if (!newTime)  { setErr('Укажите время (HH:MM)'); return }
+    if (!/^\d{2}:\d{2}$/.test(newTime)) { setErr('Время в формате HH:MM'); return }
+    if (!newDoctorId) { setErr('Выберите врача'); return }
+
+    const body = {
+      appointment_date: newDate,
+      start_time: newTime + ':00',
+      doctor_id: newDoctorId,
+    }
+    setSubmitting(true)
+    try {
+      await api.patch(`/appointments/${appt.id}`, body)
+      onMoved && onMoved()
+    } catch (e) {
+      setErr(e?.response?.data?.detail || 'Не удалось перенести запись')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Перенос записи" size="md">
+      <div className="flex flex-col gap-3">
+        {/* Текущие значения — для контекста */}
+        <div
+          className="text-xs"
+          style={{
+            color: 'var(--fg-3)',
+            background: 'var(--bg-1)',
+            border: '1px solid var(--border)',
+            borderRadius: 10,
+            padding: '8px 10px',
+          }}
+        >
+          <div><strong style={{ color: 'var(--fg-2)' }}>Пациент:</strong> {appt?.patient_name || appt?.patient_phone || '—'}</div>
+          <div><strong style={{ color: 'var(--fg-2)' }}>Сейчас:</strong> {initDate} в {initTime || '—'}</div>
+        </div>
+
+        {/* Дата */}
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--fg-2)' }}>
+            Новая дата
+          </label>
+          <input
+            type="date"
+            value={newDate}
+            onChange={e => setNewDate(e.target.value)}
+            className="w-full text-sm"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+            }}
+          />
+        </div>
+
+        {/* Врач */}
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--fg-2)' }}>
+            Врач
+          </label>
+          <select
+            value={newDoctorId}
+            onChange={e => setNewDoctorId(e.target.value)}
+            disabled={doctorsLoading}
+            className="w-full text-sm"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+            }}
+          >
+            {doctorsLoading && <option value="">Загрузка…</option>}
+            {!doctorsLoading && doctors.length === 0 && <option value="">Врачи не найдены</option>}
+            {!doctorsLoading && doctors.map(d => (
+              <option key={d.id} value={d.id}>
+                {d.full_name}{d.specialty ? ` · ${d.specialty}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Время — свободный input + быстрый выбор из свободных слотов */}
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--fg-2)' }}>
+            Время (HH:MM)
+          </label>
+          <input
+            type="time"
+            value={newTime}
+            onChange={e => setNewTime(e.target.value)}
+            className="w-full text-sm"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'var(--surface)',
+              color: 'var(--fg)',
+            }}
+          />
+          {/* Свободные слоты этого врача на эту дату — быстрая подсказка */}
+          {newDoctorId && (
+            <div className="mt-2">
+              <div className="text-[11px] mb-1" style={{ color: 'var(--fg-3)' }}>
+                Свободные слоты выбранного врача на эту дату
+                {slotsLoading ? ' · загрузка…' : ''}
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {!slotsLoading && freeSlots.length === 0 && (
+                  <span className="text-[11px]" style={{ color: 'var(--fg-3)' }}>Нет свободных слотов</span>
+                )}
+                {freeSlots.map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setNewTime(t)}
+                    className="text-[11px] font-medium"
+                    style={{
+                      padding: '4px 8px',
+                      borderRadius: 999,
+                      border: `1px solid ${newTime === t ? 'var(--accent)' : 'var(--border)'}`,
+                      background: newTime === t ? 'var(--accent)' : 'var(--surface)',
+                      color: newTime === t ? '#fff' : 'var(--fg-2)',
+                    }}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {err && (
+          <div className="text-xs" style={{ color: '#f43f5e' }}>{err}</div>
+        )}
+
+        <div className="flex items-center gap-2 mt-2">
+          <Button variant="primary" onClick={submit} disabled={submitting}>
+            {submitting ? 'Переношу…' : 'Перенести'}
+          </Button>
+          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            Отмена
+          </Button>
+        </div>
+      </div>
     </Modal>
   )
 }
@@ -458,12 +776,14 @@ function FilePreview({ att }) {
 // БЛОК: Вкладка «Направления»
 // ─────────────────────────────────────────────────────────────────────────
 
-function ReferralsTab({ apptId, appt, onChanged }) {
+function ReferralsTab({ apptId, appt, onChanged, canManage = false }) {
   const [list, setList] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [creating, setCreating] = useState(false)
   const [doctors, setDoctors] = useState([])
+  // id направления, для которого сейчас выполняется запрос отмены
+  const [cancellingId, setCancellingId] = useState(null)
 
   const reload = async () => {
     setLoading(true); setErr('')
@@ -484,6 +804,30 @@ function ReferralsTab({ apptId, appt, onChanged }) {
       setDoctors(r.data || [])
     } catch { /* ignore */ }
   }
+
+  // ── Отмена направления (POST /referrals/{id}/cancel-request) ───────────
+  // Только для активных направлений (created/confirmed/pending/scheduled).
+  // Спрашиваем причину; уходит на подтверждение руководителю.
+  const cancelReferral = async (referralId) => {
+    const reason = window.prompt(
+      'Причина отмены направления:\n(будет отправлена руководителю на подтверждение)'
+    )
+    if (reason == null) return
+    const r = reason.trim()
+    if (!r) { window.alert('Причина обязательна'); return }
+    setCancellingId(referralId)
+    try {
+      await api.post(`/referrals/${referralId}/cancel-request`, { reason: r })
+      await reload()
+      onChanged && onChanged()
+    } catch (e) {
+      window.alert('Не удалось отменить: ' + (e?.response?.data?.detail || e.message))
+    } finally {
+      setCancellingId(null)
+    }
+  }
+  // Статусы, при которых отмену запрашивать ещё имеет смысл
+  const REF_CANCELLABLE = new Set(['pending', 'created', 'confirmed', 'scheduled'])
 
   return (
     <div className="flex flex-col gap-3">
@@ -542,7 +886,31 @@ function ReferralsTab({ apptId, appt, onChanged }) {
                       {new Date(ref.created_at).toLocaleString('ru-RU')}
                     </div>
                   </div>
-                  <Chip variant={st.variant}>{st.label}</Chip>
+                  <div className="flex flex-col items-end gap-1">
+                    <Chip variant={st.variant}>{st.label}</Chip>
+                    {/* Кнопка «Отменить» — только для манагеров и только для
+                        активных направлений; уходит на подтверждение руководителю. */}
+                    {canManage && REF_CANCELLABLE.has(ref.status) && (
+                      <button
+                        type="button"
+                        onClick={() => cancelReferral(ref.id)}
+                        disabled={cancellingId === ref.id}
+                        className="text-[11px] font-medium"
+                        title="Запросить отмену направления"
+                        style={{
+                          padding: '3px 8px',
+                          borderRadius: 999,
+                          border: '1px solid #fecaca',
+                          background: cancellingId === ref.id ? 'var(--bg-2)' : '#fee2e2',
+                          color: '#9f1239',
+                          opacity: cancellingId === ref.id ? 0.6 : 1,
+                          cursor: cancellingId === ref.id ? 'wait' : 'pointer',
+                        }}
+                      >
+                        {cancellingId === ref.id ? 'Отмена…' : 'Отменить'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </li>
             )

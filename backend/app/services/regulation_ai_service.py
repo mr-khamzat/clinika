@@ -231,7 +231,7 @@ async def generate_regulation(
         result = await chat_completion(
             messages=[{"role": "user", "content": user_prompt}],
             system=system_prompt,
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash",
             max_tokens=1800,
         )
     except Exception as e:

@@ -46,7 +46,7 @@ from app.utils.phone import normalize_phone
 log = logging.getLogger("ai_assistant")
 
 # Дефолты — используются если в config_schema модуля нет переопределений
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash"
 DEFAULT_MAX_PER_DAY = 50
 DEFAULT_HISTORY_LIMIT = 12
 DEFAULT_SYSTEM_PROMPT = (

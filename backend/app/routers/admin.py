@@ -599,6 +599,8 @@ async def reset_tenant_admin_password(
     alphabet = string.ascii_letters + string.digits + "!@#$%"
     new_password = "".join(secrets.choice(alphabet) for _ in range(12))
     admin.password_hash = hash_password(new_password)
+    # pwdmust01: пароль задал админ платформы → требуем смену при первом входе
+    admin.password_must_change = True
     await db.commit()
 
     # Уведомление админу платформы — graceful (никогда не падаем)
@@ -1342,6 +1344,8 @@ async def create_platform_user(
     u = User(
         username=body.username,
         password_hash=hash_password(raw_password),
+        # pwdmust01: пароль задал админ → требуем смену при первом входе
+        password_must_change=True,
         full_name=body.full_name,
         email=body.email,
         phone_number=body.phone_number,

@@ -711,8 +711,19 @@ export default function CallWidget() {
                 const renderUser = (c) => (
                   <div key={c.user_id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800">
                     <div className="relative flex-shrink-0">
-                      <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300">
-                        {(c.full_name || '?')[0].toUpperCase()}
+                      {/* avatar01: если у контакта есть avatar_url — показываем картинку,
+                          иначе fallback на инициал. */}
+                      <div className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-sm font-bold text-gray-600 dark:text-gray-300 overflow-hidden">
+                        {c.avatar_url ? (
+                          <img
+                            src={c.avatar_url.startsWith('http') ? c.avatar_url : `${API_BASE}${c.avatar_url}`}
+                            alt={c.full_name || ''}
+                            style={{ width:'100%', height:'100%', objectFit:'cover' }}
+                            onError={(e) => { e.currentTarget.style.display = 'none' }}
+                          />
+                        ) : (
+                          (c.full_name || '?')[0].toUpperCase()
+                        )}
                       </div>
                       <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-gray-900 ${STATUS_COLOR[c.status] || STATUS_COLOR.offline}`} />
                     </div>

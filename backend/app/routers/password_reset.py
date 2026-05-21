@@ -221,6 +221,9 @@ async def reset_password(
 
     # Установить новый пароль
     user.password_hash = hash_password(body.new_password)
+    # pwdmust01: публичный сброс — пользователь сам выбрал новый пароль,
+    # снимаем флаг принудительной смены (если стоял).
+    user.password_must_change = False
     rec.used_at = datetime.utcnow()
 
     # Инвалидировать все refresh-токены пользователя (logout со всех устройств)
