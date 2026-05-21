@@ -8,7 +8,7 @@
 import uuid
 from typing import Optional, List, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -164,6 +164,7 @@ async def post_message(
     thread_id: uuid.UUID,
     body: SendMessageIn,
     request: Request,
+    background_tasks: BackgroundTasks,
     authorization: Optional[str] = Header(None),
     x_patient_session: Optional[str] = Header(None, alias="X-Patient-Session"),
     session_token: Optional[str] = Query(None),
@@ -189,6 +190,26 @@ async def post_message(
         )
     msg = await cs.add_patient_message(db, th, acc.id, body.body, body.attachments)
     await db.commit()
+
+    # chatslot01: если у пациента ещё не привязан mis_patient_id — запускаем
+    # background identifier (find_by_phone / add_patient в МИС). Не блокируем ответ.
+    # Используем отдельную async-сессию (AsyncSessionLocal) чтобы не делить state
+    # с request-сессией, которая уже закрыта к моменту выполнения background-таска.
+    if acc.mis_patient_id is None:
+        from app.services.patient_identifier import identify_patient
+        from app.database import AsyncSessionLocal
+        patient_account_id = acc.id
+
+        async def _run_identify():
+            async with AsyncSessionLocal() as bg_session:
+                try:
+                    await identify_patient(bg_session, patient_account_id=patient_account_id)
+                    await bg_session.commit()
+                except Exception:
+                    await bg_session.rollback()
+
+        background_tasks.add_task(_run_identify)
+
     return cs.serialize_message(msg)
 
 

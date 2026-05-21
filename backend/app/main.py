@@ -32,6 +32,8 @@ import asyncio
 from app.routers import auth, referrals, bonuses, clinics, admins, integrations
 # Партнёрский прайс (partneroffers01): категории + офферы услуг для cross-clinic направлений
 from app.routers import partner_offers
+# Профиль текущего сотрудника (avatar01): /profile/me, /profile/me/avatar и т.д.
+from app.routers import profile as profile_router_module
 from app.routers.password_reset import router as password_reset_router, cleanup_expired_password_reset_tokens
 from app.routers.manager import router as manager_router
 from app.routers.accountant import router as accountant_router
@@ -187,6 +189,7 @@ from app.core import disaster_middleware as _disaster_mw
 from app.core.scheduler import scheduler
 from app.services.auto_confirm import auto_confirm_loop
 from app.models import *  # Import all models for table creation
+from app.services import user_audit_listeners  # noqa: F401  # registers SQLA event listeners (user.created / user.password_changed audit)
 
 
 
@@ -998,6 +1001,28 @@ async def geoip_initial_download_if_missing():
 
 log = get_logger("clinika")
 
+
+# chatslot01: cron-job (15min) — помечает slot_offer старше 24ч как expired.
+# Используем отдельную async-сессию (AsyncSessionLocal) чтобы не делиться с request-сессиями.
+async def _expire_slot_offers_job():
+    import logging as _lg
+    _logger = _lg.getLogger("expire_slot_offers")
+    try:
+        from app.database import AsyncSessionLocal
+        from app.services.slot_booking_service import expire_old_offers
+        async with AsyncSessionLocal() as session:
+            try:
+                count = await expire_old_offers(session)
+                if count > 0:
+                    await session.commit()
+                    _logger.info("expire_slot_offers: marked %d offers as expired", count)
+            except Exception as e:
+                await session.rollback()
+                _logger.exception("expire_slot_offers: error: %s", e)
+    except Exception as e:
+        _logger.exception("expire_slot_offers: outer error: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(json_logs=True)
@@ -1123,6 +1148,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(module_daily_digest_job, 'cron', hour=6, minute=0, id='module_daily_digest', replace_existing=True)
     # Глава 10: каждые 5 минут проверяем DB/disk; если критично → авто-disaster mode.
     scheduler.add_job(disaster_health_check, 'interval', minutes=5, id='disaster_health_check', replace_existing=True)
+    # chatslot01: каждые 15 минут помечаем устаревшие slot_offer (>24ч) как expired
+    scheduler.add_job(_expire_slot_offers_job, 'interval', minutes=15, id='expire_slot_offers', replace_existing=True)
     scheduler.start()
     # Лог зарегистрированных job'ов — удобно дебажить что реально стартует
     try:
@@ -1553,6 +1580,8 @@ app.include_router(bonuses.router)
 app.include_router(partner_offers.router)  # /clinics/me/partner-* и /clinics/{id}/partner-offers
 app.include_router(clinics.router)
 app.include_router(admins.router)
+# Профиль сотрудника — личный кабинет (avatar01): /profile/me, /profile/me/avatar
+app.include_router(profile_router_module.router)
 app.include_router(manager_router)
 app.include_router(accountant_router)
 app.include_router(contact_router)
