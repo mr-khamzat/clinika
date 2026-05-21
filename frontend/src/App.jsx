@@ -101,7 +101,7 @@ const ManagerInventoryReceiptDetail = lazy(() => import('./pages/ManagerInventor
 const ManagerInventoryBatches = lazy(() => import('./pages/ManagerInventoryBatches'))
 const ManagerServiceNorms = lazy(() => import('./pages/ManagerServiceNorms'))
 // partneroffers01 — экран «Партнёрский прайс» (категории + офферы) для управляющего/владельца франшизы
-const PartnerOffersAdmin  = lazy(() => import('./components/admin/PartnerOffersAdmin'))
+const ManagerPartnerOffers = lazy(() => import('./pages/ManagerPartnerOffers'))
 // partneroffers01 — 2-шаговый визард создания межклинического направления с pickers
 const CreateReferralWizard = lazy(() => import('./components/referrals/CreateReferralWizard'))
 // ─── Кабинет директора сети (read-only аналитика по сети) ───
@@ -383,7 +383,7 @@ function MiniApp() {
               <Route path="manager/inventory/batches" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerInventoryBatches /></Suspense>} />
               <Route path="manager/services/norms" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerServiceNorms /></Suspense>} />
               {/* partneroffers01 — Партнёрский прайс: категории + офферы (управляющий/владелец) */}
-              <Route path="manager/partner-offers" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><PartnerOffersAdmin /></Suspense>} />
+              <Route path="manager/partner-offers" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><ManagerPartnerOffers /></Suspense>} />
               {/* partneroffers01 — Создание направления через визард с pickers */}
               <Route path="manager/referrals/new" element={<Suspense fallback={<div style={{minHeight:'100vh'}}/>}><CreateReferralWizard onCreated={(r) => { window.location.href = '/' + SLUG + '/manager/history'; }} /></Suspense>} />
               {/* admin-panel роут удалён — AdminPanel.jsx был дубль */}
