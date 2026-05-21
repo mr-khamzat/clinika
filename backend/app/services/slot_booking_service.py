@@ -21,7 +21,6 @@ from app.models.patient_chat import (
     PatientChatMessageType,
 )
 from app.models.doctor import Appointment, AppointmentStatus, AppointmentSource, Doctor
-from app.models.patient_account import PatientAccount
 from app.models.service import Service  # type: ignore  # сервис из manager_mgmt
 from app.schemas.chat_slots import (
     SlotOfferCreate,
