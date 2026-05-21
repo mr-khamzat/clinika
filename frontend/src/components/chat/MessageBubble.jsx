@@ -14,6 +14,10 @@
  */
 import { useMemo, useState } from 'react'
 import MarkdownText from './MarkdownText'
+// chatslot01: специализированные баблы для slot-booking сообщений
+import SlotOfferBubble from './SlotOfferBubble'
+import SlotRequestBubble from './SlotRequestBubble'
+import SlotBookedBubble from './SlotBookedBubble'
 
 const QUICK_REACTIONS = ['👍', '❤️', '✅', '🙏', '😂', '🔥']
 
@@ -46,7 +50,7 @@ function fileIconName(att) {
   return 'attach_file'
 }
 
-export default function MessageBubble({ message, isOwn, showAvatar = true, onReact, onReply }) {
+export default function MessageBubble({ message, isOwn, showAvatar = true, onReact, onReply, isPatient = false, threadId, onSlotBooked, onOfferRequest }) {
   const isSystem = message.sender_type === 'system' || message.sender_type === 'bot'
   const name = message.sender_name || (isOwn ? 'Вы' : 'Клиника')
   const color = useMemo(() => avatarColor(name), [name])
@@ -54,6 +58,32 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
   const atts = Array.isArray(message.attachments) ? message.attachments : []
   const reactions = Array.isArray(message.reactions) ? message.reactions : []
   const [pickerOpen, setPickerOpen] = useState(false)
+
+  // ─── chatslot01: ранний return для специальных типов сообщений ───
+  // Эти баблы рендерим вместо обычного текстового пузыря.
+  const mt = message.message_type || 'text'
+  if (mt === 'slot_offer' || mt === 'slot_expired') {
+    return (
+      <SlotOfferBubble
+        message={message}
+        isPatient={isPatient}
+        threadId={threadId}
+        onBooked={onSlotBooked}
+      />
+    )
+  }
+  if (mt === 'slot_request') {
+    return (
+      <SlotRequestBubble
+        message={message}
+        isStaff={!isPatient}
+        onOfferRequest={onOfferRequest}
+      />
+    )
+  }
+  if (mt === 'slot_booked') {
+    return <SlotBookedBubble message={message} />
+  }
 
   // Системное сообщение — серая пилюля по центру
   if (isSystem) {
