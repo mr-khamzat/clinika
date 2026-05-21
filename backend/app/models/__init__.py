@@ -233,3 +233,6 @@ from app.models.engagement import (
 from app.models.cash_shift import CashShift, CashShiftEntry  # noqa: F401
 from app.models.spending import Spending  # noqa: F401
 from app.models.mis_payment_import import MisPaymentImport  # noqa: F401
+
+# chatslot01 — outbox-таблица для отложенных вызовов МИС (patient.create / appointment.*)
+from app.models.mis_outbox import MisOutbox  # noqa: F401

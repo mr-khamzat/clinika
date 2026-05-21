@@ -20,7 +20,7 @@ from sqlalchemy import (
     Enum as SAEnum,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 
@@ -33,6 +33,14 @@ class PatientChatSender(str, enum.Enum):
     PATIENT = "patient"
     ASSISTANT = "assistant"
     ADMIN = "admin"
+
+
+class PatientChatMessageType(str, enum.Enum):
+    TEXT = "text"
+    SLOT_OFFER = "slot_offer"
+    SLOT_REQUEST = "slot_request"
+    SLOT_BOOKED = "slot_booked"
+    SLOT_EXPIRED = "slot_expired"
 
 
 class PatientChat(Base):
@@ -102,7 +110,23 @@ class PatientChatMessage(Base):
         ),
         nullable=False,
     )
-    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # chatslot01: тип сообщения и payload для интерактивных карточек (slot_offer и т.п.)
+    message_type: Mapped[PatientChatMessageType] = mapped_column(
+        SAEnum(
+            PatientChatMessageType,
+            values_callable=lambda x: [e.value for e in x],
+            native_enum=False,
+            name="patient_chat_message_type",
+        ),
+        nullable=False,
+        default=PatientChatMessageType.TEXT,
+        server_default=PatientChatMessageType.TEXT.value,
+        index=True,
+    )
+    # Для slot_offer/slot_request/slot_booked/slot_expired — структура зависит от типа (см. spec).
+    # Для text — NULL.
+    payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     tokens_in: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tokens_out: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_cached: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

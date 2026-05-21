@@ -21,6 +21,13 @@ class AppointmentStatus(str, enum.Enum):
     IN_PROGRESS = "in_progress"  # Глава 4: пациент на приёме (Kanban)
 
 
+# chatslot01: источник создания записи — для аналитики и MIS push
+class AppointmentSource(str, enum.Enum):
+    DIRECT = "direct"
+    REFERRAL = "referral"
+    CHAT = "chat"
+
+
 class Doctor(Base):
     __tablename__ = "doctors"
 
@@ -92,6 +99,25 @@ class Appointment(Base):
     )
     referral_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("referrals.id", ondelete="SET NULL"), nullable=True
+    )
+    # chatslot01: thread из которого создана запись (если из чата)
+    chat_thread_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patient_chats.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # chatslot01: откуда пришла запись — для аналитики и MIS push
+    source: Mapped[AppointmentSource] = mapped_column(
+        SAEnum(
+            AppointmentSource,
+            values_callable=lambda x: [e.value for e in x],
+            native_enum=False,
+            name="appointment_source",
+        ),
+        nullable=False,
+        default=AppointmentSource.DIRECT,
+        server_default=AppointmentSource.DIRECT.value,
     )
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

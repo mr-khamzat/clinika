@@ -25,6 +25,13 @@ class PatientAccount(Base):
     login_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     marketing_opt_in: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    # chatslot01: связь с МИС (заполняется patient_identifier service)
+    mis_patient_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    mis_synced_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 'pending' | 'linked' | 'created' | 'manual_required' | 'ambiguous' | 'no_phone' | 'error'
+    mis_sync_state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending", server_default="pending"
+    )
 
 
 class PatientOTP(Base):
