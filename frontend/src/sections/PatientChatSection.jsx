@@ -25,6 +25,7 @@ import { API_BASE } from '../config'
 import { useToast } from '../design'
 import MessageBubble from '../components/chat/MessageBubble'
 import ThreadListItem from '../components/chat/ThreadListItem'
+import PatientSlotRequestPicker from '../components/chat/PatientSlotRequestPicker'
 
 const NewThreadModal = lazy(() => import('../components/chat/NewThreadModal'))
 
@@ -126,6 +127,9 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [pickedFiles, setPickedFiles] = useState([])
+
+  // chatslot01: drawer запроса записи (пациент выбирает врача/услугу/даты)
+  const [slotRequestOpen, setSlotRequestOpen] = useState(false)
 
   const [showNewThread, setShowNewThread] = useState(false)
   const [showPremium, setShowPremium] = useState(false)
@@ -445,7 +449,15 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                             {item.label}
                           </span>
                         </div>
-                      : <MessageBubble key={item.id} message={item.msg} isOwn={item.isOwn} showAvatar={item.showAvatar} />
+                      : <MessageBubble
+                          key={item.id}
+                          message={item.msg}
+                          isOwn={item.isOwn}
+                          showAvatar={item.showAvatar}
+                          isPatient={true}
+                          threadId={activeId}
+                          onSlotBooked={() => fetchThread(activeId, true)}
+                        />
                   ))}
                   <div ref={bottomRef} />
                 </div>
@@ -493,6 +505,17 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                           e.target.value = ''
                         }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setSlotRequestOpen(true)}
+                        disabled={!activeId}
+                        className="grid place-items-center flex-shrink-0 disabled:opacity-40"
+                        style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: 'var(--accent, #0097A7)' }}
+                        aria-label="Записаться"
+                        title="Запросить запись"
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 22 }}>event_available</span>
+                      </button>
                       <textarea
                         ref={textareaRef}
                         value={draft}
@@ -546,6 +569,14 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
         open={showPremium}
         onClose={() => setShowPremium(false)}
         onSubscribe={() => { setShowPremium(false); onGoSubscription?.() }}
+      />
+
+      {/* chatslot01: drawer запроса записи */}
+      <PatientSlotRequestPicker
+        open={slotRequestOpen}
+        onClose={() => setSlotRequestOpen(false)}
+        threadId={activeId}
+        onSent={() => fetchThread(activeId, true)}
       />
     </>
   )

@@ -64,6 +64,7 @@ import ThreadListItem from '../components/chat/ThreadListItem'
 import PatientContextPanel from '../components/chat/PatientContextPanel'
 import ReassignModal from '../components/chat/ReassignModal'
 import TemplateAutocomplete from '../components/chat/TemplateAutocomplete'
+import ClinicSlotPicker from '../components/chat/ClinicSlotPicker'
 import useChatSoundNotification from '../hooks/useChatSoundNotification'
 import { enableWebPush, disableWebPush, getPushPermissionState } from '../lib/webPush'
 
@@ -235,6 +236,14 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
   const [pendingAttachments, setPendingAttachments] = useState([])
   const [replyingTo, setReplyingTo] = useState(null)  // {id, body_preview, sender_type}
   const [pushState, setPushState] = useState('default')  // default|granted|denied|unsupported
+
+  // chatslot01: drawer выбора слотов + дефолты из slot_request пациента
+  const [slotPickerOpen, setSlotPickerOpen] = useState(false)
+  const [slotPickerDefaults, setSlotPickerDefaults] = useState({})
+  const handleOfferRequest = useCallback((req) => {
+    setSlotPickerDefaults(req || {})
+    setSlotPickerOpen(true)
+  }, [])
 
   useEffect(() => {
     // Защита от unhandled rejection: в некоторых embedded webview Notification API недоступен,
@@ -924,6 +933,10 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                           message={item.msg}
                           isOwn={item.isOwn}
                           showAvatar={item.showAvatar}
+                          isPatient={false}
+                          threadId={activeId}
+                          onOfferRequest={handleOfferRequest}
+                          onSlotBooked={() => fetchThread(activeId, true)}
                           onReact={active?.thread?.status !== 'closed' ? doReact : undefined}
                           onReply={active?.thread?.status !== 'closed' ? (msg) => setReplyingTo({
                             id: msg.id,
@@ -1021,6 +1034,16 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                       onClose={() => setTplQuery(null)}
                     />
                     <div className="flex items-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => { setSlotPickerDefaults({}); setSlotPickerOpen(true) }}
+                        className="grid place-items-center flex-shrink-0"
+                        style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: 'var(--accent, #0097A7)' }}
+                        aria-label="Предложить слоты"
+                        title="Предложить слоты записи"
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 22 }}>event</span>
+                      </button>
                       <textarea
                         ref={textareaRef}
                         value={draft}
@@ -1096,6 +1119,15 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
           showBookButton={canBook}
         />
       )}
+
+      {/* chatslot01: drawer выбора слотов для предложения пациенту */}
+      <ClinicSlotPicker
+        open={slotPickerOpen}
+        onClose={() => setSlotPickerOpen(false)}
+        threadId={activeId}
+        defaults={slotPickerDefaults}
+        onSent={() => fetchThread(activeId, true)}
+      />
     </>
   )
 }
