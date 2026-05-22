@@ -171,9 +171,28 @@ async def subscribe_push(
         # Подписка пациента без Bearer — нормально
         user_id = None
 
-    # patient_id (если будет — определит другой роут, например, /patient/push/subscribe).
-    # Пока подписки сотрудников пишут user_id, пациентские — patient_phone (legacy).
+    # patient_id — определяется по phone из patient_accounts.
+    # Раньше эта ветка не проставляла patient_id (баг). Теперь связываем подписку
+    # с patient_accounts.id, чтобы push_campaigns / engagement_suggestions могли
+    # таргетировать конкретного пациента.
     patient_phone = phone_from_user or legacy_phone
+    patient_id: str | None = None
+    if patient_phone and not user_id:
+        try:
+            from app.utils.phone import normalize_phone as _np
+            _digits = _np(patient_phone)
+            for _fmt in (patient_phone, _digits, "+" + _digits):
+                _row = (await db.execute(
+                    text("SELECT id, tenant_id FROM patient_accounts WHERE phone_number = :p"),
+                    {"p": _fmt},
+                )).fetchone()
+                if _row:
+                    patient_id = str(_row[0])
+                    if not tenant_id and _row[1]:
+                        tenant_id = str(_row[1])
+                    break
+        except Exception:
+            patient_id = None
 
     existing = (await db.execute(
         text("SELECT id FROM push_subscriptions WHERE endpoint = :ep"),
@@ -185,7 +204,7 @@ async def subscribe_push(
             text(
                 "UPDATE push_subscriptions SET "
                 "p256dh = :p256dh, auth = :auth, user_id = :uid, "
-                "patient_phone = :phone, tenant_id = :tid, user_agent = :ua, "
+                "patient_id = :pid, patient_phone = :phone, tenant_id = :tid, user_agent = :ua, "
                 "last_used_at = now() "
                 "WHERE endpoint = :ep"
             ),
@@ -193,6 +212,7 @@ async def subscribe_push(
                 "p256dh": p256dh,
                 "auth": auth,
                 "uid": user_id,
+                "pid": patient_id,
                 "phone": patient_phone,
                 "tid": tenant_id,
                 "ua": user_agent,
@@ -203,8 +223,8 @@ async def subscribe_push(
         await db.execute(
             text(
                 "INSERT INTO push_subscriptions "
-                "(id, endpoint, p256dh, auth, user_id, patient_phone, tenant_id, user_agent) "
-                "VALUES (:id, :ep, :p256dh, :auth, :uid, :phone, :tid, :ua)"
+                "(id, endpoint, p256dh, auth, user_id, patient_id, patient_phone, tenant_id, user_agent) "
+                "VALUES (:id, :ep, :p256dh, :auth, :uid, :pid, :phone, :tid, :ua)"
             ),
             {
                 "id": str(uuid.uuid4()),
@@ -212,6 +232,7 @@ async def subscribe_push(
                 "p256dh": p256dh,
                 "auth": auth,
                 "uid": user_id,
+                "pid": patient_id,
                 "phone": patient_phone,
                 "tid": tenant_id,
                 "ua": user_agent,

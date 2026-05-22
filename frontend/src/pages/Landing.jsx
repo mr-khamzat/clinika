@@ -34,6 +34,7 @@ import HeroChatDemo from '../components/landing/HeroChatDemo'
 import ProductTour from '../components/landing/ProductTour'
 import IntegrationsGrid from '../components/landing/IntegrationsGrid'
 import Testimonial from '../components/landing/Testimonial'
+import Comparison from '../components/landing/Comparison'
 import FAQ from '../components/landing/FAQ'
 import { LANDING_EXTRAS_CSS } from '../components/landing/landing_extras.css.js'
 
@@ -483,7 +484,7 @@ export default function Landing() {
       </nav>
 
       {/* ===== БЛОК: HERO (mesh-градиент + glassmorphism + AI-карточка) ===== */}
-      <section className="ks-hero">
+      <section id="hero" className="ks-hero">
         {/* Mesh-gradient orbs за hero для глубины */}
         <div className="ks-hero-orbs" aria-hidden>
           <div className="ks-hero-orb ks-hero-orb-1" />
@@ -497,28 +498,51 @@ export default function Landing() {
               SaaS-платформа для медицинских сетей
             </div>
             <h1 className="ks-hero-title">
-              Управляйте сетью клиник<br />
-              как <em>единым организмом</em>
+              Отвяжитесь от Excel и 7 разных систем<br />
+              за <em>28 дней</em>
             </h1>
             <p className="ks-hero-sub">
-              ЭМК, расписание, телемедицина, бонусная система, AI-ассистент пациенту, биллинг
-              франшиз, аудит и геозащита — в одной платформе. Без зоопарка интеграций и
-              ежемесячных счетов от 7 разных вендоров.
+              Регистратура, врачи, склад, бухгалтерия, аналитика — в одной платформе.
+              Запуск под ключ за месяц.
             </p>
-            <div className="ks-hero-actions">
-              <button type="button" onClick={() => setShowContact(true)} className="ks-btn-primary">
-                Запустить за 28 дней <span aria-hidden>{ICONS.arrow}</span>
-              </button>
-              <button type="button" onClick={() => setShowCalc(true)} className="ks-btn-secondary">
-                Калькулятор тарифа
+            <div className="ks-hero-actions" id="hero-cta">
+              <button
+                type="button"
+                onClick={() => setShowContact(true)}
+                className="ks-btn-primary"
+                style={{ fontSize: 17, padding: '16px 28px' }}
+              >
+                Получить демо за 15 мин <span aria-hidden>{ICONS.arrow}</span>
               </button>
             </div>
-            <div className="ks-hero-downloads">
-              <a href="/downloads/KliniknetCalls-Setup-1.0.28.exe" download className="ks-btn-ghost">
-                {ICONS.download} Calls Windows · 1.0.30 (диалпад + чат сотрудников)
+            <div
+              className="ks-hero-anchor"
+              style={{
+                marginTop: 14,
+                fontSize: 14.5,
+                lineHeight: 1.55,
+                color: 'var(--fg-2)',
+                fontWeight: 500,
+              }}
+            >
+              От <strong style={{ color: '#0F172A', fontWeight: 700 }}>9 900 ₽/мес</strong> за клинику · Без оплаты до запуска · Поможем перенести данные
+            </div>
+            <div className="ks-hero-downloads" style={{ marginTop: 18 }}>
+              <a
+                href="/downloads/KliniknetCalls-Setup-1.0.28.exe"
+                download
+                className="ks-btn-ghost"
+                style={{ fontSize: 12.5, opacity: 0.75 }}
+              >
+                {ICONS.download} Скачать Calls для звонков (Windows)
               </a>
-              <a href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip" download className="ks-btn-ghost">
-                {ICONS.download} Calls macOS · Apple Silicon
+              <a
+                href="/downloads/KliniknetCalls-1.0.7-mac-arm64.zip"
+                download
+                className="ks-btn-ghost"
+                style={{ fontSize: 12.5, opacity: 0.75 }}
+              >
+                {ICONS.download} Скачать Calls для звонков (macOS · Apple Silicon)
               </a>
             </div>
             <div className="ks-hero-trust">
@@ -852,6 +876,9 @@ export default function Landing() {
 
       {/* ===== БЛОК: TESTIMONIAL — большая цитата основателя ===== */}
       <Testimonial />
+
+      {/* ===== БЛОК: COMPARISON — сравнение с конкурентами ===== */}
+      <Comparison />
 
       {/* ===== БЛОК: FAQ — 6 вопросов в аккордеоне ===== */}
       <FAQ />

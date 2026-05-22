@@ -7021,7 +7021,7 @@ function SuperAdminSection({ token }) {
             <table className="admin-resp-table min-w-full divide-y divide-gray-100 dark:divide-gray-800">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  {['Тенант','Slug','План','Подписка','Клиники','Польз.','Статус','Действия'].map(h => (
+                  {['Тенант','Slug','План','Подписка','Клиники','Польз.','Активность','Статус','Действия'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -7039,6 +7039,9 @@ function SuperAdminSection({ token }) {
                     </td>
                     <td data-label="Клиники" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
                     <td data-label="Польз." className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
+                    <td data-label="Активность" className="px-4 py-3 text-center">
+                      <span title="Tenant activity health — coming soon" className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs cursor-help" aria-label="Активность — coming soon">—</span>
+                    </td>
                     <td data-label="Статус" className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {t.is_active ? 'Активен' : 'Откл.'}

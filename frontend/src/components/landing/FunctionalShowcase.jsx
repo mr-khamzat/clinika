@@ -36,6 +36,13 @@ function Pill({ children, tone = 'accent' }) {
   return <span className={`ks-fs-pill ks-fs-pill-${tone}`}>{children}</span>
 }
 
+// Скролл к hero CTA: при клике на «Увидеть в действии →»
+function scrollToHeroCta() {
+  if (typeof document === 'undefined') return
+  const target = document.getElementById('hero-cta') || document.getElementById('hero')
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 // === Стилизованные мок-превью (без внешних PNG) ===
 function MockSchedule() {
   const slots = [
@@ -305,6 +312,27 @@ export default function FunctionalShowcase() {
                     <div className="ks-fs-pills">
                       {it.pills.map(p => <Pill key={p}>{p}</Pill>)}
                     </div>
+                    <button
+                      type="button"
+                      onClick={scrollToHeroCta}
+                      className="ks-fs-cta"
+                      style={{
+                        marginTop: 18,
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        color: '#0097A7',
+                        fontWeight: 600,
+                        fontSize: 14.5,
+                        cursor: 'pointer',
+                        font: 'inherit',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      Увидеть в действии <span aria-hidden>→</span>
+                    </button>
                   </div>
                 </Reveal>
                 <Reveal side={reverse ? 'left' : 'right'}>

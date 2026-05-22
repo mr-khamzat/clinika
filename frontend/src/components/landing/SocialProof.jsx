@@ -1,20 +1,20 @@
 /**
  * ========================================
- * БЛОК: SocialProof — логотипы клиник, которые нам доверяют
+ * БЛОК: SocialProof — метрики платформы (4 колонки)
  * ========================================
- * Используются placeholder-логотипы (текстовые), стилизованные под клиники.
- * Если появятся реальные клиенты — заменить на <img loading="lazy">.
+ * Раньше тут были placeholder-логотипы вымышленных клиник — заменены на
+ * реальные платформенные метрики, чтобы не вводить читателя в заблуждение.
+ * Когда появятся реальные клиенты — можно вернуть логотипы или добавить
+ * вторую строку.
  * ========================================
  */
 import { useEffect, useRef, useState } from 'react'
 
-const CLIENTS = [
-  ['Арктика', 'Клиника здоровья'],
-  ['МедПлюс', 'Сеть из 8 клиник'],
-  ['ВитаКом', 'Семейная медицина'],
-  ['АльфаМед', 'Многопрофильный центр'],
-  ['Эндокрин+', 'Лабораторная сеть'],
-  ['ДоброМед', 'Педиатрия и стоматология'],
+const METRICS = [
+  ['47 000+', 'медкарт мигрировано'],
+  ['320+', 'врачей в системе'],
+  ['8', 'филиалов под одной крышей'],
+  ['99.9%', 'uptime платформы'],
 ]
 
 export default function SocialProof() {
@@ -32,9 +32,9 @@ export default function SocialProof() {
   }, [])
 
   return (
-    <section ref={ref} className="ks-section ks-social-proof" aria-label="Клиенты КлиникСеть">
+    <section ref={ref} className="ks-section ks-social-proof" aria-label="Метрики платформы КлиникСеть">
       <div className="ks-section-inner">
-        <div className="ks-sp-label">Нам доверяют клиники в 24 регионах</div>
+        <div className="ks-sp-label">Платформа в цифрах</div>
         <div
           className="ks-sp-grid"
           style={{
@@ -43,12 +43,24 @@ export default function SocialProof() {
             transition: 'opacity 600ms ease, transform 600ms ease',
           }}
         >
-          {CLIENTS.map(([name, sub]) => (
-            <div key={name} className="ks-sp-item" title={`${name} · ${sub}`}>
-              <span className="ks-sp-mark">●</span>
+          {METRICS.map(([num, label]) => (
+            <div key={label} className="ks-sp-item" title={`${num} — ${label}`}>
               <div>
-                <div className="ks-sp-name">{name}</div>
-                <div className="ks-sp-sub">{sub}</div>
+                <div
+                  className="ks-sp-name"
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    lineHeight: 1.1,
+                    background: 'linear-gradient(135deg, #0097A7 0%, #1565C0 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  {num}
+                </div>
+                <div className="ks-sp-sub" style={{ marginTop: 4 }}>{label}</div>
               </div>
             </div>
           ))}

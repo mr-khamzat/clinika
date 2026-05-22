@@ -203,6 +203,13 @@ const STEPS = [
   { Mock: DashboardMockup, title: 'Руководитель видит',    desc: 'Метрики, выручка по клиникам, загрузка кабинетов — без выгрузок из 1С.' },
 ]
 
+// ===== БЛОК: scroll-helper к hero CTA =====
+function scrollToHeroCta() {
+  if (typeof document === 'undefined') return
+  const target = document.getElementById('hero-cta') || document.getElementById('hero')
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 // ===== БЛОК: основной компонент =====
 export default function ProductTour() {
   return (
@@ -274,6 +281,27 @@ export default function ProductTour() {
                 <p style={{ fontSize: 13, color: 'var(--fg-2)', margin: 0, lineHeight: 1.5 }}>
                   {s.desc}
                 </p>
+                <button
+                  type="button"
+                  onClick={scrollToHeroCta}
+                  className="ks-tour-cta"
+                  style={{
+                    marginTop: 12,
+                    background: 'transparent',
+                    border: 'none',
+                    padding: 0,
+                    color: '#0097A7',
+                    fontWeight: 600,
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                  }}
+                >
+                  Увидеть в действии <span aria-hidden>→</span>
+                </button>
               </article>
             )
           })}
@@ -282,6 +310,9 @@ export default function ProductTour() {
 
       <style>{`
         .ks-tour-card:hover { transform: translateY(-3px); box-shadow: 0 12px 30px rgba(15,23,42,.08); }
+        .ks-tour-cta { font-weight: 600; }
+        .ks-tour-cta:hover { text-decoration: underline; color: #1565C0; }
+        .ks-tour-cta:focus-visible { outline: 2px solid #0097A7; outline-offset: 3px; border-radius: 4px; }
         @media (max-width: 980px) {
           .ks-tour-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }

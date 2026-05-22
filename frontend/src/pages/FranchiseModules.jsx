@@ -39,6 +39,44 @@ export default function FranchiseModules() {
     return m
   }, [matrix])
 
+  // Итого по тенанту (колонке): сумма всех включённых модулей × их internal_price_rub.
+  // Реактивно пересчитывается на любом тогле или изменении цены.
+  const totalByTenant = useMemo(() => {
+    const out = {}
+    if (!matrix) return out
+    matrix.tenants.forEach(t => {
+      let sum = 0
+      matrix.modules.forEach(m => {
+        const g = grantsByKey[`${t.id}|${m.key}`]
+        if (g?.is_active) sum += Number(g.internal_price_rub) || 0
+      })
+      out[t.id] = sum
+    })
+    return out
+  }, [matrix, grantsByKey])
+
+  // Итого по строке (модулю) — сумма по всем включённым тенантам.
+  const totalByModule = useMemo(() => {
+    const out = {}
+    if (!matrix) return out
+    matrix.modules.forEach(m => {
+      let sum = 0
+      matrix.tenants.forEach(t => {
+        const g = grantsByKey[`${t.id}|${m.key}`]
+        if (g?.is_active) sum += Number(g.internal_price_rub) || 0
+      })
+      out[m.key] = sum
+    })
+    return out
+  }, [matrix, grantsByKey])
+
+  // Общая сумма по сети.
+  const totalNetwork = useMemo(() => {
+    return Object.values(totalByTenant).reduce((acc, v) => acc + v, 0)
+  }, [totalByTenant])
+
+  const fmtRub = (v) => `${Math.round(v).toLocaleString('ru-RU')} ₽`
+
   function toggleGrant(tenant_id, module_key, is_active) {
     const k = `${tenant_id}|${module_key}`
     setMatrix(prev => ({
@@ -135,55 +173,122 @@ export default function FranchiseModules() {
 
       <section className="fm-section">
         <h2>Матрица распределения</h2>
-        <div className="fm-table-wrap">
-          <table className="fm-table">
-            <thead>
-              <tr>
-                <th className="fm-col-mod">Модуль</th>
-                {matrix.tenants.map(t => (
-                  <th key={t.id} className="fm-col-tenant">
-                    <div className="fm-tenant-name">{t.clinic_name || t.name}</div>
-                    <div className="fm-tenant-slug">/{t.slug}</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {matrix.modules.map(m => {
-                const subscribedByFranchise = catalog.modules.find(c => c.key === m.key)?.subscribed_by_franchise
-                return (
-                  <tr key={m.key} className={subscribedByFranchise ? '' : 'is-disabled-row'}>
-                    <td className="fm-col-mod">
-                      <div className="fm-mod-name">{m.name}</div>
-                      <div className="fm-mod-meta">
-                        Платформа: {m.price_monthly_platform ? `${m.price_monthly_platform.toLocaleString('ru-RU')} ₽/мес` : '—'}
-                        {!subscribedByFranchise && <span className="fm-tag-warn">франшиза не подключила</span>}
-                      </div>
+
+        {/* Desktop / tablet — таблица (md и выше) */}
+        <div className="hidden md:block">
+          <div className="fm-table-wrap">
+            <table className="fm-table">
+              <thead>
+                <tr>
+                  <th className="fm-col-mod">Модуль</th>
+                  {matrix.tenants.map(t => (
+                    <th key={t.id} className="fm-col-tenant">
+                      <div className="fm-tenant-name">{t.clinic_name || t.name}</div>
+                      <div className="fm-tenant-slug">/{t.slug}</div>
+                    </th>
+                  ))}
+                  <th className="fm-col-total">Итого ₽/мес</th>
+                </tr>
+              </thead>
+              <tbody>
+                {matrix.modules.map(m => {
+                  const subscribedByFranchise = catalog.modules.find(c => c.key === m.key)?.subscribed_by_franchise
+                  return (
+                    <tr key={m.key} className={subscribedByFranchise ? '' : 'is-disabled-row'}>
+                      <td className="fm-col-mod">
+                        <div className="fm-mod-name">{m.name}</div>
+                        <div className="fm-mod-meta">
+                          Платформа: {m.price_monthly_platform ? `${m.price_monthly_platform.toLocaleString('ru-RU')} ₽/мес` : '—'}
+                          {!subscribedByFranchise && <span className="fm-tag-warn">франшиза не подключила</span>}
+                        </div>
+                      </td>
+                      {matrix.tenants.map(t => {
+                        const g = grantsByKey[`${t.id}|${m.key}`]
+                        return (
+                          <td key={t.id} className="fm-cell">
+                            <label className="fm-checkbox">
+                              <input type="checkbox" checked={!!g?.is_active}
+                                disabled={!subscribedByFranchise}
+                                onChange={e => toggleGrant(t.id, m.key, e.target.checked)} />
+                              <span>вкл.</span>
+                            </label>
+                            <input type="number" min="0" step="100"
+                              placeholder="0 ₽/мес"
+                              value={g?.internal_price_rub || 0}
+                              disabled={!g?.is_active || !subscribedByFranchise}
+                              onChange={e => setPrice(t.id, m.key, e.target.value)}
+                              className="fm-price" />
+                          </td>
+                        )
+                      })}
+                      <td className="fm-col-total fm-total-cell">
+                        <b>{fmtRub(totalByModule[m.key] || 0)}</b>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="fm-foot-row">
+                  <td className="fm-col-mod"><b>Итого по клинике</b></td>
+                  {matrix.tenants.map(t => (
+                    <td key={t.id} className="fm-cell fm-total-cell">
+                      <b>{fmtRub(totalByTenant[t.id] || 0)}</b>
                     </td>
-                    {matrix.tenants.map(t => {
-                      const g = grantsByKey[`${t.id}|${m.key}`]
-                      return (
-                        <td key={t.id} className="fm-cell">
-                          <label className="fm-checkbox">
-                            <input type="checkbox" checked={!!g?.is_active}
-                              disabled={!subscribedByFranchise}
-                              onChange={e => toggleGrant(t.id, m.key, e.target.checked)} />
-                            <span>вкл.</span>
-                          </label>
-                          <input type="number" min="0" step="100"
-                            placeholder="0 ₽/мес"
-                            value={g?.internal_price_rub || 0}
-                            disabled={!g?.is_active || !subscribedByFranchise}
-                            onChange={e => setPrice(t.id, m.key, e.target.value)}
-                            className="fm-price" />
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                  ))}
+                  <td className="fm-col-total fm-total-cell fm-total-grand">
+                    <b>{fmtRub(totalNetwork)}</b>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+
+        {/* Mobile — карточки по клиникам (до md) */}
+        <div className="block md:hidden">
+          <div className="fm-cards">
+            {matrix.tenants.map(t => (
+              <div key={t.id} className="fm-card">
+                <div className="fm-card-head">
+                  <div>
+                    <div className="fm-card-title">{t.clinic_name || t.name}</div>
+                    <div className="fm-card-slug">/{t.slug}</div>
+                  </div>
+                  <div className="fm-card-sum">
+                    <div className="fm-card-sum-label">Итого / мес</div>
+                    <div className="fm-card-sum-val">{fmtRub(totalByTenant[t.id] || 0)}</div>
+                  </div>
+                </div>
+                <div className="fm-card-modules">
+                  {matrix.modules.map(m => {
+                    const subscribedByFranchise = catalog.modules.find(c => c.key === m.key)?.subscribed_by_franchise
+                    const g = grantsByKey[`${t.id}|${m.key}`]
+                    return (
+                      <div key={m.key} className={'fm-card-mod ' + (subscribedByFranchise ? '' : 'is-disabled-row')}>
+                        <label className="fm-card-mod-line">
+                          <input type="checkbox" checked={!!g?.is_active}
+                            disabled={!subscribedByFranchise}
+                            onChange={e => toggleGrant(t.id, m.key, e.target.checked)} />
+                          <span className="fm-card-mod-name">{m.name}</span>
+                        </label>
+                        <input type="number" min="0" step="100"
+                          placeholder="0 ₽/мес"
+                          value={g?.internal_price_rub || 0}
+                          disabled={!g?.is_active || !subscribedByFranchise}
+                          onChange={e => setPrice(t.id, m.key, e.target.value)}
+                          className="fm-price" />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="fm-card fm-card-grand">
+              <div className="fm-card-sum-label">Итого по сети</div>
+              <div className="fm-card-sum-val fm-card-sum-grand">{fmtRub(totalNetwork)}</div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -294,4 +399,34 @@ const FM_CSS = `
 .fm-status-cancelled { background: oklch(0.95 0.005 250); color: oklch(0.55 0.02 250); }
 .fm-mute { color: oklch(0.55 0.02 250); font-size: 11px; }
 .fm-bd { font-size: 11px; color: oklch(0.45 0.02 250); }
+
+/* Колонки итогов (десктоп) */
+.fm-col-total { min-width: 130px; text-align: right; }
+.fm-total-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.fm-foot-row td { background: oklch(0.97 0.005 250); border-top: 2px solid oklch(0.88 0.005 250); }
+.fm-total-grand { color: oklch(0.4 0.18 230); font-size: 14px; }
+
+/* Карточки (мобайл) */
+.fm-cards { display: flex; flex-direction: column; gap: 12px; }
+.fm-card { background: #fff; border: 1px solid oklch(0.92 0.005 250); border-radius: 14px; padding: 14px; }
+.fm-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 1px solid oklch(0.94 0.005 250); padding-bottom: 10px; margin-bottom: 10px; }
+.fm-card-title { font-weight: 600; font-size: 14px; }
+.fm-card-slug { font-size: 11px; color: oklch(0.55 0.02 250); margin-top: 2px; }
+.fm-card-sum { text-align: right; }
+.fm-card-sum-label { font-size: 11px; color: oklch(0.55 0.02 250); }
+.fm-card-sum-val { font-weight: 700; font-size: 15px; color: oklch(0.4 0.18 230); font-variant-numeric: tabular-nums; }
+.fm-card-modules { display: flex; flex-direction: column; gap: 10px; }
+.fm-card-mod { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fm-card-mod-line { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; flex: 1 1 auto; min-width: 0; }
+.fm-card-mod-line input[type="checkbox"] { flex: 0 0 auto; }
+.fm-card-mod-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-card-mod .fm-price { width: 110px; flex: 0 0 auto; margin-top: 0; }
+.fm-card-grand { background: oklch(0.97 0.04 230); border-color: oklch(0.85 0.06 230); display: flex; justify-content: space-between; align-items: center; }
+.fm-card-sum-grand { font-size: 18px; }
+
+@media (max-width: 640px) {
+  .fm-root { padding: 14px; }
+  .fm-section { padding: 16px; border-radius: 12px; }
+  .fm-head h1 { font-size: 20px; }
+}
 `

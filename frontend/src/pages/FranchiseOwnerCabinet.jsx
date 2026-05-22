@@ -126,7 +126,6 @@ const NAV_GROUPS = [
       { id: 'franchise_analytics', label: 'Аналитика франшизы', icon: 'insights' },
       { id: 'ltv',       label: 'LTV пациентов', icon: 'insights'             },
       { id: 'apt_stats', label: 'Записи',      icon: 'query_stats'           },
-      { id: 'royalty',   label: 'Биллинг',     icon: 'account_balance_wallet'},
       { id: 'platform',  label: 'Счета платформы', icon: 'receipt_long'      },
       { id: 'acts',      label: 'Межклин. акты', icon: 'description'         },
       { id: 'inter_inv', label: 'Счета клиник', icon: 'request_quote'        },
@@ -217,7 +216,6 @@ const PAGE_TITLES = {
   analytics:  { title: 'Аналитика',        subtitle: 'Drill-down по клиникам, врачам, услугам' },
   franchise_analytics: { title: 'Аналитика франшизы', subtitle: 'KPI, когорты, bulk-тарифы и рекомендации (премиум)' },
   apt_stats:  { title: 'Записи',           subtitle: 'Статистика приёмов и расписаний' },
-  royalty:    { title: 'Биллинг',          subtitle: 'Роялти, выплаты, межклиничные акты' },
   platform:   { title: 'Счета платформы',  subtitle: 'Тарифы, начисления и счета от КлиникСеть' },
   acts:       { title: 'Межклиничные акты',subtitle: 'Акты выполненных работ между клиниками' },
   inter_inv:  { title: 'Счета между клиниками', subtitle: 'Внутренние взаиморасчёты сети' },
@@ -252,7 +250,6 @@ const PAGE_HINTS = {
   acts:       'Акты выполненных работ между клиниками сети. Генерация PDF, электронная подпись (в разработке), отправка в ФНС (планируется).',
   inter_inv:  'Счета внутри сети — между клиниками. Видны у получателя в его /admin → Биллинг.',
   platform:   'Счета от КлиникСеть владельцу франшизы. Подписка по тарифу (basic/pro/enterprise) + надбавки за модули.',
-  royalty:    'Расчёт ваших роялти от клиник + межклиничные взаиморасчёты + сводный финансовый отчёт. В разработке.',
   apt_stats:  'Статистика онлайн-записи: сколько пациентов записались, отменили, не пришли. Помогает оценить качество расписания.',
   analytics:  'Drill-down по клиникам/врачам/услугам. Метрики: воронка, динамика, топы, ledger-trend.',
   recruiters: 'Менеджеры по привлечению врачей-партнёров. Каждый получает % бонуса от направлений приведённых врачей.',
@@ -1171,21 +1168,6 @@ function AnalyticsSection({ analytics }) {
 }
 
 // ============================================================================
-// Раздел: Биллинг (заглушка — модуль роялти в разработке)
-// ============================================================================
-function BillingSection() {
-  return (
-    <Card>
-      <EmptyState
-        icon={<Icon name="account_balance_wallet" size={28} />}
-        title="Модуль роялти в разработке"
-        message="Здесь будут начисления и выплаты роялти по вашей франшизе, межклиничные акты и сводный финансовый отчёт."
-      />
-    </Card>
-  )
-}
-
-// ============================================================================
 // Раздел: Биллинг сети (svcfin01)
 // Сводка платформенного долга по тенантам + матрица «кто кому должен» внутри сети.
 // + Кнопка «Сгенерировать счёт за период» (ручной триггер franchise_billing_job).
@@ -2055,7 +2037,6 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     if (route === 'apt_stats') return <AppointmentsStatsSection token={adminToken} />
     if (route === 'platform') return <PlatformInvoicesSection adminToken={adminToken} />
     if (route === 'calls') return <CallRulesSection adminToken={adminToken} />
-    if (route === 'royalty') return <BillingSection />
     if (route === 'partners') return <PartnerDoctorsSection adminToken={adminToken} />
     if (route === 'partners_clinics') {
       return (
