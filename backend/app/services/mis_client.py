@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from app.config import settings
 
 log = logging.getLogger("mis_client")
+_SSL_WARN_LOGGED = False  # один warning за процесс, чтобы не спамить логи
 
 DEFAULT_MIS_BASE = "https://mis.stoclinic.ru:3010/api/public"
 # ===== Per-tenant МИС =====
@@ -24,11 +25,12 @@ def _ssl_context(ssl_verify: bool):
     ca_cert = getattr(settings, 'mis_ca_cert_path', '').strip()
     if ca_cert:
         return ca_cert  # httpx принимает путь к CA-файлу
-    if not ssl_verify:
+    if not ssl_verify and not _SSL_WARN_LOGGED:
         log.warning(
             "MIS SSL verification DISABLED (MIS_SSL_VERIFY=false). "
             "Установите MIS_CA_CERT_PATH=/path/to/mis_ca.pem для безопасного подключения."
         )
+        globals()["_SSL_WARN_LOGGED"] = True
     return ssl_verify
 
 

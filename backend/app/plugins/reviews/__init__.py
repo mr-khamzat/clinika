@@ -12,9 +12,9 @@ class ReviewsPlugin(BasePlugin):
 
     async def health_check(self) -> dict:
         try:
-            from app.database import async_session
+            from app.database import AsyncSessionLocal
             from sqlalchemy import text
-            async with async_session() as db:
+            async with AsyncSessionLocal() as db:
                 await db.execute(text("SELECT 1 FROM reviews LIMIT 1"))
             return {"ok": True, "detail": "OK"}
         except Exception as e:

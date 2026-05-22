@@ -231,7 +231,7 @@ async def _send_telegram(text: str, chat_id: str | None = None) -> bool:
                 log.warning(f"Telegram API вернул {r.status_code}: {r.text[:200]}")
             return r.status_code == 200
     except Exception as e:
-        log.error(f"send_alert error: {e}")
+        log.error("send_alert error: %s", repr(e), exc_info=True)
         return False
 
 

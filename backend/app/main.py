@@ -462,10 +462,11 @@ async def engagement_suggestions_job():
 
 async def ads_attribution_job():
     """Ежедневная привязка конверсий рекламы по кликам пациентов."""
+    import logging
     try:
-        from app.database import async_session
+        from app.database import AsyncSessionLocal
         from app.jobs.ads_attribution_job import run_attribution
-        async with async_session() as db:
+        async with AsyncSessionLocal() as db:
             stats = await run_attribution(db)
             logging.getLogger('scheduler').info(f'ads_attribution: {stats}')
     except Exception as e:
@@ -474,12 +475,13 @@ async def ads_attribution_job():
 
 async def ads_health_pause_job():
     """Авто-пауза мёртвой рекламы (idle > N дней или бюджет потрачен)."""
+    import logging
     try:
-        from app.database import async_session
+        from app.database import AsyncSessionLocal
         from app.models.advertising import Ad, AdStatus
         from sqlalchemy import select
         from datetime import datetime, timedelta
-        async with async_session() as db:
+        async with AsyncSessionLocal() as db:
             rows = (await db.execute(
                 select(Ad).where(Ad.status == AdStatus.ACTIVE)
             )).scalars().all()
