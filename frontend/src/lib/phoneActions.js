@@ -35,6 +35,18 @@ export function waHref(phone) {
 }
 
 /**
+ * href для WhatsApp wa.me с предзаполненным текстом.
+ * Использует click-to-chat URL (без WhatsApp Business API).
+ * Регистратор кликает → открывается WhatsApp с набранным сообщением → жмёт «отправить».
+ */
+export function waHrefWithText(phone, text) {
+  const c = cleanPhone(phone)
+  if (!c) return ''
+  const t = encodeURIComponent(String(text || ''))
+  return `https://wa.me/${c}${t ? '?text=' + t : ''}`
+}
+
+/**
  * Звонок по номеру.
  * Если открыто в Calls (Electron) — пробуем deep-link clinikset://call?phone=...
  * Иначе — стандартный tel:
@@ -58,8 +70,8 @@ export function callPhone(phone) {
  * В Electron — через shell.openExternal (внешний браузер).
  * В вебе — window.open.
  */
-export function whatsappPhone(phone) {
-  const url = waHref(phone)
+export function whatsappPhone(phone, text) {
+  const url = text ? waHrefWithText(phone, text) : waHref(phone)
   if (!url) return
   const isElectron = !!(typeof window !== 'undefined' && window.clinikset?.isElectron)
   if (isElectron && typeof window.clinikset.shell?.openExternal === 'function') {

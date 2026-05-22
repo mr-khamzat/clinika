@@ -37,6 +37,7 @@ class ReferralResponse(BaseModel):
     status: ReferralStatus
     qr_code: str | None
     patient_qr_code: str | None = None
+    patient_url: str | None = None
     short_code: int | None = None
     notes: str | None
     cancel_reason: str | None = None

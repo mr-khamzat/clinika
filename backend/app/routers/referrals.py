@@ -479,6 +479,30 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
     sla_days_val = int(getattr(service, "sla_days", 14) or 14) if service else 14
     sla_deadline_val = referral.created_at + _td(days=sla_days_val) if referral.created_at else None
 
+    # Patient URL — детерминированно вычисляется из ref_id + tenant_slug + token.
+    # Используется фронтом для WhatsApp deep-link (без API).
+    _pu = None
+    try:
+        from app.services.referral_service import make_patient_token as _mpt
+        from app.config import settings as _set
+        _slug = None
+        if referral.tenant_id:
+            from app.models.tenant import Tenant as _T
+            _t = await db.get(_T, referral.tenant_id)
+            _slug = _t.slug if _t else None
+        # mini_app_url может содержать /slug в конце — берём только scheme://host
+        _raw = (_set.mini_app_url or "").rstrip("/")
+        if _raw:
+            from urllib.parse import urlparse as _urlparse
+            _pu_p = _urlparse(_raw)
+            _origin = f"{_pu_p.scheme}://{_pu_p.netloc}" if _pu_p.netloc else _raw
+        else:
+            _origin = "https://xn--e1afagcdp8ak4h.xn--p1ai"
+        _tok = _mpt(str(referral.id), referral.patient_phone)
+        _pu = f"{_origin}/{_slug}/p/{referral.id}?t={_tok}" if _slug else f"{_origin}/p/{referral.id}?t={_tok}"
+    except Exception:
+        _pu = None
+
     return ReferralResponse(
         id=referral.id,
         from_clinic_id=referral.from_clinic_id,
@@ -489,6 +513,7 @@ async def _enrich_referral(referral: Referral, db: AsyncSession) -> ReferralResp
         mis_patient_id=referral.mis_patient_id,
         status=referral.status,
         patient_qr_code=referral.patient_qr_code,
+        patient_url=_pu,
         short_code=referral.short_code,
         qr_code=referral.qr_code,
         notes=referral.notes,

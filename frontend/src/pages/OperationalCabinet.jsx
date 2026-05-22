@@ -1029,7 +1029,39 @@ export default function OperationalCabinet({ adminToken, user, onLogout }) {
                     />
                   )}
 
-                  <div className="mt-5 grid grid-cols-2 gap-3">
+                  {/* WhatsApp click-to-chat — без API, открывает WA на устройстве регистратора
+                      с предзаполненным сообщением: логин (телефон), код и URL ЛК пациента.
+                      Деп-линк wa.me?text= — стандартный, не требует WhatsApp Business API. */}
+                  {createdRef.patient_phone && (
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      onClick={() => {
+                        const phoneClean = (createdRef.patient_phone || '').replace(/\D/g, '')
+                        const url = createdRef.patient_url
+                          || `${window.location.origin}/p/${createdRef.id}`
+                        const text = [
+                          `Здравствуйте! Вы записаны в КлиникСеть.`,
+                          ``,
+                          `📋 Код направления: ${createdRef.short_code}`,
+                          `🔑 Логин (ваш телефон): ${createdRef.patient_phone}`,
+                          ``,
+                          `🌐 Ссылка в личный кабинет:`,
+                          url,
+                          ``,
+                          `Покажите код при визите.`,
+                        ].join('\n')
+                        const wa = `https://wa.me/${phoneClean}?text=${encodeURIComponent(text)}`
+                        window.open(wa, '_blank', 'noopener,noreferrer')
+                      }}
+                      leftIcon={<Icon name="chat" size={18} fill={1} />}
+                      style={{ minHeight: 48, marginTop: 12, width: '100%', background: '#25D366', borderColor: '#25D366' }}
+                    >
+                      Отправить в WhatsApp
+                    </Button>
+                  )}
+
+                  <div className="mt-3 grid grid-cols-2 gap-3">
                     <Button
                       variant="secondary"
                       size="lg"

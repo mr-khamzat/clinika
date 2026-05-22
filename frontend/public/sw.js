@@ -3,8 +3,8 @@
  * Push notifications + offline
  */
 
-// v4 (2026-05-19): visiting_doctor edit + 422 fix optimization — bump чтобы юзеры получили новые chunks.
-const CACHE_NAME = 'clinika-portal-v4';
+// v5 (2026-05-22): WhatsApp deep-link для направлений optimization — bump чтобы юзеры получили новые chunks.
+const CACHE_NAME = 'clinika-portal-v5';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
