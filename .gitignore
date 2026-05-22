@@ -55,3 +55,4 @@ frontend/public/downloads/*.deb
 # Phase backups
 **/main.py.bak.*
 **/*.bak.phase*
+/downloads/

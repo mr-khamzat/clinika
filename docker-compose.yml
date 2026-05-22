@@ -101,6 +101,10 @@ services:
         VITE_SENTRY_ENVIRONMENT: ${VITE_SENTRY_ENVIRONMENT:-production}
     container_name: clinika-frontend
     restart: always
+    volumes:
+      # Installer-пакеты Electron-приложения KliniknetCalls — лежат на хосте,
+      # не запекаем в image (1.7GB economy). Раздаются nginx по /downloads/.
+      - /opt/clinika/downloads:/usr/share/nginx/html/downloads:ro
     ports:
       - "127.0.0.1:8901:80"
     healthcheck:
