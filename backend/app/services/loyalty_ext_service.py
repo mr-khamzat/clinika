@@ -33,6 +33,14 @@ from app.utils.phone import normalize_phone
 logger = logging.getLogger(__name__)
 
 
+class LoyaltyClaimError(Exception):
+    """Доменная ошибка получения награды (недостаточно баллов / нет в наличии / тир).
+
+    Бросается ТОЛЬКО из claim-пути (create_claim / lock_account_and_reward),
+    чтобы роутер мог вернуть 409, а триггеры начисления оставались безопасными.
+    """
+
+
 # ── Constants ──────────────────────────────────────────────────────────────
 TIER_THRESHOLDS = [
     ("platinum", 20000),
@@ -155,9 +163,20 @@ async def adjust_points(
     referral_id: uuid.UUID | None = None,
     note: str | None = None,
     add_total_spent: Decimal | None = None,
+    allow_negative: bool = True,
 ) -> LoyaltyEvent:
-    """Применить delta к балансу + обновить тир + создать LoyaltyEvent."""
-    account.points = max(0, (account.points or 0) + delta)
+    """Применить delta к балансу + обновить тир + создать LoyaltyEvent.
+
+    При allow_negative=False (списания/redeem) недостаток баллов поднимает
+    LoyaltyClaimError ДО клампа max(0, ...), чтобы перерасход не «съедался»
+    молча. Для начислений (delta>0) проверка не мешает.
+    """
+    current = account.points or 0
+    if not allow_negative and current + delta < 0:
+        raise LoyaltyClaimError(
+            f"Недостаточно баллов (нужно {-delta}, доступно {current})"
+        )
+    account.points = max(0, current + delta)
     if add_total_spent:
         account.total_spent = (account.total_spent or Decimal("0")) + add_total_spent
     account.tier = calc_tier(account.points)
@@ -316,10 +335,55 @@ async def can_claim(reward: LoyaltyReward, account: LoyaltyAccountExt) -> tuple[
     return True, None
 
 
+async def lock_account_and_reward(
+    db: AsyncSession, account_id: uuid.UUID, reward_id: uuid.UUID,
+) -> tuple[LoyaltyAccountExt, LoyaltyReward]:
+    """Перечитать обе строки с FOR UPDATE в едином порядке (account → reward).
+
+    Закрывает TOCTOU: между can_claim и списанием строки удерживаются до конца
+    транзакции, поэтому два параллельных claim сериализуются. Порядок локов
+    фиксирован (сначала account, затем reward) — единый во всём проекте, чтобы
+    не плодить deadlock. Паттерн referral_service.py:208 / inventory_fifo.py:74.
+    """
+    acc_q = await db.execute(
+        select(LoyaltyAccountExt)
+        .where(LoyaltyAccountExt.id == account_id)
+        .with_for_update()
+    )
+    account = acc_q.scalar_one_or_none()
+    if account is None:
+        raise LoyaltyClaimError("Аккаунт лояльности не найден")
+
+    rw_q = await db.execute(
+        select(LoyaltyReward)
+        .where(LoyaltyReward.id == reward_id)
+        .with_for_update()
+    )
+    reward = rw_q.scalar_one_or_none()
+    if reward is None:
+        raise LoyaltyClaimError("Награда не найдена")
+
+    return account, reward
+
+
 async def create_claim(
     db: AsyncSession, account: LoyaltyAccountExt, reward: LoyaltyReward,
 ) -> LoyaltyClaim:
-    """Создать заявку, списать points, уменьшить stock."""
+    """Создать заявку, списать points, уменьшить stock.
+
+    Ожидает, что account/reward уже заблокированы (lock_account_and_reward).
+    Повторно валидирует can_claim ВНУТРИ лока — на актуальных значениях строк,
+    а не на снимке, прочитанном до блокировки. При недостатке —
+    LoyaltyClaimError (роутер → 409), а не молчаливый max(0).
+    """
+    ok, err = await can_claim(reward, account)
+    if not ok:
+        raise LoyaltyClaimError(err or "Награда недоступна")
+
+    # Defense-in-depth: stock-гонка после can_claim не должна уводить в минус.
+    if reward.stock is not None and reward.stock <= 0:
+        raise LoyaltyClaimError("Награда закончилась")
+
     claim = LoyaltyClaim(
         id=uuid.uuid4(),
         account_id=account.id,
@@ -332,6 +396,7 @@ async def create_claim(
     await adjust_points(
         db, account, -reward.cost_points, "reward_claimed",
         note=f"Reward: {reward.name}",
+        allow_negative=False,
     )
 
     if reward.stock is not None and reward.stock > 0:

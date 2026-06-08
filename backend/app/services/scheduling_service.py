@@ -1,11 +1,31 @@
 """
 Сервис расписания: генерация свободных слотов для врача на дату.
 """
+import hashlib
 from datetime import date, time, datetime, timedelta
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.doctor import Doctor, DoctorSchedule, Appointment, AppointmentStatus
+
+
+def _is_postgres(db: AsyncSession) -> bool:
+    """True, если сессия привязана к PostgreSQL (advisory-lock доступен)."""
+    try:
+        return db.bind is not None and db.bind.dialect.name == "postgresql"
+    except Exception:
+        return False
+
+
+def _advisory_lock_key(doctor_id, appointment_date: date, start_time: time) -> int:
+    """Стабильный 8-байтный int для pg_advisory_xact_lock на (doctor_id, date, start_time).
+
+    Тот же приём, что в slot_booking_service: лок держится до commit/rollback
+    транзакции и сериализует параллельные попытки занять один и тот же слот.
+    """
+    raw = f"{doctor_id}|{appointment_date.isoformat()}|{start_time.isoformat()}".encode()
+    digest = hashlib.sha256(raw).digest()[:8]
+    return int.from_bytes(digest, byteorder="big", signed=True)
 
 
 def _time_slots(start: time, end: time, duration_min: int) -> list[tuple[time, time]]:
@@ -83,7 +103,19 @@ async def book_slot(
     notes: str | None = None,
     tenant_id=None,
 ) -> Appointment:
-    """Создаёт запись на слот. Проверяет что слот свободен."""
+    """Создаёт запись на слот. Проверяет что слот свободен.
+
+    Защита от двойной брони: pg_advisory_xact_lock на (doctor_id, date, start_time)
+    перед SELECT-проверкой сериализует конкурентные брони одного слота (как в
+    slot_booking_service). Лок снимается на commit/rollback. На не-PostgreSQL
+    (например SQLite в тестах) лок мягко пропускается.
+    """
+    # 0) Advisory lock на (doctor_id, date, start_time) — освобождается на commit.
+    #    Только PostgreSQL; на прочих диалектах (например SQLite в тестах) пропускаем.
+    if _is_postgres(db):
+        lock_key = _advisory_lock_key(doctor_id, appointment_date, start_time)
+        await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_key})
+
     # Проверка — слот свободен
     conflict = (await db.execute(
         select(Appointment).where(

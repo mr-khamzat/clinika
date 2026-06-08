@@ -5,7 +5,20 @@ Patient Vitals — модель показателей здоровья паци
 
 Дедупликация на уровне сервиса по (tenant_id, patient_phone, metric, measured_at):
 повторная синхронизация одних и тех же сэмплов не создаёт дубликатов.
+
+[Находка #17 — 152-ФЗ] Виталки — сведения о здоровье (спец.категория ПДн).
+Шифруются value_extra (составные данные/метаданные сна) и note (свободный текст)
+по паттерну PHI appointments (см. app/models/doctor.py): shadow-колонка *_encrypted
+(Text), property *_plain (lazy decrypt с fallback на legacy), set_*() + listener.
+value_extra (JSONB) → JSON-строка в value_extra_encrypted (Text).
+ОСОБЫЙ СЛУЧАЙ: value_num (Numeric) НЕ шифруется — основной числовой показатель
+используется для графиков/агрегации и малочувствителен вне ФИО (сужение исходной
+рекомендации, см. PR). metric/unit/source НЕ шифруются (служебные). Blind-index
+не нужен.
+
+ВАЖНО: shadow-колонки добавляет ОТДЕЛЬНАЯ миграция; здесь — ORM + accessors.
 """
+import json
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -64,3 +77,42 @@ class PatientVital(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=datetime.utcnow
     )
+
+    # ── Shadow-колонки шифрования медданных (#17) ────────────────────────────
+    # Создаёт отдельная миграция. value_extra_encrypted хранит JSON-строку (Text).
+    value_extra_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    note_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # ── Accessors (lazy-decrypt, fallback на legacy-plaintext) ───────────────
+    @property
+    def value_extra_plain(self) -> dict | None:
+        """Расшифрованные доп.данные показателя (JSON → dict; fallback legacy)."""
+        if self.value_extra_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.value_extra_encrypted)
+            if val is not None:
+                try:
+                    return json.loads(val)
+                except (ValueError, TypeError):
+                    return None
+        return self.value_extra
+
+    def set_value_extra(self, value: dict | None) -> None:
+        from app.services.encryption_service import encrypt
+        self.value_extra = value
+        self.value_extra_encrypted = encrypt(json.dumps(value)) if value is not None else None
+
+    @property
+    def note_plain(self) -> str | None:
+        """Расшифрованная заметка к измерению (или legacy-plaintext)."""
+        if self.note_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.note_encrypted)
+            if val is not None:
+                return val
+        return self.note
+
+    def set_note(self, value: str | None) -> None:
+        from app.services.encryption_service import encrypt
+        self.note = value
+        self.note_encrypted = encrypt(value) if value else None

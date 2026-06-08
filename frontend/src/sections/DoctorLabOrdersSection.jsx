@@ -13,7 +13,7 @@
  * UX:
  *   • Top-bar: фильтр по статусу + кнопка «+ Новая заявка»
  *   • Таблица: Пациент / Лаборатория / Анализы / Статус / Дата
- *   • Клик по строке → модал с результатами и кнопкой «Скачать PDF»
+ *   • Клик по строке → модал с результатами
  * ========================================
  */
 import { useEffect, useState, useCallback, useMemo, lazy, Suspense } from 'react'
@@ -125,22 +125,6 @@ export default function DoctorLabOrdersSection() {
   }
 
   const closeDetail = () => { setDetailOrder(null); setDetailResults(null) }
-
-  const downloadPdf = async () => {
-    if (!detailOrder) return
-    try {
-      const r = await api.get(`/doctor/lab-orders/${detailOrder.id}/pdf`, { responseType: 'blob' })
-      const blob = new Blob([r.data], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `lab-order-${detailOrder.id}.pdf`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch {
-      toast({ kind: 'info', text: 'PDF пока недоступен' })
-    }
-  }
 
   // ── 402: модуль не подключён ───────────────────────────────────────────────
   if (error === 'module_off') {
@@ -374,11 +358,6 @@ export default function DoctorLabOrdersSection() {
             )}
 
             <div className="flex items-center justify-end gap-2 pt-2" style={{ borderTop: '1px solid #f1f5f9' }}>
-              {['results_ready','delivered'].includes(detailOrder.status) && (
-                <Button variant="secondary" onClick={downloadPdf} leftIcon={<MIcon name="download" size={15} />}>
-                  Скачать PDF
-                </Button>
-              )}
               <Button variant="ghost" onClick={closeDetail}>Закрыть</Button>
             </div>
           </div>

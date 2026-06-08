@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select
 from app.database import get_db
 from app.core.security import decode_token
 from app.models.user import User, UserRole
@@ -154,6 +154,70 @@ async def get_current_tenant(
     return tenant
 
 
+def _is_cross_tenant(user) -> bool:
+    """Кросс-тенантные роли — RLS-контекст НЕ ставим (permissive), изоляция на ручных фильтрах.
+
+    super_admin (вся платформа) + franchise_owner (несколько тенантов франшизы по
+    tenant.franchise_owner_id). Если поставить им single app.tenant_id, RLS срежет
+    видимость до одного тенанта → регрессия кросс-тенантных франшиза-вью (calls/ledger/...).
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role in (UserRole.SUPER_ADMIN.value, UserRole.FRANCHISE_OWNER.value)
+
+
+def _is_super_admin(user) -> bool:
+    """super_admin строго ПО РОЛИ (не по NULL tenant_id).
+
+    Дубль `regulation_service.is_super_admin`, вынесен сюда чтобы избежать
+    импорта сервисного слоя в core/deps. Только роль SUPER_ADMIN считается
+    супер-админом — НИКОГДА не «tenant_id IS NULL».
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role == UserRole.SUPER_ADMIN.value
+
+
+def assert_same_tenant(user, obj, status: int = 404) -> None:
+    """Единый fail-CLOSED guard кросс-тенантного доступа (находка #7).
+
+    Заменяет повсеместную fail-open лесенку
+    ``if user.tenant_id and obj.tenant_id and obj.tenant_id != user.tenant_id``,
+    которая пропускала проверку, если ЛЮБОЙ операнд был NULL → кросс-тенантный
+    доступ к записям с ``tenant_id=NULL``.
+
+    Логика (образец `regulation_service.user_has_access_to_regulation:295-297`):
+      • super_admin (строго ПО РОЛИ) — пропускается всегда;
+      • иначе NULL у пользователя ИЛИ у записи — запрет;
+      • иначе несовпадение tenant_id — запрет.
+
+    ``obj`` может быть моделью с атрибутом ``tenant_id`` или сырым значением
+    tenant_id (UUID/None). По умолчанию запрет — ``404`` (не подтверждаем
+    существование чужой записи); вызывающий может передать 403.
+    """
+    if _is_super_admin(user):
+        return
+    obj_tid = getattr(obj, "tenant_id", obj)
+    user_tid = getattr(user, "tenant_id", None)
+    # Fail-closed: NULL с любой стороны (для не-super_admin) = запрет.
+    if not user_tid or not obj_tid or obj_tid != user_tid:
+        raise HTTPException(status_code=status, detail="Не найдено")
+
+
+def assert_can_create_in_tenant(user) -> None:
+    """Запрет рождения NULL-тенанта (находка #7, п.3).
+
+    super_admin может создавать записи в системном контексте, но обычный
+    пользователь без tenant_id создал бы запись с ``tenant_id=NULL``, которую
+    затем сможет прочитать любой тенант — поэтому fail-closed 409.
+    """
+    if _is_super_admin(user):
+        return
+    if not getattr(user, "tenant_id", None):
+        raise HTTPException(
+            status_code=409,
+            detail="Пользователь не привязан к тенанту — создание записи запрещено",
+        )
+
+
 def require_role(*roles: str):
     """Фабрика зависимостей — разрешает доступ только указанным ролям."""
     async def _check(user: User = Depends(get_current_user)) -> None:
@@ -169,24 +233,41 @@ def require_role(*roles: str):
 async def get_tenant_db(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> AsyncSession:
-    """Сессия БД с установленным app.tenant_id для RLS.
+):
+    """Сессия БД с установленным app.tenant_id для RLS (находка #1, Часть B).
 
-    Если у пользователя есть tenant_id — устанавливает SET LOCAL app.tenant_id,
-    и RLS автоматически фильтрует строки по тенанту.
-    Если tenant_id отсутствует (суперадмин) — сессия без ограничений, видны все строки.
+    Кладёт tenant_id аутентифицированного пользователя в request-scoped
+    contextvar (`current_tenant_id`). begin-listener в database.py применяет
+    `SELECT set_config('app.tenant_id', <tid>, true)` в начале КАЖДОЙ
+    транзакции сессии — поэтому контекст переживает mid-handler db.commit()
+    (старая одноразовая установка терялась после первого commit, и RLS
+    становился permissive — корень находки #1, Часть B).
+
+    Поведение:
+      • tenant-пользователь → app.tenant_id = его tenant → RLS фильтрует по тенанту;
+      • super_admin (строго ПО РОЛИ) → контекст НЕ ставится (None) → app.tenant_id=''
+        → RLS-политика пропускает все тенанты (super_admin видит всё);
+      • по выходе контекст восстанавливается (token reset) — без утечки в пул.
+
+    Зависит от get_current_user → требует аутентификации. НЕ использовать на
+    эндпоинтах, где db нужна ДО auth (например, восстановление patient-сессии
+    по токену из query/header) — там оставлять Depends(get_db).
 
     Использование:
-        @router.get("/referrals")
-        async def list_referrals(db: AsyncSession = Depends(get_tenant_db)):
+        @router.get("/medcard/diagnoses")
+        async def list_diagnoses(db: AsyncSession = Depends(get_tenant_db)):
             ...
     """
-    if user.tenant_id:
-        # set_config(name, value, is_local=true) эквивалентен SET LOCAL,
-        # но поддерживает bind-параметры → защищён от SQL-injection
-        # (раньше user.tenant_id вставлялся через f-string — уязвимость P1).
-        await db.execute(
-            text("SELECT set_config('app.tenant_id', :tid, true)"),
-            {"tid": str(user.tenant_id)},
-        )
-    return db
+    from app.database import current_tenant_id
+
+    # Кросс-тенантные роли (super_admin = вся платформа; franchise_owner = несколько
+    # тенантов франшизы по tenant.franchise_owner_id) — контекст НЕ ставим (None →
+    # permissive RLS), иначе RLS срежет их видимость до одного tenant_id (регрессия
+    # франшиза-отчётности/звонков). Их изоляция — на ручных фильтрах франшизы.
+    # Обычный tenant-пользователь → его tenant_id (канонизируем как UUID-строку).
+    tid = None if _is_cross_tenant(user) else (str(user.tenant_id) if user.tenant_id else None)
+    token = current_tenant_id.set(str(uuid.UUID(tid)) if tid else None)
+    try:
+        yield db
+    finally:
+        current_tenant_id.reset(token)

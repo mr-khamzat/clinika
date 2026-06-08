@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.database import get_db
 from app.models.advertising import Ad, AdStatus
 from app.models.user import User
@@ -109,7 +109,7 @@ def _tone_body(tone: str, price: Optional[float]) -> str:
 @router.post("/bulk-generate", dependencies=[_mod])
 async def ads_bulk_generate(
     body: BulkGenerateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_manager),
 ):
     """Создаёт N draft-объявлений (разной тональности+CTA) для одной услуги.
@@ -218,7 +218,7 @@ DEFAULT_TEMPLATES = [
 
 @router.post("/templates/seed", dependencies=[_mod])
 async def ads_templates_seed(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_manager),
 ):
     """Создаёт стартовые шаблоны для тенанта (идемпотентно).

@@ -24,7 +24,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db, assert_same_tenant
 from app.core.tenant import require_feature
 from app.models.user import User
 from app.models.doctor import Appointment, AppointmentStatus, Doctor
@@ -125,8 +125,8 @@ async def _get_appt_or_404(db: AsyncSession, appt_id: uuid.UUID, user: User) -> 
     appt = (await db.execute(select(Appointment).where(Appointment.id == appt_id))).scalar_one_or_none()
     if not appt:
         raise HTTPException(404, "Запись на приём не найдена")
-    if user.tenant_id and appt.tenant_id and appt.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, appt, status=403)
     return appt
 
 
@@ -138,7 +138,7 @@ async def upsert_outcome(
     appointment_id: uuid.UUID,
     data: OutcomeIn,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать или обновить заключение по приёму (1:1)."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -199,7 +199,7 @@ async def upsert_outcome(
 async def get_outcome(
     appointment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Получить заключение по приёму. Возвращает 200 с null если нет."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -219,7 +219,7 @@ async def upload_attachment(
     appointment_id: uuid.UUID,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Загрузить файл (PDF/JPG/PNG/WEBP, ≤25 МБ) к приёму."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -264,7 +264,7 @@ async def upload_attachment(
 async def list_attachments(
     appointment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список файлов приёма."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -281,7 +281,7 @@ async def delete_attachment(
     appointment_id: uuid.UUID,
     attachment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удалить файл приёма (запись + физический файл)."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -312,7 +312,7 @@ async def serve_attachment(
     appointment_id: uuid.UUID,
     attachment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Скачать/просмотреть файл приёма (требует авторизацию)."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -348,7 +348,7 @@ async def create_internal_referral(
     appointment_id: uuid.UUID,
     data: ReferralIn,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать внутриклиническое направление по итогу приёма."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -367,8 +367,8 @@ async def create_internal_referral(
         d = (await db.execute(select(Doctor).where(Doctor.id == data.target_doctor_id))).scalar_one_or_none()
         if not d:
             raise HTTPException(404, "Целевой врач не найден")
-        if current_user.tenant_id and d.tenant_id and d.tenant_id != current_user.tenant_id:
-            raise HTTPException(403, "Чужой тенант")
+        # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+        assert_same_tenant(current_user, d, status=403)
         target_doctor_name = d.full_name
 
     ref = InternalReferral(
@@ -448,7 +448,7 @@ async def create_internal_referral(
 async def list_internal_referrals(
     appointment_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все направления, созданные из этого приёма."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -481,7 +481,7 @@ async def list_internal_referrals(
 async def patient_appointment_history(
     phone: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История приёмов пациента (по телефону) — последние 50 визитов с заключениями.
 

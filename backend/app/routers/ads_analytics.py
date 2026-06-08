@@ -16,7 +16,7 @@ from app.models.advertising import Ad, AdEvent, AdEventType
 from app.models.referral import Referral
 from app.models.user import User
 from app.routers.ads import _mod
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.services.ads_analytics import funnel_for_ad, heatmap_for_ad, forecast_for_ad
 
 router = APIRouter(prefix="/ads", tags=["ads-analytics"])
@@ -38,7 +38,7 @@ async def compare_ads(
     metric: str = Query("clicks"),
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if metric not in ("clicks", "impressions", "conversions", "revenue"):
         raise HTTPException(400, "invalid metric")
@@ -89,7 +89,7 @@ async def compare_ads(
 async def ad_funnel(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     ad = await _get_ad_or_404(db, ad_id, current_user.tenant_id)
     return await funnel_for_ad(db, ad)
@@ -101,7 +101,7 @@ async def ad_heatmap(
     event_type: str = Query("click"),
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if event_type not in ("impression", "click", "conversion", "schedule_book"):
         raise HTTPException(400, "invalid event_type")
@@ -114,7 +114,7 @@ async def ad_heatmap(
 async def ad_forecast(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     ad = await _get_ad_or_404(db, ad_id, current_user.tenant_id)
     return await forecast_for_ad(db, ad)
@@ -125,7 +125,7 @@ async def ad_conversions(
     ad_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=500),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Последние конверсии по объявлению с временем до конверсии и данными пациента."""
     ad = await _get_ad_or_404(db, ad_id, current_user.tenant_id)

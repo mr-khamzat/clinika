@@ -5,7 +5,22 @@
   LabProvider  — справочник лабораторий тенанта (Гемотест, Инвитро, KDL, ...)
   LabOrder     — заявка на анализ (отправляется в лабораторию, потом приходит результат)
   LabResult    — отдельный результат анализа (по тест-коду)
+
+[Находка #17 — 152-ФЗ] Результаты анализов — специальная категория ПДн.
+В LabResult шифруются value / reference_range / raw_json по тому же паттерну,
+что и PHI appointments (см. app/models/doctor.py): plaintext в shadow-колонке
+*_encrypted (Text), plaintext отдаётся property *_plain (lazy decrypt с fallback
+на legacy-plaintext), на запись шифрует set_*() и listener pii_sync.
+raw_json (JSONB) → шифруется как JSON-сериализованная строка в raw_json_encrypted
+(Text); getter делает json.loads(decrypt(...)), setter — encrypt(json.dumps(...)).
+flagged (Boolean, аномальность) и test_code/test_name/unit НЕ шифруются —
+структурированные/служебные поля без сведений о здоровье конкретного пациента.
+Blind-index не нужен (поиска по value/reference_range нет).
+
+ВАЖНО: shadow-колонки добавляет ОТДЕЛЬНАЯ миграция; здесь — ORM + accessors.
+Существующие plaintext-колонки НЕ переименованы.
 """
+import json
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
@@ -105,4 +120,59 @@ class LabResult(Base):
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
 
+    # ── Shadow-колонки шифрования медданных (#17) ────────────────────────────
+    # Создаёт отдельная миграция. raw_json_encrypted хранит JSON-строку (Text).
+    value_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reference_range_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_json_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     order: Mapped["LabOrder"] = relationship("LabOrder", back_populates="results")
+
+    # ── Accessors (lazy-decrypt, fallback на legacy-plaintext) ───────────────
+    @property
+    def value_plain(self) -> str | None:
+        """Расшифрованное значение анализа (или legacy-plaintext)."""
+        if self.value_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.value_encrypted)
+            if val is not None:
+                return val
+        return self.value
+
+    def set_value(self, value: str | None) -> None:
+        from app.services.encryption_service import encrypt
+        self.value = value
+        self.value_encrypted = encrypt(value) if value else None
+
+    @property
+    def reference_range_plain(self) -> str | None:
+        """Расшифрованный референсный интервал (или legacy-plaintext)."""
+        if self.reference_range_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.reference_range_encrypted)
+            if val is not None:
+                return val
+        return self.reference_range
+
+    def set_reference_range(self, value: str | None) -> None:
+        from app.services.encryption_service import encrypt
+        self.reference_range = value
+        self.reference_range_encrypted = encrypt(value) if value else None
+
+    @property
+    def raw_json_plain(self) -> dict | None:
+        """Расшифрованный сырой ответ лаборатории (JSON → dict; fallback legacy)."""
+        if self.raw_json_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.raw_json_encrypted)
+            if val is not None:
+                try:
+                    return json.loads(val)
+                except (ValueError, TypeError):
+                    return None
+        return self.raw_json
+
+    def set_raw_json(self, value: dict | None) -> None:
+        from app.services.encryption_service import encrypt
+        self.raw_json = value
+        self.raw_json_encrypted = encrypt(json.dumps(value)) if value is not None else None

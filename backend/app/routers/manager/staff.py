@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.security import verify_password
 from app.services import audit_service
 from app.services.audit_service import AuditAction
@@ -33,7 +33,7 @@ async def assign_clinic(
     admin_id: uuid.UUID,
     body: AssignClinicRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(User).where(User.id == admin_id))
     admin = result.scalar_one_or_none()
@@ -62,7 +62,7 @@ async def assign_clinic(
 async def create_admin(
     body: CreateAdminRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _sub: None = Depends(require_active_subscription),
 ):
     from app.core.security import hash_password
@@ -114,7 +114,7 @@ async def update_admin(
     admin_id: uuid.UUID,
     body: UpdateAdminRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.core.security import hash_password
     result = await db.execute(select(User).where(User.id == admin_id))
@@ -173,7 +173,7 @@ async def deactivate_admin(
     admin_id: uuid.UUID,
     hard: bool = Query(False),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if admin_id == current_user.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить собственный аккаунт")
@@ -216,7 +216,7 @@ async def deactivate_admin(
 @router.get("/managers/", response_model=list[dict])
 async def list_managers(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = select(User).where(User.role == UserRole.MANAGER, User.is_active == True)
     if current_user.tenant_id is not None:
@@ -287,7 +287,7 @@ _ROLE_MAP = {
 async def create_staff_universal(
     body: CreateStaffRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _sub: None = Depends(require_active_subscription),
 ):
     """Универсальное создание сотрудника любой роли (#22).
@@ -506,7 +506,7 @@ async def create_staff_universal(
 async def delete_staff_universal(
     user_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Soft-delete сотрудника: is_active=false + is_suspended=true.
 
@@ -542,7 +542,7 @@ async def hard_delete_staff(
     user_id: uuid.UUID,
     body: HardDeleteRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Полное удаление сотрудника (DROP ROW). Требует подтверждения паролем.
 

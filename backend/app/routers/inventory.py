@@ -39,7 +39,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, get_tenant_db, require_manager
 from app.core.tenant import require_module
 from app.database import get_db
 from app.models.clinic import Clinic
@@ -372,7 +372,7 @@ async def list_items(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     q = select(InventoryItem).where(InventoryItem.tenant_id == tenant_id)
@@ -403,7 +403,7 @@ async def list_items(
 async def create_item(
     body: ItemIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     # Проверка уникальности SKU в рамках тенанта
@@ -429,7 +429,7 @@ async def create_item(
 async def get_item(
     item_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     item = await _verify_item(db, tenant_id, item_id)
@@ -448,7 +448,7 @@ async def patch_item(
     item_id: uuid.UUID,
     body: ItemPatch,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     item = await _verify_item(db, tenant_id, item_id)
@@ -478,7 +478,7 @@ async def patch_item(
 async def delete_item(
     item_id: uuid.UUID,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Soft delete — выставляем is_active=False."""
     tenant_id = _require_tenant(user)
@@ -493,7 +493,7 @@ async def delete_item(
 async def import_items_csv(
     file: UploadFile = File(...),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Массовый импорт items из CSV.
 
@@ -574,7 +574,7 @@ async def list_stocks(
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     q = (
@@ -620,7 +620,7 @@ async def list_stocks(
 async def stock_count(
     body: StockCountIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Инвентаризация: для каждого item-а создаём adjustment к фактическому qty."""
     tenant_id = _require_tenant(user)
@@ -671,7 +671,7 @@ async def list_movements(
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     q = select(InventoryMovement).where(InventoryMovement.tenant_id == tenant_id)
@@ -702,7 +702,7 @@ async def list_movements(
 async def income(
     body: IncomeIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     await _verify_item(db, tenant_id, body.item_id)
@@ -730,7 +730,7 @@ async def income(
 async def outgoing(
     body: OutgoingIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     await _verify_item(db, tenant_id, body.item_id)
@@ -758,7 +758,7 @@ async def outgoing(
 async def transfer(
     body: TransferIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Двойная проводка: списание из from_clinic + приход в to_clinic."""
     tenant_id = _require_tenant(user)
@@ -808,7 +808,7 @@ async def transfer(
 async def write_off(
     body: WriteOffIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tenant_id = _require_tenant(user)
     await _verify_item(db, tenant_id, body.item_id)
@@ -838,7 +838,7 @@ async def write_off(
 async def alerts(
     expiring_days: int = Query(30, ge=1, le=365),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Текущие алерты по инвентарю тенанта.
 

@@ -3,11 +3,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from sqlalchemy import text as sql_text
 import json as _json
+from typing import Optional
 from pydantic import BaseModel
 from app.database import get_db
 from app.models.referral import Referral, ReferralStatus
 from app.models.clinic import Clinic
+from app.models.tenant import Tenant
+from app.models.user import User
 from app.config import settings
+from app.core.deps import require_manager, get_tenant_db
+from app.services.settings_service import get_setting, set_setting
+from app.services import encryption_service
 from app.utils.phone import phone_variants
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
@@ -125,4 +131,75 @@ async def mis_webhook(
     return {
         "status": "not_found",
         "detail": "Активное направление с таким телефоном не найдено",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Настройки МИС-интеграции тенанта (находка #22 — фронт FranchiseOwnerCabinet
+# зовёт PATCH /integrations/mis/settings, эндпоинт не был реализован).
+# ─────────────────────────────────────────────────────────────────────
+class MISSettingsPatch(BaseModel):
+    mis_api_url: Optional[str] = None
+    mis_api_key: Optional[str] = None
+    mis_clinic_ids: Optional[list] = None
+
+
+@router.patch("/mis/settings")
+async def update_mis_settings(
+    body: MISSettingsPatch,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_tenant_db),
+):
+    """Обновить настройки МИС-интеграции текущего тенанта.
+
+    Доступ: manager / franchise_owner / super_admin (require_manager).
+    Tenant-скоуп: всё пишется под tenant_id текущего пользователя
+    (system_settings — с префиксом тенанта; mis_clinic_ids — в Tenant).
+
+    Секрет api_key шифруется через encryption_service.encrypt и хранится в
+    отдельном ключе ``mis_api_key_enc``. Легаси-ключ ``mis_api_key`` (plaintext)
+    тоже обновляется — его читают существующие потребители (mis_sync, referral
+    auto-confirm, ltv, ads и т.д.) без расшифровки. PATCH-семантика: поля со
+    значением None пропускаются (не затирают сохранённое).
+    """
+    tid = current_user.tenant_id
+    if not tid:
+        # super_admin без тенанта не имеет «своих» настроек МИС
+        raise HTTPException(status_code=400, detail="Пользователь без tenant_id")
+
+    if body.mis_api_url is not None:
+        await set_setting(db, "mis_api_url", body.mis_api_url.strip(), tenant_id=tid)
+
+    if body.mis_api_key is not None:
+        key = body.mis_api_key.strip()
+        # Зашифрованная копия секрета (encryption_service.encrypt → enc:/plain:)
+        await set_setting(
+            db, "mis_api_key_enc", encryption_service.encrypt(key), tenant_id=tid
+        )
+        # Легаси plaintext-ключ — для существующих читателей, ожидающих сырой ключ
+        await set_setting(db, "mis_api_key", key, tenant_id=tid)
+
+    if body.mis_clinic_ids is not None:
+        # mis_clinic_ids живёт в Tenant (JSONB), а не в system_settings
+        ids = [str(x).strip() for x in body.mis_clinic_ids if str(x).strip()]
+        tenant = (
+            await db.execute(select(Tenant).where(Tenant.id == tid))
+        ).scalar_one_or_none()
+        if not tenant:
+            raise HTTPException(status_code=404, detail="Тенант не найден")
+        tenant.mis_clinic_ids = ids
+        await db.commit()
+
+    # Текущее состояние (api_key не отдаём — секрет)
+    saved_url = await get_setting(db, "mis_api_url", "", tenant_id=tid)
+    tenant_ids = (
+        await db.execute(select(Tenant.mis_clinic_ids).where(Tenant.id == tid))
+    ).scalar_one_or_none()
+    return {
+        "status": "ok",
+        "mis_api_url": saved_url,
+        "mis_api_key_set": bool(
+            await get_setting(db, "mis_api_key", "", tenant_id=tid)
+        ),
+        "mis_clinic_ids": tenant_ids or [],
     }

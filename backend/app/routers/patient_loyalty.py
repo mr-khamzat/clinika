@@ -53,9 +53,12 @@ async def _require_module_and_account(
         raise HTTPException(404, "No tenant context")
     if not await ls.is_module_active(db, sess.tenant_id):
         raise HTTPException(402, "Модуль loyalty_pro не подключён")
-    pa = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: аккаунт лояльности — в рамках тенанта сессии.
+    pa = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not pa:
-        pa, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        pa, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     acc = await ls.get_or_create_account(db, sess.tenant_id, pa)
     await db.commit()
@@ -177,17 +180,24 @@ async def claim_reward(
     session_token: Optional[str] = Query(default=None),
 ):
     sess = await _get_session(db, request, authorization, x_patient_session, session_token)
+    # _require_module_and_account делает свои подготовительные commit'ы внутри —
+    # лочим строки ПОСЛЕ него, в той же открытой транзакции, что и сам claim.
     tenant_id, acc = await _require_module_and_account(db, sess)
 
-    rw = await db.get(LoyaltyReward, body.reward_id)
-    if not rw or rw.tenant_id != tenant_id:
+    # Проверка принадлежности тенанту — на незаблокированной копии (быстрый отказ).
+    rw_check = await db.get(LoyaltyReward, body.reward_id)
+    if not rw_check or rw_check.tenant_id != tenant_id:
         raise HTTPException(404, "Reward not found")
 
-    ok, err = await ls.can_claim(rw, acc)
-    if not ok:
-        raise HTTPException(409, err or "Cannot claim")
+    # Атомарно: блокируем account+reward (FOR UPDATE), re-validate и списываем
+    # внутри лока — закрывает TOCTOU параллельных claim'ов.
+    try:
+        acc, rw = await ls.lock_account_and_reward(db, acc.id, body.reward_id)
+        claim = await ls.create_claim(db, acc, rw)
+    except ls.LoyaltyClaimError as e:
+        await db.rollback()
+        raise HTTPException(409, str(e) or "Cannot claim")
 
-    claim = await ls.create_claim(db, acc, rw)
     await db.commit()
     return {
         "claim_id": str(claim.id),

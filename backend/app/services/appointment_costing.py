@@ -330,12 +330,16 @@ async def on_appointment_completed(
             summary["skipped_reason"] = "no_tenant"
             return summary
 
-        # Идемпотентность: уже списано ранее?
+        # Идемпотентность: уже списано ранее (и ещё не реверснуто)?
+        # Учитываем только НЕ-реверснутые WRITE_OFF: после отката приёма
+        # (reverse_writeoff помечает их reversed=True) повторный complete
+        # должен снова списать материалы, а не уйти в already_written_off.
         existing = (
             await db.execute(
                 select(func.count(InventoryMovement.id)).where(
                     InventoryMovement.appointment_id == appointment_id,
                     InventoryMovement.type == InventoryMovementType.WRITE_OFF,
+                    InventoryMovement.reversed.is_(False),
                 )
             )
         ).scalar() or 0

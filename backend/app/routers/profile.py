@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.core.security import hash_password, verify_password
 from app.database import get_db
 from app.models.clinic import Clinic
@@ -147,7 +147,7 @@ async def _serialize_profile(user: User, db: AsyncSession) -> dict:
 @router.get("/me")
 async def get_my_profile(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает редактируемый профиль текущего сотрудника."""
     return await _serialize_profile(current_user, db)
@@ -158,7 +158,7 @@ async def get_my_profile(
 async def update_my_profile(
     data: ProfileUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Обновление телефона, почты и/или пароля.
 
@@ -225,7 +225,7 @@ async def update_my_profile(
 async def upload_my_avatar(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Загрузка аватарки (multipart). JPEG/PNG/WEBP ≤ 5 МБ. Большие изображения
     автоматически уменьшаются до 512×512 через Pillow."""
@@ -293,7 +293,7 @@ async def upload_my_avatar(
 @router.delete("/me/avatar")
 async def delete_my_avatar(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удаление аватарки (файл + поле avatar_url=NULL)."""
     path = _find_existing_avatar(current_user.id)

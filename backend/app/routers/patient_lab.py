@@ -43,9 +43,12 @@ async def _get_session(
 
 
 async def _account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
-    acc = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: ищем/создаём аккаунт в рамках тенанта сессии.
+    acc = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not acc:
-        acc, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        acc, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     return acc
 
@@ -107,9 +110,10 @@ async def list_lab_results(
                 {
                     "test_code": r.test_code,
                     "test_name": r.test_name,
-                    "value": r.value,
+                    # #17 PHI: значения анализов через расшифрованные property *_plain.
+                    "value": r.value_plain,
                     "unit": r.unit,
-                    "reference_range": r.reference_range,
+                    "reference_range": r.reference_range_plain,
                     "flagged": r.flagged,
                     "result_date": r.result_date.isoformat() if r.result_date else None,
                 }

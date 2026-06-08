@@ -11,7 +11,7 @@ from sqlalchemy import select, func, and_, Integer, cast, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.user import User
 from app.models.clinic import Clinic
 from app.models.service import Service
@@ -38,7 +38,7 @@ class SetCategoryBonusRequest(BaseModel):
 async def list_service_categories(
     clinic_id: uuid.UUID | None = None,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     filters = [Service.is_active == True]
     # Tenant isolation: super_admin (tenant_id is None) видит всё
@@ -66,7 +66,7 @@ async def list_services(
     search: str | None = None,
     for_referrals: bool | None = None,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Список услуг с tenant-isolation.
@@ -109,7 +109,7 @@ async def list_services(
 async def create_service(
     body: CreateServiceRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Tenant isolation: проверяем что клиника принадлежит текущему тенанту
     if body.clinic_id is not None and current_user.tenant_id is not None:
@@ -153,7 +153,7 @@ async def update_service(
     service_id: uuid.UUID,
     body: UpdateServiceRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(Service).where(Service.id == service_id))
     svc = result.scalar_one_or_none()
@@ -191,7 +191,7 @@ async def update_service(
 async def deactivate_service(
     service_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(Service).where(Service.id == service_id))
     svc = result.scalar_one_or_none()
@@ -206,7 +206,7 @@ async def deactivate_service(
 async def set_category_bonus(
     body: SetCategoryBonusRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     cat_filter = Service.category.is_(None) if body.category == "Без категории" else Service.category == body.category
     filters = [cat_filter, Service.is_active == True]
@@ -226,7 +226,7 @@ async def set_category_bonus(
 async def sync_services_from_mis(
     clinic_id: uuid.UUID | None = None,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.services.mis_client import get_services
     from app.services.mis_resolver import resolve_mis_creds

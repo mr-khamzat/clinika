@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.patient_chat import PatientChat
 from app.schemas.chat_slots import SlotOfferCreate, ChatMessageResponse
@@ -45,7 +45,7 @@ async def post_slot_offer(
     thread_id: UUID,
     body: SlotOfferCreate,
     user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
+    session: AsyncSession = Depends(get_tenant_db),
 ) -> ChatMessageResponse:
     # Проверка роли: только staff клиники
     if user.role not in STAFF_ROLES:

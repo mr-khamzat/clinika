@@ -28,6 +28,7 @@ class SubStatus:
 class InvoiceStatus:
     DRAFT    = "draft"
     SENT     = "sent"
+    PARTIAL  = "partial"   # частично оплачен (paid_amount < amount)
     PAID     = "paid"
     OVERDUE  = "overdue"
     VOID     = "void"

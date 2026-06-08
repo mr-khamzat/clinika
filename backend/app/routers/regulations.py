@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.database import get_db
 from app.models.regulation import (
     Regulation,
@@ -86,7 +86,7 @@ async def _get_version_or_none(
 @router.get("/my-assigned")
 async def my_assigned(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список регламентов, доступных текущему пользователю."""
     if not can_read_regulations(current_user):
@@ -98,7 +98,7 @@ async def my_assigned(
 async def regulation_detail(
     regulation_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Детали регламента + текущая опубликованная версия."""
     if not can_read_regulations(current_user):
@@ -133,7 +133,7 @@ async def complete_regulation(
     regulation_id: uuid.UUID,
     body: CompleteBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Е-подпись регламента (текущая опубликованная версия)."""
     if not can_read_regulations(current_user):

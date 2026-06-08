@@ -224,6 +224,7 @@ async def reverse_writeoff(
         InventoryMovement.appointment_id == appointment_id,
         InventoryMovement.tenant_id == tenant_id,
         InventoryMovement.quantity < 0,
+        InventoryMovement.reversed.is_(False),
     )
     movements = (await db.execute(q)).scalars().all()
 
@@ -269,6 +270,10 @@ async def reverse_writeoff(
         if stock_rows:
             target = max(stock_rows, key=lambda r: r.quantity or 0)
             target.quantity = (target.quantity or Decimal("0")) + qty
+
+        # Идемпотентность: помечаем ИСХОДНОЕ списание как реверснутое в той же
+        # транзакции, чтобы повторный вызов reverse_writeoff его не подхватил.
+        m.reversed = True
         count += 1
 
     return count

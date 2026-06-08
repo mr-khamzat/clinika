@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, require_role, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.doctor_clinic_access import DoctorClinicAccess
 from app.models.recruiter_bonus import RecruiterBonus, RecruiterBonusStatus
@@ -63,7 +63,7 @@ class AcceptInviteRequest(BaseModel):
 @router.get("/stats")
 async def get_recruiter_stats(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
 ):
     doctors_count = await db.scalar(
@@ -97,7 +97,7 @@ async def get_recruiter_stats(
 @router.get("/doctors")
 async def get_my_doctors(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
 ):
     result = await db.execute(
@@ -157,7 +157,7 @@ async def get_my_doctors(
 @router.get("/bonuses")
 async def get_recruiter_bonuses(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
     limit: int = Query(50, le=200),
     offset: int = Query(0),
@@ -193,7 +193,7 @@ async def get_recruiter_bonuses(
 async def register_doctor_direct(
     body: RegisterDoctorRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
 ):
     """
@@ -337,7 +337,7 @@ async def register_doctor_direct(
 @router.get("/invites")
 async def get_sent_invites(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
 ):
     """Устаревший эндпоинт — теперь используется register_doctor."""
@@ -365,7 +365,7 @@ async def get_sent_invites(
 async def create_doctor_invite(
     body: InviteRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _: None = _recruiter,
 ):
     """Устаревший endpoint для обратной совместимости."""

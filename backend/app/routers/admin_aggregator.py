@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, get_tenant_db, require_role
 from app.models.user import User, UserRole
 from app.models.aggregator import AggregatorPartnership, AggregatorLead
 from app.services import aggregator_service
@@ -82,7 +82,7 @@ def _serialize_lead(l: AggregatorLead) -> dict:
 @router.get("/partnerships")
 async def list_partnerships(
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:
@@ -99,7 +99,7 @@ async def list_partnerships(
 async def create_partnership(
     payload: PartnershipIn,
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:
@@ -125,7 +125,7 @@ async def update_partnership(
     partnership_id: uuid.UUID,
     payload: PartnershipPatch,
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     p = (await db.execute(
@@ -146,7 +146,7 @@ async def update_partnership(
 async def delete_partnership(
     partnership_id: uuid.UUID,
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     p = (await db.execute(
@@ -168,7 +168,7 @@ async def list_leads(
     partner: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:
@@ -198,7 +198,7 @@ async def patch_lead_status(
     lead_id: uuid.UUID,
     payload: LeadStatusPatch,
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if payload.status not in {"received", "contacted", "scheduled", "completed", "lost"}:
@@ -230,7 +230,7 @@ async def patch_lead_status(
 async def aggregator_stats(
     period: str = Query("30d", description="Период: '7d', '30d', '90d'"),
     _: User = _REQUIRE_MANAGER,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:

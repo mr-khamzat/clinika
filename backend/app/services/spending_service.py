@@ -19,7 +19,7 @@ from typing import Optional
 from sqlalchemy import select, and_, extract, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.doctor import Appointment, AppointmentStatus, Doctor
+from app.models.doctor import Appointment, AppointmentStatus, Doctor, hash_phone
 from app.models.clinic import Clinic
 from app.models.service import Service
 from app.models.payments_clinic import ClinicPayment
@@ -39,9 +39,13 @@ async def compute_spending_summary(
     phone_n = normalize_phone(patient_phone)
 
     # ── Список приёмов ─────────────────────────────────────────────────
+    # #2 PHI cutover: exact-match по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). hash_phone сам
+    # нормализует номер. Загружаем ORM-объекты — отображаемые поля при
+    # необходимости берутся через *_plain.
     q = select(Appointment).where(
         and_(
-            Appointment.patient_phone == phone_n,
+            Appointment.patient_phone_hash == hash_phone(patient_phone),
             extract("year", Appointment.appointment_date) == year,
             Appointment.status == AppointmentStatus.COMPLETED,
         )

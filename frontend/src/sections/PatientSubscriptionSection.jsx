@@ -13,14 +13,14 @@
  *   GET  /patient/subscription/plans/{plan_key}/benefits-detail — детали по категориям
  *   POST /patient/subscription/start                          — {plan, billing, trial_days?}
  *   POST /patient/subscription/cancel                         — {reason, comment?}
- *   POST /patient/subscription/resume
- *   PATCH /patient/subscription/my                            — {auto_renew}
+ *   POST /patient/subscription/resume                         — (= включить авто-продление)
  *   POST /patient/subscription/inquire-details                — {plan_key, category} → {thread_id}
+ *   NB: авто-продление управляется через resume/cancel (PATCH /my на бэке нет)
  *
  * Состояния:
  *   • module_active=false → плашка «Свяжитесь с менеджером клиники» (CTA → чат с клиникой)
  *   • Нет подписки → hero + 3 PlanCardV2 + toggle monthly/annual + PlanComparisonTable (desktop) + FAQ
- *   • Есть подписка → hero (золотисто-фиолетовый) + BenefitsList + auto-renew + история + cancel
+ *   • Есть подписка → hero (золотисто-фиолетовый) + BenefitsList + auto-renew + cancel
  *
  * Deeplink в чат:
  *   • При клике «Подробнее» на конкретной категории → POST /inquire-details
@@ -196,7 +196,6 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
   const [moduleActive, setModuleActive] = useState(true)
   const [sub, setSub]               = useState(null)
   const [benefits, setBenefits]     = useState(null)
-  const [history, setHistory]       = useState([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
   const [billing, setBilling]       = useState('monthly')
@@ -249,14 +248,8 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
           const b = await axios.get(`${API_BASE}/patient/subscription/benefits`, { params: { t: sessionToken } })
           setBenefits(b.data?.benefits || b.data || {})
         } catch { setBenefits({}) }
-
-        try {
-          const h = await axios.get(`${API_BASE}/patient/subscription/history`, { params: { t: sessionToken } })
-          setHistory(Array.isArray(h.data) ? h.data : [])
-        } catch { setHistory([]) }
       } else {
         setBenefits(null)
-        setHistory([])
       }
     } catch (e) {
       const status = e?.response?.status
@@ -332,8 +325,20 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
     const newVal = !sub?.auto_renew
     setSub(s => s ? { ...s, auto_renew: newVal } : s)
     try {
-      await axios.patch(`${API_BASE}/patient/subscription/my`, { auto_renew: newVal }, { params: { t: sessionToken } })
+      // На бэке нет PATCH /my: авто-продление управляется через resume/cancel.
+      // Включить авто-продление = возобновить, выключить = отменить (подписка
+      // остаётся активной до конца оплаченного периода).
+      if (newVal) {
+        await axios.post(`${API_BASE}/patient/subscription/resume`, {}, { params: { t: sessionToken } })
+      } else {
+        await axios.post(
+          `${API_BASE}/patient/subscription/cancel`,
+          { reason: 'auto_renew_off' },
+          { params: { t: sessionToken } }
+        )
+      }
       toast(newVal ? 'Авто-продление включено' : 'Авто-продление отключено', 'info', 2500)
+      load()
     } catch (e) {
       setSub(s => s ? { ...s, auto_renew: !newVal } : s)
       toast('Не удалось сменить настройку', 'error', 3000)
@@ -528,43 +533,6 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
             <BenefitsList benefits={benefits || {}} />
           </Suspense>
         </div>
-
-        {/* История платежей */}
-        {history?.length > 0 && (
-          <div>
-            <h3 className="text-base font-bold mb-3" style={{ color: '#0F172A' }}>История платежей</h3>
-            <div className="rounded-2xl bg-white overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
-              {history.map((h, i) => (
-                <div
-                  key={h.id || i}
-                  className="flex items-center justify-between px-4 py-3"
-                  style={{ borderBottom: i === history.length - 1 ? 'none' : '1px solid rgba(0,0,0,.05)' }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center"
-                      style={{ background: h.status === 'paid' ? '#DCFCE7' : '#FEE2E2' }}
-                    >
-                      <span
-                        className="material-symbols-outlined text-base"
-                        style={{ color: h.status === 'paid' ? '#15803D' : '#991B1B', fontVariationSettings: "'FILL' 1" }}
-                      >
-                        {h.status === 'paid' ? 'check' : 'close'}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>{h.description || 'Подписка'}</p>
-                      <p className="text-xs" style={{ color: '#64748B' }}>{fmtDate(h.paid_at || h.created_at)}</p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-bold" style={{ color: h.status === 'paid' ? '#0F172A' : '#94A3B8' }}>
-                    {Number(h.amount || 0).toLocaleString('ru-RU')} ₽
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* CancelModal */}
         <Suspense fallback={null}>

@@ -226,6 +226,12 @@ class InventoryMovement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+    # Идемпотентность реверса: исходное WRITE_OFF-движение помечается reversed=True
+    # после создания обратного INCOME, чтобы повторный reverse_writeoff не дублировал
+    # восстановление остатка (см. reverse_writeoff / on_appointment_completed).
+    reversed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
 
 # ─────────── 1С Excel/CSV import audit log (Этап 0) ────────────────────────

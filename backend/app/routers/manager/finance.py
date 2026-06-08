@@ -13,7 +13,7 @@ from sqlalchemy import select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.tenant import Tenant
 from app.models.franchise import Franchise
@@ -176,9 +176,15 @@ async def list_cross_clinic_invoices(
 async def list_bonus_aggregation(
     status: Optional[str] = Query(None),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
-    """Агрегация бонусов по сотрудникам — для таба «Сотрудникам»."""
+    """Агрегация бонусов по сотрудникам — для таба «Сотрудникам».
+
+    RLS defense-in-depth (#1, Часть B): через get_tenant_db сессия несёт
+    app.tenant_id менеджера — User/Bonus уже изолированы на уровне БД,
+    что совпадает с ручным фильтром Bonus.tenant_id == current_user.tenant_id.
+    super_admin (по роли) → пустой контекст → видит все (как и было).
+    """
     from app.models.user import User as UserModel
     q = (
         select(

@@ -76,8 +76,12 @@ class PlatformaOfdProvider(BaseOfdProvider):
             password = cfg_extra.get("password") or ""
             api_base = cfg_extra.get("api_base") or api_base
 
-        # api_key в OFDConfig — для совместимости со старым контрактом
-        api_key = getattr(self.config, "api_key", "") if self.config else ""
+        # api_key в OFDConfig — для совместимости со старым контрактом.
+        # Читаем расшифрованное значение (api_key хранится зашифрованным).
+        api_key = (
+            (getattr(self.config, "decrypted_api_key", None) or "")
+            if self.config else ""
+        )
         if api_key and ":" in api_key and not (login and password):
             # формат "login:password"
             l, p = api_key.split(":", 1)

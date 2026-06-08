@@ -9,7 +9,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager, require_director_or_owner
+from app.core.deps import require_manager, require_director_or_owner, get_tenant_db
 from app.models.user import User
 from app.models.patient_account import PatientAccount
 from app.models.patient_session import PatientSession
@@ -42,7 +42,7 @@ async def list_patients(
         pattern="^(last_seen_desc|last_seen_asc|created_desc|login_count_desc)$",
     ),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список пациентов с фильтрами для главной таблицы CRM-hub."""
     stmt = select(PatientAccount)
@@ -135,7 +135,7 @@ async def list_patients(
 async def patient_card(
     patient_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Карточка пациента: профиль + теги + заметки + comm_prefs + последние логины + appointments + suggestions."""
     pa = (
@@ -282,7 +282,7 @@ async def add_tag(
     patient_id: uuid.UUID,
     body: TagCreate,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     pt = PatientTag(
         tenant_id=current_user.tenant_id,
@@ -305,7 +305,7 @@ async def remove_tag(
     patient_id: uuid.UUID,
     tag_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     pt = (
         await db.execute(
@@ -335,7 +335,7 @@ async def add_note(
     patient_id: uuid.UUID,
     body: NoteCreate,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     n = PatientNote(
         tenant_id=current_user.tenant_id,
@@ -360,7 +360,7 @@ async def update_note(
     note_id: uuid.UUID,
     body: NoteCreate,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     n = (
         await db.execute(
@@ -384,7 +384,7 @@ async def delete_note(
     patient_id: uuid.UUID,
     note_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     n = (
         await db.execute(
@@ -417,7 +417,7 @@ async def update_prefs(
     patient_id: uuid.UUID,
     body: CommPrefsUpdate,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     prefs = (
         await db.execute(
@@ -447,7 +447,7 @@ async def list_suggestions(
     kind: Optional[str] = Query(None),
     limit: int = Query(200, ge=1, le=500),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список pending подсказок для основной вкладки CRM."""
     stmt = select(EngagementSuggestion).where(
@@ -480,7 +480,7 @@ async def list_suggestions(
 async def dismiss_suggestion(
     sug_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = (
         await db.execute(
@@ -508,7 +508,7 @@ async def postpone_suggestion(
     sug_id: uuid.UUID,
     body: PostponeRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = (
         await db.execute(
@@ -531,7 +531,7 @@ async def postpone_suggestion(
 @router.post("/suggestions/regenerate")
 async def regenerate_suggestions(
     current_user: User = Depends(require_director_or_owner),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Ручной запуск suggestion_engine для текущего тенанта (для отладки)."""
     from app.services.suggestion_engine import run_engine

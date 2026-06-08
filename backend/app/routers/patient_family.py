@@ -18,7 +18,7 @@ from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.patient_account import PatientAccount
 from app.models.patient_family import PatientFamilyMember  # Legacy-таблица семьи (до Главы 8)
 from app.models.patient_session import PatientSession
-from app.models.doctor import Appointment, AppointmentStatus
+from app.models.doctor import Appointment, AppointmentStatus, hash_phone
 from app.services import family_service as fs
 from app.services.patient_session_service import restore_session, create_session
 from app.core.security import make_patient_session_token
@@ -52,10 +52,13 @@ async def _get_session(
 
 
 async def _current_account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
-    acc = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: текущий пациент — в рамках тенанта своей сессии.
+    acc = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not acc:
-        # Auto-create skeleton
-        acc, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        # Auto-create skeleton + линк к тенанту
+        acc, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     return acc
 
@@ -231,12 +234,15 @@ async def invite_member(
     if phone_n == normalize_phone(acc.phone):
         raise HTTPException(422, "Нельзя пригласить себя")
 
-    existing = await fs.get_account_by_phone(db, body.phone)
+    # [#18] Для семьи проверяем существование аккаунта в рамках ТЕНАНТА сессии:
+    # пациент другой клиники = «нет в этой клинике» → пойдём по ветке invite.
+    existing = await fs.get_account_by_phone(db, body.phone, tenant_id=sess.tenant_id)
 
     if existing is None:
-        # Создаём skeleton и добавляем сразу
+        # Создаём/привязываем skeleton к тенанту и добавляем сразу
         new_pa, _ = await fs.get_or_create_account_by_phone(
             db, body.phone, name=body.full_name, birth_date=body.birth_date,
+            tenant_id=sess.tenant_id,
         )
         mem = FamilyMember(
             id=uuid.uuid4(),
@@ -485,9 +491,12 @@ async def aggregated_cabinet(
         raise HTTPException(404, "Patient not found")
 
     # Приёмы
+    # #2 PHI cutover: exact-match по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). hash_phone сам
+    # нормализует номер.
     appts_r = await db.execute(
         select(Appointment).where(
-            Appointment.patient_phone == normalize_phone(target_pa.phone)
+            Appointment.patient_phone_hash == hash_phone(target_pa.phone)
         ).order_by(Appointment.appointment_date.desc()).limit(50)
     )
     appts = appts_r.scalars().all()

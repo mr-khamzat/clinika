@@ -17,7 +17,6 @@
 //   PATCH  /patient/family/members/{id}      {relation?, can_*?}
 //   DELETE /patient/family/members/{id}
 //   GET    /patient/family/switch-context/{patient_id}
-//   PATCH  /patient/family (новый,) — переименование группы (best-effort)
 //
 // Все запросы идут через session_token (как в остальных секциях кабинета),
 // токен передаётся в query-param ?t={session}.
@@ -110,8 +109,6 @@ export default function PatientFamilySection({ sessionToken, ownerName, onContex
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
-  const [renameMode, setRenameMode] = useState(false)
-  const [renameValue, setRenameValue] = useState('')
 
   const token = sessionToken || (typeof window !== 'undefined' ? localStorage.getItem(SESSION_KEY) : null)
 
@@ -240,25 +237,6 @@ export default function PatientFamilySection({ sessionToken, ownerName, onContex
     }
   }
 
-  // ── Переименование группы ──
-  const handleRename = async () => {
-    const newName = renameValue.trim()
-    if (!newName || newName === family?.name) {
-      setRenameMode(false); return
-    }
-    try {
-      // Контракт не описывает PATCH /patient/family, но мы посылаем best-effort —
-      // backend-агент может реализовать. При неудаче — silent: имя не меняем.
-      await axios.patch(`${API_BASE}/patient/family`, { name: newName }, { params: { t: token } })
-      setFamily(prev => prev ? { ...prev, name: newName } : prev)
-      toast('Название обновлено', 'success')
-    } catch {
-      toast('Не удалось переименовать', 'error')
-    } finally {
-      setRenameMode(false)
-    }
-  }
-
   // ── Render ──
   if (loading) {
     return (
@@ -308,39 +286,15 @@ export default function PatientFamilySection({ sessionToken, ownerName, onContex
       {/* ── Хедер группы ── */}
       <div className="flex items-center justify-between mb-5">
         <div className="min-w-0 flex-1">
-          {renameMode ? (
-            <div className="flex items-center gap-2">
-              <input
-                value={renameValue}
-                onChange={e => setRenameValue(e.target.value)}
-                autoFocus
-                onKeyDown={e => {
-                  if (e.key === 'Enter') handleRename()
-                  if (e.key === 'Escape') setRenameMode(false)
-                }}
-                className="px-3 py-1.5 rounded-lg border border-gray-300 text-base font-bold outline-none focus:border-cyan-500 flex-1"
-                style={{ color: '#0A2342' }}
-              />
-              <button onClick={handleRename} className="text-sm font-bold text-emerald-600">OK</button>
-              <button onClick={() => setRenameMode(false)} className="text-sm font-bold text-gray-400">×</button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="material-symbols-outlined text-2xl flex-shrink-0"
-                    style={{ color: '#EC4899', fontVariationSettings: "'FILL' 1" }}>
-                family_restroom
-              </span>
-              <h2 className="text-lg font-extrabold truncate" style={{ color: '#0A2342' }}>
-                {family.name || 'Моя семья'}
-              </h2>
-              <button
-                onClick={() => { setRenameValue(family.name || ''); setRenameMode(true) }}
-                className="text-gray-400 hover:text-gray-600 p-1"
-                title="Переименовать">
-                <span className="material-symbols-outlined text-base">edit</span>
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="material-symbols-outlined text-2xl flex-shrink-0"
+                  style={{ color: '#EC4899', fontVariationSettings: "'FILL' 1" }}>
+              family_restroom
+            </span>
+            <h2 className="text-lg font-extrabold truncate" style={{ color: '#0A2342' }}>
+              {family.name || 'Моя семья'}
+            </h2>
+          </div>
           <p className="text-xs text-gray-500 mt-0.5 ml-9">{sortedMembers.length} {sortedMembers.length === 1 ? 'участник' : 'участника(-ов)'}</p>
         </div>
       </div>

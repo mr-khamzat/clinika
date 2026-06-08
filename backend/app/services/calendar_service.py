@@ -13,7 +13,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.calendar import PatientCalendarToken
-from app.models.doctor import Appointment, AppointmentStatus, Doctor
+from app.models.doctor import Appointment, AppointmentStatus, Doctor, hash_phone
 from app.models.clinic import Clinic
 from app.models.patient_account import PatientAccount
 from app.utils.phone import normalize_phone
@@ -56,15 +56,17 @@ async def get_token_record(
 async def upcoming_appointments(
     db: AsyncSession, patient_phone: str, weeks_ahead: int = 4,
 ) -> list[tuple[Appointment, Doctor | None, Clinic | None]]:
-    phone_n = normalize_phone(patient_phone)
     today = date.today()
     horizon = today + timedelta(weeks=weeks_ahead)
+    # #2 PHI cutover: exact-match по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). hash_phone сам
+    # нормализует номер, поэтому отдельный normalize_phone здесь не нужен.
     r = await db.execute(
         select(Appointment, Doctor, Clinic)
         .join(Doctor, Doctor.id == Appointment.doctor_id, isouter=True)
         .join(Clinic, Clinic.id == Appointment.clinic_id, isouter=True)
         .where(
-            Appointment.patient_phone == phone_n,
+            Appointment.patient_phone_hash == hash_phone(patient_phone),
             Appointment.appointment_date >= today,
             Appointment.appointment_date <= horizon,
             Appointment.status.in_([

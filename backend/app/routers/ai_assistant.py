@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, assert_same_tenant, get_tenant_db
 from app.core.tenant import require_module
 from app.database import get_db
 from app.models.ai_assistant import AiConversation, AiMessage
@@ -487,7 +487,7 @@ async def list_conversations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список диалогов тенанта с фильтрами."""
     if not user.tenant_id:
@@ -516,7 +516,7 @@ async def list_conversations(
 async def list_messages_admin(
     conv_id: uuid.UUID,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Полная история диалога (для менеджера)."""
     conv = (
@@ -524,8 +524,8 @@ async def list_messages_admin(
     ).scalar_one_or_none()
     if not conv:
         raise HTTPException(404, "Диалог не найден")
-    if user.tenant_id and conv.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, conv, status=403)
 
     rows = (
         await db.execute(
@@ -544,7 +544,7 @@ async def list_messages_admin(
 async def take_conversation(
     conv_id: uuid.UUID,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Менеджер берёт диалог в работу: status='escalated' → создание в Support Chat."""
     conv = (
@@ -552,8 +552,8 @@ async def take_conversation(
     ).scalar_one_or_none()
     if not conv:
         raise HTTPException(404, "Диалог не найден")
-    if user.tenant_id and conv.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, conv, status=403)
 
     conv.status = "escalated"
     conv.updated_at = datetime.utcnow()

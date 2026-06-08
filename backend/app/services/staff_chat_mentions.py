@@ -29,6 +29,26 @@ log = logging.getLogger(__name__)
 # Латиница / цифры / _ / точка, длиной 3-30 символов.
 _RE_MENTION = re.compile(r"@([A-Za-z0-9_.]{3,30})")
 
+# Удерживаем ссылки на fire-and-forget задачи: без сильной ссылки GC может
+# собрать ещё не выполнившуюся задачу (см. предупреждение в доке asyncio).
+_pending_tg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_tg_task(coro) -> None:
+    """Запускает корутину фоном, удерживая ссылку и логируя исключения."""
+    task = asyncio.create_task(coro)
+    _pending_tg_tasks.add(task)
+
+    def _on_done(t: asyncio.Task) -> None:
+        _pending_tg_tasks.discard(t)
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc is not None:
+            log.warning("TG mention notification task failed: %r", exc)
+
+    task.add_done_callback(_on_done)
+
 
 def parse_mention_strings(text: str) -> list[str]:
     """Извлекает уникальные @username из текста (нижний регистр)."""
@@ -146,8 +166,8 @@ async def notify_mentions(
         tg = (getattr(u, "telegram_id", None) or "").strip()
         if not tg:
             continue
-        # fire-and-forget
-        asyncio.create_task(send_mention_tg_notification(
+        # fire-and-forget (ссылка удерживается в _pending_tg_tasks)
+        _spawn_tg_task(send_mention_tg_notification(
             chat_id=tg, sender_name=sender_name,
             room_name=room_name, text_preview=text_preview,
         ))

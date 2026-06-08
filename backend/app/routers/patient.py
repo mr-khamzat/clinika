@@ -1172,6 +1172,17 @@ async def export_personal_data(
     session = await _session_or_401(db, t)
     phone_n = normalize_phone(session.phone)
 
+    # [#18] DSAR ограничен данными ТЕНАНТА сессии (152-ФЗ + изоляция справочника):
+    # экспорт по A не должен раскрывать приёмы/чаты/документы пациента из клиники B.
+    # _scoped(model, q) добавляет фильтр tenant_id == session.tenant_id, если тенант
+    # известен; иначе (None — глобальный/легаси контекст) фильтр не накладывается.
+    _sess_tid = session.tenant_id
+
+    def _scoped(model, q):
+        if _sess_tid is not None and hasattr(model, "tenant_id"):
+            return q.where(model.tenant_id == _sess_tid)
+        return q
+
     # ── Профиль PatientAccount ────────────────────────────────────────────────
     pa = (await db.execute(
         _sel(PatientAccount).where(PatientAccount.phone == phone_n)
@@ -1198,25 +1209,25 @@ async def export_personal_data(
 
     # ── Направления ───────────────────────────────────────────────────────────
     refs = (await db.execute(
-        _sel(Referral).where(Referral.patient_phone == phone_n).order_by(Referral.created_at.desc())
+        _scoped(Referral, _sel(Referral).where(Referral.patient_phone == phone_n)).order_by(Referral.created_at.desc())
     )).scalars().all()
     referrals_data = [_serialize_obj(r) for r in refs]
 
     # ── Записи к врачу ────────────────────────────────────────────────────────
     apts = (await db.execute(
-        _sel(_Apt).where(_Apt.patient_phone == phone_n).order_by(_Apt.appointment_date.desc())
+        _scoped(_Apt, _sel(_Apt).where(_Apt.patient_phone == phone_n)).order_by(_Apt.appointment_date.desc())
     )).scalars().all()
     appointments_data = [_serialize_obj(a) for a in apts]
 
     # ── Семья ─────────────────────────────────────────────────────────────────
     family = (await db.execute(
-        _sel(PatientFamilyMember).where(PatientFamilyMember.owner_phone == phone_n)
+        _scoped(PatientFamilyMember, _sel(PatientFamilyMember).where(PatientFamilyMember.owner_phone == phone_n))
     )).scalars().all()
     family_data = [_serialize_obj(f) for f in family]
 
     # ── Диалоги с AI ──────────────────────────────────────────────────────────
     convs = (await db.execute(
-        _sel(AiConversation).where(AiConversation.patient_phone == phone_n).order_by(AiConversation.created_at.desc())
+        _scoped(AiConversation, _sel(AiConversation).where(AiConversation.patient_phone == phone_n)).order_by(AiConversation.created_at.desc())
     )).scalars().all()
     ai_dialogs: list[dict] = []
     for cv in convs:
@@ -1230,7 +1241,7 @@ async def export_personal_data(
 
     # ── Документы ─────────────────────────────────────────────────────────────
     docs = (await db.execute(
-        _sel(PatientDocument).where(PatientDocument.patient_phone == phone_n).order_by(PatientDocument.created_at.desc())
+        _scoped(PatientDocument, _sel(PatientDocument).where(PatientDocument.patient_phone == phone_n)).order_by(PatientDocument.created_at.desc())
     )).scalars().all()
     documents_data = []
     for d in docs:
@@ -1241,7 +1252,7 @@ async def export_personal_data(
 
     # ── Чаты с операторами ────────────────────────────────────────────────────
     chats = (await db.execute(
-        _sel(PatientChat).where(PatientChat.patient_phone == phone_n).order_by(PatientChat.created_at.desc())
+        _scoped(PatientChat, _sel(PatientChat).where(PatientChat.patient_phone == phone_n)).order_by(PatientChat.created_at.desc())
     )).scalars().all()
     chats_data: list[dict] = []
     for ch in chats:
@@ -1393,23 +1404,31 @@ async def forget_personal_data(
     """
     152-ФЗ ст. 21 — Право на удаление персональных данных.
 
-    Анонимизирует данные пациента: PatientAccount.name/birth_date → null,
-    phone → "anon_<hash>". Связанный User (если есть) тоже анонимизируется.
-    Все сессии отзываются, в audit_log пишется patient.data_forgotten,
-    в consent_records — событие "forgotten".
+    [#18] «Забвение» выполняется В РАМКАХ ТЕНАНТА сессии: сначала снимается
+    связь TenantPatient(этот тенант, пациент). Глобальную идентичность
+    (PatientAccount.phone/name + связанный User) обнуляем ТОЛЬКО когда не
+    осталось ни одной TenantPatient-связи (пациент больше нигде не лечится).
+    Если пациент остаётся в других клиниках — глобальная запись сохраняется,
+    отзываются лишь сессии этого тенанта.
+
+    При полном забвении: PatientAccount.name/birth_date → null,
+    phone → "anon_<hash>", связанный User анонимизируется, все сессии отзываются.
+    В audit_log пишется patient.data_forgotten, в consent_records — "forgotten".
 
     Медкарта в МИС НЕ затрагивается (внешняя система).
     """
     import hashlib
-    from sqlalchemy import update as _upd
+    from sqlalchemy import update as _upd, delete as _del, func as _func
     from app.models.patient_account import PatientAccount
     from app.models.patient_session import PatientSession
+    from app.models.tenant_patient import TenantPatient
     from app.models.consent import ConsentRecord
     from app.models.user import User
     from app.services import audit_service
 
     session = await _session_or_401(db, t)
     phone_n = normalize_phone(session.phone)
+    sess_tid = session.tenant_id
     anon_id = hashlib.sha256(f"{phone_n}-{session.id}".encode()).hexdigest()[:12]
     anon_phone = f"anon_{anon_id}"
 
@@ -1418,13 +1437,40 @@ async def forget_personal_data(
         select(PatientAccount).where(PatientAccount.phone == phone_n)
     )).scalar_one_or_none()
     pa_id = pa.id if pa else None
+
+    # [#18] «Забвение» в рамках тенанта: сначала снимаем связь пациента с этой
+    # клиникой. Глобальную идентичность (phone/name на PatientAccount + связанный
+    # User) обнуляем ТОЛЬКО если не осталось ни одной TenantPatient-связи —
+    # иначе мы бы стёрли пациента, который лечится и в других клиниках.
+    remaining_links = 0
     if pa:
+        if sess_tid is not None:
+            await db.execute(
+                _del(TenantPatient).where(
+                    TenantPatient.tenant_id == sess_tid,
+                    TenantPatient.patient_id == pa.id,
+                )
+            )
+            await db.flush()
+            remaining_links = (await db.execute(
+                select(_func.count())
+                .select_from(TenantPatient)
+                .where(TenantPatient.patient_id == pa.id)
+            )).scalar_one() or 0
+
+    wipe_global = (pa is not None) and (sess_tid is None or remaining_links == 0)
+
+    if pa and wipe_global:
         await db.execute(
             _upd(PatientAccount)
             .where(PatientAccount.id == pa.id)
             .values(
                 phone=anon_phone,
                 name=None,
+                # [#18] зачищаем и shadow-колонки шифрования ФИО (иначе ciphertext
+                # ФИО переживёт «забвение»). Прямой UPDATE минует setter — чистим явно.
+                name_encrypted=None,
+                name_hash=None,
                 email=None,
                 birth_date=None,
                 is_active=False,
@@ -1432,7 +1478,7 @@ async def forget_personal_data(
             )
         )
 
-    # ── User (если связан) ────────────────────────────────────────────────────
+    # ── User (если связан) — только при полном (глобальном) забвении ───────────
     user_id_for_audit: uuid.UUID | None = None
     try:
         u = (await db.execute(
@@ -1440,18 +1486,19 @@ async def forget_personal_data(
         )).scalar_one_or_none()
         if u:
             user_id_for_audit = u.id
-            await db.execute(
-                _upd(User)
-                .where(User.id == u.id)
-                .values(
-                    full_name=f"Anonymized_{anon_id}",
-                    phone_number=None,
-                    telegram_id=None,
-                    date_of_birth=None,
-                    consent_given=False,
-                    is_active=False,
+            if wipe_global:
+                await db.execute(
+                    _upd(User)
+                    .where(User.id == u.id)
+                    .values(
+                        full_name=f"Anonymized_{anon_id}",
+                        phone_number=None,
+                        telegram_id=None,
+                        date_of_birth=None,
+                        consent_given=False,
+                        is_active=False,
+                    )
                 )
-            )
             db.add(ConsentRecord(
                 user_id=u.id,
                 event="forgotten",
@@ -1465,13 +1512,13 @@ async def forget_personal_data(
     except Exception:
         pass
 
-    # ── Все сессии этого телефона — revoked ───────────────────────────────────
+    # ── Сессии: при полном забвении — все по телефону; иначе только этого ──────
+    #    тенанта (пациент остаётся залогинен в других клиниках).
     try:
-        await db.execute(
-            _upd(PatientSession)
-            .where(PatientSession.phone == phone_n)
-            .values(revoked=True)
-        )
+        sess_q = _upd(PatientSession).where(PatientSession.phone == phone_n)
+        if not wipe_global and sess_tid is not None:
+            sess_q = sess_q.where(PatientSession.tenant_id == sess_tid)
+        await db.execute(sess_q.values(revoked=True))
     except Exception:
         pass
 
@@ -1485,8 +1532,9 @@ async def forget_personal_data(
             entity_type="patient_data",
             entity_id=pa_id,
             before={"phone": phone_n},
-            after={"phone": anon_phone},
-            comment="152-FZ Art.21 erase",
+            after={"phone": (anon_phone if wipe_global else phone_n)},
+            comment=("152-FZ Art.21 erase (global)" if wipe_global
+                     else "152-FZ Art.21 erase (tenant-scoped, patient retained in other tenants)"),
             request=request,
             tenant_id=session.tenant_id,
         )
@@ -1496,6 +1544,13 @@ async def forget_personal_data(
     await db.commit()
     return {
         "ok": True,
-        "message": "Данные анонимизированы согласно 152-ФЗ ст. 21. Все сессии отозваны.",
+        "message": (
+            "Данные анонимизированы согласно 152-ФЗ ст. 21. Все сессии отозваны."
+            if wipe_global else
+            "Связь с клиникой удалена согласно 152-ФЗ ст. 21. "
+            "Идентичность сохранена, т.к. вы обслуживаетесь в других клиниках; "
+            "сессии этой клиники отозваны."
+        ),
         "anon_id": anon_id,
+        "global_erase": wipe_global,
     }

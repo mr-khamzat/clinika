@@ -7,13 +7,13 @@ from app.models.user import User, UserRole
 from app.models.referral import Referral, ReferralStatus
 from app.models.bonus import Bonus, BonusStatus
 from app.schemas.user import UserResponse, UserUpdate
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 
 router = APIRouter(prefix="/admins", tags=["admins"])
 
 
 @router.get("/me")
-async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+async def get_me(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_tenant_db)):
     from app.models.tenant import Tenant as TenantModel
     from app.config import settings
     tenant_slug = None
@@ -80,7 +80,7 @@ async def get_me(current_user: User = Depends(get_current_user), db: AsyncSessio
 async def update_me(
     data: UserUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     for key, value in data.model_dump(exclude_none=True).items():
         setattr(current_user, key, value)
@@ -96,7 +96,7 @@ async def update_me(
 @router.get("/me/stats")
 async def get_my_stats(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Личная статистика сотрудника: текущий месяц, прошлый месяц, за всё время."""
     from datetime import date
@@ -208,7 +208,7 @@ async def get_my_stats(
 @router.get("/me/kpi")
 async def get_my_kpi(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """KPI цель текущего сотрудника за текущий месяц."""
     from app.models.kpi_target import KpiTarget
@@ -262,7 +262,7 @@ async def get_my_kpi(
 @router.get("/", response_model=list[UserResponse])
 async def list_admins(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список сотрудников (admin/manager). Партнёры исключены — они в /manager/partners/."""
     # Только активные сотрудники (деактивированные видит только super_admin)
@@ -281,7 +281,7 @@ async def list_admins(
 async def get_admin_stats(
     admin_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Stats for a specific admin: referral counts and bonus totals. Manager only."""
     result = await db.execute(select(User).where(User.id == admin_id))
@@ -325,7 +325,7 @@ async def get_admin_stats(
 async def list_doctor_requests(
     status_filter: str | None = None,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список заявок на регистрацию врача от менеджеров по привлечению."""
     from app.models.external_doctor import DoctorRequest
@@ -360,7 +360,7 @@ async def list_doctor_requests(
 async def approve_doctor_request(
     request_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Одобрить заявку — создать аккаунт external_doctor и обновить статус заявки."""
     from app.models.external_doctor import DoctorRequest
@@ -422,7 +422,7 @@ async def approve_doctor_request(
 async def reject_doctor_request(
     request_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Отклонить заявку."""
     from app.models.external_doctor import DoctorRequest
@@ -442,7 +442,7 @@ async def reject_doctor_request(
 @router.get("/external-doctors")
 async def list_external_doctors(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список всех external/visiting врачей тенанта."""
     q = select(User).where(
