@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.deps import (
     get_current_user,
+    get_tenant_db,
     require_role,
     assert_same_tenant,
     assert_can_create_in_tenant,
@@ -142,7 +143,7 @@ async def staff_upload_document(
     issued_at: Optional[str] = Form(None),
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Загрузить документ для пациента. Файл сохраняется на /app/uploads/patient_docs/<tenant>/<uuid>.<ext>."""
     # Находка #7: запрет рождения документа с tenant_id=NULL.
@@ -215,7 +216,7 @@ async def staff_upload_document(
 async def staff_delete_document(
     doc_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(doc_id)
@@ -241,7 +242,7 @@ async def staff_delete_document(
 async def staff_list_documents(
     patient_phone: str = Query(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientDocument).where(PatientDocument.patient_phone == phone_n)
@@ -258,7 +259,7 @@ async def staff_list_documents(
 async def staff_download_document(
     doc_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(doc_id)

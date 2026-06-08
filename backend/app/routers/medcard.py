@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from app.database import get_db
 from app.core.deps import (
     get_current_user,
+    get_tenant_db,
     require_role,
     assert_same_tenant,
     assert_can_create_in_tenant,
@@ -193,7 +194,7 @@ class DiagnosisPatch(BaseModel):
 async def staff_create_diagnosis(
     body: DiagnosisIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Находка #7: запрет рождения записи с tenant_id=NULL.
     assert_can_create_in_tenant(user)
@@ -219,7 +220,7 @@ async def staff_update_diagnosis(
     diag_id: str,
     body: DiagnosisPatch,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(diag_id)
@@ -251,7 +252,7 @@ async def staff_update_diagnosis(
 async def staff_delete_diagnosis(
     diag_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(diag_id)
@@ -271,7 +272,7 @@ async def staff_delete_diagnosis(
 async def staff_list_diagnoses(
     patient_phone: str = Query(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientDiagnosis).where(PatientDiagnosis.patient_phone == phone_n)
@@ -305,7 +306,7 @@ class AllergyPatch(BaseModel):
 async def staff_create_allergy(
     body: AllergyIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Находка #7: запрет рождения записи с tenant_id=NULL.
     assert_can_create_in_tenant(user)
@@ -329,7 +330,7 @@ async def staff_update_allergy(
     aid: str,
     body: AllergyPatch,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         au = uuid.UUID(aid)
@@ -357,7 +358,7 @@ async def staff_update_allergy(
 async def staff_delete_allergy(
     aid: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         au = uuid.UUID(aid)
@@ -377,7 +378,7 @@ async def staff_delete_allergy(
 async def staff_list_allergies(
     patient_phone: str = Query(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientAllergy).where(PatientAllergy.patient_phone == phone_n)
@@ -415,7 +416,7 @@ class VaccPatch(BaseModel):
 async def staff_create_vaccination(
     body: VaccIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Находка #7: запрет рождения записи с tenant_id=NULL.
     assert_can_create_in_tenant(user)
@@ -441,7 +442,7 @@ async def staff_update_vaccination(
     vid: str,
     body: VaccPatch,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         vu = uuid.UUID(vid)
@@ -473,7 +474,7 @@ async def staff_update_vaccination(
 async def staff_delete_vaccination(
     vid: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         vu = uuid.UUID(vid)
@@ -493,7 +494,7 @@ async def staff_delete_vaccination(
 async def staff_list_vaccinations(
     patient_phone: str = Query(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientVaccination).where(PatientVaccination.patient_phone == phone_n)

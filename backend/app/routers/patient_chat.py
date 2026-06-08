@@ -23,7 +23,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager, assert_same_tenant, _is_super_admin
+from app.core.deps import require_manager, get_tenant_db, assert_same_tenant, _is_super_admin
 from app.models.user import User
 from app.models.patient_chat import (
     PatientChat,
@@ -379,7 +379,7 @@ async def patient_request_manual(
 @router.get("/admin/patient-chats")
 async def admin_list_chats(
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список чатов клиники (тенанта пользователя). Сортировка: свежие сверху."""
     q = select(PatientChat)
@@ -399,7 +399,7 @@ async def admin_list_chats(
 async def admin_get_messages(
     chat_id: str,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История сообщений + сброс unread_admin."""
     try:
@@ -434,7 +434,7 @@ async def admin_reply(
     chat_id: str,
     body: AdminReplyBody,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Ответ администратора. mode → manual (навсегда для этой ветки)."""
     text = (body.text or "").strip()
@@ -473,7 +473,7 @@ async def admin_reply(
 async def admin_toggle_mode(
     chat_id: str,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Переключить mode AI ↔ MANUAL (вернуть AI-ассистента в строй)."""
     try:

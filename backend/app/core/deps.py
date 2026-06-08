@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select
 from app.database import get_db
 from app.core.security import decode_token
 from app.models.user import User, UserRole
@@ -222,24 +222,38 @@ def require_role(*roles: str):
 async def get_tenant_db(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> AsyncSession:
-    """Сессия БД с установленным app.tenant_id для RLS.
+):
+    """Сессия БД с установленным app.tenant_id для RLS (находка #1, Часть B).
 
-    Если у пользователя есть tenant_id — устанавливает SET LOCAL app.tenant_id,
-    и RLS автоматически фильтрует строки по тенанту.
-    Если tenant_id отсутствует (суперадмин) — сессия без ограничений, видны все строки.
+    Кладёт tenant_id аутентифицированного пользователя в request-scoped
+    contextvar (`current_tenant_id`). begin-listener в database.py применяет
+    `SELECT set_config('app.tenant_id', <tid>, true)` в начале КАЖДОЙ
+    транзакции сессии — поэтому контекст переживает mid-handler db.commit()
+    (старая одноразовая установка терялась после первого commit, и RLS
+    становился permissive — корень находки #1, Часть B).
+
+    Поведение:
+      • tenant-пользователь → app.tenant_id = его tenant → RLS фильтрует по тенанту;
+      • super_admin (строго ПО РОЛИ) → контекст НЕ ставится (None) → app.tenant_id=''
+        → RLS-политика пропускает все тенанты (super_admin видит всё);
+      • по выходе контекст восстанавливается (token reset) — без утечки в пул.
+
+    Зависит от get_current_user → требует аутентификации. НЕ использовать на
+    эндпоинтах, где db нужна ДО auth (например, восстановление patient-сессии
+    по токену из query/header) — там оставлять Depends(get_db).
 
     Использование:
-        @router.get("/referrals")
-        async def list_referrals(db: AsyncSession = Depends(get_tenant_db)):
+        @router.get("/medcard/diagnoses")
+        async def list_diagnoses(db: AsyncSession = Depends(get_tenant_db)):
             ...
     """
-    if user.tenant_id:
-        # set_config(name, value, is_local=true) эквивалентен SET LOCAL,
-        # но поддерживает bind-параметры → защищён от SQL-injection
-        # (раньше user.tenant_id вставлялся через f-string — уязвимость P1).
-        await db.execute(
-            text("SELECT set_config('app.tenant_id', :tid, true)"),
-            {"tid": str(user.tenant_id)},
-        )
-    return db
+    from app.database import current_tenant_id
+
+    # super_admin строго ПО РОЛИ — НЕ ставим контекст (None → permissive RLS).
+    # Иначе берём tenant_id пользователя (канонизируем как UUID-строку).
+    tid = None if _is_super_admin(user) else (str(user.tenant_id) if user.tenant_id else None)
+    token = current_tenant_id.set(str(uuid.UUID(tid)) if tid else None)
+    try:
+        yield db
+    finally:
+        current_tenant_id.reset(token)
