@@ -48,3 +48,32 @@
 - `/health` 200; bot healthcheck зелёный; платежи идут на юрлицо клиники (не ENV платформы).
 - `COUNT(*) WHERE tenant_id IS NULL` по chat/medcard/documents/appointments = 0.
 - Дамп: ФИО/телефон/медтекст в `*_encrypted` — без plaintext.
+
+---
+
+# Обновление 2026-06-08 — волны R1/R2/R3 (ветка дополнена до 16 коммитов)
+
+## Дозакрыто в коде
+- **R1 #21/#22:** реализованы недостающие эндпоинты — регламенты `GET version`/`POST rollback` (admin_regulations) и `PATCH /integrations/mis/settings` (шифр `mis_api_key`). Tenant-скоуп.
+- **R1 cutover ПДн:** ВСЕ 16 `TODO(#2 PHI)` + #17-чтения переведены на `*_plain`/`patient_phone_hash` в 17 файлах (включая сырые text()-SQL в engagement/lab-dynamics). После backfill-шифрования аналитика/отображение читают корректно.
+- **R2 RLS Часть B:** 64 аутентифицированных tenant-эндпоинта переведены `Depends(get_db)→get_tenant_db` (RLS реально изолирует, defense-in-depth). `get_tenant_db` теперь permissive и для `franchise_owner` (кросс-тенантная роль — иначе RLS срезал бы франшиза-видимость).
+- **R3 #40:** легаси чат-движок PatientChat помечен DEPRECATED + план миграции на ChatThread (без удаления данных).
+- **R3 #25:** проверено — мёртвых admin-роутов нет (все группы вызываются фронтом; `/admin/arr-ltv` не существует).
+
+## Data-скрипт шифрования (заменяет «шаг 4» выше)
+`backend/scripts/encrypt_pii_backfill.py` (+ README) — идемпотентный батч-скрипт. Запуск В MAINTENANCE-ОКНО после миграций, при заданном и СТАБИЛЬНОМ `SECRET_KEY`:
+```
+python -m scripts.encrypt_pii_backfill --dry-run   # сначала счёт
+python -m scripts.encrypt_pii_backfill             # шифрует appointments/medcard/lab/vitals/patient_accounts
+```
+Идемпотентен (пропускает уже `enc:`), безопасен для повторного запуска.
+
+## Остаток RLS Части B (не блокирует, permissive → не ломается)
+~77 эндпоинтов на `Depends(get_db)` осознанно: публичные/pre-auth/webhook/super_admin + роутеры, где tenant берётся из path (franchise-управление). Их изоляция — на ручных фильтрах + permissive RLS. Доводятся доменными волнами при желании.
+
+## Осознанно отложено (НЕ баги — tech-debt/продукт/несрочные upgrade'ы, так пометил сам аудит)
+- **#46** split AdminLayout.jsx (9004 строки) — крупный рефакторинг, риск регрессии без браузерного теста; «improve», не баг.
+- **#47** дубль кабинетов пациента — осознанный preview-роллаут премиум-дизайна (продуктовое решение).
+- **Мажор-апгрейды:** FastAPI/starlette (#8-хвост), react-router 6→7, tailwind 3→4, vite 5→6 — ЛОМАЮЩИЕ, аудит пометил «отдельными задачами с CI/staging». Security-CVE в этих стеках уже закрыты патч-версиями (vite 5.4.21, Pillow 11.3, python-multipart 0.0.18).
+- **6 companion admin-эндпоинтов** (#25) — живые фичи под super_admin, не мёртвые.
+- **Удаление легаси чат-движка** (#40) — требует data-миграции истории (отдельная задача).
