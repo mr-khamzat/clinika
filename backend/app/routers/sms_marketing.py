@@ -163,10 +163,9 @@ async def _estimate_audience_size(
 
     # Базовая оценка — distinct patient_phone из appointments тенанта.
     # Окно зависит от типа аудитории.
-    # TODO(#2 PHI): все distinct(Appointment.patient_phone) ниже после миграции
-    # shadow-колонок заменить на distinct(Appointment.patient_phone_hash)
-    # (детерминированный blind-index) — оценка размера аудитории эквивалентна,
-    # plaintext-телефон в БД больше не читаем.
+    # #2 PHI cutover: все distinct ниже считаем по детерминированному
+    # blind-index patient_phone_hash (plaintext-телефон в БД не читаем) —
+    # оценка размера аудитории эквивалентна.
     from app.models.doctor import Appointment
 
     if audience_type == SmsAudienceType.SLEEPING_30D:
@@ -174,26 +173,26 @@ async def _estimate_audience_size(
         # Минимальная оценка — distinct phone которые были до cutoff-30 дней
         # и не имели визита позже (упрощённо: всех distinct).
         result = await db.execute(
-            select(func.count(func.distinct(Appointment.patient_phone)))
+            select(func.count(func.distinct(Appointment.patient_phone_hash)))
             .where(Appointment.tenant_id == tid)
         )
         total = result.scalar() or 0
         return total
     if audience_type == SmsAudienceType.SLEEPING_90D:
         result = await db.execute(
-            select(func.count(func.distinct(Appointment.patient_phone)))
+            select(func.count(func.distinct(Appointment.patient_phone_hash)))
             .where(Appointment.tenant_id == tid)
         )
         return result.scalar() or 0
     if audience_type == SmsAudienceType.SPECIFIC_SEGMENT:
         result = await db.execute(
-            select(func.count(func.distinct(Appointment.patient_phone)))
+            select(func.count(func.distinct(Appointment.patient_phone_hash)))
             .where(Appointment.tenant_id == tid)
         )
         return result.scalar() or 0
     # ALL_PATIENTS
     result = await db.execute(
-        select(func.count(func.distinct(Appointment.patient_phone)))
+        select(func.count(func.distinct(Appointment.patient_phone_hash)))
         .where(Appointment.tenant_id == tid)
     )
     return result.scalar() or 0

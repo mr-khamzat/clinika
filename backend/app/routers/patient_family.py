@@ -18,7 +18,7 @@ from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.patient_account import PatientAccount
 from app.models.patient_family import PatientFamilyMember  # Legacy-таблица семьи (до Главы 8)
 from app.models.patient_session import PatientSession
-from app.models.doctor import Appointment, AppointmentStatus
+from app.models.doctor import Appointment, AppointmentStatus, hash_phone
 from app.services import family_service as fs
 from app.services.patient_session_service import restore_session, create_session
 from app.core.security import make_patient_session_token
@@ -491,12 +491,12 @@ async def aggregated_cabinet(
         raise HTTPException(404, "Patient not found")
 
     # Приёмы
-    # TODO(#2 PHI): после миграции shadow-колонок заменить exact-match на
-    # `Appointment.patient_phone_hash == hash_phone(target_pa.phone)`
-    # (from app.models.doctor import hash_phone).
+    # #2 PHI cutover: exact-match по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). hash_phone сам
+    # нормализует номер.
     appts_r = await db.execute(
         select(Appointment).where(
-            Appointment.patient_phone == normalize_phone(target_pa.phone)
+            Appointment.patient_phone_hash == hash_phone(target_pa.phone)
         ).order_by(Appointment.appointment_date.desc()).limit(50)
     )
     appts = appts_r.scalars().all()

@@ -535,13 +535,14 @@ async def patient_context(
         }
 
     # Recent appointments
-    from app.models.doctor import Appointment
+    from app.models.doctor import Appointment, hash_phone
     from sqlalchemy import desc
-    # TODO(#2 PHI): после миграции — exact-match по blind-index:
-    #   .where(Appointment.patient_phone_hash == hash_phone(p.phone))
+    # #2 PHI cutover: exact-match по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). Если пациента нет —
+    # hash_phone(None) == None, сравнение не вернёт строк (приёмов нет).
     ra = await db.execute(
         select(Appointment)
-        .where(Appointment.patient_phone == (p.phone if p else ""))
+        .where(Appointment.patient_phone_hash == hash_phone(p.phone if p else None))
         .order_by(desc(Appointment.appointment_date), desc(Appointment.start_time))
         .limit(5)
     )

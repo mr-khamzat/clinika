@@ -56,13 +56,15 @@ async def _patient_session_or_401(
 
 
 def _diag_dict(d: PatientDiagnosis) -> dict:
+    # #17 PHI: name/notes — спец. категория ПДн, читаем через расшифрованные
+    # property *_plain (lazy-decrypt, fallback на legacy-plaintext), не сырые колонки.
     return {
         "id": str(d.id),
         "icd10_code": d.icd10_code,
-        "name": d.name,
+        "name": d.name_plain,
         "diagnosed_at": d.diagnosed_at.isoformat() if d.diagnosed_at else None,
         "is_chronic": d.is_chronic,
-        "notes": d.notes,
+        "notes": d.notes_plain,
         "doctor_name": d.doctor_name,
         "source": d.source,
         "created_at": d.created_at.isoformat() if d.created_at else None,
@@ -70,11 +72,12 @@ def _diag_dict(d: PatientDiagnosis) -> dict:
 
 
 def _allergy_dict(a: PatientAllergy) -> dict:
+    # #17 PHI: allergen/reaction через расшифрованные property *_plain.
     return {
         "id": str(a.id),
-        "allergen": a.allergen,
+        "allergen": a.allergen_plain,
         "severity": a.severity,
-        "reaction": a.reaction,
+        "reaction": a.reaction_plain,
         "noted_at": a.noted_at.isoformat() if a.noted_at else None,
         "source": a.source,
         "created_at": a.created_at.isoformat() if a.created_at else None,
@@ -82,9 +85,10 @@ def _allergy_dict(a: PatientAllergy) -> dict:
 
 
 def _vacc_dict(v: PatientVaccination) -> dict:
+    # #17 PHI: vaccine_name через расшифрованное property *_plain.
     return {
         "id": str(v.id),
-        "vaccine_name": v.vaccine_name,
+        "vaccine_name": v.vaccine_name_plain,
         "given_at": v.given_at.isoformat() if v.given_at else None,
         "dose_number": v.dose_number,
         "expires_at": v.expires_at.isoformat() if v.expires_at else None,
@@ -528,7 +532,7 @@ async def patient_medcard_timeline(
     Сортировка по дате (новые сверху).
     """
     from app.models.referral import Referral, ReferralStatus
-    from app.models.doctor import Appointment, AppointmentStatus, Doctor
+    from app.models.doctor import Appointment, AppointmentStatus, Doctor, hash_phone
     from app.models.clinic import Clinic
     from app.models.service import Service
     from app.models.user import User
@@ -574,10 +578,13 @@ async def patient_medcard_timeline(
             "category": "Направление",
         })
 
-    # 2) Завершённые записи к врачу
+    # 2) Завершённые записи к врачу.
+    # #2 PHI cutover: фильтр по детерминированному blind-index patient_phone_hash
+    # (plaintext-колонку не читаем). hash_phone сам нормализует номер, поэтому
+    # прежний перебор форм [phone, "+"+phone] больше не нужен.
     apts = (await db.execute(
         select(Appointment).where(
-            Appointment.patient_phone.in_([phone, "+" + phone]),
+            Appointment.patient_phone_hash == hash_phone(phone),
             Appointment.status == AppointmentStatus.COMPLETED,
             Appointment.appointment_date >= since.date(),
         ).order_by(Appointment.appointment_date.desc())
@@ -592,7 +599,7 @@ async def patient_medcard_timeline(
             "type": "appointment",
             "date": a.appointment_date.isoformat() if a.appointment_date else None,
             "title": doc_name or "Приём",
-            "subtitle": (a.notes[:120] if a.notes else None) or "Завершённый приём",
+            "subtitle": ((a.notes_plain or "")[:120] or None) or "Завершённый приём",
             "appointment_id": str(a.id),
             "icon": "stethoscope",
             "category": "Приём врача",

@@ -376,6 +376,70 @@ async def new_version(
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Get one version (находка #21 — фронт RegulationBuilderSection.previewVersion
+# и rollback зовут GET /{id}/versions/{vid}, чтобы получить content версии)
+# ─────────────────────────────────────────────────────────────────────
+async def _get_version_for_reg(
+    db: AsyncSession, reg: Regulation, version_id: uuid.UUID
+) -> RegulationVersion:
+    v = (
+        await db.execute(
+            select(RegulationVersion).where(RegulationVersion.id == version_id)
+        )
+    ).scalar_one_or_none()
+    if not v or v.regulation_id != reg.id:
+        raise HTTPException(status_code=404, detail="Версия не найдена")
+    return v
+
+
+@router.get("/{regulation_id}/versions/{version_id}")
+async def get_version(
+    regulation_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(_require_manage),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детали одной версии регламента (content + метаданные).
+
+    Tenant-скоуп через _get_reg_for_manage: чужой тенант → 403, нет
+    регламента → 404, версия из другого регламента → 404.
+    """
+    reg = await _get_reg_for_manage(db, regulation_id, current_user)
+    v = await _get_version_for_reg(db, reg, version_id)
+    return version_to_dict(v)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Rollback (находка #21 — серверная копия выбранной версии в новый draft).
+# Версионность append-only: откат НЕ удаляет/перезаписывает версии, а создаёт
+# новую draft-версию = копию указанной. Публикация делается отдельно.
+# ─────────────────────────────────────────────────────────────────────
+@router.post("/{regulation_id}/versions/{version_id}/rollback", status_code=201)
+async def rollback_version(
+    regulation_id: uuid.UUID,
+    version_id: uuid.UUID,
+    current_user: User = Depends(_require_manage),
+    db: AsyncSession = Depends(get_db),
+):
+    """Создаёт новую draft-версию из содержимого указанной версии.
+
+    Совпадает с фронтом (RegulationBuilderSection.rollbackVersion fallback):
+    «попросим бэк сделать копию серверной стороной» → возвращаем новую версию.
+    """
+    reg = await _get_reg_for_manage(db, regulation_id, current_user)
+    src = await _get_version_for_reg(db, reg, version_id)
+    new_v = await create_new_version(
+        db,
+        regulation_id=reg.id,
+        content=src.content or [],
+        changelog=f"Откат к версии #{src.version_number}",
+    )
+    await db.commit()
+    await db.refresh(new_v)
+    return version_to_dict(new_v)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Publish version
 # ─────────────────────────────────────────────────────────────────────
 @router.post("/{regulation_id}/versions/{version_id}/publish")

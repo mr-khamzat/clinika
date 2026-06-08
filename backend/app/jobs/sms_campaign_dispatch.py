@@ -54,17 +54,31 @@ async def _fetch_audience_phones(
         phones = (audience_filter or {}).get("phones") or []
         return list(phones)[:limit]
 
-    # TODO(#2 PHI): аудитория рассылки строится из plaintext-телефонов.
-    # После миграции для DISTINCT-набора получателей выбирать пары
-    # (patient_phone_hash, patient_phone_encrypted) и расшифровывать номер
-    # перед отправкой через encryption_service.decrypt — distinct по хэшу,
-    # plaintext в БД не читаем.
+    # #2 PHI cutover: DISTINCT-набор получателей строим по детерминированному
+    # blind-index patient_phone_hash (plaintext-колонку не читаем), а сам номер
+    # для отправки берём через расшифрованное property patient_phone_plain
+    # (lazy-decrypt c fallback на legacy-plaintext — корректно и до, и после
+    # backfill-шифрования). Дедупликация по hash на стороне Python.
     result = await db.execute(
-        select(func.distinct(Appointment.patient_phone))
+        select(Appointment)
         .where(Appointment.tenant_id == tenant_id)
-        .limit(limit)
+        .order_by(Appointment.patient_phone_hash)
     )
-    return [r[0] for r in result.all() if r[0]]
+    phones: list[str] = []
+    seen_hashes: set[str] = set()
+    for appt in result.scalars():
+        h = appt.patient_phone_hash
+        # Дедуп по hash; для legacy-строк без hash — по самому расшифрованному номеру.
+        key = h if h is not None else appt.patient_phone_plain
+        if key is None or key in seen_hashes:
+            continue
+        seen_hashes.add(key)
+        phone = appt.patient_phone_plain
+        if phone:
+            phones.append(phone)
+        if len(phones) >= limit:
+            break
+    return phones
 
 
 async def _send_via_provider(

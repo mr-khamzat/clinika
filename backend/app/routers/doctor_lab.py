@@ -62,14 +62,16 @@ def _serialize_order(o: LabOrder, results: list[LabResult] | None = None) -> dic
 
 
 def _serialize_result(r: LabResult) -> dict:
+    # #17 PHI: value/reference_range — спец. категория ПДн (результаты анализов),
+    # читаем через расшифрованные property *_plain (lazy-decrypt, fallback на legacy).
     return {
         "id": str(r.id),
         "order_id": str(r.order_id),
         "test_code": r.test_code,
         "test_name": r.test_name,
-        "value": r.value,
+        "value": r.value_plain,
         "unit": r.unit,
-        "reference_range": r.reference_range,
+        "reference_range": r.reference_range_plain,
         "flagged": r.flagged,
         "result_date": r.result_date.isoformat() if r.result_date else None,
     }

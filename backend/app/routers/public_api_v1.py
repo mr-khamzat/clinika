@@ -20,7 +20,7 @@ from app.database import get_db
 from app.core.api_key_deps import verify_tenant_api_key, require_scope
 from app.models.tenant_api_key import TenantApiKey
 from app.models.referral import Referral, ReferralStatus
-from app.models.doctor import Appointment
+from app.models.doctor import Appointment, hash_phone
 from app.models.patient_account import PatientAccount
 from app.models.billing_ledger import BillingLedger
 from app.services import audit_service
@@ -72,8 +72,10 @@ def _appointment_out(a: Appointment) -> dict:
         "doctor_id": str(a.doctor_id),
         "clinic_id": str(a.clinic_id),
         "referral_id": str(a.referral_id) if a.referral_id else None,
-        "patient_phone": a.patient_phone,
-        "patient_name": a.patient_name,
+        # #2 PHI: отдаём расшифрованные значения через property (не сырые
+        # plaintext/шифр-колонки) — корректно и до, и после backfill-шифрования.
+        "patient_phone": a.patient_phone_plain,
+        "patient_name": a.patient_name_plain,
         "appointment_date": a.appointment_date.isoformat() if a.appointment_date else None,
         "start_time": a.start_time.strftime("%H:%M") if a.start_time else None,
         "end_time": a.end_time.strftime("%H:%M") if a.end_time else None,
@@ -164,18 +166,18 @@ async def search_patients(
         ).limit(limit)
     )).scalars().all()
     phones_in_tenant.update(r_phones)
-    # TODO(#2 PHI): ilike по plaintext-телефону несовместим с шифрованием.
-    # После миграции shadow-колонок заменить на exact-match по blind-index:
-    #   .where(Appointment.patient_phone_hash == hash_phone(phone))
-    # (from app.models.doctor import hash_phone). Это сужает «поиск по подстроке»
-    # до точного совпадения — согласовано в плане #2 (ilike по телефону → exact-hash).
-    a_phones = (await db.execute(
-        select(Appointment.patient_phone).where(
+    # #2 PHI cutover: ilike по plaintext-телефону несовместим с шифрованием —
+    # сужаем «поиск по подстроке» до exact-match по детерминированному blind-index
+    # patient_phone_hash (согласовано в плане #2: ilike по телефону → exact-hash).
+    # Сам номер для ответа берём через расшифрованное property patient_phone_plain,
+    # plaintext-колонку не читаем.
+    a_appts = (await db.execute(
+        select(Appointment).where(
             Appointment.tenant_id == api_key.tenant_id,
-            Appointment.patient_phone.ilike(f"%{phone}%"),
+            Appointment.patient_phone_hash == hash_phone(phone),
         ).limit(limit)
     )).scalars().all()
-    phones_in_tenant.update(a_phones)
+    phones_in_tenant.update(a.patient_phone_plain for a in a_appts if a.patient_phone_plain)
 
     if not phones_in_tenant:
         await _log_api_request(db, request, api_key, "GET /api/v1/patients")
@@ -222,9 +224,10 @@ async def list_appointments(
     if status:
         q = q.where(Appointment.status == status)
     if phone:
-        # TODO(#2 PHI): после миграции — exact-match по blind-index:
-        #   q = q.where(Appointment.patient_phone_hash == hash_phone(phone))
-        q = q.where(Appointment.patient_phone == phone)
+        # #2 PHI cutover: exact-match по детерминированному blind-index
+        # patient_phone_hash (plaintext-колонку не читаем). hash_phone нормализует
+        # номер. Отображаемый телефон в _appointment_out — см. ниже (через property).
+        q = q.where(Appointment.patient_phone_hash == hash_phone(phone))
     if clinic_id:
         q = q.where(Appointment.clinic_id == clinic_id)
     if doctor_id:

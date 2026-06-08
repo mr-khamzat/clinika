@@ -915,23 +915,14 @@ async def get_appointments_report(
     where = and_(*filters)
 
     # ── Основной запрос: записи + врач + клиника (LEFT JOIN) ─────────────
-    # TODO(#2 PHI): этот отчёт ОТОБРАЖАЕТ ПДн — после миграции выбирать сам
-    # Appointment (ORM-объект), а в строку ответа класть расшифрованные
-    # patient_phone_plain / patient_name_plain / notes_plain. Выбор отдельных
-    # шифр-колонок здесь отдал бы 'enc:...' токены — переводить на ORM+property,
-    # НЕ на сырые *_encrypted колонки.
+    # #2 PHI cutover: отчёт ОТОБРАЖАЕТ ПДн, поэтому выбираем сам ORM-объект
+    # Appointment и кладём в ответ расшифрованные patient_phone_plain /
+    # patient_name_plain / notes_plain (property, lazy-decrypt с fallback на
+    # legacy-plaintext). Сырые plaintext/шифр-колонки НЕ читаем — иначе после
+    # backfill отдали бы 'enc:...' токены.
     q = (
         select(
-            Appointment.id,
-            Appointment.appointment_date,
-            Appointment.start_time,
-            Appointment.end_time,
-            Appointment.patient_name,
-            Appointment.patient_phone,
-            Appointment.status,
-            Appointment.price,
-            Appointment.payment_method,
-            Appointment.notes,
+            Appointment,
             Doctor.full_name.label("doctor_name"),
             Doctor.specialty.label("doctor_specialty"),
             Doctor.id.label("doctor_id"),
@@ -953,9 +944,12 @@ async def get_appointments_report(
     by_doctor: dict[str, dict] = {}
 
     for r in rows:
-        price_val = float(r.price) if r.price is not None else 0.0
+        # r — Row: (Appointment, doctor_name, doctor_specialty, doctor_id,
+        #           clinic_name, clinic_id). ПДн читаем через property *_plain.
+        a = r[0]
+        price_val = float(a.price) if a.price is not None else 0.0
         total_revenue += price_val
-        st = r.status.value if hasattr(r.status, "value") else str(r.status)
+        st = a.status.value if hasattr(a.status, "value") else str(a.status)
         by_status[st] = by_status.get(st, 0) + 1
         if r.doctor_id:
             key = str(r.doctor_id)
@@ -970,19 +964,19 @@ async def get_appointments_report(
             d["revenue"] += price_val
 
         appointments.append({
-            "id": str(r.id),
-            "date": r.appointment_date.isoformat(),
-            "time": r.start_time.strftime("%H:%M") if r.start_time else "",
-            "end_time": r.end_time.strftime("%H:%M") if r.end_time else "",
+            "id": str(a.id),
+            "date": a.appointment_date.isoformat(),
+            "time": a.start_time.strftime("%H:%M") if a.start_time else "",
+            "end_time": a.end_time.strftime("%H:%M") if a.end_time else "",
             "doctor_name": r.doctor_name or "",
             "doctor_specialty": r.doctor_specialty or "",
             "clinic_name": r.clinic_name or "",
-            "patient_name": r.patient_name or "",
-            "patient_phone": r.patient_phone or "",
+            "patient_name": a.patient_name_plain or "",
+            "patient_phone": a.patient_phone_plain or "",
             "status": st,
             "price": price_val,
-            "payment_method": r.payment_method or "",
-            "notes": r.notes or "",
+            "payment_method": a.payment_method or "",
+            "notes": a.notes_plain or "",
         })
 
     # ── KPI: топ-10 врачей ───────────────────────────────────────────────

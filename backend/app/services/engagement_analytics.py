@@ -153,15 +153,38 @@ async def funnel_summary(db: AsyncSession, tenant_id: UUID, days: int = 30) -> d
             PatientAccount.login_count >= 2,
         )
     )).scalar() or 0
-    # first_appointment: есть appointment у этого аккаунта в tenant_id
-    appointed = (await db.execute(text("""
-        SELECT COUNT(DISTINCT pa.id) FROM patient_accounts pa
-        WHERE pa.created_at >= :since
-          AND EXISTS (
-            SELECT 1 FROM appointments a
-            WHERE a.tenant_id = :tid AND a.patient_phone = pa.phone
-          )
-    """), {"since": since, "tid": str(tenant_id)})).scalar() or 0
+    # first_appointment: есть appointment у этого аккаунта в tenant_id.
+    # #2 PHI cutover: прежний сырой джойн телефона приёма к телефону аккаунта по
+    # PLAINTEXT после шифрования совпадать перестал бы. Переписано на ORM
+    # + детерминированный blind-index: считаем hash_phone(pa.phone) в Python и
+    # сверяем с distinct Appointment.patient_phone_hash тенанта (hash-к-хэшу,
+    # plaintext-телефон из appointments не читаем).
+    from app.models.doctor import Appointment, hash_phone
+
+    reg_accounts = (await db.execute(
+        select(PatientAccount.id, PatientAccount.phone).where(
+            PatientAccount.created_at >= since
+        )
+    )).all()
+    # hash → set(account_id), чтобы корректно учитывать общий телефон у разных аккаунтов
+    hash_to_accounts: dict[str, set] = {}
+    for acc_id, acc_phone in reg_accounts:
+        h = hash_phone(acc_phone)
+        if h is not None:
+            hash_to_accounts.setdefault(h, set()).add(acc_id)
+    appointed = 0
+    if hash_to_accounts:
+        appt_hashes = set((await db.execute(
+            select(func.distinct(Appointment.patient_phone_hash)).where(
+                Appointment.tenant_id == tenant_id,
+                Appointment.patient_phone_hash.in_(list(hash_to_accounts.keys())),
+            )
+        )).scalars().all())
+        matched_accounts: set = set()
+        for h in appt_hashes:
+            if h is not None:
+                matched_accounts |= hash_to_accounts.get(h, set())
+        appointed = len(matched_accounts)
     return {
         "stages": [
             {"key": "registration", "label": "Зарегистрировались", "value": reg},
@@ -187,34 +210,67 @@ async def churn_list(
     Loyal = login_count >= 3 И был >= 1 визит в данном тенанте.
     """
     threshold = datetime.utcnow() - timedelta(days=days_threshold)
-    # TODO(#2 PHI): этот сырой SQL джойнит appointments.patient_phone = pa.phone по
-    # PLAINTEXT — после шифрования телефона джойн перестанет совпадать. При
-    # переводе на blind-index сравнивать a.patient_phone_hash с хэшем pa.phone
-    # (например, добавить patient_accounts.phone_hash в #18 и джойнить хэш-к-хэшу),
-    # ЛИБО переписать на ORM с hash_phone(pa.phone). Сырой SQL мимо property —
-    # известная ловушка плана (даст пустые visits после шифрования).
-    stmt = text("""
-        SELECT pa.id, pa.phone, pa.name, pa.last_seen_at, pa.login_count,
-               (SELECT COUNT(*) FROM appointments a WHERE a.tenant_id=:tid AND a.patient_phone=pa.phone) AS visits
-        FROM patient_accounts pa
-        WHERE pa.last_seen_at < :threshold
-          AND pa.login_count >= 3
-          AND EXISTS (SELECT 1 FROM appointments a WHERE a.tenant_id=:tid AND a.patient_phone=pa.phone)
-        ORDER BY pa.last_seen_at ASC NULLS LAST
-        LIMIT :lim
-    """)
-    rows = (await db.execute(stmt, {"tid": str(tenant_id), "threshold": threshold, "lim": limit})).all()
-    return [
-        {
-            "id": str(r.id),
-            "phone": r.phone,
-            "name": r.name,
-            "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
-            "login_count": int(r.login_count),
-            "visits": int(r.visits or 0),
-        }
-        for r in rows
-    ]
+    # #2 PHI cutover: прежний сырой SQL джойнил телефон приёма к телефону аккаунта
+    # по PLAINTEXT — после шифрования телефона джойн перестал бы совпадать (пустые
+    # visits). Переписано на ORM + детерминированный blind-index: считаем
+    # hash_phone(pa.phone) в Python и сверяем с Appointment.patient_phone_hash
+    # (hash-к-хэшу), визиты агрегируем одним grouped-запросом. patient_accounts.phone/
+    # name НЕ шифруются (вне scope #2) — отдаём как есть. Тенант-фильтр сохранён.
+    from app.models.doctor import Appointment, hash_phone
+
+    # 1) loyal-кандидаты, упорядоченные по last_seen_at (NULLS LAST как в SQL)
+    cand_rows = (await db.execute(
+        select(
+            PatientAccount.id, PatientAccount.phone, PatientAccount.name,
+            PatientAccount.last_seen_at, PatientAccount.login_count,
+        ).where(
+            PatientAccount.last_seen_at < threshold,
+            PatientAccount.login_count >= 3,
+        ).order_by(PatientAccount.last_seen_at.asc().nullslast())
+    )).all()
+    if not cand_rows:
+        return []
+
+    # 2) hash → [accounts] (общий телефон у нескольких аккаунтов учитываем все)
+    hash_to_cands: dict[str, list] = {}
+    for cr in cand_rows:
+        h = hash_phone(cr.phone)
+        if h is not None:
+            hash_to_cands.setdefault(h, []).append(cr)
+    if not hash_to_cands:
+        return []
+
+    # 3) визиты на тенант одним grouped-запросом по blind-index
+    visit_rows = (await db.execute(
+        select(
+            Appointment.patient_phone_hash,
+            func.count().label("visits"),
+        ).where(
+            Appointment.tenant_id == tenant_id,
+            Appointment.patient_phone_hash.in_(list(hash_to_cands.keys())),
+        ).group_by(Appointment.patient_phone_hash)
+    )).all()
+    visits_by_hash = {vr.patient_phone_hash: int(vr.visits or 0) for vr in visit_rows}
+
+    # 4) только loyal-с-визитом, в исходном порядке (cand_rows уже отсортированы),
+    #    срез до limit
+    out: list[dict] = []
+    for cr in cand_rows:
+        h = hash_phone(cr.phone)
+        v = visits_by_hash.get(h, 0) if h is not None else 0
+        if v <= 0:
+            continue
+        out.append({
+            "id": str(cr.id),
+            "phone": cr.phone,
+            "name": cr.name,
+            "last_seen_at": cr.last_seen_at.isoformat() if cr.last_seen_at else None,
+            "login_count": int(cr.login_count),
+            "visits": v,
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 async def stuck_in_funnel(
