@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.tenant import require_feature
 from app.models.user import User
 from app.services import ledger_service
@@ -65,7 +65,7 @@ class AdjustRequest(BaseModel):
 @router.get("/balance", dependencies=[_feature])
 async def my_balance(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Текущий баланс текущего пользователя."""
     balance = await ledger_service.get_balance(db, current_user.id)
@@ -76,7 +76,7 @@ async def my_balance(
 @router.get("/summary", response_model=LedgerSummaryOut, dependencies=[_feature])
 async def my_summary(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Сводка по типам операций для текущего пользователя."""
     return await ledger_service.get_summary(db, current_user.id)
@@ -87,7 +87,7 @@ async def my_history(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История операций текущего пользователя."""
     entries = await ledger_service.get_history(db, current_user.id, limit=limit, offset=offset)
@@ -111,7 +111,7 @@ async def my_history(
 async def user_balance(
     user_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Баланс конкретного пользователя (только manager)."""
     # Tenant isolation: проверяем принадлежность пользователя тенанту менеджера
@@ -135,7 +135,7 @@ async def user_history(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История операций конкретного пользователя (только manager)."""
     # Tenant isolation
@@ -162,7 +162,7 @@ async def user_history(
 async def manual_adjust(
     body: AdjustRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Ручная корректировка баланса (только manager).
@@ -209,7 +209,7 @@ async def manual_adjust(
 async def payout_bonus(
     bonus_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Выплатить бонус: статус PENDING → PAID, запись BONUS_PAID в реестр."""
     from app.services.bonus_service import mark_bonus_paid

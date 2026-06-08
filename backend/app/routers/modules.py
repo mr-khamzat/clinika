@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.tenant import get_tenant_license
@@ -60,7 +60,7 @@ async def check_feature(
 @router.get("/active-keys")
 async def get_active_module_keys(
     current_user=Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Активные коммерческие модули тенанта (для фильтрации меню фронтенда)."""
     if not current_user.tenant_id:

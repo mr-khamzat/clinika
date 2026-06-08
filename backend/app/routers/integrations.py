@@ -11,7 +11,7 @@ from app.models.clinic import Clinic
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.config import settings
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.services.settings_service import get_setting, set_setting
 from app.services import encryption_service
 from app.utils.phone import phone_variants
@@ -148,7 +148,7 @@ class MISSettingsPatch(BaseModel):
 async def update_mis_settings(
     body: MISSettingsPatch,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Обновить настройки МИС-интеграции текущего тенанта.
 

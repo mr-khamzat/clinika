@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.models.tenant import Tenant
 from app.services.cms_service import CmsService
 from app.services.theme_service import ThemeService
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User
 
 router = APIRouter(prefix="/cms", tags=["cms"])
@@ -73,7 +73,7 @@ async def get_theme_css(
 
 @router.get("/menu")
 async def get_cms_menu(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
 ):
     if not tenant:
@@ -84,7 +84,7 @@ async def get_cms_menu(
 @router.get("/pages")
 async def list_pages(
     all: bool = False,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -97,7 +97,7 @@ async def list_pages(
 @router.get("/pages/{slug}")
 async def get_page(
     slug: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
 ):
     if not tenant:
@@ -111,7 +111,7 @@ async def get_page(
 @router.post("/pages", dependencies=[Depends(require_module("white_label"))])
 async def create_page(
     data: PageCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -126,7 +126,7 @@ async def create_page(
 async def update_page(
     slug: str,
     data: PageUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -143,7 +143,7 @@ async def update_page(
 @router.delete("/pages/{slug}", dependencies=[Depends(require_module("white_label"))])
 async def delete_page(
     slug: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):

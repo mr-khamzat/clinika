@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.deps import (
     get_current_user,
+    get_tenant_db,
     require_manager,
     require_director_or_owner,
 )
@@ -51,7 +52,7 @@ class RejectRequest(BaseModel):
 async def ad_approve(
     ad_id: uuid.UUID,
     body: ApproveRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_director_or_owner),
 ):
     """Одобряет рекламу. Доступно director/deputy/franchise_owner/super_admin."""
@@ -69,7 +70,7 @@ async def ad_approve(
 async def ad_reject(
     ad_id: uuid.UUID,
     body: RejectRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_director_or_owner),
 ):
     """Отклоняет рекламу. Note обязателен."""
@@ -87,7 +88,7 @@ async def ad_reject(
 
 @router.get("/pending-approval", dependencies=[_mod])
 async def list_pending_approval(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_manager),
     limit: int = Query(100, ge=1, le=500),
 ):
@@ -113,7 +114,7 @@ class ShareRequest(BaseModel):
 
 @router.get("/franchise-siblings", dependencies=[_mod])
 async def franchise_siblings(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_manager),
 ):
     """Список тенантов в той же франшизе (для UI выбора целевого филиала при share)."""
@@ -214,7 +215,7 @@ async def share_ad(
 @router.get("/by-tags", dependencies=[_mod])
 async def list_by_tags(
     tags: str = Query(..., description="Comma-separated tags"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(require_manager),
     limit: int = Query(200, ge=1, le=500),
 ):

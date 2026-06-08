@@ -230,7 +230,7 @@ async def signup_status(
 
 @router.get("/trial-status")
 async def trial_status_endpoint(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(__import__("app.core.deps", fromlist=["get_tenant_db"]).get_tenant_db),
     user=Depends(__import__("app.core.deps", fromlist=["get_current_user"]).get_current_user),
 ):
     """Статус триала для текущего тенанта. Использует тот же расчёт, что и

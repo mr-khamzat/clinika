@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.database import get_db
 from app.models.regulation import (
     Regulation,
@@ -164,7 +164,7 @@ async def ai_generate(
 async def delete_assignment(
     assignment_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Снять точечное назначение."""
     a = (
@@ -198,7 +198,7 @@ async def list_regulations(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список регламентов с фильтрами и пагинацией."""
     base = select(Regulation)
@@ -250,7 +250,7 @@ async def list_regulations(
 async def create_regulation(
     body: CreateRegulationBody,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать регламент + первую draft версию."""
     if not is_super_admin(current_user) and not current_user.tenant_id:
@@ -281,7 +281,7 @@ async def create_regulation(
 async def get_regulation(
     regulation_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     versions = (
@@ -313,7 +313,7 @@ async def update_regulation(
     regulation_id: uuid.UUID,
     body: UpdateRegulationBody,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     if body.title is not None:
@@ -344,7 +344,7 @@ async def update_regulation(
 async def archive_regulation(
     regulation_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     reg.status = RegulationStatus.ARCHIVED
@@ -361,7 +361,7 @@ async def new_version(
     regulation_id: uuid.UUID,
     body: NewVersionBody,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     v = await create_new_version(
@@ -397,7 +397,7 @@ async def get_version(
     regulation_id: uuid.UUID,
     version_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Детали одной версии регламента (content + метаданные).
 
@@ -419,7 +419,7 @@ async def rollback_version(
     regulation_id: uuid.UUID,
     version_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создаёт новую draft-версию из содержимого указанной версии.
 
@@ -447,7 +447,7 @@ async def publish(
     regulation_id: uuid.UUID,
     version_id: uuid.UUID,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     v = (
@@ -476,7 +476,7 @@ async def add_assignments(
     regulation_id: uuid.UUID,
     body: AssignmentBody,
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reg = await _get_reg_for_manage(db, regulation_id, current_user)
     user_ids = body.user_ids or []
@@ -530,7 +530,7 @@ async def list_completions(
     limit: int = Query(200, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(_require_manage),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список тех, кто прочитал/подписал + общая статистика покрытия."""
     reg = await _get_reg_for_manage(db, regulation_id, current_user)

@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.tenant import require_feature, require_module
 from app.models.user import User
 from app.models.advertising import Ad, AdEvent, AdStatus, AdType, PricingModel
@@ -179,7 +179,7 @@ def _apply_meta_update(ad: Ad, fields: dict):
 @router.get("")
 async def list_ads(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -202,7 +202,7 @@ async def list_ads(
 async def create_ad(
     body: CreateAdRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail="Тенант не определён")
@@ -528,7 +528,7 @@ async def get_ad_stats(
     ad_id: uuid.UUID,
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Статистика по дням: показы / клики / конверсии."""
     q = await db.execute(select(Ad).where(Ad.id == ad_id))
@@ -587,7 +587,7 @@ async def get_ad_stats(
 async def get_ad(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = await db.execute(select(Ad).where(Ad.id == ad_id))
     ad = q.scalar_one_or_none()
@@ -601,7 +601,7 @@ async def get_ad(
 async def reorder_ads(
     body: list[dict],  # [{"id": "...", "sort_order": 0}, ...]
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Обновить порядок показа баннеров в карусели."""
     for item in body:
@@ -618,7 +618,7 @@ async def update_ad(
     ad_id: uuid.UUID,
     body: UpdateAdRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = await db.execute(select(Ad).where(Ad.id == ad_id))
     ad = q.scalar_one_or_none()
@@ -759,7 +759,7 @@ async def record_ad_event(
 async def duplicate_ad(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Дублировать объявление (создаёт копию в статусе draft)."""
     q = await db.execute(select(Ad).where(Ad.id == ad_id))
@@ -797,7 +797,7 @@ async def create_variant(
     ad_id: uuid.UUID,
     body: CreateAdRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать A/B-вариант к существующему объявлению.
 
@@ -860,7 +860,7 @@ async def create_variant(
 async def list_variants(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все варианты A/B-теста для родительского объявления (включая parent)."""
     parent = (await db.execute(select(Ad).where(Ad.id == ad_id))).scalar_one_or_none()
@@ -878,7 +878,7 @@ async def list_variants(
 async def declare_winner(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Авто-определение победителя A/B по CTR. Все остальные варианты ставятся на pause."""
     parent = (await db.execute(select(Ad).where(Ad.id == ad_id))).scalar_one_or_none()
@@ -911,7 +911,7 @@ async def declare_winner(
 @router.get("/health-check")
 async def ads_health_check(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список «мёртвой» рекламы: idle (без показов > N дней) + битых ссылок."""
     filters = []
@@ -950,7 +950,7 @@ async def ads_health_check(
 @router.post("/health-check/auto-pause", dependencies=[_mod])
 async def auto_pause_dead_ads(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Автоматически перевести в paused всю мёртвую рекламу."""
     filters = []
@@ -986,7 +986,7 @@ class BulkActionRequest(BaseModel):
 async def bulk_action(
     body: BulkActionRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Массовые операции: pause / activate / delete."""
     if body.action not in ("pause", "activate", "delete"):
@@ -1074,7 +1074,7 @@ async def ai_generate_ad_text(
 @router.get("/templates")
 async def list_templates(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список сохранённых шаблонов объявлений тенанта."""
     filters = []
@@ -1090,7 +1090,7 @@ async def list_templates(
 async def create_from_template(
     ad_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать новое объявление на основе шаблона. Чистит даты/бюджет/счётчики."""
     src = (await db.execute(select(Ad).where(Ad.id == ad_id))).scalar_one_or_none()

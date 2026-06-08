@@ -25,7 +25,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.tenant import require_module
 from app.database import get_db
 from app.models.clinic import Clinic
@@ -267,7 +267,7 @@ async def preview_import(
     file: UploadFile = File(...),
     sheet_name: Optional[str] = Form(None),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Парсит файл, возвращает заголовки + автомаппинг + первые 10 строк."""
     _require_tenant(user)
@@ -325,7 +325,7 @@ async def execute_import(
     paid_at: Optional[str] = Form(None),
     sheet_name: Optional[str] = Form(None),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Импорт по подтверждённому маппингу. Создаёт лог и движения INCOME."""
     tenant_id = _require_tenant(user)
@@ -510,7 +510,7 @@ async def list_history(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История последних импортов тенанта."""
     tenant_id = _require_tenant(user)
@@ -534,7 +534,7 @@ async def list_history(
 async def rollback_import(
     import_id: uuid.UUID,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Мягкий откат: deactivate items, созданные импортом + reverse income-движения.
 

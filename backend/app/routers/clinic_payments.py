@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
@@ -129,7 +129,7 @@ async def init_payment(
     body: PaymentInitRequest,
     user: User = Depends(get_current_user),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Старт оплаты пациентом. Возвращает payment_url для редиректа.
@@ -178,7 +178,7 @@ async def init_payment(
 async def get_payment(
     payment_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await db.get(ClinicPayment, payment_id)
     if not p or (tenant and p.tenant_id != tenant.id):
@@ -193,7 +193,7 @@ async def refund_payment(
     payment_id: uuid.UUID = Path(...),
     amount: Optional[Decimal] = Body(None, embed=True),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await db.get(ClinicPayment, payment_id)
     if not p or (tenant and p.tenant_id != tenant.id):
@@ -390,7 +390,7 @@ async def list_clinic_payments(
     date_to: Optional[datetime] = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=500),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         return []
@@ -416,7 +416,7 @@ async def list_clinic_payments(
 async def get_payment_config(
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Чтение конфига доступно даже без подписки (видно «Подключите модуль»)."""
     if tenant is None:
@@ -439,7 +439,7 @@ async def upsert_payment_config(
     body: PaymentConfigBody,
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создаёт или обновляет конфиг шлюза (uniq по clinic_id+gateway)."""
     if tenant is None:

@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager, require_admin
+from app.core.deps import require_manager, require_admin, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.models.user import User, UserRole
 from app.models.clinic import Clinic
@@ -34,7 +34,7 @@ class CreateInviteRequest(BaseModel):
 @router.get("/partners/", response_model=list[dict])
 async def list_partners(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = select(User).where(User.role == UserRole.PARTNER_DOCTOR).order_by(User.full_name)
     if current_user.tenant_id is not None:
@@ -59,7 +59,7 @@ async def list_partners(
 async def create_partner(
     body: CreateAdminRequest,
     current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.core.security import hash_password
     if body.telegram_id:
@@ -97,7 +97,7 @@ async def update_partner(
     partner_id: uuid.UUID,
     body: UpdateAdminRequest,
     current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.core.security import hash_password
     result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER_DOCTOR))
@@ -128,7 +128,7 @@ async def delete_partner(
     partner_id: uuid.UUID,
     hard: bool = Query(False),
     current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(User).where(User.id == partner_id, User.role == UserRole.PARTNER_DOCTOR))
     partner = result.scalar_one_or_none()
@@ -149,7 +149,7 @@ async def delete_partner(
 async def create_invitation(
     body: CreateInviteRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if current_user.clinic_id:
         clinic_id = current_user.clinic_id
@@ -175,7 +175,7 @@ async def create_invitation(
 @router.get("/invitations/", response_model=list[dict])
 async def list_invitations(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Tenant isolation: фильтруем JOIN'ом по invited_by.tenant_id
     q = select(Invitation).order_by(Invitation.created_at.desc())
@@ -200,7 +200,7 @@ async def list_invitations(
 async def delete_invitation(
     invitation_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(Invitation).where(Invitation.id == invitation_id))
     invite = result.scalar_one_or_none()

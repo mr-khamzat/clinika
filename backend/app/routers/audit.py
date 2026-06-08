@@ -21,7 +21,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.tenant import require_feature
 from app.models.audit import AuditEntry
 from app.models.user import User
@@ -62,7 +62,7 @@ async def get_audit_log(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Общий журнал аудита с фильтрацией."""
     d_from = datetime.utcnow() - timedelta(days=days)
@@ -111,7 +111,7 @@ async def export_audit_log_csv(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(5000, ge=1, le=20000),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """CSV-выгрузка аудит-журнала. UTF-8 BOM + разделитель «;» для Excel."""
     d_from = datetime.utcnow() - timedelta(days=days)
@@ -169,7 +169,7 @@ async def get_entity_history(
     entity_id: uuid.UUID,
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История изменений конкретной сущности."""
     filters = [AuditEntry.entity_type == entity_type, AuditEntry.entity_id == entity_id]
@@ -190,7 +190,7 @@ async def get_actor_history(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все действия конкретного пользователя."""
     # Tenant isolation: проверяем принадлежность актора нашему тенанту
@@ -223,7 +223,7 @@ async def get_audit_feed(
     days: int = Query(30, ge=1, le=365),
     limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Объединённый журнал: audit_log + activity_log, сортировка по времени."""
     from datetime import timedelta
@@ -314,7 +314,7 @@ async def get_audit_feed(
 async def get_by_tenant_geo(
     days: int = Query(30, ge=1, le=365),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Гео-статистика по тенантам/франшизам.
 
@@ -466,7 +466,7 @@ async def list_region_violations(
     limit: int = Query(200, ge=1, le=1000),
     tenant_id: uuid.UUID | None = Query(None),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Лента событий action='region.violation' за период.
 

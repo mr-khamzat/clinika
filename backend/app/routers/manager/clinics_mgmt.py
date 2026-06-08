@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.models.user import User
 from app.models.clinic import Clinic
@@ -22,7 +22,7 @@ router = APIRouter(tags=["manager:clinics"])
 @router.get("/clinics/", response_model=list[ClinicResponse])
 async def list_clinics(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = select(Clinic).order_by(Clinic.name)
     if current_user.tenant_id is not None:
@@ -42,7 +42,7 @@ async def update_clinic(
     clinic_id: uuid.UUID,
     body: UpdateClinicRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = select(Clinic).where(Clinic.id == clinic_id)
     if current_user.tenant_id is not None:
@@ -67,7 +67,7 @@ async def update_clinic(
 async def create_clinic(
     body: CreateClinicRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     _sub: None = Depends(require_active_subscription),
 ):
     # Проверяем лимит клиник по тарифу
@@ -87,7 +87,7 @@ async def onboard_clinic_manager(
     clinic_id: uuid.UUID,
     body: dict,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать управляющего для клиники. Возвращает логин+пароль единожды."""
     from app.models.user import UserRole
@@ -166,7 +166,7 @@ async def onboard_clinic_manager(
 async def get_clinic_manager(
     clinic_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Получить управляющего клиники (без пароля)."""
     from app.models.user import UserRole
@@ -198,7 +198,7 @@ async def get_clinic_manager(
 async def remove_clinic_manager(
     clinic_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Деактивировать управляющего клиники."""
     from app.models.user import UserRole

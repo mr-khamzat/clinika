@@ -154,6 +154,17 @@ async def get_current_tenant(
     return tenant
 
 
+def _is_cross_tenant(user) -> bool:
+    """Кросс-тенантные роли — RLS-контекст НЕ ставим (permissive), изоляция на ручных фильтрах.
+
+    super_admin (вся платформа) + franchise_owner (несколько тенантов франшизы по
+    tenant.franchise_owner_id). Если поставить им single app.tenant_id, RLS срежет
+    видимость до одного тенанта → регрессия кросс-тенантных франшиза-вью (calls/ledger/...).
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role in (UserRole.SUPER_ADMIN.value, UserRole.FRANCHISE_OWNER.value)
+
+
 def _is_super_admin(user) -> bool:
     """super_admin строго ПО РОЛИ (не по NULL tenant_id).
 
@@ -249,9 +260,12 @@ async def get_tenant_db(
     """
     from app.database import current_tenant_id
 
-    # super_admin строго ПО РОЛИ — НЕ ставим контекст (None → permissive RLS).
-    # Иначе берём tenant_id пользователя (канонизируем как UUID-строку).
-    tid = None if _is_super_admin(user) else (str(user.tenant_id) if user.tenant_id else None)
+    # Кросс-тенантные роли (super_admin = вся платформа; franchise_owner = несколько
+    # тенантов франшизы по tenant.franchise_owner_id) — контекст НЕ ставим (None →
+    # permissive RLS), иначе RLS срежет их видимость до одного tenant_id (регрессия
+    # франшиза-отчётности/звонков). Их изоляция — на ручных фильтрах франшизы.
+    # Обычный tenant-пользователь → его tenant_id (канонизируем как UUID-строку).
+    tid = None if _is_cross_tenant(user) else (str(user.tenant_id) if user.tenant_id else None)
     token = current_tenant_id.set(str(uuid.UUID(tid)) if tid else None)
     try:
         yield db

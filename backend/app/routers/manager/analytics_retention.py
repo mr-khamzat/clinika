@@ -29,7 +29,7 @@ from sqlalchemy import select, and_, or_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.doctor import Appointment
 from app.models.doctor import Doctor
 from app.models.clinic import Clinic
@@ -87,7 +87,7 @@ async def doctor_retention(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[DoctorRetentionRow]:
     """Возвратность пациентов по врачам за период."""
     df, dt = _default_period(date_from, date_to)
@@ -212,7 +212,7 @@ async def doctor_retention_patients(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[RetentionPatientRow]:
     """Drill-down: пациенты конкретного врача за период с признаком повторных."""
     df, dt = _default_period(date_from, date_to)

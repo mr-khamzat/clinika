@@ -29,7 +29,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
 from app.models.sms_marketing import (
@@ -212,7 +212,7 @@ async def list_templates(
     only_active: bool = Query(True),
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список шаблонов тенанта (по умолчанию только активные)."""
     tid = _tenant_id(tenant)
@@ -234,7 +234,7 @@ async def create_template(
     body: SmsTemplateIn,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создание шаблона SMS."""
     tid = _tenant_id(tenant)
@@ -260,7 +260,7 @@ async def update_template(
     body: SmsTemplatePatch,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Частичное обновление шаблона."""
     tid = _tenant_id(tenant)
@@ -292,7 +292,7 @@ async def delete_template(
     template_id: uuid.UUID,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Soft delete — is_active=False (используется в кампаниях, поэтому без хард-делита)."""
     tid = _tenant_id(tenant)
@@ -326,7 +326,7 @@ async def list_campaigns(
     offset: int = Query(0, ge=0),
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список кампаний тенанта. Фильтр по статусу опционален."""
     tid = _tenant_id(tenant)
@@ -348,7 +348,7 @@ async def create_campaign(
     body: SmsCampaignIn,
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создание черновика кампании. Запуск — отдельным эндпоинтом /launch."""
     tid = _tenant_id(tenant)
@@ -390,7 +390,7 @@ async def preview_campaign(
     campaign_id: uuid.UUID,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Подсчёт размера аудитории без отправки. Сохраняет total_recipients."""
     tid = _tenant_id(tenant)
@@ -423,7 +423,7 @@ async def launch_campaign(
     campaign_id: uuid.UUID,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Запуск кампании.
@@ -473,7 +473,7 @@ async def cancel_campaign(
     campaign_id: uuid.UUID,
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Отмена кампании. После status='sent' отмена бессмысленна — 400."""
     tid = _tenant_id(tenant)
@@ -508,7 +508,7 @@ async def list_campaign_messages(
     offset: int = Query(0, ge=0),
     _user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Лог отправок кампании (paginated, optional filter по статусу)."""
     tid = _tenant_id(tenant)

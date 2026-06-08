@@ -19,7 +19,7 @@ from sqlalchemy import select, func, cast, Date, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.tenant import require_feature
 from app.models.user import User, UserRole
 from app.models.clinic import Clinic
@@ -70,7 +70,7 @@ async def analytics_overview(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Сводные метрики за период: кол-во направлений, конверсия, сумма бонусов,
@@ -167,7 +167,7 @@ async def analytics_funnel(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Воронка направлений:
@@ -284,7 +284,7 @@ async def analytics_dynamics(
     to_date: Optional[str] = Query(None),
     granularity: str = Query("day", pattern="^(day|week|month)$"),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Динамика направлений по времени.
@@ -367,7 +367,7 @@ async def analytics_top_services(
     to_date: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=50),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Топ услуг: кол-во направлений, конверсия, бонусный объём, средний бонус.
@@ -443,7 +443,7 @@ async def analytics_top_staff(
     to_date: Optional[str] = Query(None),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Рейтинг сотрудников: кол-во направлений, конверсия, заработанные бонусы.
@@ -519,7 +519,7 @@ async def analytics_clinics(
     from_date: Optional[str] = Query(None),
     to_date: Optional[str] = Query(None),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Сравнение клиник: направления, конверсия, объём бонусов.
@@ -586,7 +586,7 @@ async def analytics_ledger_trend(
     user_id: uuid.UUID = Query(...),
     days: int = Query(30, ge=7, le=365),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Накопительный баланс пользователя по дням (из ledger_entries).

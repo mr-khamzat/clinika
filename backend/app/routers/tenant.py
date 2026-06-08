@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager, require_super_admin
+from app.core.deps import get_current_user, require_manager, require_super_admin, get_tenant_db
 from app.models.user import User
 from app.models.tenant import Tenant, TenantLicense, TenantBranding
 from app.core.tenant import get_current_tenant
@@ -99,7 +99,7 @@ class BrandingUpdate(BaseModel):
 async def get_tenant_current(
     tenant: Tenant | None = Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Информация о текущем тенанте."""
     if tenant is None:
@@ -114,7 +114,7 @@ async def get_tenant_current(
 @router.get("/branding", response_model=BrandingOut)
 async def get_branding(
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Настройки брендинга тенанта."""
     if tenant is None:
@@ -143,7 +143,7 @@ async def update_branding(
     data: BrandingUpdate,
     tenant: Tenant | None = Depends(get_current_tenant),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Обновление брендинга (только менеджер)."""
     if tenant is None:
@@ -169,7 +169,7 @@ async def update_branding(
 @router.get("/license", response_model=LicenseOut)
 async def get_license(
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Лицензия тенанта."""
     if tenant is None:
@@ -244,7 +244,7 @@ async def create_tenant(
 @router.get("/modules-status")
 async def my_tenant_modules_status(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает модули текущего тенанта (для проверки доступности фич в UI).
     Любая роль внутри тенанта может прочитать."""

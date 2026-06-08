@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.database import get_db
 from app.models.tenant_mis_subscription_webhook import TenantMisSubscriptionWebhook
 from app.models.user import User
@@ -85,7 +85,7 @@ def _validate_events(events: list[str]) -> None:
 @router.get("")
 async def list_hooks(
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -103,7 +103,7 @@ async def list_hooks(
 async def create_hook(
     body: WebhookIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -127,7 +127,7 @@ async def update_hook(
     hook_id: uuid.UUID,
     body: WebhookPatch,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -158,7 +158,7 @@ async def update_hook(
 async def delete_hook(
     hook_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -181,7 +181,7 @@ async def delete_hook(
 async def test_hook(
     hook_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")

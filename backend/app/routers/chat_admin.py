@@ -22,7 +22,7 @@ from sqlalchemy import select, delete, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.chat_global_settings import ChatGlobalSettings
 from app.models.staff_chat import (
@@ -86,7 +86,7 @@ class SettingsUpdate(BaseModel):
 @router.get("/chat-settings", response_model=SettingsResponse)
 async def get_chat_settings(
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_admin(user)
     s = await _get_or_create_settings(db, user.tenant_id)
@@ -107,7 +107,7 @@ async def get_chat_settings(
 async def update_chat_settings(
     payload: SettingsUpdate,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_owner_or_super(user)
     s = await _get_or_create_settings(db, user.tenant_id)
@@ -145,7 +145,7 @@ class MembersAdd(BaseModel):
 async def create_group(
     payload: GroupCreate,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_admin(user)
     if not user.tenant_id and not (user.role.value if hasattr(user.role, "value") else str(user.role)) == "super_admin":
@@ -183,7 +183,7 @@ async def create_group(
 @router.get("/chat/groups")
 async def list_groups(
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Видят группу ТОЛЬКО участники (creator → автоматически member).
     # super_admin/franchise_owner bypass'ов нет — изоляция важнее.
@@ -232,7 +232,7 @@ async def add_members(
     room_id: uuid.UUID,
     payload: MembersAdd,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_admin(user)
     room = await svc.get_room(db, room_id)
@@ -264,7 +264,7 @@ async def remove_member(
     room_id: uuid.UUID,
     user_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_admin(user)
     room = await svc.get_room(db, room_id)
@@ -292,7 +292,7 @@ async def update_group(
     room_id: uuid.UUID,
     payload: GroupUpdate,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Переименовать группу. Только admin группы."""
     _ensure_admin(user)
@@ -312,7 +312,7 @@ async def update_group(
 async def delete_group(
     room_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удалить группу полностью (включая все сообщения и файлы). Только admin группы."""
     _ensure_admin(user)

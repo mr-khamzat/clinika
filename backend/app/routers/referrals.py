@@ -7,7 +7,7 @@ from app.models.referral import Referral, ReferralStatus
 from app.models.referral_comment import ReferralComment
 from app.schemas.referral import ReferralCreate, ReferralResponse, QRScanRequest, CancelRequestBody
 from app.services.referral_service import create_referral, confirm_referral, confirm_referral_by_short_code
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.services import webhook_service
 from datetime import datetime
@@ -85,7 +85,7 @@ async def verify_patient(
     phone: str | None = None,
     full_name: str | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Поиск пациента в МИС Renovatio по телефону и/или ФИО.
 
@@ -156,7 +156,7 @@ class CreatePatientInMisRequest(BaseModel):
 async def mis_add_patient(
     body: CreatePatientInMisRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создать нового пациента в МИС (addPatient). Возвращает patient_id.
 
@@ -202,7 +202,7 @@ async def create_new_referral(
     data: ReferralCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     from_clinic_id = current_user.clinic_id or data.from_clinic_id
     # Партнёры (role=partner) не привязаны к клинике — from_clinic_id остаётся None
@@ -263,7 +263,7 @@ async def create_new_referral(
 async def confirm_by_short_code(
     data: ShortCodeRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Подтвердить направление по 5-значному коду (без сканирования QR)."""
     try:
@@ -282,7 +282,7 @@ async def confirm_by_short_code(
 async def scan_qr(
     data: QRScanRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     try:
         referral = await confirm_referral(
@@ -298,7 +298,7 @@ async def scan_qr(
 @router.get("/", response_model=list[ReferralResponse])
 async def get_my_referrals(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     result = await db.execute(
         select(Referral)
@@ -313,7 +313,7 @@ async def get_my_referrals(
 async def get_incoming_referrals(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Входящие направления — направленные В клинику текущего пользователя.
@@ -344,7 +344,7 @@ async def get_incoming_referrals(
 async def get_referral(
     referral_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     q = select(Referral).where(Referral.id == referral_id)
     if current_user.tenant_id is not None:
@@ -363,7 +363,7 @@ async def request_cancel(
     referral_id: uuid.UUID,
     body: CancelRequestBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     """Администратор запрашивает отмену направления — уходит на подтверждение руководителю."""
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
@@ -393,7 +393,7 @@ async def request_cancel(
 async def get_comments(
     referral_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     # Tenant isolation
     ref_obj = (await db.execute(select(Referral).where(Referral.id == referral_id))).scalar_one_or_none()
@@ -422,7 +422,7 @@ async def add_comment(
     referral_id: uuid.UUID,
     body: CommentBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_tenant_db)
 ):
     if not body.text or not body.text.strip():
         raise HTTPException(status_code=400, detail="Пустой комментарий")

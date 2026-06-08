@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
 from app.models.payments_clinic import FiscalReceipt, OFDConfig
@@ -87,7 +87,7 @@ async def list_receipts(
     date_to: Optional[datetime] = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=500),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         return []
@@ -110,7 +110,7 @@ async def list_receipts(
 async def get_receipt_qr(
     receipt_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     r = await db.get(FiscalReceipt, receipt_id)
     if not r or (tenant and r.tenant_id != tenant.id):
@@ -124,7 +124,7 @@ async def get_receipt_qr(
 async def force_pull(
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         raise HTTPException(status_code=403, detail="Тенант не определён")
@@ -145,7 +145,7 @@ async def force_pull(
 async def get_ofd_config(
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         return {"config": None, "available_providers": list_providers()}
@@ -166,7 +166,7 @@ async def upsert_ofd_config(
     body: OFDConfigBody,
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         raise HTTPException(status_code=403, detail="Тенант не определён")

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, get_tenant_db, require_role
 from app.models.user import User, UserRole
 from app.models.external_doctor import VisitingDoctorSettings
 from app.models.doctor import Appointment, AppointmentStatus
@@ -46,7 +46,7 @@ class CompleteVisitBody(BaseModel):
 async def create_visiting_settings(
     body: VisitingSettingsCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Проверить, нет ли уже активной настройки для этой пары doctor+clinic
     existing = await db.scalar(
@@ -87,7 +87,7 @@ async def create_visiting_settings(
 @router.get("/admin/settings", dependencies=[_admin])
 async def list_visiting_settings(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(
         select(VisitingDoctorSettings).where(
@@ -117,7 +117,7 @@ async def list_visiting_settings(
 @router.get("/my-queue")
 async def get_my_queue(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.models.doctor import Doctor, Appointment, AppointmentStatus
     from datetime import date as date_type
@@ -166,7 +166,7 @@ async def get_my_queue(
 @router.get("/my-visits")
 async def get_my_visits(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Для visiting_doctor — список своих приёмов через doctors table."""
     from app.models.doctor import Doctor
@@ -202,7 +202,7 @@ async def get_my_visits(
 @router.get("/my-income")
 async def get_my_income(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(
         select(LedgerEntry).where(
@@ -232,7 +232,7 @@ async def get_my_income(
 async def complete_visit(
     body: CompleteVisitBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Завершить приём visiting_doctor и начислить в ledger."""
     from app.models.doctor import Appointment as _Apt
@@ -422,7 +422,7 @@ async def book_visiting_appointment(
     body: BookAppointmentBody,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.models.doctor import Doctor, Appointment, AppointmentStatus
     from datetime import time as time_type
@@ -531,7 +531,7 @@ async def get_visiting_doctor_appointments(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from app.models.doctor import Doctor, Appointment, AppointmentStatus
 
@@ -615,7 +615,7 @@ async def update_visiting_doctor(
     doctor_user_id: uuid.UUID,
     body: UpdateDoctorBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     doctor_user = await db.get(User, doctor_user_id)
     if not doctor_user or doctor_user.tenant_id != current_user.tenant_id:
@@ -674,7 +674,7 @@ async def get_all_visiting_appointments(
     date_to: Optional[date] = None,
     status: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все записи ко всем приезжим врачам (для панели администратора)."""
     from app.models.doctor import Doctor, Appointment, AppointmentStatus
@@ -766,7 +766,7 @@ async def edit_appointment(
     apt_id: uuid.UUID,
     body: AppointmentEditBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Редактировать запись пациента (дата, время, статус и т.д.)."""
     from app.models.doctor import Appointment as Apt, AppointmentStatus
@@ -814,7 +814,7 @@ async def edit_appointment(
 async def delete_appointment(
     apt_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удалить запись пациента."""
     from app.models.doctor import Appointment as Apt
@@ -832,7 +832,7 @@ async def delete_appointment(
 async def suspend_visiting_doctor(
     doctor_user_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Приостановить врача (is_suspended=True). Врач теряет возможность принимать новые записи."""
     doc = await db.get(User, doctor_user_id)
@@ -847,7 +847,7 @@ async def suspend_visiting_doctor(
 async def resume_visiting_doctor(
     doctor_user_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возобновить врача (is_suspended=False)."""
     doc = await db.get(User, doctor_user_id)

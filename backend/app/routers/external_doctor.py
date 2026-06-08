@@ -40,7 +40,7 @@ from sqlalchemy import select, func, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, require_role, get_tenant_db
 from app.models.user import User
 from app.models.clinic import Clinic
 from app.models.doctor_ai import DirectBill, DirectBillStatus, DirectBillPaymentMethod
@@ -158,7 +158,7 @@ async def _gen_bill_number(db: AsyncSession, tenant_id: uuid.UUID | None) -> str
 async def create_direct_bill(
     body: DirectBillCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if body.payment_method and body.payment_method not in (
         DirectBillPaymentMethod.CASH,
@@ -220,7 +220,7 @@ async def list_direct_bills(
     period_to: Optional[date] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     role_val = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
     q = select(DirectBill)
@@ -243,7 +243,7 @@ async def list_direct_bills(
 async def get_direct_bill(
     bill_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     b = await _get_bill_or_404(db, bill_id, current_user)
     return _bill_to_dict(b)
@@ -254,7 +254,7 @@ async def change_direct_bill_status(
     bill_id: uuid.UUID,
     body: DirectBillStatusUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if body.status not in (
         DirectBillStatus.DRAFT,
@@ -392,7 +392,7 @@ async def print_direct_bill(
     bill_id: uuid.UUID,
     inline: bool = Query(True),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     b = await _get_bill_or_404(db, bill_id, current_user)
     doctor = (await db.execute(select(User).where(User.id == b.doctor_id))).scalar_one_or_none() or current_user
@@ -424,7 +424,7 @@ async def my_stats(
     period_from: Optional[date] = Query(None),
     period_to: Optional[date] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Кабинетная статистика external-доктора:

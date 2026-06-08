@@ -34,7 +34,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
 from app.models.call_recording import (
@@ -172,7 +172,7 @@ def _serialize(rec: CallRecording, has_tr: bool = False) -> RecordingOut:
 @router.post("", response_model=RecordingOut, status_code=201)
 async def create_recording(
     payload: RecordingInitIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -196,7 +196,7 @@ async def create_recording(
 async def upload_recording_file(
     recording_id: uuid.UUID,
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     """Загрузить файл записи (multipart). Перезаписывает существующий."""
@@ -266,7 +266,7 @@ async def upload_recording_file(
 async def finalize_recording(
     recording_id: uuid.UUID,
     payload: RecordingFinalizeIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     """Закрыть загрузку: status='ready'. Воркер транскрипции подхватит."""
@@ -296,7 +296,7 @@ async def list_recordings(
     date_to: Optional[datetime] = None,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     """Список записей тенанта с фильтрами."""
@@ -333,7 +333,7 @@ async def list_recordings(
 @router.get("/{recording_id}", response_model=RecordingOut)
 async def get_recording(
     recording_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     t = _ensure_tenant(tenant)
@@ -351,7 +351,7 @@ async def get_recording(
 @router.get("/{recording_id}/file")
 async def download_recording_file(
     recording_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -376,7 +376,7 @@ async def download_recording_file(
 @router.get("/{recording_id}/transcript", response_model=TranscriptOut)
 async def get_transcript(
     recording_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     t = _ensure_tenant(tenant)
@@ -409,7 +409,7 @@ async def get_transcript(
 @router.delete("/{recording_id}", status_code=204)
 async def delete_recording(
     recording_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -451,7 +451,7 @@ class TranscriptSearchHit(BaseModel):
 async def search_transcripts(
     q: str = Query(..., min_length=2, max_length=200),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant: Tenant | None = Depends(get_current_tenant),
 ):
     """Полнотекстовый поиск по транскриптам тенанта (ILIKE %q%)."""

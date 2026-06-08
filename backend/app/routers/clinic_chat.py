@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.chat import ChatThread, ChatMessage
 from app.models.clinic import Clinic
@@ -123,7 +123,7 @@ async def list_threads(
     clinic_id: Optional[uuid.UUID] = Query(None),
     status: Optional[str] = Query(None),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_clinic_role(user)
     allowed = await _user_clinic_ids(db, user)
@@ -172,7 +172,7 @@ async def get_thread(
     limit: int = Query(100, ge=1, le=500),
     before_id: Optional[uuid.UUID] = Query(None),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_clinic_role(user)
     allowed = await _user_clinic_ids(db, user)
@@ -193,7 +193,7 @@ async def post_message(
     thread_id: uuid.UUID,
     body: SendMessageIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_clinic_role(user)
     allowed = await _user_clinic_ids(db, user)
@@ -226,7 +226,7 @@ async def upload_thread_file(
     thread_id: uuid.UUID,
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Quick Wins хвосты: drag&drop загрузка файла в тред чата клиники.
 
@@ -271,7 +271,7 @@ async def upload_thread_file(
 async def typing_indicator(
     thread_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Quick Wins: пинг "клиника печатает...".
 
@@ -297,7 +297,7 @@ async def assign_doctor(
     thread_id: uuid.UUID,
     body: AssignIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_clinic_role(user)
     allowed = await _user_clinic_ids(db, user)
@@ -324,7 +324,7 @@ async def set_color_label(
     thread_id: uuid.UUID,
     body: ColorLabelIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Quick Wins #4: установить/снять цветовую метку треда.
 
@@ -352,7 +352,7 @@ async def set_color_label(
 async def pin_thread(
     thread_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Quick Wins #3: toggle pin треда.
 
@@ -384,7 +384,7 @@ async def toggle_reaction(
     message_id: uuid.UUID,
     body: ReactionIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Quick Wins #2: toggle-реакция на сообщение.
 
@@ -436,7 +436,7 @@ async def toggle_reaction(
 async def close_thread(
     thread_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_clinic_role(user)
     allowed = await _user_clinic_ids(db, user)
@@ -460,7 +460,7 @@ async def reassign(
     thread_id: uuid.UUID,
     body: ReassignIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Передача треда другому сотруднику того же тенанта (Workflow batch).
 
@@ -495,7 +495,7 @@ async def reassign(
 async def patient_context(
     thread_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Полный контекст пациента треда — для panel'а в чате (Phase 1).
 

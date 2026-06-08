@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.database import get_db
 from app.models.activity_log import ActivityLog
 from app.models.clinic import Clinic
@@ -37,7 +37,7 @@ router = APIRouter(tags=["manager:multi-clinic"])
 @router.get("/multi-clinic-overview")
 async def multi_clinic_overview(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Возвращает обзор всех клиник, доступных менеджеру.
@@ -195,7 +195,7 @@ class AssignBody(BaseModel):
 async def assign_manager_clinic(
     body: AssignBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Назначает менеджеру дополнительный доступ к клинике.
@@ -262,7 +262,7 @@ async def revoke_manager_clinic(
     user_id: uuid.UUID,
     clinic_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Отозвать доступ менеджера к клинике. Доступно franchise_owner/super_admin."""
     if current_user.role not in (UserRole.FRANCHISE_OWNER, UserRole.SUPER_ADMIN):
