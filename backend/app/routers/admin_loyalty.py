@@ -216,10 +216,19 @@ async def manual_adjust(
     pa: PatientAccount | None = None
     if body.patient_id:
         pa = await db.get(PatientAccount, body.patient_id)
+        # [#18] Линкуем пациента к тенанту менеджера (M2M), чтобы начисление
+        # держало пациента в справочнике этой клиники.
+        if pa is not None:
+            await fs.link_patient_to_tenant(db, pa.id, current_user.tenant_id)
     else:
-        pa = await fs.get_account_by_phone(db, body.patient_phone)
+        # [#18] Изоляция: пациент — в рамках тенанта менеджера; create линкует.
+        pa = await fs.get_account_by_phone(
+            db, body.patient_phone, tenant_id=current_user.tenant_id
+        )
         if not pa:
-            pa, _ = await fs.get_or_create_account_by_phone(db, body.patient_phone)
+            pa, _ = await fs.get_or_create_account_by_phone(
+                db, body.patient_phone, tenant_id=current_user.tenant_id
+            )
     if not pa:
         raise HTTPException(404, "Patient not found")
 

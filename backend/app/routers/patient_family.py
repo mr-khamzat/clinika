@@ -52,10 +52,13 @@ async def _get_session(
 
 
 async def _current_account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
-    acc = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: текущий пациент — в рамках тенанта своей сессии.
+    acc = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not acc:
-        # Auto-create skeleton
-        acc, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        # Auto-create skeleton + линк к тенанту
+        acc, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     return acc
 
@@ -231,12 +234,15 @@ async def invite_member(
     if phone_n == normalize_phone(acc.phone):
         raise HTTPException(422, "Нельзя пригласить себя")
 
-    existing = await fs.get_account_by_phone(db, body.phone)
+    # [#18] Для семьи проверяем существование аккаунта в рамках ТЕНАНТА сессии:
+    # пациент другой клиники = «нет в этой клинике» → пойдём по ветке invite.
+    existing = await fs.get_account_by_phone(db, body.phone, tenant_id=sess.tenant_id)
 
     if existing is None:
-        # Создаём skeleton и добавляем сразу
+        # Создаём/привязываем skeleton к тенанту и добавляем сразу
         new_pa, _ = await fs.get_or_create_account_by_phone(
             db, body.phone, name=body.full_name, birth_date=body.birth_date,
+            tenant_id=sess.tenant_id,
         )
         mem = FamilyMember(
             id=uuid.uuid4(),

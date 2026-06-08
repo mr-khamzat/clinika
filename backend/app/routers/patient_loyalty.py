@@ -53,9 +53,12 @@ async def _require_module_and_account(
         raise HTTPException(404, "No tenant context")
     if not await ls.is_module_active(db, sess.tenant_id):
         raise HTTPException(402, "Модуль loyalty_pro не подключён")
-    pa = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: аккаунт лояльности — в рамках тенанта сессии.
+    pa = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not pa:
-        pa, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        pa, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     acc = await ls.get_or_create_account(db, sess.tenant_id, pa)
     await db.commit()

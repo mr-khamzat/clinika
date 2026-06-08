@@ -45,6 +45,7 @@ from app.models.doctor import Appointment, hash_phone, hash_name
 from app.models.medcard import PatientDiagnosis, PatientAllergy, PatientVaccination
 from app.models.lab import LabResult
 from app.models.patient_vital import PatientVital
+from app.models.patient_account import PatientAccount
 from app.services import encryption_service
 
 log = logging.getLogger("pii_sync")
@@ -94,6 +95,11 @@ _MAP: dict = {
     PatientVital: {
         "value_extra": {"enc": "value_extra_encrypted", "json": True},
         "note":        {"enc": "note_encrypted"},
+    },
+    # ── Находка #18: ФИО глобального аккаунта пациента ────────────────────────
+    # name участвует в поиске/идентификации → есть blind-index hash.
+    PatientAccount: {
+        "name": {"enc": "name_encrypted", "hash": ("name_hash", hash_name)},
     },
 }
 
