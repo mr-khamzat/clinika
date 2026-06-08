@@ -308,18 +308,79 @@ async def refund_clinic_payment(
 ) -> dict[str, Any]:
     """
     Возврат через шлюз. amount=None — полный возврат.
-    Не меняет статус локально — это сделает webhook (или вызывающий после).
+    Не меняет статус на REFUNDED локально — это сделает webhook (или вызывающий
+    после). Но фиксирует факт инициированного возврата в payment_metadata для
+    идемпотентности.
+
+    Защита (находка #36):
+      - возврат разрешён только из статуса SUCCEEDED;
+      - сумма возврата не может превышать сумму платежа;
+      - повторный успешный возврат блокируется (idempotency по payment_id):
+        если уже стоит статус REFUNDED либо в metadata есть отметка
+        refund_initiated — повторно к шлюзу не идём.
     """
-    payment = await db.get(ClinicPayment, payment_id)
+    # Блокируем строку платежа на время операции (SELECT ... FOR UPDATE на PG),
+    # чтобы идемпотентность держалась и при конкурентных запросах возврата.
+    is_pg = False
+    try:
+        is_pg = db.bind is not None and db.bind.dialect.name == "postgresql"
+    except Exception:
+        is_pg = False
+
+    if is_pg:
+        payment = (await db.execute(
+            select(ClinicPayment)
+            .where(ClinicPayment.id == payment_id)
+            .with_for_update()
+        )).scalar_one_or_none()
+    else:
+        payment = await db.get(ClinicPayment, payment_id)
+
     if payment is None:
         raise LookupError("Платёж не найден")
     if not payment.gateway_payment_id:
         raise LookupError("У платежа нет gateway_payment_id — возврат невозможен")
 
+    # Идемпотентность: уже возвращён.
+    if payment.status == ClinicPaymentStatus.REFUNDED:
+        raise LookupError("Платёж уже возвращён")
+
+    # Возврат допустим только из успешного платежа.
+    if payment.status != ClinicPaymentStatus.SUCCEEDED:
+        raise LookupError(
+            f"Возврат недоступен: статус платежа {payment.status} (ожидался succeeded)"
+        )
+
+    meta = dict(payment.payment_metadata or {})
+    if meta.get("refund_initiated"):
+        raise LookupError("Возврат уже инициирован для этого платежа")
+
+    # Ограничиваем сумму возврата суммой платежа.
+    paid_amount = _quantize(payment.amount or Decimal("0"))
+    if amount is not None:
+        refund_amount = _quantize(amount)
+        if refund_amount <= 0:
+            raise LookupError("Сумма возврата должна быть положительной")
+        if refund_amount - paid_amount > _AMOUNT_EPS:
+            raise LookupError(
+                f"Сумма возврата {refund_amount} превышает сумму платежа {paid_amount}"
+            )
+    else:
+        refund_amount = None
+
     cfg = await _get_active_config(db, payment.clinic_id, gateway=payment.gateway)
     if cfg is None:
         raise LookupError(f"Конфиг шлюза {payment.gateway} не найден для клиники {payment.clinic_id}")
 
+    # Отмечаем инициацию ДО вызова шлюза — параллельный повторный возврат
+    # упрётся в refund_initiated. Лочим строку платежа на время операции.
+    meta["refund_initiated"] = {
+        "at": datetime.utcnow().isoformat(),
+        "amount": str(refund_amount) if refund_amount is not None else str(paid_amount),
+    }
+    payment.payment_metadata = meta
+    await db.flush()
+
     adapter = get_gateway(payment.gateway, cfg)
-    raw = await adapter.refund(payment.gateway_payment_id, amount=amount)
+    raw = await adapter.refund(payment.gateway_payment_id, amount=refund_amount)
     return {"payment_id": str(payment.id), "raw": raw}

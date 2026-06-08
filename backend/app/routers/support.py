@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.database import get_db
 from app.core.deps import get_current_user, require_manager
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.support import SupportMessage
 from pydantic import BaseModel
 import httpx
@@ -21,9 +21,17 @@ import uuid
 
 router = APIRouter(prefix="/support", tags=["support"])
 
-# Дефолтные токены (для arc тенанта / обратная совместимость)
-_DEFAULT_BOT_TOKEN = "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
-_DEFAULT_ADMIN_CHAT_ID = 293633093
+# Дефолтные токены (для arc тенанта / обратная совместимость).
+# Источник — переменные окружения (как в alert_service); хардкод-фолбэк
+# оставлен на переходный период и ДОЛЖЕН быть отозван/ротирован в BotFather
+# (старое значение присутствует в git history).
+_DEFAULT_BOT_TOKEN = (
+    os.environ.get("SUPPORT_BOT_TOKEN", "").strip()
+    or "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
+)
+_DEFAULT_ADMIN_CHAT_ID = int(
+    os.environ.get("SUPPORT_ADMIN_CHAT_ID", "").strip() or "293633093"
+)
 SUPPORT_BOT_TOKEN = _DEFAULT_BOT_TOKEN
 ADMIN_CHAT_ID = _DEFAULT_ADMIN_CHAT_ID
 
@@ -181,14 +189,32 @@ async def upload_file(
     }
 
 
-# ─── Служба файлов (только авторизованным) ───
+# Роли операторов поддержки — им разрешено скачивать файлы из переписок.
+_SUPPORT_OPERATOR_ROLES = (UserRole.MANAGER, UserRole.SUPER_ADMIN, UserRole.FRANCHISE_OWNER)
+
+
+# ─── Служба файлов (владелец сообщения или оператор поддержки) ───
 @router.get("/files/{filename}")
 async def serve_file(
     filename: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
     if not _safe_filename(filename):
         raise HTTPException(400, "Некорректное имя файла")
+
+    # IDOR-guard: файл привязан к SupportMessage.file_path. Отдаём только если
+    # запрашивающий — владелец сообщения, либо оператор поддержки (manager+).
+    if current_user.role not in _SUPPORT_OPERATOR_ROLES:
+        owner_msg = (await db.execute(
+            select(SupportMessage).where(
+                SupportMessage.file_path == filename,
+                SupportMessage.user_id == current_user.id,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if owner_msg is None:
+            raise HTTPException(404, "Файл не найден")
+
     filepath = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(404, "Файл не найден")

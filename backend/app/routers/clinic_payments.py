@@ -237,15 +237,43 @@ async def payment_webhook(
     body = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
 
-    # Берём первый активный конфиг (для адаптеров, которым он нужен). Если
-    # конфига нет — адаптер обязан использовать ENV и сам бросить RuntimeError,
-    # если ENV пуст. Для ЮKassa verify_webhook не требует ни того, ни другого.
-    cfg = (await db.execute(
-        select(PaymentGatewayConfig).where(
-            PaymentGatewayConfig.gateway == gateway,
-            PaymentGatewayConfig.is_active == True,  # noqa: E712
-        ).limit(1)
-    )).scalar_one_or_none()
+    # Сначала пытаемся определить платёж ДО verify по metadata.internal_payment_id
+    # из сырого тела — чтобы выбрать конфиг шлюза ИМЕННО этого тенанта/клиники
+    # (его секрет), а не первого попавшегося активного конфига.
+    pre_payment: ClinicPayment | None = None
+    try:
+        import json as _json
+        _raw_pre = _json.loads(body.decode("utf-8") or "{}")
+        _meta_pre = (_raw_pre.get("object") or {}).get("metadata") or {}
+        _internal_pre = _meta_pre.get("internal_payment_id")
+        if _internal_pre:
+            pre_payment = await db.get(ClinicPayment, uuid.UUID(str(_internal_pre)))
+    except (UnicodeDecodeError, ValueError, TypeError):
+        pre_payment = None
+
+    cfg = None
+    if pre_payment is not None:
+        # Конфиг строго того же тенанта/клиники/шлюза, что и платёж.
+        cfg = (await db.execute(
+            select(PaymentGatewayConfig).where(
+                PaymentGatewayConfig.gateway == gateway,
+                PaymentGatewayConfig.tenant_id == pre_payment.tenant_id,
+                PaymentGatewayConfig.clinic_id == pre_payment.clinic_id,
+                PaymentGatewayConfig.is_active == True,  # noqa: E712
+            ).limit(1)
+        )).scalar_one_or_none()
+
+    if cfg is None:
+        # Fallback: платёж не опознан заранее (или конфиг для него не настроен) —
+        # берём первый активный конфиг шлюза. Если его нет — адаптер обязан
+        # использовать ENV и сам бросить RuntimeError, если ENV пуст. Для ЮKassa
+        # verify_webhook не требует ни того, ни другого.
+        cfg = (await db.execute(
+            select(PaymentGatewayConfig).where(
+                PaymentGatewayConfig.gateway == gateway,
+                PaymentGatewayConfig.is_active == True,  # noqa: E712
+            ).limit(1)
+        )).scalar_one_or_none()
 
     adapter = get_gateway(gateway, cfg)  # cfg может быть None — адаптер должен это пережить
     try:

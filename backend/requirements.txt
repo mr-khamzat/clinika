@@ -1,4 +1,7 @@
 fastapi==0.115.14
+# starlette закреплён явно (#38): fastapi 0.115.x требует starlette>=0.40.0,<0.42.0 —
+# дублируем диапазон, чтобы транзитивная зависимость была видимой и воспроизводимой.
+starlette>=0.40.0,<0.42.0
 uvicorn[standard]==0.32.1
 sqlalchemy==2.0.36
 alembic==1.13.1
@@ -21,10 +24,13 @@ fastapi-limiter==0.1.6
 psutil==5.9.8
 docker==7.1.0
 pywebpush==2.3.0
-apscheduler>=3.10.4
-structlog>=24.0.0
-prometheus-client>=0.20.0
-tenacity>=8.2.0
+# Фикс дрейфа версий (#56): верхний потолок по мажору (>=floor,<next-major),
+# чтобы reproducible-сборка не подтянула breaking-релиз. Точный лок — через
+# pip-compile в ops (не в этой правке, без установки).
+apscheduler>=3.10.4,<4
+structlog>=24.0.0,<25
+prometheus-client>=0.20.0,<1
+tenacity>=8.2.0,<9
 geoip2==4.8.0
 maxminddb==2.6.0
 sentry-sdk[fastapi]==2.20.0
@@ -34,6 +40,9 @@ weasyprint==62.3
 pydyf==0.10.0
 openpyxl==3.1.2
 icalendar==5.0.13
-jinja2==3.1.4
-holidays>=0.45
-anthropic>=0.45.0
+# CVE-фикс (#66): 3.1.4 уязвим (CVE-2024-56201/56326, CVE-2025-27516).
+# 3.1.6 — патч-релиз той же минорной ветки, без изменения API. weasyprint совместим.
+jinja2==3.1.6
+holidays>=0.45,<1
+# anthropic: фиксируем мажор 0.x (критично — частые breaking-изменения SDK, #56)
+anthropic>=0.45.0,<1

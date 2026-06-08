@@ -9,6 +9,7 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.billing import (
@@ -19,10 +20,49 @@ from app.models.billing import (
 
 # ── Хелперы ───────────────────────────────────────────────────────────────────
 
-def _next_invoice_number(db_seq_value: int) -> str:
+def _invoice_prefix(year: int | None = None) -> str:
+    return f"INV-{year or datetime.utcnow().year}-"
+
+
+def _format_invoice_number(seq: int, year: int | None = None) -> str:
     """INV-2026-00001"""
-    year = datetime.utcnow().year
-    return f"INV-{year}-{db_seq_value:05d}"
+    return f"{_invoice_prefix(year)}{seq:05d}"
+
+
+def _next_invoice_number(db_seq_value: int) -> str:
+    """Обратносовместимый алиас форматирования номера (INV-YYYY-NNNNN)."""
+    return _format_invoice_number(db_seq_value)
+
+
+def _seq_from_invoice_number(number: str | None, prefix: str) -> int:
+    """Извлекает числовой суффикс из 'INV-2026-00042' → 42 (0 если не распарсилось)."""
+    if not number or not number.startswith(prefix):
+        return 0
+    tail = number[len(prefix):]
+    try:
+        return int(tail)
+    except (ValueError, TypeError):
+        return 0
+
+
+async def _next_invoice_seq(db: AsyncSession, year: int) -> int:
+    """Следующий порядковый номер счёта за год.
+
+    Берём MAX по существующим invoice_number с префиксом года (а не COUNT(*)+1):
+    COUNT ломается при удалении строк и плодит дубли. MAX-подход устойчив к
+    удалению; гонку добивает unique-индекс на invoice_number + retry в
+    generate_invoice.
+    """
+    prefix = _invoice_prefix(year)
+    rows = (await db.execute(
+        select(Invoice.invoice_number).where(Invoice.invoice_number.like(f"{prefix}%"))
+    )).scalars().all()
+    max_seq = 0
+    for n in rows:
+        s = _seq_from_invoice_number(n, prefix)
+        if s > max_seq:
+            max_seq = s
+    return max_seq + 1
 
 
 def _add_months(start: date, n: int) -> date:
@@ -130,26 +170,44 @@ async def generate_invoice(
     start = period_start or sub.current_period_start
     end   = _period_end(start, sub.billing_cycle)
 
-    # Порядковый номер счёта
-    count_q = await db.execute(select(func.count(Invoice.id)))
-    seq = (count_q.scalar() or 0) + 1
+    # Порядковый номер счёта: MAX(suffix)+1 за текущий год (устойчив к удалению,
+    # в отличие от COUNT(*)+1). Гонку добиваем unique-индексом invoice_number +
+    # retry: при конфликте перевычисляем seq и пробуем снова в savepoint.
+    year = datetime.utcnow().year
+    invoice: Invoice | None = None
+    last_err: Exception | None = None
+    for _attempt in range(5):
+        seq = await _next_invoice_seq(db, year)
+        candidate = Invoice(
+            subscription_id=sub.id,
+            tenant_id=sub.tenant_id,
+            invoice_number=_format_invoice_number(seq, year),
+            status=InvoiceStatus.SENT,
+            amount=sub.amount_per_period,
+            period_start=start,
+            period_end=end,
+            due_date=start + timedelta(days=14),
+            line_items=[{
+                "description": f"Подписка {sub.plan} ({sub.billing_cycle})",
+                "amount": float(sub.amount_per_period),
+                "quantity": 1,
+            }],
+        )
+        try:
+            async with db.begin_nested():   # savepoint: откатывается только INSERT
+                db.add(candidate)
+                await db.flush()
+            invoice = candidate
+            break
+        except IntegrityError as e:
+            # Конкурентная вставка заняла этот invoice_number — перевычисляем.
+            last_err = e
+            continue
 
-    invoice = Invoice(
-        subscription_id=sub.id,
-        tenant_id=sub.tenant_id,
-        invoice_number=_next_invoice_number(seq),
-        status=InvoiceStatus.SENT,
-        amount=sub.amount_per_period,
-        period_start=start,
-        period_end=end,
-        due_date=start + timedelta(days=14),
-        line_items=[{
-            "description": f"Подписка {sub.plan} ({sub.billing_cycle})",
-            "amount": float(sub.amount_per_period),
-            "quantity": 1,
-        }],
-    )
-    db.add(invoice)
+    if invoice is None:
+        raise RuntimeError(
+            "Не удалось присвоить уникальный номер счёта (конкурентные вставки)"
+        ) from last_err
 
     # Обновляем следующий период в подписке
     next_start = end + timedelta(days=1)
