@@ -7,6 +7,14 @@ pii_sync — SQLAlchemy event-listeners, синхронизирующие plaint
 notes_encrypted из соответствующих plaintext-полей — чтобы прикладной код мог
 писать как раньше (appt.patient_phone = "..."), а шифрование происходило прозрачно.
 
+[Находка #17 — 152-ФЗ] То же для медданных спец.категории:
+  • PatientDiagnosis.name/notes
+  • PatientAllergy.allergen/reaction
+  • PatientVaccination.vaccine_name
+  • LabResult.value/reference_range/raw_json (JSONB)
+  • PatientVital.value_extra (JSONB)/note
+По медтексту blind-index не нужен (поиска нет) — только шифрование.
+
 Паттерн (по образцу app/services/user_audit_listeners.py):
   • before_insert / before_update на ORM-модели
   • синхронные listeners (другого пути у ORM-events нет)
@@ -17,6 +25,7 @@ _MAP описывает, какие plaintext-поля каких моделей
         plaintext_attr: {
             "enc": encrypted_attr,          # обязательно
             "hash": (hash_attr, hash_func), # опционально (для полей с поиском)
+            "json": True,                   # опционально (JSONB-поле: dump в JSON-строку)
         }
     }
 
@@ -26,19 +35,31 @@ _MAP описывает, какие plaintext-поля каких моделей
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from sqlalchemy import event
 from sqlalchemy.orm.attributes import get_history
 
 from app.models.doctor import Appointment, hash_phone, hash_name
+from app.models.medcard import PatientDiagnosis, PatientAllergy, PatientVaccination
+from app.models.lab import LabResult
+from app.models.patient_vital import PatientVital
 from app.services import encryption_service
 
 log = logging.getLogger("pii_sync")
 
 
-def _enc(value):
-    """plaintext -> ciphertext ('enc:'/'plain:') либо None для пустого."""
+def _enc(value, *, as_json: bool = False):
+    """plaintext -> ciphertext ('enc:'/'plain:') либо None для пустого.
+
+    as_json=True: значение — JSONB (dict/list). None → None; иначе сериализуем
+    в JSON-строку и шифруем её (getter делает json.loads(decrypt(...))).
+    """
+    if as_json:
+        if value is None:
+            return None
+        return encryption_service.encrypt(json.dumps(value))
     if value is None or value == "":
         return None
     return encryption_service.encrypt(value)
@@ -46,12 +67,33 @@ def _enc(value):
 
 # Карта синхронизации plaintext -> shadow-колонки.
 # phone и name участвуют в поиске/группировке → имеют blind-index hash.
-# notes — только шифрование (поиска по тексту заметок нет).
+# Медтекст (#17) — только шифрование (поиска по нему нет).
 _MAP: dict = {
     Appointment: {
         "patient_phone": {"enc": "patient_phone_encrypted", "hash": ("patient_phone_hash", hash_phone)},
         "patient_name":  {"enc": "patient_name_encrypted",  "hash": ("patient_name_hash",  hash_name)},
         "notes":         {"enc": "notes_encrypted"},
+    },
+    # ── Находка #17: медданные спец.категории ────────────────────────────────
+    PatientDiagnosis: {
+        "name":  {"enc": "name_encrypted"},
+        "notes": {"enc": "notes_encrypted"},
+    },
+    PatientAllergy: {
+        "allergen": {"enc": "allergen_encrypted"},
+        "reaction": {"enc": "reaction_encrypted"},
+    },
+    PatientVaccination: {
+        "vaccine_name": {"enc": "vaccine_name_encrypted"},
+    },
+    LabResult: {
+        "value":           {"enc": "value_encrypted"},
+        "reference_range": {"enc": "reference_range_encrypted"},
+        "raw_json":        {"enc": "raw_json_encrypted", "json": True},
+    },
+    PatientVital: {
+        "value_extra": {"enc": "value_extra_encrypted", "json": True},
+        "note":        {"enc": "note_encrypted"},
     },
 }
 
@@ -64,7 +106,7 @@ def _sync_target(target) -> None:
     for plain_attr, dst in spec.items():
         try:
             value = getattr(target, plain_attr, None)
-            setattr(target, dst["enc"], _enc(value))
+            setattr(target, dst["enc"], _enc(value, as_json=dst.get("json", False)))
             hash_cfg = dst.get("hash")
             if hash_cfg:
                 hash_attr, hash_fn = hash_cfg
