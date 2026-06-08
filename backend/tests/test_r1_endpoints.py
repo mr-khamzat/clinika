@@ -263,7 +263,7 @@ def test_regulation_endpoints_use_tenant_guard():
 async def test_mis_settings_route_registered(client, mock_db, monkeypatch):
     """PATCH /integrations/mis/settings зарегистрирован (не route-404/405)."""
     from app.main import app
-    from app.core.deps import require_manager
+    from app.core.deps import get_current_user
     import app.routers.integrations as integ
 
     # set_setting/get_setting не должны лезть в реальную БД
@@ -271,14 +271,14 @@ async def test_mis_settings_route_registered(client, mock_db, monkeypatch):
     monkeypatch.setattr(integ, "get_setting", AsyncMock(return_value="https://mis"))
 
     tid = uuid.uuid4()
-    app.dependency_overrides[require_manager] = lambda: _override_user("franchise_owner", tid)
+    app.dependency_overrides[get_current_user] = lambda: _override_user("franchise_owner", tid)
     try:
         resp = await client.patch(
             "/integrations/mis/settings",
             json={"mis_api_url": "https://mis.example.ru/api"},
         )
     finally:
-        app.dependency_overrides.pop(require_manager, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code != 405
     assert resp.json().get("detail") != "Not Found", resp.text
@@ -290,7 +290,7 @@ async def test_mis_settings_encrypts_api_key(client, mock_db, monkeypatch):
     """api_key пишется через encryption_service.encrypt (под ключ mis_api_key_enc),
     plaintext-копия — под легаси-ключ mis_api_key. Секрет не возвращается в ответе."""
     from app.main import app
-    from app.core.deps import require_manager
+    from app.core.deps import get_current_user
     import app.routers.integrations as integ
 
     set_calls = []
@@ -305,14 +305,14 @@ async def test_mis_settings_encrypts_api_key(client, mock_db, monkeypatch):
     )
 
     tid = uuid.uuid4()
-    app.dependency_overrides[require_manager] = lambda: _override_user("manager", tid)
+    app.dependency_overrides[get_current_user] = lambda: _override_user("manager", tid)
     try:
         resp = await client.patch(
             "/integrations/mis/settings",
             json={"mis_api_key": "TOP-SECRET-KEY"},
         )
     finally:
-        app.dependency_overrides.pop(require_manager, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 200, resp.text
     keys_written = dict(set_calls)
@@ -328,21 +328,21 @@ async def test_mis_settings_encrypts_api_key(client, mock_db, monkeypatch):
 async def test_mis_settings_clinic_ids_validation(client, mock_db, monkeypatch):
     """mis_clinic_ids должен быть списком; строка → 422 (валидация тела)."""
     from app.main import app
-    from app.core.deps import require_manager
+    from app.core.deps import get_current_user
     import app.routers.integrations as integ
 
     monkeypatch.setattr(integ, "set_setting", AsyncMock())
     monkeypatch.setattr(integ, "get_setting", AsyncMock(return_value=""))
 
     tid = uuid.uuid4()
-    app.dependency_overrides[require_manager] = lambda: _override_user("franchise_owner", tid)
+    app.dependency_overrides[get_current_user] = lambda: _override_user("franchise_owner", tid)
     try:
         resp = await client.patch(
             "/integrations/mis/settings",
             json={"mis_clinic_ids": "1,2,3"},  # строка вместо списка
         )
     finally:
-        app.dependency_overrides.pop(require_manager, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 422, resp.text
 
@@ -350,7 +350,7 @@ async def test_mis_settings_clinic_ids_validation(client, mock_db, monkeypatch):
 async def test_mis_settings_requires_tenant(client, mock_db, monkeypatch):
     """Пользователь без tenant_id (super_admin вне тенанта) → 400, ничего не пишем."""
     from app.main import app
-    from app.core.deps import require_manager
+    from app.core.deps import get_current_user
     import app.routers.integrations as integ
 
     set_mock = AsyncMock()
@@ -359,14 +359,14 @@ async def test_mis_settings_requires_tenant(client, mock_db, monkeypatch):
 
     user = _override_user("super_admin")
     user.tenant_id = None
-    app.dependency_overrides[require_manager] = lambda: user
+    app.dependency_overrides[get_current_user] = lambda: user
     try:
         resp = await client.patch(
             "/integrations/mis/settings",
             json={"mis_api_url": "https://x"},
         )
     finally:
-        app.dependency_overrides.pop(require_manager, None)
+        app.dependency_overrides.pop(get_current_user, None)
 
     assert resp.status_code == 400, resp.text
     assert not set_mock.called, "без tenant_id ничего не должно записываться"
