@@ -1,475 +1,192 @@
-<div align="center">
+# КлиникСеть (clinika)
 
-# 🏥 КлиникСеть
+Мультитенантная **МИС/SaaS-платформа для сети клиник**: FastAPI + React, ~263k строк кода, 7 ролевых кабинетов поверх единого ядра изоляции тенантов. Один монолитный бэкенд (~165 роутеров, ~135 сервисов, ~100 ORM-моделей) и один SPA обслуживают всю сеть, разводя клиники по slug-у тенанта в URL.
 
-**SaaS-платформа для управления сетью медицинских клиник**
-
-[![Production](https://img.shields.io/badge/Production-Active-success)](https://клиниксеть.рф)
-[![License](https://img.shields.io/badge/License-Proprietary-blue)]()
-[![Backend](https://img.shields.io/badge/Backend-FastAPI%200.115-009688)]()
-[![Frontend](https://img.shields.io/badge/Frontend-React%2018%20%2B%20Vite-61dafb)]()
-[![Database](https://img.shields.io/badge/Database-PostgreSQL%2016-336791)]()
-[![Tests](https://img.shields.io/badge/Tests-121%20passed-success)]()
-[![Coverage](https://img.shields.io/badge/Coverage-35%25-yellow)]()
-
-[Возможности](#-возможности) • [Архитектура](#-архитектура) • [Установка](#-установка) • [Документация](#-документация) • [Roadmap](#-roadmap)
-
-</div>
+> Это точка входа для нового разработчика. Подробности по слоям — в [карте документации](#карта-документации).
 
 ---
 
-## 📖 О проекте
+## Что это за продукт
 
-**КлиникСеть** — многотенантная SaaS-платформа для управления сетью медицинских клиник: учёт направлений, бонусная система между клиниками, интеграция с МИС Renovatio, биллинг подписок, телемедицина, реклама с A/B-тестами, ЛК пациента, мобильная PWA.
+«КлиникСеть» — платформа для франшизной сети медицинских клиник: онлайн-запись, направления между клиниками (реферальная воронка — сердце бизнес-модели), биллинг платформы и франшиз, медкарта пациента, телемедицина, лаборатория, склад, телефония, AI-ассистенты и сквозная аналитика. Иерархия данных: **Платформа → Франшиза → Тенант → Клиника**.
 
-Используется в реальной франшизе из 5 клиник: **АРЦ**, **Лорсанова**, **НЕОМЕД**, **Ачхой**, **Серноводск**.
+### Семь кабинетов
 
-### 🎯 Ключевые цифры
-- **20+ модулей** в каталоге (телемедицина, реклама, инвентарь, лояльность, AI-аналитика, ОФД, эквайринг и др.)
-- **11 ролей**: super_admin / franchise_owner / manager / doctor / reg / nurse / recruiter / partner_doctor / visiting_doctor / acquisition_manager / patient
-- **70+ Backend endpoints** + Public API v1
-- **80 миграций** Alembic
-- **121 pytest тестов**, coverage 35% по критическим путям
-- **Frontend bundle**: 167 KB gzipped (главный chunk)
+| Кабинет | Роль(и) | Назначение |
+|---|---|---|
+| **Платформа (super_admin)** | `super_admin` | Управление всеми тенантами/франшизами: биллинг, churn, health-score, feature-flags, мониторинг, RBAC, impersonation |
+| **Франшиза** | `franchise_owner` | P&L сети, перелив пациентов, gap-анализ модулей, биллинг от платформы, создание клиник |
+| **Директор сети** | `director`, `deputy_director` | P&L / ДДС / KPI / маркетинг сети — read-only аналитика |
+| **Управляющий** | `manager` | Операционка клиники: услуги, персонал, склад, лояльность, лаборатория, телефония, отчёты |
+| **Бухгалтер** | `accountant` | Кассовые смены, акты, счета, выплаты, расходы, отчёты |
+| **Врач / медперсонал** | `doctor`, `reg`, `nurse`, `recruiter`, `partner_doctor`, `visiting_doctor` | Расписание, приёмы, заключения, направления, AI-инструменты, лаб-заявки |
+| **Пациент (ЛК)** | `patient` | Записи, медкарта, рецепты, документы, лояльность, подписка «Здоровье+», семья, чат, телемед (вход по QR/коду, без пароля) |
 
----
-
-## ✨ Возможности
-
-### 🏢 Платформа (super_admin)
-- **Marketplace модулей** — витрина с триал-периодом, скриншотами, фичами
-- **Tenant impersonation** — заход «как tenant» с полным audit-логом
-- **Журнал безопасности** — failed logins, brute-force, webhook-нарушения, IP-блокировка
-- **Module Monitoring** — 20 health-check адаптеров, Telegram-алерты, daily digest
-- **API-keys для tenants** — публичный API v1 с RBAC по scopes
-- **Cohort-анализ клиник** (в работе)
-- **KPI-Dashboard франшизы** (в работе)
-
-### 🏛 Кабинет франшизы (franchise_owner)
-- Управление дочерними клиниками (адрес, юр.лицо, руководитель)
-- Партнёрские клиники с контрактами: royalty / per_referral / hybrid
-- Биллинг: счета от платформы, межклиничные акты, биллинг сети
-- LTV-аналитика пациентов
-- Аналитика записей и направлений (drill-down)
-- Реклама pro (A/B-тесты, таргетинг, ROI, AI-генерация креативов)
-- CMS-страницы (white-label лендинг)
-- Брендинг (custom domain, цвета, лого)
-- Мониторинг модулей (heatmap по тенантам)
-- Wiki / База знаний
-- Подключение модулей (триал и оплата)
-
-### 🏥 Кабинет руководителя клиники (manager)
-- Создание сотрудников всех ролей (doctor / reg / nurse / recruiter / partner / visiting)
-- Управление клиниками сети (с фильтром по `clinic_id`)
-- Услуги с категориями и бонусной частью
-- Бонусы сотрудников + одобрение отмен
-- KPI и отчёты (по сотрудникам, клиникам, услугам)
-- Финансы: бонусы / межклиничные акты / счета платформы
-- Расписание врачей
-- Скидки и акции
-- Аналитика приёмов
-- Кампании SMS / Loyalty
-
-### 👨‍⚕️ Кабинет врача (doctor + visiting + partner)
-- Расписание дня и недели с премиум-дизайном
-- Список приёмов: активные / завершённые / отменённые с причинами
-- Подтверждение приёма по QR / 5-значному коду
-- Расчёт заработка для visiting/partner (50/50 split, редактируемый)
-- Создание медкарт пациентов
-- Назначения и рецепты
-- Заработок и история выплат
-
-### 🎫 Кабинет регистратора (reg / nurse)
-- Создание направлений 3 типов: **услуга** / **врач** / **анализы**
-- Поиск пациента в МИС Renovatio (по телефону и/или ФИО)
-- Создание пациента в МИС в один клик
-- Каталог анализов из МИС с категориями + поиском
-- QR + 5-значный код для пациента
-- Приём пациента по QR-сканеру / коду
-- Бонусы и направления (только свои с фильтром `created_by_admin_id == current_user.id`)
-- KPI: направлений сегодня, неделя, мои бонусы
-
-### 🎯 Кабинет рекрутера (recruiter)
-- Регистрация партнёров-врачей напрямую (с QR на вход)
-- Управление доступом партнёров к клиникам
-- Бонусы рекрутера (% от направлений партнёров)
-
-### 🧑‍🤝‍🧑 ЛК пациента (PWA + Telegram WebApp)
-- **Авто-вход по QR** с короткого направления
-- **Семейный профиль**: добавление членов семьи + поиск в МИС по `parent_id`
-- **Переключение между профилями** (требуется short_code для подтверждения)
-- **Медкарта (Уровень 1)**: автоматическая хронология из направлений, приёмов и МИС-визитов
-- **Показатели здоровья**: динамические KPI-карточки (пульс, давление, SpO₂, шаги, вес, рост и др.) + графики 30 дней
-- **Apple Health / Google Fit** как платные модули (выключены по умолчанию)
-- **Документы**: загрузка справок, выписок, больничных
-- **Чат с поддержкой** + AI-ассистент
-- **Видео-приём** через WebRTC (coturn + presence)
-- **152-ФЗ права**: экспорт данных в JSON + кнопка «Удалить мои данные» (анонимизация)
-- **Push-нотификации** через ServiceWorker
-- **Реклама-баннеры** с idempotent impression tracking
-
-### 💰 Финансовая модель
-- **Каскадный расчёт бонусов**:
-  - `bonus_total` (300₽ на услуге/враче) − `platform_fee_floor` (100₽) = `intermediate` (200₽)
-  - Если автор = партнёр-врач с рекрутером (10%): рекрутер получает 20₽, автор 180₽
-  - Если автор = штатный сотрудник: 200₽ автору, 100₽ платформе
-- **Idempotent confirm** с `pg_advisory_xact_lock` + `SELECT FOR UPDATE` + UNIQUE constraint
-- **InterClinicInvoice** между клиниками с автозакрытием и подписями
-- **FranchiseInvoice** от платформы → tenant'у
-- **BillingLedger** для всех движений
-- **`approve_cancel`** правильно откатывает: Bonus → CANCELLED, RecruiterBonus → CANCELLED, ICI → CANCELLED, BillingLedger refund
-
-### 🔌 Интеграции
-- **МИС Renovatio** (per-clinic настройки) — пациенты, врачи, услуги, приёмы, программы лояльности
-- **Telegram Bot API** через прокси-туннель 212→144 (провайдер блокирует прямой доступ)
-- **ЮKassa эквайринг** — рабочий адаптер (init/status/refund/webhook + IP-allowlist)
-- **Платформа ОФД** — фискализация 54-ФЗ (send_receipt + auto-pull статусов)
-- **SMTP email-service** (Jinja2 шаблоны) — welcome / password-reset / digest
-- **coturn** для WebRTC (HMAC-SHA1 short-term creds через `/presence/ice-config`)
-- **Prometheus** + **Grafana** + **postgres-exporter** + **Uptime-Kuma**
-- **Sentry** (готово, нужен DSN)
-- **WhatsApp Web** через Electron-обёртку (с прокси-фиксом BasicAuth)
-
-### 🛡 Безопасность
-- **JWT** access (30 мин) + refresh (30 дней) с ротацией секретов при старте
-- **bcrypt** для паролей (или PBKDF2-SHA256 260k iter)
-- **Fail-fast** при дефолтных секретах в продакшне
-- **RBAC** через `require_role` / `require_manager` / `require_super_admin`
-- **Tenant isolation** через middleware с `app.tenant_id` SET LOCAL
-- **Manager scope** по clinic_id (фильтр в 7+ endpoints)
-- **Rate-limit** на auth (5/min) + sliding-window middleware (200 req/min)
-- **Region Lock** с IP-allowlist + manual block + GeoIP
-- **CSP, HSTS, X-Frame-Options, Permissions-Policy, X-Content-Type-Options**
-- **TLS 1.2/1.3** + HTTP/3 + QUIC
-- **Idempotency-keys** для рекламных событий
-- **152-ФЗ соответствие**: consent versioning, право на удаление, экспорт данных
-- **Audit log** всех важных действий с before/after diff
-
-### ⚡ Производительность
-- **Frontend bundle: 1.32MB → 738KB → 167KB gzipped** (-50% от исходного)
-- **Lazy-load** PatientCabinet, FranchiseOwnerCabinet, Landing, ScanScreen
-- **Code-splitting**: jspdf/xlsx/qr грузятся по запросу
-- **Pre-gzipped assets** в Docker-образе (gzip_static в nginx)
-- **HTTP/2** + **HTTP/3 (QUIC)**
-- **Self-hosted Material Symbols** (3.3 MB) + Golos Text (72 KB)
-- **CDN-free** — нет внешних зависимостей
-- **PostgreSQL**: 15 FK-индексов + `pg_stat_statements`
-- **Cache-Control immutable** для assets на 1 год
-- **Service Worker** с CACHE_NAME=v3 для PWA
-
-### 📊 Reliability / DevOps
-- **Healthcheck** на 9 контейнеров (backend, frontend, bot, db, redis, grafana, prometheus, postgres-exporter, uptime-kuma)
-- **Backup** ежедневно 03:00 с **GPG-шифрованием** + cron под root
-- **Test-restore** еженедельно (поднимает временный PG, проверяет dump)
-- **Uptime-Kuma** с 3 мониторами
-- **Telegram-алерты** при сбоях модулей (`alert_service.notify_admin`)
-- **Daily digest** модулей в 09:00 МСК
-- **Auto-cleanup**: docker buildx prune каждые 2 часа + при df>70%
-- **Self-healing**: healthcheck.sh перезапускает упавший backend
+Всего в `UserRole` — 17 значений (включая `acquisition_manager`, `lab_ct`, `lab_xray` и др.).
 
 ---
 
-## 🏗 Архитектура
+## Технологический стек
 
-### Backend (FastAPI 0.115)
-```
-app/
-├── main.py              # FastAPI app + lifespan + scheduler
-├── database.py          # AsyncSessionLocal + engine
-├── config.py            # Settings (pydantic-settings)
-├── core/
-│   ├── deps.py          # get_current_user, require_*
-│   ├── domain_router.py # CNAME → tenant_slug middleware
-│   ├── region_lock.py   # Geo-блокировка
-│   ├── security.py      # JWT + hash_password
-│   └── permissions.py   # RBAC матрица
-├── models/              # 60+ SQLAlchemy моделей
-├── routers/             # 50+ роутеров (включая manager/* subroutes)
-├── services/            # MIS клиент, billing, fiscal, acquiring, AI
-├── jobs/                # Cron-задачи (auto-confirm, daily-invoices, etc)
-├── schemas/             # Pydantic v2 модели
-└── utils/               # Helpers (phone, qr, metrics)
-```
+**Backend** (`backend/`, Python 3.11)
+- FastAPI 0.115 + uvicorn, SQLAlchemy 2.0 async (asyncpg), Alembic
+- PostgreSQL 16, Redis 7 (кэш / квоты / pub-sub / blacklist / очереди)
+- Pydantic 2 / pydantic-settings, python-jose (JWT HS256), passlib (bcrypt)
+- APScheduler (~37 фоновых джобов), WeasyPrint (PDF, lazy-import), structlog, prometheus-client, sentry-sdk
+- AI: `anthropic` SDK; OpenAI/Gemini/Whisper — через httpx + proxyapi.ru
 
-### Frontend (React 18 + Vite)
-```
-src/
-├── App.jsx              # Router + lazy-load
-├── pages/
-│   ├── AdminLayout.jsx              # 8800+ строк — super_admin/franchise_owner кабинет
-│   ├── FranchiseOwnerCabinet.jsx    # Кабинет владельца франшизы
-│   ├── OperationalCabinet.jsx       # Кабинет reg/nurse
-│   ├── DoctorLayout.jsx             # Кабинет врача
-│   ├── PatientCabinet.jsx           # ЛК пациента (PWA)
-│   ├── RecruiterCabinet.jsx
-│   ├── PartnerDoctorCabinet.jsx
-│   ├── VisitingDoctorCabinet.jsx
-│   ├── ManagerDashboard.jsx + Manager*.jsx
-│   └── Landing.jsx                  # Публичный лендинг
-├── sections/            # 60+ переиспользуемых секций (lazy-load)
-├── components/          # UI-компоненты (Modal, Toast, Card, etc)
-├── design/              # Design-system tokens + components
-└── api.js               # Axios клиент с auto-refresh
-```
+**Frontend** (`frontend/`, версия 1.0.0)
+- React 18 + Vite 5 + react-router-dom 6, Tailwind 3
+- Zustand (state), axios (единый инстанс с auto-refresh), dompurify, @sentry/react
+- Дизайн-система на CSS-токенах, Material Symbols, react-markdown, jspdf
 
-### База данных (PostgreSQL 16)
-- **Multi-tenant**: `tenants` + `tenant_modules` + `app.tenant_id` SET LOCAL
-- **80 миграций** Alembic
-- **30 MB** размер БД в продакшне
-- **pg_stat_statements** включён
+**Инфраструктура**
+- Docker Compose: PostgreSQL, Redis, backend, frontend (Vite→nginx), Telegram-бот, docker-proxy (sidecar)
+- Отдельный профиль мониторинга: Prometheus + exporters (postgres/redis/node/cadvisor/blackbox), Uptime-Kuma, Sentry
+- nginx хоста (TLS, домен) срезает `/api` и проксирует на backend/frontend
 
 ---
 
-## 🚀 Установка
+## Структура репозитория
 
-### Требования
-- Docker 24+ и Docker Compose v2
-- Сервер с **2 vCPU / 4 GB RAM / 50 GB SSD** минимум
-- Домен с настроенными DNS A-записями
-- Let's Encrypt сертификат
-
-### Развёртывание
-```bash
-git clone https://github.com/mr-khamzat/clinika.git /opt/clinika
-cd /opt/clinika
-
-# 1. Скопировать и заполнить .env
-cp .env.example .env
-nano .env
-
-# 2. Установить SSL (Let's Encrypt)
-certbot certonly --webroot -w /var/www/html -d клиниксеть.рф
-
-# 3. Запустить
-docker compose up -d
-
-# 4. Применить миграции
-docker exec clinika-backend alembic -c /app/alembic.ini upgrade head
-
-# 5. Создать super-admin (одноразово через ENV)
-# SUPERADMIN_USERNAME=admin SUPERADMIN_PASSWORD=... подхватится при первом старте
 ```
-
-### Переменные окружения (`.env`)
-
-#### Обязательные
-```bash
-DATABASE_URL=postgresql+asyncpg://clinika:pass@clinika-db:5432/clinika
-REDIS_URL=redis://clinika-redis:6379/0
-SECRET_KEY=<64+ символов случайных>
-QR_SECRET=<48+ символов>
-WEBHOOK_API_KEY=wh-<random>
-SUPERADMIN_USERNAME=admin
-SUPERADMIN_PASSWORD=<сильный пароль>
-SUPERADMIN_FULL_NAME=Имя Фамилия
-MINI_APP_URL=https://клиниксеть.рф
-ALLOWED_ORIGINS=https://клиниксеть.рф
-```
-
-#### Интеграции (опционально)
-```bash
-# МИС Renovatio
-MIS_API_URL=http://mis.stoclinic.ru:3010
-MIS_API_KEY=<32-hex>
-MIS_SSL_VERIFY=false
-
-# ЮKassa (эквайринг)
-YOOKASSA_SHOP_ID=
-YOOKASSA_SECRET_KEY=
-
-# Платформа ОФД (54-ФЗ)
-PLATFORMA_OFD_LOGIN=
-PLATFORMA_OFD_PASSWORD=
-COMPANY_INN=
-COMPANY_TAX_SYSTEM=usn_income
-
-# Telegram-бот (через прокси-туннель)
-TELEGRAM_BOT_TOKEN=
-ADMIN_CHAT_ID=
-TELEGRAM_PROXY_URL=http://user:pass@host:port
-
-# Sentry
-SENTRY_DSN=
-
-# SMTP (для forgot-password и welcome-email)
-SMTP_HOST=
-SMTP_USER=
-SMTP_PASSWORD=
-
-# coturn (WebRTC)
-TURN_HOST=
-TURN_PORT=3478
-TURN_SECRET=
+clinika/
+├── backend/                       # FastAPI-монолит
+│   ├── app/
+│   │   ├── main.py                # точка сборки: ~165 include_router + 12 middleware + lifespan (джобы)
+│   │   ├── config.py              # pydantic-settings из .env (fail-fast на дефолтных секретах в prod)
+│   │   ├── database.py            # async-движок, get_db() и get_tenant_db() (RLS)
+│   │   ├── routers/               # ~165 тонких APIRouter (prefix задаётся внутри файла)
+│   │   ├── services/              # ~135 сервисов: бизнес-логика, адаптеры внешних API
+│   │   ├── models/                # ~100 ORM-моделей (SQLAlchemy 2.0), наследуют Base
+│   │   ├── schemas/               # Pydantic DTO (*In/*Out/*Patch)
+│   │   ├── core/                  # auth/RBAC, middleware, лимиты, гейты, криптография
+│   │   ├── jobs/                  # фоновые APScheduler-задачи
+│   │   ├── plugins/               # лёгкая plugin-система (MIS/SMS/Notify/Reviews)
+│   │   └── utils/                 # stateless-хелперы (телефоны, IP, метрики, device)
+│   ├── alembic/versions/          # >100 миграций (пишутся вручную)
+│   ├── tests/                     # pytest (coverage ~35%)
+│   ├── requirements.txt
+│   └── Dockerfile                 # alembic upgrade heads → uvicorn
+├── frontend/                      # React SPA (Vite)
+│   └── src/
+│       ├── main.jsx               # точка входа: createRoot, ErrorBoundary, Sentry, tokens.css
+│       ├── App.jsx                # AppRouter (грубый роутинг по pathname) + MiniApp + auth-гейт
+│       ├── config.js              # вычисление SLUG / API_BASE / PLATFORM_MODE из URL
+│       ├── api/index.js           # единый axios-инстанс: Bearer, X-Tenant-Slug, auto-refresh
+│       ├── pages/                 # ≈90 экранов уровня роутинга (shell-кабинеты + тонкие обёртки)
+│       ├── sections/              # крупные разделы кабинетов (переиспользуются между shell-ами)
+│       ├── components/            # переиспользуемые UI-блоки и подсистемы (Layout, CallWidget, ...)
+│       ├── design/               # дизайн-система (UI-kit на CSS-токенах)
+│       ├── store/auth.js          # минимальный Zustand-стор (token, user)
+│       ├── hooks/ · lib/          # clinicScope, regHotkeys, useTheme, webPush, telegram SDK
+│       └── utils/ThemeLoader.js   # CMS-брендинг тенанта
+├── bot/                           # Telegram-бот (отдельный контейнер, делит .env)
+├── docker-proxy/                  # read-only Docker API sidecar для админ-команд бота
+├── docker-compose.yml             # основной стек (db, redis, backend, frontend, bot, docker-proxy)
+├── docker-compose.monitoring.yml  # профиль metrics (Prometheus + exporters)
+├── .env / .env.example            # переменные окружения (⚠️ .env под git — см. техдолг)
+└── docs/structure/                # карта проекта (этот аудит) — см. ниже
 ```
 
 ---
 
-## 🧪 Тестирование
+## Быстрый старт
+
+### Прод-стиль (Docker, рекомендуется)
 
 ```bash
-# Все тесты
+docker compose up -d                                                # db, redis, backend, frontend, bot
+docker exec clinika-backend alembic -c /app/alembic.ini upgrade head # миграции
+# backend → 127.0.0.1:8900, frontend → 127.0.0.1:8901 (наружу публикует nginx хоста)
+```
+
+Super-admin создаётся одноразово из ENV при первом старте (`SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD`).
+Health-чеки: `GET /health` и `GET /health/full`.
+
+### Dev-режим бэкенда (без Docker)
+
+```bash
+pip install -r backend/requirements.txt        # системный Python 3.11; weasyprint импортируется лениво
+# нужны доступные PostgreSQL и Redis
+ENVIRONMENT=development uvicorn app.main:app --reload   # из каталога backend/
+```
+
+> В prod `lifespan` **отказывается стартовать** при дефолтных секретах (`change-in-production` и т.п.); в dev — только warning. Поэтому в dev задавайте `ENVIRONMENT=development`.
+
+### Dev-режим фронтенда
+
+```bash
+cd frontend
+npm install
+npm run dev      # dev-сервер с HMR
+npm run build    # Vite-сборка (главный chunk < 500 KB, большие страницы lazy)
+```
+
+### Тесты
+
+```bash
 docker exec clinika-backend pytest /app/tests/ -v
-
-# Только новые critical-path тесты
-docker exec clinika-backend pytest /app/tests/test_bonus_cascade.py -v
-docker exec clinika-backend pytest /app/tests/test_referrals_race.py -v
-docker exec clinika-backend pytest /app/tests/test_approve_cancel.py -v
-docker exec clinika-backend pytest /app/tests/test_rbac_isolation.py -v
-
-# Coverage
-docker exec clinika-backend pytest --cov=app --cov-report=term-missing
+docker exec clinika-backend pytest /app/tests/test_rbac_isolation.py -v   # критический путь
 ```
 
-**Покрытие**:
-- `referral_service.py` — 61%
-- `settings_service.py` — 84%
-- `ledger_service.py` — 62%
-- Общее — **35%**
+> ⚠️ Много raw-SQL **PostgreSQL-специфичен** (`date_trunc`, `FILTER (WHERE)`, `::inet`, RLS, partial unique, GENERATED-колонки) и не покрывается SQLite-тестами — обязателен прогон на Postgres перед релизом.
 
 ---
 
-## 🗺 Roadmap
+## Карта документации
 
-### ✅ Сделано (актуальная версия)
-- [x] Multi-tenant архитектура с rollback на 1 tenant + 5 клиник
-- [x] 11 ролей + RBAC + manager scope по clinic_id
-- [x] 3 типа направлений (услуга / врач / анализы)
-- [x] Каскадная финмодель с advisory lock
-- [x] МИС per-clinic + helper resolver
-- [x] Реклама pro (A/B + audience + ROI + AI-генерация)
-- [x] Module Monitoring System (20 адаптеров + alerts)
-- [x] Forgot/Reset password flow
-- [x] 152-ФЗ права пациента (export + erase)
-- [x] ЮKassa + Платформа ОФД adapters
-- [x] GPG-шифрование бэкапов + cron + test-restore
-- [x] Apple Health + Google Fit как модули
+Полная карта кодовой базы лежит в [`docs/structure/`](docs/structure/). Начните с тематических обзоров:
 
-### 🟡 В работе
-- [ ] Marketplace модулей (UI витрины с триал-периодом)
-- [ ] Tenant impersonation для super_admin
-- [ ] Journal безопасности (единый dashboard)
-- [ ] API-keys для tenant интеграций (CRM/BI)
-- [ ] Self-service onboarding wizard
-
-### 📋 Запланировано
-- [ ] Cohort-анализ клиник (heatmap)
-- [ ] KPI-Dashboard топ-менеджмента (live)
-- [ ] Bulk-настройка тарифов
-- [ ] Kanban расписание (drag-and-drop)
-- [ ] Анализ загрузки врачей
-- [ ] Шаблоны направлений
-- [ ] Multi-clinic view для менеджеров
-- [ ] Pre-visit briefing с AI
-- [ ] Генератор плана лечения
-- [ ] Direct billing для visiting/partner
-- [ ] Подписка «Здоровье»
-- [ ] Программа лояльности с уровнями
-- [ ] Чат с врачом (асинхронный)
-- [ ] Calendar-интеграция (iCloud/Google)
-- [ ] Document storage
-- [ ] Лаборатория-интеграция (Helix/Invitro)
-- [ ] Wellness-модуль (Whoop/Oura/Garmin)
-- [ ] Партнёрская программа агрегаторам
-- [ ] Disaster-mode (offline МИС)
-- [ ] iOS + Android native apps
-- [ ] Электронная подпись (КриптоПро)
-- [ ] ЕМИАС адаптер
-
-### 🚧 Блокеры коммерческого запуска
-- [ ] Регистрация ИП/ООО → ИНН/ОГРН для Privacy/Terms/Consent
-- [ ] Уведомление Роскомнадзора как оператор ПДн
-- [ ] Мед.лицензия Росздравнадзора (или B2B-модель)
-- [ ] ЮKassa аккаунт (для онлайн-оплаты подписок)
-- [ ] Платформа ОФД аккаунт (для фискализации 54-ФЗ)
-- [ ] SMTP-аккаунт + SPF/DKIM/DMARC в DNS
-- [ ] Yandex.Disk/S3 для offsite-бэкапов
-
-**Тихий запуск возможен сейчас** — B2B-модель с оплатой по банковским переводам.
-
----
-
-## 📚 Документация
-
-- [API_REFERENCE.md](docs/API_REFERENCE.md) — справочник эндпоинтов
-- [API_CONTRACT.md](docs/API_CONTRACT.md) — контракт API
-- [API_CONVENTIONS.md](docs/API_CONVENTIONS.md) — соглашения
-- [BACKUP.md](docs/BACKUP.md) — стратегия резервного копирования
-- [MONITORING.md](docs/MONITORING.md) — мониторинг и алерты
-- [PAYMENTS_FOUNDATION.md](docs/PAYMENTS_FOUNDATION.md) — платёжная архитектура
-- [RENOVATIO_API.md](docs/RENOVATIO_API.md) — интеграция с МИС
-- [SECURITY_HEADERS.md](docs/SECURITY_HEADERS.md) — security headers
-- [SENTRY_SETUP.md](docs/SENTRY_SETUP.md) — настройка Sentry
-
-### Wiki (внутри платформы)
-В каждом кабинете есть раздел «Wiki / База знаний» (`/wiki`):
-- Роли (super_admin / franchise_owner / manager / doctor / reg / nurse / patient / recruiter / partner_doctor / visiting_doctor)
-- Концепции (направления, бонусы, QR, модули, приёмы)
-- Настройка (первая клиника, сотрудники)
-
-Swagger UI: `https://домен/docs` (доступ только super_admin)
-ReDoc: `https://домен/redoc` (только super_admin)
-
----
-
-## 🔌 API v1 (для внешних интеграций)
-
-### Auth
-Bearer token в заголовке:
-```
-Authorization: Bearer clk_live_<api_key>
-```
-
-API-ключи создаются в кабинете franchise_owner → «API-ключи». Scopes:
-- `read:referrals` / `write:referrals`
-- `read:patients` / `write:patients`
-- `read:appointments` / `write:appointments`
-- `read:finance`
-
-### Эндпоинты
-```
-GET    /api/v1/referrals?since=2026-01-01&status=confirmed
-GET    /api/v1/referrals/{id}
-GET    /api/v1/patients?phone=+7...
-GET    /api/v1/appointments?from=&to=
-GET    /api/v1/finance/summary?period=month
-```
-
-Rate-limit: **1000 req/hour** на ключ.
-
----
-
-## 🤝 Структура команды
-
-| Роль | Ответственность |
+| Документ | О чём |
 |---|---|
-| **Хамзат** (super_admin) | Архитектура платформы, безопасность, биллинг |
-| **Лорсанова, manager arc** | Управление клиникой Лорсанова, наполнение услуг |
-| **Регистраторы** | Создание направлений, приём пациентов |
-| **Врачи** | Расписание, приёмы, медкарты |
-| **Рекрутеры** | Привлечение партнёров-врачей |
+| [`docs/structure/BACKEND.md`](docs/structure/BACKEND.md) | Слои бэкенда, жизненный цикл запроса, RBAC и мультитенантность, доменные группы роутеров, ~37 фоновых джобов |
+| [`docs/structure/FRONTEND.md`](docs/structure/FRONTEND.md) | Мультитенантный роутинг (SLUG→кабинет), слои pages/sections/components/design, сетевой слой, темизация |
+| [`docs/structure/DATA-MODEL.md`](docs/structure/DATA-MODEL.md) | ORM-слой: ~100 моделей, домены сущностей, изоляция (RLS), денежные поля, шифрование ПДн (152-ФЗ), ER-схема |
+| [`docs/structure/INFRA-INTEGRATIONS.md`](docs/structure/INFRA-INTEGRATIONS.md) | Docker-стек, мониторинг, внешние интеграции (эквайринг/ОФД/телефония/МИС/AI), переменные окружения |
+| [`docs/structure/HOWTO-CHANGE.md`](docs/structure/HOWTO-CHANGE.md) | Плейбук разработчика: рецепты «как добавить эндпоинт / страницу / модель / кабинет / провайдера» с чек-листами |
+| [`docs/structure/AUDIT-PLAN.md`](docs/structure/AUDIT-PLAN.md) | Результаты аудита: 89 подтверждённых находок, severity, файлы, что делать, топ-10 порядок устранения |
+| [`docs/structure/ref/`](docs/structure/ref/) | **Детальная карта файлов** — карточки каждого роутера/сервиса/модели/компонента (routers-01..13, services-01..09, models-01..05, components/pages/sections-NN, core, design, frontend-misc, jobs-schemas) |
 
 ---
 
-## 📞 Поддержка
+## Состояние и техдолг
 
-- **Telegram**: [@RootkinG85](https://t.me/RootkinG85)
-- **Email**: mrevil9995@gmail.com
-- **GitHub Issues**: [github.com/mr-khamzat/clinika/issues](https://github.com/mr-khamzat/clinika/issues)
-- **Сервер**: 212.57.118.126 (Ubuntu 24.04, u1host.com)
-- **Production URL**: https://клиниксеть.рф
+Проект функционален и в проде, но прошёл аудит (78 агентов, 7 направлений, 104 находки → **89 подтверждено**). Распределение подтверждённых:
+
+- 🔴 **CRITICAL — 2:** RLS включён лишь на 3 таблицах из 126 (изоляция тенантов держится на ручных `WHERE tenant_id`); центральная PHI-таблица `appointments` хранит ПДн пациента в plaintext + `tenant_id` nullable/SET NULL.
+- 🟠 **HIGH — 18:** кросс-тенантный IDOR при `tenant_id IS NULL`, медданные спец.категории в plaintext, fail-open `/tenant/create`, IDOR в payment-config, открытые CVE в зависимостях, хардкод пароля БД в compose, баги денег в биллинге/эквайринге, мёртвые центральные эндпоинты.
+- 🟡 **MEDIUM — 25** · 🟢 **LOW — 33** (включая 11 INFO): техдолг, мёртвый код, понижённые маршрутные находки, инфра-гигиена.
+
+Полный разбор и рекомендованный **топ-10 порядок устранения** — в [`docs/structure/AUDIT-PLAN.md`](docs/structure/AUDIT-PLAN.md).
+
+### ⚠️ Главный риск безопасности: `.env` отслеживается git
+
+На сервере файл **`.env` закоммичен в репозиторий**, поэтому все боевые секреты (креды БД `clinika_pass`, JWT/QR-секреты, токены платёжек/ОФД/МИС/AI, пароль суперадмина, хардкод прокси-кредов Telegram) **уже в истории приватного репо** `mr-khamzat/clinika`. Это находка №1 в порядке устранения.
+
+**Что нужно сделать (критично):**
+1. Ротировать все секреты, попавшие в git (пароль БД, токен Telegram-бота в BotFather, ключи интеграций).
+2. Убрать `.env` из git: `git rm --cached .env` + `.gitignore` + **чистка истории** (например, `git filter-repo`).
+3. Вынести хардкод прокси-кредов и `clinika_pass` в `${ENV}`/secrets без fallback-хардкода в коде.
+4. Задать сильные `SECRET_KEY` / `QR_SECRET` / `PII_HASH_PEPPER` (при пустом `SECRET_KEY` секреты ложатся в БД в открытом виде через `plain:`-fallback).
 
 ---
 
-## 📄 Лицензия
+## Прод и деплой
 
-Proprietary. Все права защищены © КлиникСеть 2024-2026.
+- **Сервер:** `212.57.118.126`, каталог `/opt/clinika`.
+- **Деплой** — через `docker compose` (отдельного `deploy.sh` нет):
 
----
+```bash
+cd /opt/clinika
+git pull
+docker compose up -d --build                                       # пересборка изменённых сервисов
+docker exec clinika-backend alembic -c /app/alembic.ini upgrade head
+docker compose logs -f clinika-backend                             # проверить старт
+```
 
-<div align="center">
+- Миграции применяются и автоматически при старте контейнера (`alembic upgrade heads` в `Dockerfile`).
+- Тома данных хоста: `/opt/clinika/uploads`, `/opt/clinika/data` (мед.документы, GeoIP, VAPID), `/opt/clinika/downloads` (инсталляторы Electron-звонилки).
+- Мониторинг (Prometheus + exporters + Uptime-Kuma) уже развёрнут на сервере; backend сам экспонирует `/metrics`.
 
-**Made with ❤️ for healthcare in Russia**
-
-[⬆ К началу](#-клиниксеть)
-
-</div>
+**Чек-лист перед деплоем:** миграции применяются без ошибок · `pytest` зелёный (хотя бы critical-path) · `npm run build` проходит · новые ENV добавлены в `.env` на сервере · секреты не дефолтные · не закоммитить новые секреты в `.env` (он под git).
