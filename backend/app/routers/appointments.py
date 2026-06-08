@@ -24,7 +24,7 @@ from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, assert_same_tenant
 from app.core.tenant import require_feature
 from app.models.user import User
 from app.models.doctor import Appointment, AppointmentStatus, Doctor
@@ -125,8 +125,8 @@ async def _get_appt_or_404(db: AsyncSession, appt_id: uuid.UUID, user: User) -> 
     appt = (await db.execute(select(Appointment).where(Appointment.id == appt_id))).scalar_one_or_none()
     if not appt:
         raise HTTPException(404, "Запись на приём не найдена")
-    if user.tenant_id and appt.tenant_id and appt.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, appt, status=403)
     return appt
 
 
@@ -367,8 +367,8 @@ async def create_internal_referral(
         d = (await db.execute(select(Doctor).where(Doctor.id == data.target_doctor_id))).scalar_one_or_none()
         if not d:
             raise HTTPException(404, "Целевой врач не найден")
-        if current_user.tenant_id and d.tenant_id and d.tenant_id != current_user.tenant_id:
-            raise HTTPException(403, "Чужой тенант")
+        # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+        assert_same_tenant(current_user, d, status=403)
         target_doctor_name = d.full_name
 
     ref = InternalReferral(

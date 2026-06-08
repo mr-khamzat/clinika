@@ -23,7 +23,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, assert_same_tenant, _is_super_admin
 from app.models.user import User
 from app.models.patient_chat import (
     PatientChat,
@@ -105,9 +105,12 @@ async def _get_or_create_chat(
 ) -> PatientChat:
     """Найти ветку чата по (phone, tenant) или создать новую."""
     phone_n = normalize_phone(phone)
-    q = select(PatientChat).where(PatientChat.patient_phone == phone_n)
-    if tenant_id:
-        q = q.where(PatientChat.tenant_id == tenant_id)
+    # Находка #7: строгий фильтр по tenant_id всегда (NULL==NULL включительно),
+    # чтобы не подобрать чужую ветку при tenant_id=NULL.
+    q = select(PatientChat).where(
+        PatientChat.patient_phone == phone_n,
+        PatientChat.tenant_id == tenant_id,
+    )
     chat = (await db.execute(q.order_by(desc(PatientChat.created_at)).limit(1))).scalar_one_or_none()
     if chat:
         return chat
@@ -156,9 +159,12 @@ async def list_patient_chats(
     """Список чатов пациента (обычно один на тенант)."""
     sess = await _require_session(db, t)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientChat).where(PatientChat.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientChat.tenant_id == sess.tenant_id)
+    # Находка #7: тенант пациентской сессии накладывается ВСЕГДА (строгое
+    # равенство, в т.ч. NULL==NULL), чтобы не утекали чаты чужих тенантов.
+    q = select(PatientChat).where(
+        PatientChat.patient_phone == phone_n,
+        PatientChat.tenant_id == sess.tenant_id,
+    )
     chats = (await db.execute(q.order_by(desc(PatientChat.updated_at)))).scalars().all()
     return {"chats": [_serialize_chat(c) for c in chats]}
 
@@ -180,7 +186,9 @@ async def get_patient_chat_messages(
         raise HTTPException(404, "chat not found")
     if normalize_phone(chat.patient_phone) != normalize_phone(sess.phone):
         raise HTTPException(403, "forbidden")
-    if sess.tenant_id and chat.tenant_id and chat.tenant_id != sess.tenant_id:
+    # Находка #7: строгое fail-closed сравнение тенанта пациентской сессии
+    # с чатом (без super_admin-исключения и без пропуска NULL).
+    if sess.tenant_id != chat.tenant_id:
         raise HTTPException(403, "forbidden")
 
     msgs = (await db.execute(
@@ -232,6 +240,9 @@ async def patient_send_message(
         if not chat:
             raise HTTPException(404, "chat not found")
         if normalize_phone(chat.patient_phone) != phone_n:
+            raise HTTPException(403, "forbidden")
+        # Находка #7: строгая tenant-изоляция пациентской сессии.
+        if sess.tenant_id != chat.tenant_id:
             raise HTTPException(403, "forbidden")
     else:
         chat = await _get_or_create_chat(db, phone_n, tenant_id)
@@ -341,6 +352,9 @@ async def patient_request_manual(
         raise HTTPException(404, "chat not found")
     if normalize_phone(chat.patient_phone) != normalize_phone(sess.phone):
         raise HTTPException(403, "forbidden")
+    # Находка #7: строгая tenant-изоляция пациентской сессии.
+    if sess.tenant_id != chat.tenant_id:
+        raise HTTPException(403, "forbidden")
 
     chat.mode = PatientChatMode.MANUAL
     sys_msg = PatientChatMessage(
@@ -369,7 +383,9 @@ async def admin_list_chats(
 ):
     """Список чатов клиники (тенанта пользователя). Сортировка: свежие сверху."""
     q = select(PatientChat)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id накладывается ВСЕГДА для тенантного
+    # пользователя; пропуск (все тенанты) — только для super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientChat.tenant_id == user.tenant_id)
     q = q.order_by(desc(PatientChat.last_message_at), desc(PatientChat.updated_at)).limit(500)
     chats = (await db.execute(q)).scalars().all()
@@ -393,8 +409,8 @@ async def admin_get_messages(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     msgs = (await db.execute(
         select(PatientChatMessage)
@@ -433,8 +449,8 @@ async def admin_reply(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     chat.mode = PatientChatMode.MANUAL
     msg = PatientChatMessage(
@@ -467,8 +483,8 @@ async def admin_toggle_mode(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     chat.mode = (
         PatientChatMode.AI if chat.mode == PatientChatMode.MANUAL else PatientChatMode.MANUAL

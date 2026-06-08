@@ -154,6 +154,59 @@ async def get_current_tenant(
     return tenant
 
 
+def _is_super_admin(user) -> bool:
+    """super_admin строго ПО РОЛИ (не по NULL tenant_id).
+
+    Дубль `regulation_service.is_super_admin`, вынесен сюда чтобы избежать
+    импорта сервисного слоя в core/deps. Только роль SUPER_ADMIN считается
+    супер-админом — НИКОГДА не «tenant_id IS NULL».
+    """
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    return role == UserRole.SUPER_ADMIN.value
+
+
+def assert_same_tenant(user, obj, status: int = 404) -> None:
+    """Единый fail-CLOSED guard кросс-тенантного доступа (находка #7).
+
+    Заменяет повсеместную fail-open лесенку
+    ``if user.tenant_id and obj.tenant_id and obj.tenant_id != user.tenant_id``,
+    которая пропускала проверку, если ЛЮБОЙ операнд был NULL → кросс-тенантный
+    доступ к записям с ``tenant_id=NULL``.
+
+    Логика (образец `regulation_service.user_has_access_to_regulation:295-297`):
+      • super_admin (строго ПО РОЛИ) — пропускается всегда;
+      • иначе NULL у пользователя ИЛИ у записи — запрет;
+      • иначе несовпадение tenant_id — запрет.
+
+    ``obj`` может быть моделью с атрибутом ``tenant_id`` или сырым значением
+    tenant_id (UUID/None). По умолчанию запрет — ``404`` (не подтверждаем
+    существование чужой записи); вызывающий может передать 403.
+    """
+    if _is_super_admin(user):
+        return
+    obj_tid = getattr(obj, "tenant_id", obj)
+    user_tid = getattr(user, "tenant_id", None)
+    # Fail-closed: NULL с любой стороны (для не-super_admin) = запрет.
+    if not user_tid or not obj_tid or obj_tid != user_tid:
+        raise HTTPException(status_code=status, detail="Не найдено")
+
+
+def assert_can_create_in_tenant(user) -> None:
+    """Запрет рождения NULL-тенанта (находка #7, п.3).
+
+    super_admin может создавать записи в системном контексте, но обычный
+    пользователь без tenant_id создал бы запись с ``tenant_id=NULL``, которую
+    затем сможет прочитать любой тенант — поэтому fail-closed 409.
+    """
+    if _is_super_admin(user):
+        return
+    if not getattr(user, "tenant_id", None):
+        raise HTTPException(
+            status_code=409,
+            detail="Пользователь не привязан к тенанту — создание записи запрещено",
+        )
+
+
 def require_role(*roles: str):
     """Фабрика зависимостей — разрешает доступ только указанным ролям."""
     async def _check(user: User = Depends(get_current_user)) -> None:

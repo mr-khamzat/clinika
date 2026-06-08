@@ -1261,13 +1261,20 @@ async def seed_initial_data():
                 db.add(s)
             await db.commit()
 
+        # Seed дефолтный тенант ДО клиник — чтобы demo-клиники не рождались
+        # с tenant_id=NULL (находка #7: NULL-тенант = кросс-тенантная утечка).
+        # _seed_default_tenant идемпотентен (создаёт «default» только однажды).
+        default_tenant = await _seed_default_tenant(db)
+
         # Seed clinics
         clinic_result = await db.execute(select(Clinic).limit(1))
         if not clinic_result.scalar_one_or_none():
+            # Находка #7: demo-клиники привязываем к demo-тенанту, а не NULL.
+            _dtid = default_tenant.id if default_tenant else None
             demo_clinics = [
-                Clinic(name="Клиника А", address="ул. Центральная, 1", phone="+7 (900) 000-00-01"),
-                Clinic(name="Клиника Б — Диагностика", address="пр. Мира, 15", phone="+7 (900) 000-00-02"),
-                Clinic(name="Клиника В — Кардиоцентр", address="ул. Советская, 7", phone="+7 (900) 000-00-03"),
+                Clinic(name="Клиника А", address="ул. Центральная, 1", phone="+7 (900) 000-00-01", tenant_id=_dtid),
+                Clinic(name="Клиника Б — Диагностика", address="пр. Мира, 15", phone="+7 (900) 000-00-02", tenant_id=_dtid),
+                Clinic(name="Клиника В — Кардиоцентр", address="ул. Советская, 7", phone="+7 (900) 000-00-03", tenant_id=_dtid),
             ]
             for c in demo_clinics:
                 db.add(c)
@@ -1286,20 +1293,26 @@ async def seed_initial_data():
             db.add(superadmin)
             await db.commit()
 
-        # Seed дефолтный тенант
-        await _seed_default_tenant(db)
+        # Дефолтный тенант уже засеян выше (до клиник, находка #7).
 
         # Seed города
         await _seed_cities(db)
 
 
 async def _seed_default_tenant(db):
+    """Идемпотентно создаёт «default»-тенант и возвращает его.
+
+    Возвращает существующий тенант, если он уже создан, иначе создаёт новый
+    (находка #7: demo-клиники привязываются к этому тенанту, чтобы не
+    рождаться с tenant_id=NULL).
+    """
     from app.models.tenant import Tenant, TenantLicense, TenantBranding
     from datetime import datetime
     from sqlalchemy import select
     result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
-    if result.scalar_one_or_none():
-        return
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     tenant = Tenant(name="КлиникаСеть", slug="default", is_active=True)
     db.add(tenant)
     await db.flush()
@@ -1320,6 +1333,7 @@ async def _seed_default_tenant(db):
         font_family="Inter",
     ))
     await db.commit()
+    return tenant
 
 
 

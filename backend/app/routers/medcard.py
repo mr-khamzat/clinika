@@ -21,7 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import (
+    get_current_user,
+    require_role,
+    assert_same_tenant,
+    assert_can_create_in_tenant,
+    _is_super_admin,
+)
 from app.models.user import User
 from app.models.medcard import PatientDiagnosis, PatientAllergy, PatientVaccination
 from app.services.patient_session_service import restore_session
@@ -97,9 +103,12 @@ async def patient_diagnoses(
 ):
     sess = await _patient_session_or_401(db, session_token or t, x_patient_session)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientDiagnosis).where(PatientDiagnosis.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientDiagnosis.tenant_id == sess.tenant_id)
+    # Находка #7: строгий фильтр по tenant_id пациентской сессии всегда
+    # (NULL==NULL включительно), без пропуска при NULL.
+    q = select(PatientDiagnosis).where(
+        PatientDiagnosis.patient_phone == phone_n,
+        PatientDiagnosis.tenant_id == sess.tenant_id,
+    )
     q = q.order_by(PatientDiagnosis.diagnosed_at.desc().nulls_last(),
                    PatientDiagnosis.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -115,9 +124,11 @@ async def patient_allergies(
 ):
     sess = await _patient_session_or_401(db, session_token or t, x_patient_session)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientAllergy).where(PatientAllergy.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientAllergy.tenant_id == sess.tenant_id)
+    # Находка #7: строгий фильтр по tenant_id пациентской сессии всегда.
+    q = select(PatientAllergy).where(
+        PatientAllergy.patient_phone == phone_n,
+        PatientAllergy.tenant_id == sess.tenant_id,
+    )
     q = q.order_by(PatientAllergy.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
     return [_allergy_dict(a) for a in rows]
@@ -132,9 +143,11 @@ async def patient_vaccinations(
 ):
     sess = await _patient_session_or_401(db, session_token or t, x_patient_session)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientVaccination).where(PatientVaccination.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientVaccination.tenant_id == sess.tenant_id)
+    # Находка #7: строгий фильтр по tenant_id пациентской сессии всегда.
+    q = select(PatientVaccination).where(
+        PatientVaccination.patient_phone == phone_n,
+        PatientVaccination.tenant_id == sess.tenant_id,
+    )
     q = q.order_by(PatientVaccination.given_at.desc().nulls_last(),
                    PatientVaccination.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -182,6 +195,8 @@ async def staff_create_diagnosis(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Находка #7: запрет рождения записи с tenant_id=NULL.
+    assert_can_create_in_tenant(user)
     d = PatientDiagnosis(
         tenant_id=user.tenant_id,
         patient_phone=normalize_phone(body.patient_phone),
@@ -211,8 +226,10 @@ async def staff_update_diagnosis(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     d = await db.get(PatientDiagnosis, did)
-    if not d or (user.tenant_id and d.tenant_id != user.tenant_id):
+    if not d:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, d)
     if body.icd10_code is not None:
         d.icd10_code = body.icd10_code
     if body.name is not None:
@@ -241,8 +258,10 @@ async def staff_delete_diagnosis(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     d = await db.get(PatientDiagnosis, did)
-    if not d or (user.tenant_id and d.tenant_id != user.tenant_id):
+    if not d:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, d)
     await db.delete(d)
     await db.commit()
     return {"ok": True}
@@ -256,7 +275,9 @@ async def staff_list_diagnoses(
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientDiagnosis).where(PatientDiagnosis.patient_phone == phone_n)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id всегда для тенантного пользователя;
+    # пропуск (все тенанты) — только super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientDiagnosis.tenant_id == user.tenant_id)
     q = q.order_by(PatientDiagnosis.diagnosed_at.desc().nulls_last(), PatientDiagnosis.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -286,6 +307,8 @@ async def staff_create_allergy(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Находка #7: запрет рождения записи с tenant_id=NULL.
+    assert_can_create_in_tenant(user)
     a = PatientAllergy(
         tenant_id=user.tenant_id,
         patient_phone=normalize_phone(body.patient_phone),
@@ -313,8 +336,10 @@ async def staff_update_allergy(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     a = await db.get(PatientAllergy, au)
-    if not a or (user.tenant_id and a.tenant_id != user.tenant_id):
+    if not a:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, a)
     if body.allergen is not None:
         a.allergen = body.allergen.strip()
     if body.severity is not None:
@@ -339,8 +364,10 @@ async def staff_delete_allergy(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     a = await db.get(PatientAllergy, au)
-    if not a or (user.tenant_id and a.tenant_id != user.tenant_id):
+    if not a:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, a)
     await db.delete(a)
     await db.commit()
     return {"ok": True}
@@ -354,7 +381,9 @@ async def staff_list_allergies(
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientAllergy).where(PatientAllergy.patient_phone == phone_n)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id всегда для тенантного пользователя;
+    # пропуск (все тенанты) — только super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientAllergy.tenant_id == user.tenant_id)
     q = q.order_by(PatientAllergy.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -388,6 +417,8 @@ async def staff_create_vaccination(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Находка #7: запрет рождения записи с tenant_id=NULL.
+    assert_can_create_in_tenant(user)
     v = PatientVaccination(
         tenant_id=user.tenant_id,
         patient_phone=normalize_phone(body.patient_phone),
@@ -417,8 +448,10 @@ async def staff_update_vaccination(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     v = await db.get(PatientVaccination, vu)
-    if not v or (user.tenant_id and v.tenant_id != user.tenant_id):
+    if not v:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, v)
     if body.vaccine_name is not None:
         v.vaccine_name = body.vaccine_name.strip()
     if body.given_at is not None:
@@ -447,8 +480,10 @@ async def staff_delete_vaccination(
     except ValueError:
         raise HTTPException(404, "Не найдено")
     v = await db.get(PatientVaccination, vu)
-    if not v or (user.tenant_id and v.tenant_id != user.tenant_id):
+    if not v:
         raise HTTPException(404, "Не найдено")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, v)
     await db.delete(v)
     await db.commit()
     return {"ok": True}
@@ -462,7 +497,9 @@ async def staff_list_vaccinations(
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientVaccination).where(PatientVaccination.patient_phone == phone_n)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id всегда для тенантного пользователя;
+    # пропуск (все тенанты) — только super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientVaccination.tenant_id == user.tenant_id)
     q = q.order_by(PatientVaccination.given_at.desc().nulls_last(),
                    PatientVaccination.created_at.desc())

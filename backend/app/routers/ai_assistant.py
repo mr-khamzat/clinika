@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, assert_same_tenant
 from app.core.tenant import require_module
 from app.database import get_db
 from app.models.ai_assistant import AiConversation, AiMessage
@@ -524,8 +524,8 @@ async def list_messages_admin(
     ).scalar_one_or_none()
     if not conv:
         raise HTTPException(404, "Диалог не найден")
-    if user.tenant_id and conv.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, conv, status=403)
 
     rows = (
         await db.execute(
@@ -552,8 +552,8 @@ async def take_conversation(
     ).scalar_one_or_none()
     if not conv:
         raise HTTPException(404, "Диалог не найден")
-    if user.tenant_id and conv.tenant_id != user.tenant_id:
-        raise HTTPException(403, "Чужой тенант")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, conv, status=403)
 
     conv.status = "escalated"
     conv.updated_at = datetime.utcnow()
