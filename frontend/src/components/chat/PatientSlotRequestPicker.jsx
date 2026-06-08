@@ -18,12 +18,20 @@ export default function PatientSlotRequestPicker({ open, onClose, threadId, onSe
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
 
-  // ─── При открытии: загружаем публичные справочники ───
+  // ─── При открытии: загружаем публичный справочник врачей ───
   useEffect(() => {
     if (!open) return
-    // Публичные endpoints для пациента — graceful fallback при 404
-    api.get('/patient/doctors').then(r => setDoctors(r.data || [])).catch(() => setDoctors([]))
-    api.get('/patient/services').then(r => setServices(r.data || [])).catch(() => setServices([]))
+    // Публичный список врачей тенанта: GET /public/{slug}/doctors (без авторизации).
+    // slug сохраняется PatientCabinet в localStorage при заходе в кабинет.
+    let slug = ''
+    try { slug = localStorage.getItem('clinika_patient_slug') || '' } catch {}
+    if (slug) {
+      api.get(`/public/${slug}/doctors`).then(r => setDoctors(r.data || [])).catch(() => setDoctors([]))
+    } else {
+      setDoctors([])
+    }
+    // Публичного эндпоинта услуг нет — оставляем «по описанию» (поле опционально).
+    setServices([])
   }, [open])
 
   // ─── Toggle даты: максимум 7 ───

@@ -23,7 +23,8 @@ import ForcePasswordChangeModal from './components/ForcePasswordChangeModal'
 // Optim 2026-05-11: переводим ВСЕ страницы кроме лёгких на lazy.
 // Цель — уменьшить index.js с 1.17 MB → <500 KB. Каждый кабинет/роль
 // загружает только свои страницы; PatientCabinet больше не тащит Manager*.
-const Dashboard = lazy(() => import('./pages/Dashboard'))
+// idx 5: осиротевший импорт Dashboard удалён — компонент не привязан ни к одному Route
+// (RootRedirect редиректит по роли, legacy Dashboard не показывается).
 const CreateReferral = lazy(() => import('./pages/CreateReferral'))
 // PartnerCreateReferral удалён в Этапе 3 ROADMAP — partner_doctor больше не имеет отдельной страницы.
 const QRScreen = lazy(() => import('./pages/QRScreen'))
@@ -34,13 +35,9 @@ const Bonuses = lazy(() => import('./pages/Bonuses'))
 // Landing — lazy. Большая страница лендинга платформы (не нужна авторизованным пользователям).
 const Landing = lazy(() => import('./pages/Landing'))
 const StaffChat = lazy(() => import('./pages/StaffChat'))
-const ChatSettings = lazy(() => import('./pages/ChatSettings'))
-const ChatRoles = lazy(() => import('./pages/ChatRoles'))
-const PlatformAnnouncements = lazy(() => import('./pages/PlatformAnnouncements'))
-// Supervisor — мониторинг сервисов платформы (только super_admin)
-const AdminSupervisor = lazy(() => import('./pages/AdminSupervisor'))
-const FranchiseModules = lazy(() => import('./pages/FranchiseModules'))
-const FranchiseRevenue = lazy(() => import('./pages/FranchiseRevenue'))
+// idx 1: ChatSettings / ChatRoles / PlatformAnnouncements / AdminSupervisor / FranchiseModules /
+// FranchiseRevenue здесь больше не импортируются — их недостижимые /admin/* Route удалены.
+// Эти экраны рендерятся внутри AdminLayout как секции (см. AdminLayout.jsx renderSection).
 const Franchise = lazy(() => import('./pages/Franchise'))
 const ProfileSetup = lazy(() => import('./pages/ProfileSetup'))
 // InviteRegister/InviteAccept — eager: маленькие, на критическом пути регистрации.
@@ -315,8 +312,8 @@ function MiniApp() {
           <Route path="qr/:id" element={<QRScreen />} />
 
           {/* ─── Превью дизайн-токенов (публичный пилот, без auth) ─── */}
-          {/* design-preview (v1) удалён, оставлен только актуальный design-preview-2 */}
-          <Route path="design-preview-2" element={<DesignPreview2 />} />
+          {/* design-preview-2 обрабатывается публично в AppRouter (см. строку с /design-preview-2);
+              вложенный Route здесь недостижим — MiniApp не рендерится для этого пути. Удалён (idx 11). */}
 
           {/* ─── Витрина дизайн-системы (Этап 4): только super_admin ─── */}
           {user?.role === 'super_admin' && (
@@ -444,17 +441,19 @@ function MiniApp() {
             </Suspense>
           } />
         )}
+        {/* ─── idx 1: маршруты /admin/* удалены ───
+            Все /admin и /{slug}/admin перехватываются в AppRouter (→ AdminRoot) ДО рендера MiniApp,
+            поэтому эти вложенные Route были недостижимы. Реальная навигация по этим экранам идёт
+            через activeSection в AdminLayout (ключи franchise_modules/franchise_revenue/chat_settings/
+            chat_groups), а supervisor/announcements — отдельные секции/страницы AdminLayout. */}
         {/* Staff Chat — standalone полноэкранный чат (для встраивания в Calls Electron) */}
-        <Route path="/admin/chat-settings" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatSettings /></Suspense>} />
-        <Route path="/admin/franchise-revenue" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseRevenue /></Suspense>} />
-        <Route path="/admin/franchise-modules" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><FranchiseModules /></Suspense>} />
-        <Route path="/admin/chat-roles" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><ChatRoles /></Suspense>} />
-        <Route path="/admin/announcements" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><PlatformAnnouncements /></Suspense>} />
-        {/* Supervisor — мониторинг сервисов (super_admin); если не super_admin — backend вернёт 403, страница покажет ошибку */}
-        {user?.role === 'super_admin' && (
-          <Route path="/admin/supervisor" element={<Suspense fallback={<div style={{minHeight:"100vh"}}/>}><AdminSupervisor /></Suspense>} />
-        )}
         <Route path="/staff-chat" element={<Suspense fallback={<div style={{minHeight:"100vh",background:"#0f1115"}}/>}><StaffChat /></Suspense>} />
+        {/* ─── idx 6 + idx 7: единый catch-all / ролевой guard ───
+            Любой несовпавший путь (в т.ч. ролевой роут, не отрендеренный для текущей роли —
+            например manager, открывший /director/...) попадает сюда. RootRedirect отправляет
+            пользователя в его кабинет по роли. Это убирает «белый экран» на несуществующих
+            путях и служит fallback-редиректом при несоответствии роли. */}
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
       </Suspense>
     </BrowserRouter>

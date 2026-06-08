@@ -40,6 +40,10 @@ export const DIR_NAV = [
   { key: 'clinics',   label: 'Клиники',    icon: 'local_hospital',  path: '/director/clinics' },
   { key: 'doctors',   label: 'Врачи',      icon: 'medical_services',path: '/director/doctors' },
   { key: 'services',  label: 'Услуги',     icon: 'list_alt',        path: '/director/services' },
+  // idx 10: маршруты /director/engagement и /director/network существовали без пункта меню (orphan).
+  // Добавлены в NAV → попадают в «Ещё» (не в BOTTOM_KEYS), теперь достижимы.
+  { key: 'engagement', label: 'Вовлечённость', icon: 'favorite',    path: '/director/engagement' },
+  { key: 'network',    label: 'Сеть',          icon: 'hub',         path: '/director/network' },
 ]
 // 6 пунктов в bottom-nav на мобильном (главная + 5), остальное в "Ещё"
 const BOTTOM_KEYS = ['dashboard', 'pnl', 'cashflow', 'kpi', 'clinics']

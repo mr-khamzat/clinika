@@ -39,10 +39,20 @@ services:
     image: redis:7-alpine
     container_name: clinika-redis
     restart: always
+    # --requirepass включается ТОЛЬКО если задан REDIS_PASSWORD в .env
+    #   (иначе Redis стартует без auth — обратная совместимость).
+    #   При включении пароля обнови REDIS_URL=redis://:<pass>@clinika-redis:6379
+    # --appendonly yes — persistence (AOF), переживает рестарт без потери JWT-blacklist/лимитов.
+    # rename-command FLUSHALL/FLUSHDB "" — отключаем опасные команды даже без auth.
+    # Вся логика опционального пароля — внутри sh (без compose-интерполяции).
+    command: ["sh", "-c", "exec redis-server --appendonly yes --rename-command FLUSHALL \"\" --rename-command FLUSHDB \"\" ${REDIS_PASSWORD:+--requirepass \"$REDIS_PASSWORD\"}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
       - clinika-redis-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping"]
+      # При заданном REDIS_PASSWORD ping идёт с auth, иначе — обычный ping.
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a \"$REDIS_PASSWORD\" --no-auth-warning} ping | grep -q PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,7 +88,7 @@ services:
       clinika-db:
         condition: service_healthy
       clinika-redis:
-        condition: service_started
+        condition: service_healthy
       clinika-docker-proxy:
         condition: service_started
     healthcheck:
@@ -123,7 +133,8 @@ services:
     restart: always
     env_file: .env
     depends_on:
-      - clinika-backend
+      clinika-backend:
+        condition: service_healthy
     # Бот запущен как PID 1 (python bot.py). pgrep отсутствует в slim-образе,
     # поэтому проверяем что PID 1 — python через /proc.
     healthcheck:

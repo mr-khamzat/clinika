@@ -8,7 +8,7 @@
  *   GET    /patient/calendar/upcoming                → [{id, datetime, clinic_name, doctor_name, service_name, address}]
  *   POST   /patient/calendar/issue-token             → {token, feed_url}
  *   GET    /patient/calendar/tokens                  → [{id, created_at, revoked_at}]
- *   DELETE /patient/calendar/tokens/{id}             → revoke
+ *   POST   /patient/calendar/tokens/{id}/revoke      → revoke
  *
  * UX:
  *   - Hero-карточка ближайшего приёма (UpcomingCard highlight)
@@ -121,7 +121,7 @@ export default function PatientCalendarSection({ sessionToken: sessionTokenProp 
   const revoke = async (id) => {
     if (!confirm('Отозвать ссылку? Подписка перестанет работать.')) return
     try {
-      await axios.delete(`${API_BASE}/patient/calendar/tokens/${id}`, { params })
+      await axios.post(`${API_BASE}/patient/calendar/tokens/${id}/revoke`, {}, { params })
       toast?.('Ссылка отозвана', 'success')
       loadTokens()
       if (issued && issued.id === id) setIssued(null)

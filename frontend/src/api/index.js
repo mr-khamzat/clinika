@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { API_BASE, SLUG } from '../config'
 import { userTokenKey, adminTokenKey, userRefreshKey, adminRefreshKey } from '../lib/authKeys'
 
 // API_BASE imported from config.js
@@ -68,18 +68,24 @@ function _showRegionBlockModal(detail) {
   const now = Date.now()
   if (now - _regionBlockShownAt < 5000) return
   _regionBlockShownAt = now
-  // Используем простой alert как fallback. Если в проекте есть глобальная Modal/toast система —
-  // можно перехватить событие 'region-lock-blocked' через window.addEventListener.
+  // idx 49: событие cancelable. Глобальный слушатель (UI-модалка/toast) должен ПОДТВЕРДИТЬ
+  // обработку — вызвать e.preventDefault(). Браузерный alert() показываем ТОЛЬКО если реального
+  // слушателя нет (никто не отменил событие) — раньше alert (по таймеру) срабатывал всегда,
+  // даже когда модалку успевали поднять.
+  // Подписка: window.addEventListener('region-lock-blocked', (e) => { e.preventDefault(); showModal(e.detail.message) })
+  let handled = false
   try {
-    window.dispatchEvent(new CustomEvent('region-lock-blocked', { detail: { message: detail } }))
+    const evt = new CustomEvent('region-lock-blocked', {
+      detail: { message: detail },
+      cancelable: true,
+    })
+    // dispatchEvent возвращает false, если хоть один слушатель вызвал preventDefault().
+    handled = (window.dispatchEvent(evt) === false)
   } catch (_) { /* noop */ }
-  // Браузерный fallback — гарантированно сработает даже без слушателя.
-  setTimeout(() => {
-    if (Date.now() - _regionBlockShownAt < 100) {
-      // Если за это время никто не успел поднять модалку — показываем alert.
-      try { alert(detail) } catch (_) {}
-    }
-  }, 50)
+  // Браузерный fallback — только при отсутствии обработчика, чтобы не дублировать UI-модалку.
+  if (!handled) {
+    try { alert(detail) } catch (_) {}
+  }
 }
 
 api.interceptors.response.use(

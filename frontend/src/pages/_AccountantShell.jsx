@@ -12,7 +12,7 @@
  * Пункты меню: summary / cash / acts / payments / payroll / spending / reports.
  * Акцент — бирюзовый (#0097A7). Активный пункт — заливка var(--accent-soft)
  * + левая рамка цветом акцента.
- * Кнопка «Выйти» снизу очищает токен и редиректит на /{slug}/login.
+ * Кнопка «Выйти» снизу очищает токен и редиректит на /{slug}/.
  *
  * Mobile (≤880px):
  *   • Верхняя панель с burger-кнопкой + название раздела + clinic name
@@ -47,7 +47,7 @@ const MOBILE_BREAKPOINT = 880
 function logout() {
   // Единый хелпер чистит все 4 ключа (access+refresh, user+admin) — см. lib/authKeys
   clearAllAuth(SLUG)
-  window.location.href = '/' + SLUG + '/login'
+  window.location.href = '/' + SLUG + '/'
 }
 
 function useIsMobile() {
