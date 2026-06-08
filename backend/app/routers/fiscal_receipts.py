@@ -182,6 +182,10 @@ async def upsert_ofd_config(
         )
     )).scalar_one_or_none()
 
+    # api_key шифруем перед записью (encryption_service: 'enc:'/'plain:').
+    # Чтение — через OFDConfig.decrypted_api_key.
+    from app.services.encryption_service import encrypt as _encrypt_secret
+
     if cfg is None:
         if not body.api_key:
             raise HTTPException(status_code=400, detail="api_key обязателен при создании")
@@ -190,7 +194,7 @@ async def upsert_ofd_config(
             clinic_id=clinic_id,
             provider=body.provider,
             inn=body.inn,
-            api_key=body.api_key,    # TODO: Fernet.encrypt
+            api_key=_encrypt_secret(body.api_key),
             is_active=body.is_active,
             config=body.config or {},
         )
@@ -199,7 +203,7 @@ async def upsert_ofd_config(
         cfg.provider = body.provider
         cfg.inn = body.inn
         if body.api_key:
-            cfg.api_key = body.api_key   # TODO: Fernet.encrypt
+            cfg.api_key = _encrypt_secret(body.api_key)
         cfg.is_active = body.is_active
         cfg.config = body.config or cfg.config or {}
         cfg.updated_at = datetime.utcnow()

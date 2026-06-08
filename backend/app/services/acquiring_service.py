@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -25,8 +26,72 @@ from app.models.payments_clinic import (
 )
 from app.services.acquiring import get_gateway
 
+log = logging.getLogger("acquiring_service")
+
+# Терминальные статусы: после них «откат» в нетерминальный (поздний/повторный
+# webhook с pending) запрещён — иначе выручка (_sum_revenue по SUCCEEDED) поедет.
+_TERMINAL_STATUSES = frozenset({
+    ClinicPaymentStatus.SUCCEEDED,
+    ClinicPaymentStatus.REFUNDED,
+})
+
+# Допуск при сверке сумм (копейки округляются до 0.01).
+_AMOUNT_EPS = Decimal("0.01")
+
 
 # ── Вспомогательное ──────────────────────────────────────────────────────────
+
+
+def _quantize(value: Decimal) -> Decimal:
+    return Decimal(value).quantize(_AMOUNT_EPS)
+
+
+async def _confirm_via_adapter(
+    db: AsyncSession,
+    payment: ClinicPayment,
+    gateway_payment_id: str | None,
+) -> tuple[bool, Decimal | None]:
+    """Авторитетная сверка статуса платежа через adapter.get_status.
+
+    Возвращает (verified, authoritative_amount):
+      - verified=True  — шлюз подтвердил статус succeeded (можно доверять);
+      - verified=False — шлюз-заглушка/недоступен/нет get_status; статус
+        succeeded можно ставить ТОЛЬКО при совпадении суммы webhook'а
+        (осознанный компромисс для шлюзов без реального get_status).
+    authoritative_amount — сумма из ответа шлюза (если удалось извлечь).
+    """
+    gw_pid = gateway_payment_id or payment.gateway_payment_id
+    if not gw_pid:
+        return False, None
+
+    cfg = await _get_active_config(db, payment.clinic_id, gateway=payment.gateway)
+    try:
+        adapter = get_gateway(payment.gateway, cfg)
+        result = await adapter.get_status(str(gw_pid))
+    except NotImplementedError:
+        # Шлюз-заглушка (tinkoff/sber/...) — get_status ещё не реализован.
+        return False, None
+    except Exception as e:  # noqa: BLE001 — сеть/конфиг/KeyError/LookupError
+        # Не доверяем и не падаем — деградируем; решение о succeeded примет
+        # сверка суммы выше по стеку (verified=False).
+        log.warning(
+            "confirm_via_adapter(payment_id=%s) get_status failed: %s",
+            payment.id, e,
+        )
+        return False, None
+
+    authoritative_amount: Decimal | None = getattr(result, "amount", None)
+    if authoritative_amount is None:
+        amount_val = (result.raw.get("amount") or {}).get("value") if result.raw else None
+        if amount_val is not None:
+            try:
+                authoritative_amount = Decimal(str(amount_val))
+            except (ValueError, ArithmeticError):
+                authoritative_amount = None
+
+    verified = result.status == ClinicPaymentStatus.SUCCEEDED
+    return verified, authoritative_amount
+
 
 async def _get_active_config(
     db: AsyncSession,
@@ -129,24 +194,105 @@ async def update_clinic_payment_status(
     status: str,
     paid_at: datetime | None = None,
     raw: dict[str, Any] | None = None,
+    webhook_amount: Decimal | None = None,
+    gateway_payment_id: str | None = None,
 ) -> ClinicPayment | None:
-    """Обновляет статус ClinicPayment (после webhook/опроса)."""
+    """Обновляет статус ClinicPayment (после webhook/опроса).
+
+    Защита от доверия непроверенному webhook (находка #16):
+      1) Машина переходов: терминальный статус (succeeded/refunded) НЕ
+         перезаписывается поздним нетерминальным (pending/cancelled) — событие
+         только дозаписывается в аудит. REFUNDED допустим только из SUCCEEDED.
+      2) Переход в SUCCEEDED обусловлен:
+         - сверкой суммы: webhook_amount (если передан) должен совпасть с
+           payment.amount с точностью до копейки; иначе — пометка
+           amount_mismatch и статус НЕ ставится в succeeded;
+         - авторитетной сверкой через adapter.get_status; если шлюз не
+           подтвердил (заглушка/недоступен), succeeded ставится только при
+           совпадении суммы (verified=False, осознанный компромисс).
+
+    Все принятые события всегда пишутся в payment_metadata.webhook_events (аудит),
+    даже если статус решено не менять.
+    """
     payment = await db.get(ClinicPayment, payment_id)
     if payment is None:
         return None
 
-    payment.status = status
-    if status == ClinicPaymentStatus.SUCCEEDED and paid_at is not None:
+    current = payment.status
+    requested = status
+    decision: str = requested          # к чему в итоге придём
+    note: str | None = None            # отметка причины для аудита
+
+    is_terminal_now = current in _TERMINAL_STATUSES
+    is_requested_terminal = requested in _TERMINAL_STATUSES
+
+    if requested == current:
+        # Идемпотентный повтор — статус не трогаем, событие зальём в аудит.
+        decision = current
+        note = "duplicate"
+    elif is_terminal_now and not is_requested_terminal:
+        # Поздний/повторный webhook с откатом в нетерминальный — запрещено.
+        decision = current
+        note = "downgrade_blocked"
+    elif requested == ClinicPaymentStatus.REFUNDED:
+        # REFUNDED допустим только из SUCCEEDED.
+        if current == ClinicPaymentStatus.SUCCEEDED:
+            decision = ClinicPaymentStatus.REFUNDED
+        else:
+            decision = current
+            note = "refund_without_success_blocked"
+    elif requested == ClinicPaymentStatus.SUCCEEDED:
+        # Самый чувствительный переход: сверяем сумму и подтверждаем через шлюз.
+        expected = _quantize(payment.amount or Decimal("0"))
+        amount_ok = True
+        if webhook_amount is not None:
+            amount_ok = _quantize(webhook_amount) == expected
+
+        verified, authoritative_amount = await _confirm_via_adapter(
+            db, payment, gateway_payment_id
+        )
+        if authoritative_amount is not None:
+            # Авторитетная сумма из шлюза тоже обязана совпасть.
+            amount_ok = amount_ok and (_quantize(authoritative_amount) == expected)
+
+        if not amount_ok:
+            decision = current
+            note = "amount_mismatch"
+            log.warning(
+                "payment_id=%s succeeded ОТКЛОНЁН: amount_mismatch "
+                "(expected=%s webhook=%s authoritative=%s verified=%s)",
+                payment.id, expected, webhook_amount, authoritative_amount, verified,
+            )
+        elif not verified:
+            # Шлюз не подтвердил (заглушка/недоступен), но сумма совпала —
+            # осознанный компромисс: ставим succeeded, но помечаем unverified.
+            decision = ClinicPaymentStatus.SUCCEEDED
+            note = "unverified_amount_ok"
+        else:
+            decision = ClinicPaymentStatus.SUCCEEDED
+    # прочие переходы (pending→cancelled и т.п.) — разрешены как есть
+
+    payment.status = decision
+    if decision == ClinicPaymentStatus.SUCCEEDED and paid_at is not None:
         payment.paid_at = paid_at
-    if status == ClinicPaymentStatus.REFUNDED:
+    if decision == ClinicPaymentStatus.REFUNDED:
         payment.refunded_at = datetime.utcnow()
 
-    if raw:
-        meta = dict(payment.payment_metadata or {})
-        webhooks = list(meta.get("webhook_events") or [])
-        webhooks.append({"received_at": datetime.utcnow().isoformat(), "raw": raw, "status": status})
-        meta["webhook_events"] = webhooks[-20:]   # держим последние 20 событий
-        payment.payment_metadata = meta
+    # Аудит: КАЖДОЕ принятое событие пишем в webhook_events (как обещает докстринг),
+    # даже на чистом успехе без note/raw — иначе аудит-трейл неполный.
+    meta = dict(payment.payment_metadata or {})
+    webhooks = list(meta.get("webhook_events") or [])
+    event: dict[str, Any] = {
+        "received_at": datetime.utcnow().isoformat(),
+        "raw": raw,
+        "requested_status": requested,
+        "applied_status": decision,
+    }
+    if note is not None:
+        event["note"] = note
+    webhooks.append(event)
+    meta["webhook_events"] = webhooks[-20:]   # держим последние 20 событий
+    payment.payment_metadata = meta
 
     payment.updated_at = datetime.utcnow()
     await db.commit()

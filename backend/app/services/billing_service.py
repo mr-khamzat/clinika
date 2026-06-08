@@ -217,10 +217,27 @@ async def record_payment(
     if invoice.status == InvoiceStatus.PAID:
         raise ValueError("Счёт уже оплачен")
 
+    # Сверяем сумму платежа с суммой счёта.
+    # Нормализуем в Decimal с точностью до копейки, накапливаем частичные платежи.
+    eps = Decimal("0.01")
+    pay_amount = Decimal(str(amount)).quantize(eps)
+    if pay_amount <= 0:
+        raise ValueError("Сумма платежа должна быть положительной")
+    invoice_amount = Decimal(str(invoice.amount)).quantize(eps)
+    already_paid = Decimal(str(invoice.paid_amount or 0)).quantize(eps)
+    new_total = (already_paid + pay_amount).quantize(eps)
+
+    # Переплата запрещена (epsilon на округление копеек).
+    if new_total - invoice_amount > eps:
+        raise ValueError(
+            f"Сумма платежа превышает остаток по счёту: к доплате "
+            f"{invoice_amount - already_paid}, получено {pay_amount}"
+        )
+
     payment = Payment(
         invoice_id=invoice_id,
         tenant_id=invoice.tenant_id,
-        amount=amount,
+        amount=pay_amount,
         status=PaymentStatus.COMPLETED,
         method=method,
         transaction_id=transaction_id,
@@ -230,26 +247,32 @@ async def record_payment(
     )
     db.add(payment)
 
-    # Помечаем счёт как оплаченный
-    invoice.status     = InvoiceStatus.PAID
-    invoice.paid_at    = datetime.utcnow()
-    invoice.paid_amount = amount
+    # Накапливаем фактически полученную сумму.
+    invoice.paid_amount = new_total
 
-    # Возобновляем подписку если была past_due
-    sub_q = await db.execute(select(Subscription).where(Subscription.id == invoice.subscription_id))
-    sub = sub_q.scalar_one_or_none()
-    if sub and sub.status == SubStatus.PAST_DUE:
-        sub.status = SubStatus.ACTIVE
+    # Счёт закрываем (PAID) только когда покрыта вся сумма; иначе — частичная оплата.
+    is_fully_paid = (invoice_amount - new_total) <= eps
+    if is_fully_paid:
+        invoice.status  = InvoiceStatus.PAID
+        invoice.paid_at = datetime.utcnow()
+
+        # Возобновляем подписку только при полной оплате счёта.
+        sub_q = await db.execute(select(Subscription).where(Subscription.id == invoice.subscription_id))
+        sub = sub_q.scalar_one_or_none()
+        if sub and sub.status == SubStatus.PAST_DUE:
+            sub.status = SubStatus.ACTIVE
+    else:
+        invoice.status = InvoiceStatus.PARTIAL
 
     await db.flush()
 
-    # Пишем в billing_ledger: получение платежа
+    # Пишем в billing_ledger: получение платежа (фактическая сумма платежа, не сумма счёта)
     await record_billing_ledger(
         db,
         tenant_id=invoice.tenant_id,
         entry_type=EntryType.PAYMENT_RECEIVED,
         direction=Direction.CREDIT,
-        amount=amount,
+        amount=pay_amount,
         reference_id=payment.id,
         reference_type='payment',
         description=f'Оплата счёта {invoice.invoice_number}',
@@ -272,8 +295,18 @@ async def get_billing_summary(db: AsyncSession, tenant_id: uuid.UUID) -> dict:
     )
     invoices = inv_q.scalars().all()
 
-    total_paid = sum(float(i.amount) for i in invoices if i.status == InvoiceStatus.PAID)
-    total_due  = sum(float(i.amount) for i in invoices if i.status in (InvoiceStatus.SENT, InvoiceStatus.OVERDUE))
+    # Полностью оплаченные — целиком в paid. Частично оплаченные (PARTIAL):
+    # внесённая часть → paid, остаток → due (иначе частичные счета «исчезнут» из сводки).
+    total_paid = sum(
+        float(i.paid_amount or 0) if i.status == InvoiceStatus.PARTIAL else float(i.amount)
+        for i in invoices
+        if i.status in (InvoiceStatus.PAID, InvoiceStatus.PARTIAL)
+    )
+    total_due = sum(
+        float(i.amount) - float(i.paid_amount or 0) if i.status == InvoiceStatus.PARTIAL else float(i.amount)
+        for i in invoices
+        if i.status in (InvoiceStatus.SENT, InvoiceStatus.OVERDUE, InvoiceStatus.PARTIAL)
+    )
 
     return {
         "subscription": {

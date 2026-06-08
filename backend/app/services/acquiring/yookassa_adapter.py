@@ -8,12 +8,16 @@
 
 Конфигурация:
   - На уровне клиники: PaymentGatewayConfig.shop_id + secret_key (через UI «Настройки → Онлайн-оплата»).
-  - На уровне сервера:  YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY в .env (fallback,
-    если у конкретной клиники конфиг ещё не заполнен).
+    secret_key хранится зашифрованным и читается через property
+    decrypted_secret_key. ПРИОРИТЕТ за конфигом клиники.
+  - На уровне сервера:  YOOKASSA_SHOP_ID / YOOKASSA_SECRET_KEY в .env — fallback
+    ТОЛЬКО когда у клиники конфиг отсутствует вовсе (config is None). Если конфиг
+    задан, но секрет не читается — RuntimeError (НЕ молчаливый откат в ENV
+    платформы, иначе деньги ушли бы не тому юрлицу).
   - YOOKASSA_RETURN_URL — дефолтный return_url, если вызывающий не передал свой.
 
-Если ни в БД, ни в env ключей нет — методы кидают RuntimeError с понятным
-сообщением «YOOKASSA не настроена …». Роутер транслирует это в HTTP 503.
+Если ни в БД, ни в env ключей нет (или конфиг клиники не расшифровывается) —
+методы кидают RuntimeError с понятным сообщением. Роутер транслирует это в 503.
 """
 from __future__ import annotations
 
@@ -76,19 +80,33 @@ class YookassaGateway(BasePaymentGateway):
     # ── Креды ────────────────────────────────────────────────────────────────
 
     def _credentials(self) -> tuple[str, str]:
-        """Берёт (shop_id, secret_key) из БД-конфига, иначе из env.
+        """Берёт (shop_id, secret_key) из БД-конфига клиники, иначе из env.
 
-        Бросает RuntimeError если ничего не задано — роутер превратит это в 503
-        с понятным сообщением для UI.
+        Приоритет — конфиг клиники: если он задан, используем ИМЕННО его креды
+        (деньги должны идти на юрлицо клиники, не на аккаунт платформы из ENV).
+        secret_key читается через property decrypted_secret_key (расшифровка
+        Fernet). Если конфиг активен, но секрет не расшифровывается (None/пусто)
+        — это RuntimeError (роутер → 503), а НЕ молчаливый откат в ENV платформы.
+
+        ENV-fallback допустим только когда конфига нет вовсе (config is None) —
+        чтобы не сломать сценарий «шлюз ещё не настроен в клинике».
+
+        Бросает RuntimeError если ничего не задано — роутер превратит это в 503.
         """
-        shop_id = getattr(self.config, "shop_id", None) if self.config else None
-        secret_key = getattr(self.config, "secret_key", None) if self.config else None
+        if self.config is not None:
+            shop_id = getattr(self.config, "shop_id", None)
+            secret_key = self.config.decrypted_secret_key
+            if not shop_id or not secret_key:
+                raise RuntimeError(
+                    "YOOKASSA: конфиг клиники задан, но shop_id/secret_key "
+                    "не читаются (проверь SECRET_KEY и переввод ключа). "
+                    "В целях безопасности откат на ENV платформы не выполняется."
+                )
+            return str(shop_id), str(secret_key)
 
-        if not shop_id:
-            shop_id = os.getenv("YOOKASSA_SHOP_ID", "")
-        if not secret_key:
-            secret_key = os.getenv("YOOKASSA_SECRET_KEY", "")
-
+        # Конфиг клиники не передан — fallback на ENV платформы.
+        shop_id = os.getenv("YOOKASSA_SHOP_ID", "")
+        secret_key = os.getenv("YOOKASSA_SECRET_KEY", "")
         if not shop_id or not secret_key:
             raise RuntimeError(
                 "YOOKASSA не настроена: задай YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY "

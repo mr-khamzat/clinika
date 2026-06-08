@@ -290,12 +290,24 @@ async def payment_webhook(
             paid_at = None
 
     if payment is not None:
+        # Сумма из webhook'а (для сверки против payment.amount перед succeeded).
+        # У ЮKassa лежит в object.amount.value; для прочих — None (тогда сверка
+        # опирается на authoritative get_status, см. acquiring_service).
+        webhook_amount: Optional[Decimal] = None
+        yk_amount_val = ((raw.get("object") or {}).get("amount") or {}).get("value")
+        if yk_amount_val is not None:
+            try:
+                webhook_amount = Decimal(str(yk_amount_val))
+            except (ValueError, ArithmeticError):
+                webhook_amount = None
         await update_clinic_payment_status(
             db,
             payment_id=payment.id,
             status=new_status or payment.status,
             paid_at=paid_at,
             raw=raw,
+            webhook_amount=webhook_amount,
+            gateway_payment_id=gateway_payment_id,
         )
 
     # 3) Ветка для подписки платформы (Invoice → record_payment).
@@ -423,6 +435,10 @@ async def upsert_payment_config(
         )
     )).scalar_one_or_none()
 
+    # Секрет шифруем перед записью (encryption_service: 'enc:'/'plain:').
+    # Чтение — через PaymentGatewayConfig.decrypted_secret_key.
+    from app.services.encryption_service import encrypt as _encrypt_secret
+
     if cfg is None:
         if not body.secret_key:
             raise HTTPException(status_code=400, detail="secret_key обязателен при создании")
@@ -431,7 +447,7 @@ async def upsert_payment_config(
             clinic_id=clinic_id,
             gateway=body.gateway,
             shop_id=body.shop_id,
-            secret_key=body.secret_key,    # TODO: Fernet.encrypt
+            secret_key=_encrypt_secret(body.secret_key),
             is_active=body.is_active,
             is_test_mode=body.is_test_mode,
             config=body.config or {},
@@ -440,7 +456,7 @@ async def upsert_payment_config(
     else:
         cfg.shop_id = body.shop_id
         if body.secret_key:
-            cfg.secret_key = body.secret_key   # TODO: Fernet.encrypt
+            cfg.secret_key = _encrypt_secret(body.secret_key)
         cfg.is_active = body.is_active
         cfg.is_test_mode = body.is_test_mode
         cfg.config = body.config or cfg.config or {}
