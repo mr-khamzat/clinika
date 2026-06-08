@@ -58,3 +58,7 @@ frontend/public/downloads/*.deb
 **/main.py.bak.*
 **/*.bak.phase*
 /downloads/
+
+# build/deps (ремедиация)
+frontend/node_modules/
+frontend/dist/
