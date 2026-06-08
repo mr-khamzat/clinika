@@ -167,7 +167,7 @@ def upgrade() -> None:
                     -- Небезопасно: останутся осиротевшие приёмы. НЕ ставим
                     -- NOT NULL вслепую — это уронило бы миграцию/прод.
                     RAISE WARNING
-                        'apptphi01: appointments.tenant_id ОСТАЁТСЯ NULLABLE — %% строк с NULL tenant_id. '
+                        'apptphi01: appointments.tenant_id ОСТАЁТСЯ NULLABLE — % строк с NULL tenant_id. '
                         'Backfill из clinics не покрыл все строки (clinic с NULL tenant_id или приёмы-сироты). '
                         'Зачистите сироты data-скриптом в maintenance-окне, затем отдельной миграцией '
                         'ALTER COLUMN tenant_id SET NOT NULL.', n_null;

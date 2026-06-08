@@ -151,7 +151,13 @@ def _tenant_tables() -> list[str]:
 
 
 def upgrade() -> None:
+    # Только реально существующие таблицы: список из Base.metadata может включать
+    # таблицы, создаваемые ПОЗЖЕ в цепочке (tenant_patients из tpat01 — он сам
+    # навешивает RLS). Иначе ALTER TABLE упадёт «relation does not exist».
+    existing_tables = set(sa.inspect(op.get_bind()).get_table_names())
     for table in _tenant_tables():
+        if table not in existing_tables:
+            continue
         # Включаем RLS. Повторный ENABLE не падает → идемпотентно.
         op.execute(sa.text(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY'))
         # FORCE — политика применяется И к владельцу таблицы (иначе owner/
@@ -169,7 +175,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    existing_tables = set(sa.inspect(op.get_bind()).get_table_names())
     for table in _tenant_tables():
+        if table not in existing_tables:
+            continue
         op.execute(sa.text(f'DROP POLICY IF EXISTS tenant_isolation ON "{table}"'))
         # Снимаем FORCE и сам RLS (NO FORCE неявно сбрасывается DISABLE).
         op.execute(sa.text(f'ALTER TABLE "{table}" NO FORCE ROW LEVEL SECURITY'))

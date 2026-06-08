@@ -117,7 +117,9 @@ def upgrade() -> None:
                    SET tenant_id = sub.tenant_id
                   FROM (
                         SELECT a.patient_phone AS patient_phone,
-                               MIN(a.tenant_id) AS tenant_id
+                               -- COUNT(DISTINCT)=1 ниже гарантирует ровно один тенант;
+                               -- MIN(uuid) в PostgreSQL не существует → берём через ::text-каст.
+                               MIN(a.tenant_id::text)::uuid AS tenant_id
                           FROM appointments AS a
                          WHERE a.tenant_id IS NOT NULL
                          GROUP BY a.patient_phone
