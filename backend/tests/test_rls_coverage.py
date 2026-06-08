@@ -73,6 +73,9 @@ WHITELIST_GLOBAL: set[str] = set()
 # роняет мета-тест → разработчик обязан осознанно либо добавить её в покрытие RLS
 # (миграция Части A делает это автоматически по Base.metadata), либо вайтлистнуть.
 KNOWN_TENANT_TABLES: frozenset[str] = frozenset({
+    # tenant_patients добавлена миграцией tpat01 (#18) ПОСЛЕ rlsall01 и покрыта
+    # RLS там же (ENABLE+FORCE+policy tenant_isolation) — поэтому в baseline.
+    "tenant_patients",
     "activity_log", "ad_events", "ad_spend_entries", "ads",
     "aggregator_partnerships", "ai_analysis_history", "ai_conversations",
     "ai_doctor_logs", "ai_knowledge_entries", "appointment_costs",
