@@ -1,6 +1,48 @@
 """
 Чат пациента (вариант D — гибрид AI + регистратура).
 
+DEPRECATED (см. находку #40): используйте чат-движок ChatThread
+(app/routers/patient_chat_threads.py + app/routers/clinic_chat.py поверх
+модели app/models/chat.py и сервиса app/services/chat_service.py).
+
+Почему этот движок — ЛЕГАСИ, а ChatThread — актуальный:
+* ChatThread — это «Глава 9» (async-треды пациент↔клиника). Он шире
+  используется фронтом: ~13 модулей (sections/PatientChatSection.jsx
+  «премиум-чат пациента (Глава 9)», sections/ClinicChatSection.jsx,
+  components/chat/* — ThreadListItem/ReassignModal/PatientCardSidebar/
+  NewThreadModal/MessageBubble/SlotOfferBubble, components/AdminSupportPanel.jsx,
+  api/chatSlots.js, components/patient/PatientChatHub.jsx) и развивается
+  (SLA-эскалация, reassign-история, pin/цвет-метки, реакции, индикатор
+  «печатает…», бронь слотов, drag-drop). Сам docstring patient_chat_threads.py
+  явно помечает /patient/chat как legacy.
+* Этот движок (PatientChat / /patient/chat) — старый «AI-ассистент + админ».
+  Фронт зовёт его лишь из устаревшего SupportTab в pages/PatientCabinet.jsx
+  (см. комментарий «Аналог SupportTab, но через /patient/chat — AI-ассистент
+  + админ») и его клона PatientCabinetPreview.jsx, плюс админ-вкладка
+  sections/PatientChatsSection.jsx (/admin/patient-chats). Новые кабинеты
+  (PatientChatHub → PatientChatSection) уже используют ChatThread.
+
+ВНИМАНИЕ: роуты, таблицы (patient_chats / patient_chat_messages) и данные НЕ
+удаляются здесь намеренно — движок ещё вызывается живым фронтом, а вынос
+требует миграции данных. Это отдельная задача (см. план миграции ниже).
+
+──────────────────────────────────────────────────────────────────────────
+ПЛАН МИГРАЦИИ (отдельной задачей, не входит в эту правку):
+  1. Перевести устаревший SupportTab в pages/PatientCabinet.jsx (и клон
+     PatientCabinetPreview.jsx) на ChatThread (PatientChatSection / threads),
+     либо полностью заменить SupportTab на PatientChatHub. AI-ассистент
+     (chat_with_ai из patient_chat_ai) при необходимости подключить как
+     отдельный сегмент внутри тредового UI, а не как параллельный движок.
+  2. Перевести админ-вкладку sections/PatientChatsSection.jsx
+     (/admin/patient-chats) на тредовую админку (clinic_chat / chat_admin).
+  3. Data-миграция: перенести историю из patient_chats/patient_chat_messages
+     в chat_threads/chat_messages (маппинг PatientChat→ChatThread,
+     PatientChatMessage→ChatMessage; сопоставить sender/mode). Идемпотентно,
+     в maintenance-окне, с бэкапом и проверкой ПДн (телефон/ФИО).
+  4. После полного перехода фронта и переноса данных — удалить роуты этого
+     модуля, его include_router в app/main.py (строка ~1612) и, отдельной
+     alembic-миграцией, таблицы patient_chats/patient_chat_messages.
+
 Пациентские эндпоинты (защита через session_token из patient_session_service):
 * GET  /patient/chat?t=<session_token>
 * GET  /patient/chat/{chat_id}/messages?t=<session_token>
