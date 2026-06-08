@@ -464,6 +464,7 @@ async def list_bonuses_by_admin(
 @router.get("/reports/referrals", response_model=list[dict])
 async def list_all_referrals(
     clinic_id: Optional[uuid.UUID] = Query(None, description="UUID клиники (per-clinic скоуп)"),
+    author_id: Optional[uuid.UUID] = Query(None, description="UUID автора направления (created_by_admin_id)"),
     date_from: Optional[datetime] = Query(None),
     date_to: Optional[datetime] = Query(None),
     ref_status: Optional[str] = Query(None, alias="status"),
@@ -498,6 +499,9 @@ async def list_all_referrals(
             Referral.from_clinic_id.in_(filter_ids),
             Referral.to_clinic_id.in_(filter_ids),
         ))
+    # Фильтр по автору направления (поверх tenant/clinic-скоупа; не ослабляет изоляцию).
+    if author_id is not None:
+        filters.append(Referral.created_by_admin_id == author_id)
     if date_from:
         filters.append(Referral.created_at >= date_from)
     if date_to:

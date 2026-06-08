@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { SLUG } from '../config'
+import { clearAllAuth } from '../lib/authKeys'
 
 // ─── Карта разделов кабинета бухгалтера ─────────────────────────────────────
 export const ACC_NAV = [
@@ -44,12 +45,8 @@ const ACC_ACCENT_LINE = 'rgba(0, 151, 167, 0.28)'
 const MOBILE_BREAKPOINT = 880
 
 function logout() {
-  try {
-    localStorage.removeItem('clinika_token_' + SLUG)
-    localStorage.removeItem('clinika_admin_token_' + SLUG)
-    localStorage.removeItem('clinika_refresh_token_' + SLUG)
-    localStorage.removeItem('clinika_admin_refresh_token_' + SLUG)
-  } catch (_) { /* noop */ }
+  // Единый хелпер чистит все 4 ключа (access+refresh, user+admin) — см. lib/authKeys
+  clearAllAuth(SLUG)
   window.location.href = '/' + SLUG + '/login'
 }
 

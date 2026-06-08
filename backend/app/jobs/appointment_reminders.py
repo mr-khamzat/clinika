@@ -5,11 +5,16 @@ Push-напоминания о записи к врачу.
 Помечается в Appointment.reminders_sent={"24h": True, "2h": True}.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.orm.attributes import flag_modified
 
 logger = logging.getLogger("appointment_reminders")
+
+# Слоты приёма (appointment_date + start_time) хранятся как настенное МСК-время
+# (то, что пациент видит в расписании), а не UTC. Поэтому «сейчас» для сравнения
+# с окнами тоже берём в МСК, иначе получается сдвиг на 3 часа (см. daily_digest_job).
+MSK = timezone(timedelta(hours=3))
 
 
 def _fmt_when(apt) -> str:
@@ -69,7 +74,8 @@ async def run_appointment_reminders() -> int:
     sent_total = 0
     try:
         async with AsyncSessionLocal() as db:
-            now = datetime.utcnow()
+            # МСК naive «сейчас» — в одной TZ со слотами приёма (apt_dt).
+            now = datetime.now(MSK).replace(tzinfo=None)
             t24_lo = now + timedelta(hours=23, minutes=45)
             t24_hi = now + timedelta(hours=24, minutes=15)
             t2_lo = now + timedelta(hours=1, minutes=45)

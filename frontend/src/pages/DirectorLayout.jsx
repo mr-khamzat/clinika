@@ -101,8 +101,8 @@ export default function DirectorLayout() {
   useEffect(() => { localStorage.setItem('director_period', period) }, [period])
 
   const handleLogout = () => {
+    // logout() уже чистит все 4 ключа (store/auth + lib/authKeys) — компенсация не нужна
     try { logout() } catch {}
-    try { localStorage.removeItem('clinika_token_' + SLUG) } catch {}
     window.location.href = '/' + SLUG + '/'
   }
 

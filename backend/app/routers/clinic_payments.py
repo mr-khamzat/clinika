@@ -28,6 +28,7 @@ from app.core.deps import get_current_user, require_manager
 from app.core.region_lock import enforce_region_lock
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
+from app.models.clinic import Clinic
 from app.models.payments_clinic import (
     ClinicPayment,
     ClinicPaymentStatus,
@@ -47,6 +48,20 @@ from app.services.acquiring_service import (
 router = APIRouter(tags=["clinic_payments"])
 
 _pay_module = Depends(require_module("online_payments_pro"))
+
+
+async def _verify_clinic(db: AsyncSession, tenant_id: uuid.UUID, clinic_id: uuid.UUID) -> Clinic:
+    """Проверяет, что clinic_id принадлежит тенанту (защита от IDOR).
+
+    Строгое равенство по tenant_id: клиника с tenant_id=NULL не пройдёт.
+    Возвращаем 404 (а не 403), чтобы не подтверждать существование чужого clinic_id.
+    """
+    clinic = (await db.execute(
+        select(Clinic).where(Clinic.id == clinic_id, Clinic.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
+    return clinic
 
 
 # ── Pydantic ─────────────────────────────────────────────────────────────────
@@ -339,6 +354,7 @@ async def list_clinic_payments(
 ):
     if tenant is None:
         return []
+    await _verify_clinic(db, tenant.id, clinic_id)
     q = select(ClinicPayment).where(
         ClinicPayment.tenant_id == tenant.id,
         ClinicPayment.clinic_id == clinic_id,
@@ -365,6 +381,7 @@ async def get_payment_config(
     """Чтение конфига доступно даже без подписки (видно «Подключите модуль»)."""
     if tenant is None:
         return {"configs": [], "available_gateways": list_gateways()}
+    await _verify_clinic(db, tenant.id, clinic_id)
     rows = (await db.execute(
         select(PaymentGatewayConfig).where(
             PaymentGatewayConfig.tenant_id == tenant.id,
@@ -387,6 +404,9 @@ async def upsert_payment_config(
     """Создаёт или обновляет конфиг шлюза (uniq по clinic_id+gateway)."""
     if tenant is None:
         raise HTTPException(status_code=403, detail="Тенант не определён")
+    # IDOR-защита: clinic_id из path обязан принадлежать тенанту (404, иначе чужой
+    # эквайринг можно перезаписать, подставив clinic_id другого тенанта).
+    await _verify_clinic(db, tenant.id, clinic_id)
     if body.gateway not in list_gateways():
         raise HTTPException(
             status_code=400,
@@ -396,6 +416,7 @@ async def upsert_payment_config(
     cfg = (await db.execute(
         select(PaymentGatewayConfig).where(
             and_(
+                PaymentGatewayConfig.tenant_id == tenant.id,
                 PaymentGatewayConfig.clinic_id == clinic_id,
                 PaymentGatewayConfig.gateway == body.gateway,
             )

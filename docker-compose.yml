@@ -23,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: clinika
       POSTGRES_USER: clinika
-      POSTGRES_PASSWORD: clinika_pass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - clinika-db-data:/var/lib/postgresql/data
     healthcheck:

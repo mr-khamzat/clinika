@@ -3,6 +3,7 @@
 Создание подписок, выставление счетов, регистрация платежей.
 Этап 9 SaaS-трансформации.
 """
+import calendar
 import uuid
 from datetime import datetime, date, timedelta
 from decimal import Decimal
@@ -28,7 +29,8 @@ def _add_months(start: date, n: int) -> date:
     month = start.month + n
     year  = start.year + (month - 1) // 12
     month = ((month - 1) % 12) + 1
-    return date(year, month, start.day)
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
 
 def _period_end(start: date, cycle: str) -> date:
     months = {"monthly": 1, "quarterly": 3, "semi_annual": 6, "nine_months": 9, "annual": 12}

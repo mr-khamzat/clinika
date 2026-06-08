@@ -60,7 +60,7 @@ services:
     restart: unless-stopped
     profiles: ["metrics"]
     environment:
-      DATA_SOURCE_NAME: "postgresql://clinika:clinika_pass@clinika-db:5432/clinika?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://clinika:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@clinika-db:5432/clinika?sslmode=disable"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9187/metrics"]
       interval: 30s

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, require_super_admin
 from app.models.user import User
 from app.models.tenant import Tenant, TenantLicense, TenantBranding
 from app.core.tenant import get_current_tenant
@@ -204,16 +204,23 @@ class TenantCreateRequest(BaseModel):
 @router.post("/create", status_code=201)
 async def create_tenant(
     data: TenantCreateRequest,
+    current_user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Создаёт нового тенанта: tenant + license (trial) + branding + admin user.
-    Защищён SECRET_ONBOARDING_KEY из конфига (если задан).
+    Fail-closed: требует аутентификации super_admin (онбординг новых тенантов —
+    операция владельца платформы). Для публичного self-service используйте
+    /signup/* (public_onboarding) с OTP и rate-limit, а НЕ этот эндпоинт.
+    onboarding_secret остаётся опциональным доп.фактором: если задан в конфиге,
+    переданный secret_key обязан совпадать (никогда не fail-open).
     Возвращает логин/пароль и URL нового тенанта.
     """
     from app.config import settings
     from app.services.tenant_onboarding_service import onboard_tenant as _onboard
-    # Проверяем ключ, если он задан в конфиге
+    # Доп.фактор: если секрет задан в конфиге — переданный ключ обязан совпадать.
+    # Аутентификация super_admin выше уже закрывает эндпоинт (fail-closed),
+    # пустой onboarding_secret больше не делает эндпоинт публичным.
     expected = getattr(settings, "onboarding_secret", None)
     if expected and data.secret_key != expected:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Неверный ключ доступа")

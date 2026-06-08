@@ -203,7 +203,7 @@ function MiniApp() {
             return
           } catch (e) {
             if (e?.response?.status === 401) {
-              localStorage.removeItem('clinika_token_' + SLUG)
+              // logout() уже чистит все 4 ключа (см. store/auth + lib/authKeys)
               useAuthStore.getState().logout()
             }
           }

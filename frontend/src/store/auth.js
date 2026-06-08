@@ -1,16 +1,19 @@
 import { SLUG } from '../config'
 import { create } from 'zustand'
+import { userTokenKey, clearAllAuth } from '../lib/authKeys'
 
 const useAuthStore = create((set) => ({
-  token: localStorage.getItem('clinika_token_' + SLUG),
+  token: localStorage.getItem(userTokenKey(SLUG)),
   user: null,
   setToken: (token) => {
-    localStorage.setItem('clinika_token_' + SLUG, token)
+    localStorage.setItem(userTokenKey(SLUG), token)
     set({ token })
   },
   setUser: (user) => set({ user }),
   logout: () => {
-    localStorage.removeItem('clinika_token_' + SLUG)
+    // Полный logout: чистим ВСЕ 4 ключа (access+refresh, user+admin),
+    // иначе интерсептор api/index.js молча восстановит сессию по admin/refresh.
+    clearAllAuth(SLUG)
     set({ token: null, user: null })
   }
 }))

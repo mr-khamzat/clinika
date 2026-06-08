@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { API_BASE, BASE_PATH, SLUG } from '../config'
+import { userTokenKey, adminTokenKey, userRefreshKey, adminRefreshKey } from '../lib/authKeys'
 
 // API_BASE imported from config.js
 
@@ -20,22 +21,22 @@ function _isAdminPath() {
 
 function _getActiveTokenInfo() {
   // Возвращает { kind: 'admin'|'user', tokenKey, refreshKey, token } для текущего контекста.
-  const adminKey = 'clinika_admin_token_' + SLUG
-  const userKey = 'clinika_token_' + SLUG
+  const adminKey = adminTokenKey(SLUG)
+  const userKey = userTokenKey(SLUG)
   const adminToken = localStorage.getItem(adminKey)
   const userToken = localStorage.getItem(userKey)
 
   if (_isAdminPath() && adminToken) {
-    return { kind: 'admin', tokenKey: adminKey, refreshKey: 'clinika_admin_refresh_token_' + SLUG, token: adminToken }
+    return { kind: 'admin', tokenKey: adminKey, refreshKey: adminRefreshKey(SLUG), token: adminToken }
   }
   if (userToken) {
-    return { kind: 'user', tokenKey: userKey, refreshKey: 'clinika_refresh_token_' + SLUG, token: userToken }
+    return { kind: 'user', tokenKey: userKey, refreshKey: userRefreshKey(SLUG), token: userToken }
   }
   // Fallback: если нет user-токена, но есть admin (например, manager/franchise_owner на /{slug}/manager)
   if (adminToken) {
-    return { kind: 'admin', tokenKey: adminKey, refreshKey: 'clinika_admin_refresh_token_' + SLUG, token: adminToken }
+    return { kind: 'admin', tokenKey: adminKey, refreshKey: adminRefreshKey(SLUG), token: adminToken }
   }
-  return { kind: 'user', tokenKey: userKey, refreshKey: 'clinika_refresh_token_' + SLUG, token: null }
+  return { kind: 'user', tokenKey: userKey, refreshKey: userRefreshKey(SLUG), token: null }
 }
 
 api.interceptors.request.use(config => {
