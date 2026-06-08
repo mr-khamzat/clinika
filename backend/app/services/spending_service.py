@@ -39,6 +39,9 @@ async def compute_spending_summary(
     phone_n = normalize_phone(patient_phone)
 
     # ── Список приёмов ─────────────────────────────────────────────────
+    # TODO(#2 PHI): после миграции shadow-колонок заменить
+    # `Appointment.patient_phone == phone_n` на
+    # `Appointment.patient_phone_hash == hash_phone(patient_phone)`.
     q = select(Appointment).where(
         and_(
             Appointment.patient_phone == phone_n,

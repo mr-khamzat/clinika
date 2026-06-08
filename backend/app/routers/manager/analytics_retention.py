@@ -105,6 +105,11 @@ async def doctor_retention(
         # Менеджер привязанный к клинике видит только её.
         conds.append(Appointment.clinic_id == me.clinic_id)
 
+    # TODO(#2 PHI): после миграции shadow-колонок переводить retention-логику на
+    # patient_phone_hash: выбирать Appointment.patient_phone_hash вместо
+    # patient_phone, группировать пары (doctor_id, patient_phone_hash), а ФИО для
+    # отображения брать через расшифрованное property (patient_name_plain), не из
+    # plaintext-колонки. Хэш детерминирован → repeat/first/unique эквивалентны.
     appts_q = await db.execute(
         select(
             Appointment.id,
@@ -233,6 +238,8 @@ async def doctor_retention_patients(
     elif me.clinic_id and me.role.value == "manager":
         conds.append(Appointment.clinic_id == me.clinic_id)
 
+    # TODO(#2 PHI): после миграции — группировать drill-down по patient_phone_hash;
+    # patient_name отдавать через расшифрованное property, не plaintext.
     appts_q = await db.execute(
         select(
             Appointment.patient_phone,

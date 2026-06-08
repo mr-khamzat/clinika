@@ -537,6 +537,8 @@ async def patient_context(
     # Recent appointments
     from app.models.doctor import Appointment
     from sqlalchemy import desc
+    # TODO(#2 PHI): после миграции — exact-match по blind-index:
+    #   .where(Appointment.patient_phone_hash == hash_phone(p.phone))
     ra = await db.execute(
         select(Appointment)
         .where(Appointment.patient_phone == (p.phone if p else ""))

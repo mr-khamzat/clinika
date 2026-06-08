@@ -187,6 +187,12 @@ async def churn_list(
     Loyal = login_count >= 3 И был >= 1 визит в данном тенанте.
     """
     threshold = datetime.utcnow() - timedelta(days=days_threshold)
+    # TODO(#2 PHI): этот сырой SQL джойнит appointments.patient_phone = pa.phone по
+    # PLAINTEXT — после шифрования телефона джойн перестанет совпадать. При
+    # переводе на blind-index сравнивать a.patient_phone_hash с хэшем pa.phone
+    # (например, добавить patient_accounts.phone_hash в #18 и джойнить хэш-к-хэшу),
+    # ЛИБО переписать на ORM с hash_phone(pa.phone). Сырой SQL мимо property —
+    # известная ловушка плана (даст пустые visits после шифрования).
     stmt = text("""
         SELECT pa.id, pa.phone, pa.name, pa.last_seen_at, pa.login_count,
                (SELECT COUNT(*) FROM appointments a WHERE a.tenant_id=:tid AND a.patient_phone=pa.phone) AS visits

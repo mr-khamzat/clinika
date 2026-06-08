@@ -166,6 +166,9 @@ async def _patients_split(
         return (0, 0)
 
     # Все телефоны с appointments в окне
+    # TODO(#2 PHI): заменить distinct(Appointment.patient_phone) на
+    # Appointment.patient_phone_hash (blind-index) после миграции shadow-колонок —
+    # подсчёт new/returning по хэшу эквивалентен, plaintext больше не читаем.
     phones_in = (
         await db.execute(
             select(distinct(Appointment.patient_phone)).where(

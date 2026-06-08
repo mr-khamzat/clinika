@@ -485,6 +485,9 @@ async def aggregated_cabinet(
         raise HTTPException(404, "Patient not found")
 
     # Приёмы
+    # TODO(#2 PHI): после миграции shadow-колонок заменить exact-match на
+    # `Appointment.patient_phone_hash == hash_phone(target_pa.phone)`
+    # (from app.models.doctor import hash_phone).
     appts_r = await db.execute(
         select(Appointment).where(
             Appointment.patient_phone == normalize_phone(target_pa.phone)

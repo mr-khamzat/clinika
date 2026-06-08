@@ -915,6 +915,11 @@ async def get_appointments_report(
     where = and_(*filters)
 
     # ── Основной запрос: записи + врач + клиника (LEFT JOIN) ─────────────
+    # TODO(#2 PHI): этот отчёт ОТОБРАЖАЕТ ПДн — после миграции выбирать сам
+    # Appointment (ORM-объект), а в строку ответа класть расшифрованные
+    # patient_phone_plain / patient_name_plain / notes_plain. Выбор отдельных
+    # шифр-колонок здесь отдал бы 'enc:...' токены — переводить на ORM+property,
+    # НЕ на сырые *_encrypted колонки.
     q = (
         select(
             Appointment.id,

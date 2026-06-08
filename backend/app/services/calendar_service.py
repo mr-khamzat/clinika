@@ -59,6 +59,11 @@ async def upcoming_appointments(
     phone_n = normalize_phone(patient_phone)
     today = date.today()
     horizon = today + timedelta(weeks=weeks_ahead)
+    # TODO(#2 PHI): после миграции shadow-колонок заменить exact-match
+    # `Appointment.patient_phone == phone_n` на
+    # `Appointment.patient_phone_hash == hash_phone(patient_phone)`
+    # (from app.models.doctor import hash_phone). hash_phone уже нормализует номер,
+    # поэтому отдельный normalize_phone для сравнения станет не нужен.
     r = await db.execute(
         select(Appointment, Doctor, Clinic)
         .join(Doctor, Doctor.id == Appointment.doctor_id, isouter=True)

@@ -164,6 +164,11 @@ async def search_patients(
         ).limit(limit)
     )).scalars().all()
     phones_in_tenant.update(r_phones)
+    # TODO(#2 PHI): ilike по plaintext-телефону несовместим с шифрованием.
+    # После миграции shadow-колонок заменить на exact-match по blind-index:
+    #   .where(Appointment.patient_phone_hash == hash_phone(phone))
+    # (from app.models.doctor import hash_phone). Это сужает «поиск по подстроке»
+    # до точного совпадения — согласовано в плане #2 (ilike по телефону → exact-hash).
     a_phones = (await db.execute(
         select(Appointment.patient_phone).where(
             Appointment.tenant_id == api_key.tenant_id,
@@ -217,6 +222,8 @@ async def list_appointments(
     if status:
         q = q.where(Appointment.status == status)
     if phone:
+        # TODO(#2 PHI): после миграции — exact-match по blind-index:
+        #   q = q.where(Appointment.patient_phone_hash == hash_phone(phone))
         q = q.where(Appointment.patient_phone == phone)
     if clinic_id:
         q = q.where(Appointment.clinic_id == clinic_id)

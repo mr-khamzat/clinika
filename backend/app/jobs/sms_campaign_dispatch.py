@@ -54,6 +54,11 @@ async def _fetch_audience_phones(
         phones = (audience_filter or {}).get("phones") or []
         return list(phones)[:limit]
 
+    # TODO(#2 PHI): аудитория рассылки строится из plaintext-телефонов.
+    # После миграции для DISTINCT-набора получателей выбирать пары
+    # (patient_phone_hash, patient_phone_encrypted) и расшифровывать номер
+    # перед отправкой через encryption_service.decrypt — distinct по хэшу,
+    # plaintext в БД не читаем.
     result = await db.execute(
         select(func.distinct(Appointment.patient_phone))
         .where(Appointment.tenant_id == tenant_id)

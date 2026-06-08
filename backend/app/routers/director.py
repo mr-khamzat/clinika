@@ -381,6 +381,7 @@ async def dashboard(
     )
     patients = 0
     if tenant_ids:
+        # TODO(#2 PHI): после миграции — count(distinct Appointment.patient_phone_hash).
         r = await db.execute(
             select(func.count(func.distinct(Appointment.patient_phone))).where(
                 and_(
@@ -1464,6 +1465,7 @@ async def clinics_list(
             appts_cnt = int(r.scalar() or 0)
 
             # Уникальные пациенты
+            # TODO(#2 PHI): после миграции — count(distinct Appointment.patient_phone_hash).
             r = await db.execute(
                 select(func.count(func.distinct(Appointment.patient_phone))).where(
                     and_(

@@ -210,6 +210,10 @@ async def _aggregate_patients(
     db: AsyncSession, clinic_ids: list[uuid.UUID], months: list[str]
 ) -> dict[uuid.UUID, dict[str, float]]:
     """Distinct patient_phone из Appointment по clinic_id и месяцу."""
+    # TODO(#2 PHI): после миграции shadow-колонок заменить
+    # func.distinct(Appointment.patient_phone) на Appointment.patient_phone_hash
+    # (детерминированный blind-index) — счёт уникальных пациентов не меняется,
+    # но perестаём читать plaintext. Кат вместе с миграцией, не раньше.
     if not clinic_ids:
         return {}
     start_year, start_month = months[0].split("-")

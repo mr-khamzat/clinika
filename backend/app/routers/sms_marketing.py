@@ -163,6 +163,10 @@ async def _estimate_audience_size(
 
     # Базовая оценка — distinct patient_phone из appointments тенанта.
     # Окно зависит от типа аудитории.
+    # TODO(#2 PHI): все distinct(Appointment.patient_phone) ниже после миграции
+    # shadow-колонок заменить на distinct(Appointment.patient_phone_hash)
+    # (детерминированный blind-index) — оценка размера аудитории эквивалентна,
+    # plaintext-телефон в БД больше не читаем.
     from app.models.doctor import Appointment
 
     if audience_type == SmsAudienceType.SLEEPING_30D:
