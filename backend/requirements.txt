@@ -8,10 +8,12 @@ pydantic==2.10.6
 pydantic-settings==2.7.1
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.9
+# CVE-фикс (#8): CVE-2024-53981 (DoS при разборе multipart) исправлен в 0.0.18; совместимо с fastapi 0.115 (требует >=0.0.7), мажор не растёт
+python-multipart==0.0.18
 redis==5.0.4
 qrcode[pil]==7.4.2
-Pillow==10.4.0
+# CVE-фикс (#8): подъём с 10.4.0 до 11.3.0 (фикс CVE в декодере/рендере шрифтов); 11.x совместим с qrcode[pil]==7.4.2, не связан с FastAPI/pydantic
+Pillow==11.3.0
 httpx==0.28.1
 python-telegram-bot==21.2
 aiofiles==23.2.1
