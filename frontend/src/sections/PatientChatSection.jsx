@@ -303,14 +303,29 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
 
   return (
     <>
+      {/* ═════ БЛОК: PatientChatSection — inline styles ═════ */}
       <style>{`
         @keyframes msg-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+        @keyframes pchat-pop { from { opacity: 0; transform: translateY(6px) scale(.98) } to { opacity: 1; transform: translateY(0) scale(1) } }
+        @keyframes pchat-pulse-online { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,.6) } 50% { box-shadow: 0 0 0 4px rgba(16,185,129,0) } }
         .msg-in { animation: msg-in .22s cubic-bezier(.22,1,.36,1) }
+        .pchat-header { animation: pchat-pop .32s cubic-bezier(.22,1,.36,1) both }
+        .pchat-online-dot { animation: pchat-pulse-online 2s ease-in-out infinite }
         .chat-scroll::-webkit-scrollbar { width: 6px }
         .chat-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 6px }
         /* Мобильный: пузыри шире (88%), на десктопе оставляем дефолт MessageBubble */
         @media (max-width: 767px) {
           .pchat-bubbles [data-msg-id] > div:last-child { max-width: 88% !important; }
+        }
+        /* Asymmetric corner bubbles — глобально для MessageBubble */
+        .pchat-bubbles [data-msg-id][data-own="true"] > div:last-child {
+          border-radius: 18px 18px 6px 18px !important;
+          background: linear-gradient(135deg, #0097A7 0%, #00838F 50%, #1565C0 100%) !important;
+          box-shadow: 0 4px 12px rgba(0,151,167,.25), inset 0 1px 0 rgba(255,255,255,.15) !important;
+        }
+        .pchat-bubbles [data-msg-id][data-own="false"] > div:last-child {
+          border-radius: 18px 18px 18px 6px !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6) !important;
         }
         /* Sticky композер: безопасная зона iPhone + отступ под tab-bar (80px) */
         .pchat-composer {
@@ -324,6 +339,11 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
           position: sticky;
           top: 8px;
           z-index: 5;
+        }
+        /* Premium textarea focus */
+        .pchat-textarea:focus {
+          border-color: #0097A7 !important;
+          box-shadow: 0 0 0 3px rgba(0,151,167,.15) !important;
         }
       `}</style>
 
@@ -416,27 +436,74 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
 
             {activeId && (
               <>
-                {/* Header треда */}
-                <div className="px-3 py-2.5 flex items-center gap-2 sticky top-0 z-10"
-                     style={{ background: 'var(--surface, #fff)', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
+                {/* ═════ БЛОК: Header активного треда — premium glass ═════ */}
+                <div
+                  className="pchat-header px-3 py-2.5 flex items-center gap-2.5 sticky top-0 z-10"
+                  style={{
+                    background: 'var(--surface, #fff)',
+                    borderBottom: '1px solid var(--border, #e2e8f0)',
+                    boxShadow: '0 2px 12px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.5)',
+                  }}
+                >
                   <button
                     onClick={() => { setActiveId(null) }}
-                    className="md:hidden grid place-items-center flex-shrink-0"
-                    style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg, #0F172A)' }}
+                    className="md:hidden grid place-items-center flex-shrink-0 transition-transform active:scale-95"
+                    style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg, #0F172A)' }}
                     aria-label="Назад к списку"
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 22 }}>arrow_back</span>
                   </button>
+                  {/* Avatar с инициалами клиники */}
+                  {(() => {
+                    const name = active?.thread?.clinic_name || 'Клиника'
+                    const initials = name.split(' ').filter(Boolean).slice(0,2).map(s => s[0]?.toUpperCase()).join('') || 'К'
+                    const isClosed = active?.thread?.status === 'closed'
+                    return (
+                      <div className="relative flex-shrink-0">
+                        <div
+                          className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-extrabold text-[14px]"
+                          style={{
+                            background: 'linear-gradient(135deg, #0097A7 0%, #1565C0 100%)',
+                            boxShadow: '0 4px 12px rgba(0,151,167,.28), inset 0 1px 0 rgba(255,255,255,.25)',
+                          }}
+                        >
+                          {initials}
+                        </div>
+                        {!isClosed && (
+                          <span
+                            aria-hidden
+                            className="pchat-online-dot absolute -bottom-0.5 -right-0.5 rounded-full"
+                            style={{ width: 12, height: 12, background: '#10B981', border: '2px solid #fff' }}
+                          />
+                        )}
+                      </div>
+                    )
+                  })()}
                   <div className="flex-1 min-w-0">
                     <div className="font-bold truncate" style={{ fontSize: 15, color: 'var(--fg, #0F172A)' }}>
                       {active?.thread?.clinic_name || 'Клиника'}
                     </div>
-                    <div className="truncate" style={{ fontSize: 12, color: 'var(--fg-3, #94a3b8)' }}>
-                      {active?.thread?.assigned_doctor_name || active?.thread?.subject || 'поддержка клиники'}
+                    <div className="truncate flex items-center gap-1" style={{ fontSize: 12, color: 'var(--fg-3, #94a3b8)' }}>
+                      {active?.thread?.status !== 'closed' && (
+                        <span className="inline-flex items-center gap-1 font-semibold" style={{ color: '#10B981' }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+                          онлайн
+                        </span>
+                      )}
+                      {(active?.thread?.assigned_doctor_name || active?.thread?.subject) && (
+                        <>
+                          {active?.thread?.status !== 'closed' && <span>·</span>}
+                          <span className="truncate">{active?.thread?.assigned_doctor_name || active?.thread?.subject || 'поддержка'}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                   {active?.thread?.status === 'closed' && (
-                    <span className="px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 600 }}>
+                    <span
+                      className="px-2.5 py-1 rounded-full flex-shrink-0 inline-flex items-center gap-1"
+                      style={{ background: '#F1F5F9', color: '#475569', fontSize: 11, fontWeight: 700, border: '1px solid #E2E8F0' }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>lock</span>
                       закрыт
                     </span>
                   )}
@@ -538,12 +605,18 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                         <button
                           type="button"
                           onClick={() => fileRef.current?.click()}
-                          className="grid place-items-center flex-shrink-0"
-                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                          className="grid place-items-center flex-shrink-0 transition-transform active:scale-95"
+                          style={{
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #F1F5F9, #E2E8F0)',
+                            color: '#475569',
+                            border: '1px solid rgba(0,151,167,.12)',
+                            boxShadow: '0 2px 6px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+                          }}
                           aria-label="Прикрепить файл"
                           title="Прикрепить файл"
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>attach_file</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 22 }}>attach_file</span>
                         </button>
                         <input
                           ref={fileRef}
@@ -560,23 +633,34 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                           type="button"
                           onClick={() => setSlotRequestOpen(true)}
                           disabled={!activeId}
-                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40"
-                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: 'var(--accent, #0097A7)' }}
+                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40 transition-transform active:scale-95"
+                          style={{
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #E0F7FA, #B2EBF2)',
+                            border: '1px solid rgba(0,151,167,.2)',
+                            color: '#0097A7',
+                            boxShadow: '0 2px 6px rgba(0,151,167,.06), inset 0 1px 0 rgba(255,255,255,.6)',
+                          }}
                           aria-label="Записаться"
                           title="Запросить запись"
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>event_available</span>
+                          <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}>event_available</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setStickersOpen(v => !v)}
                           disabled={!activeId}
-                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40"
-                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)' }}
+                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40 transition-transform active:scale-95"
+                          style={{
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #F1F5F9, #E2E8F0)',
+                            border: '1px solid rgba(0,0,0,.06)',
+                            boxShadow: '0 2px 6px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+                          }}
                           aria-label="Стикеры"
                           title="Стикеры"
                         >
-                          <span style={{ fontSize: 22 }}>😀</span>
+                          <span style={{ fontSize: 20 }}>😀</span>
                         </button>
                         <Suspense fallback={null}>
                           {stickersOpen && (
@@ -612,19 +696,32 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                           onKeyDown={onKeyDown}
                           rows={1}
                           placeholder="Напишите сообщение…"
-                          className="flex-1 px-3 py-3 rounded-2xl outline-none resize-none"
-                          style={{ background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', fontSize: 15, color: 'var(--fg, #0F172A)', lineHeight: 1.4, maxHeight: 140, minHeight: 48 }}
+                          className="pchat-textarea flex-1 px-4 py-3 outline-none resize-none transition-all"
+                          style={{
+                            background: '#F8FAFC',
+                            border: '1px solid #E2E8F0',
+                            borderRadius: 22,
+                            fontSize: 15,
+                            color: 'var(--fg, #0F172A)',
+                            lineHeight: 1.4,
+                            maxHeight: 140,
+                            minHeight: 44,
+                          }}
                         />
                         <button
                           type="button"
                           onClick={send}
                           disabled={sending || (!draft.trim() && pickedFiles.length === 0)}
-                          className="grid place-items-center flex-shrink-0 text-white disabled:opacity-40 transition-transform active:scale-95"
-                          style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg, #0097A7, #0A2342)', boxShadow: '0 4px 12px rgba(0,151,167,.35)' }}
+                          className="grid place-items-center flex-shrink-0 text-white disabled:opacity-40 transition-transform active:scale-90"
+                          style={{
+                            width: 44, height: 44, borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #0097A7 0%, #00838F 50%, #1565C0 100%)',
+                            boxShadow: '0 6px 16px rgba(0,151,167,.4), inset 0 1px 0 rgba(255,255,255,.2)',
+                          }}
                           aria-label="Отправить"
                           title="Отправить (Enter)"
                         >
-                          <span className="material-symbols-outlined" style={{ fontSize: 24, fontVariationSettings: "'FILL' 1" }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}>
                             {sending ? 'hourglass_top' : 'send'}
                           </span>
                         </button>

@@ -444,109 +444,205 @@ export default function PatientSubscriptionSection({ sessionToken: sessionTokenP
     const isCancelled = sub.status === 'cancelled'
     const planName = sub.plan_name || (plans?.find(p => (p.key||p.plan_key) === sub.plan)?.title || plans?.find(p => (p.key||p.plan_key) === sub.plan)?.name) || sub.plan
 
+    // ═════ Расчёт прогресса дней подписки ═════
+    let daysLeft = null
+    let daysTotal = null
+    let progressPct = null
+    if (sub.expires_at) {
+      try {
+        const exp = new Date(sub.expires_at).getTime()
+        const start = sub.started_at ? new Date(sub.started_at).getTime() : (exp - 30 * 86400000)
+        const now = Date.now()
+        daysLeft = Math.max(0, Math.ceil((exp - now) / 86400000))
+        daysTotal = Math.max(1, Math.ceil((exp - start) / 86400000))
+        progressPct = Math.min(100, Math.max(0, ((now - start) / (exp - start)) * 100))
+      } catch { /* noop */ }
+    }
+
     return (
-      <div className="flex flex-col gap-5">
-        {/* Hero */}
-        <div
-          className="relative overflow-hidden rounded-3xl p-6 text-white"
-          style={{
-            background: 'linear-gradient(135deg, #F59E0B 0%, #A855F7 60%, #6366F1 100%)',
-            boxShadow: '0 16px 48px rgba(124,58,237,.3)',
-          }}
-        >
-          <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,.18)', filter: 'blur(40px)' }} />
-          <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.12)', filter: 'blur(36px)' }} />
-          <div className="relative">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
-              <span
-                className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
-                style={{ background: 'rgba(255,255,255,.25)' }}
-              >
-                {stMeta.l}
-              </span>
-            </div>
-            <h2 className="text-2xl font-extrabold mb-1.5">«{planName}»</h2>
-            <p className="text-sm opacity-90">
-              {isCancelled
-                ? `Активна до ${fmtDate(sub.expires_at)}, затем будет отключена`
-                : `Активна до ${fmtDate(sub.expires_at)}`}
-            </p>
-            {sub.price_monthly != null && (
-              <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-3xl font-black">{Number(sub.price_monthly).toLocaleString('ru-RU')} ₽</span>
-                <span className="text-sm opacity-80">/ мес</span>
+      <>
+        {/* ═════ БЛОК: PatientSubscriptionSection — inline keyframes ═════ */}
+        <style>{`
+          @keyframes psub-pop { from { opacity: 0; transform: translateY(8px) scale(.985) } to { opacity: 1; transform: translateY(0) scale(1) } }
+          @keyframes psub-shine { 0% { transform: translateX(-100%) } 100% { transform: translateX(100%) } }
+          @keyframes psub-progress { from { width: 0 } }
+          .psub-pop { animation: psub-pop .42s cubic-bezier(.22,1,.36,1) both }
+          .psub-hero-shine::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.18) 50%, transparent 70%);
+            animation: psub-shine 6s ease-in-out infinite;
+            pointer-events: none;
+          }
+        `}</style>
+        <div className="flex flex-col gap-5">
+          {/* ═════ БЛОК: Hero активной подписки — premium gradient ═════ */}
+          <div
+            className="psub-pop psub-hero-shine relative overflow-hidden rounded-3xl p-6 text-white"
+            style={{
+              background: 'linear-gradient(135deg, #F59E0B 0%, #EC4899 35%, #A855F7 70%, #6366F1 100%)',
+              boxShadow: '0 16px 48px rgba(124,58,237,.32), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full" style={{ background: 'rgba(255,255,255,.18)', filter: 'blur(40px)' }} />
+            <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full" style={{ background: 'rgba(255,255,255,.12)', filter: 'blur(36px)' }} />
+            <div className="relative">
+              <div className="flex items-center gap-2 mb-3">
+                <div
+                  className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
+                  style={{ background: 'rgba(255,255,255,.22)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,.3)' }}
+                >
+                  <span className="material-symbols-outlined text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                </div>
+                <span
+                  className="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider inline-flex items-center gap-1"
+                  style={{ background: 'rgba(255,255,255,.25)', backdropFilter: 'blur(8px)' }}
+                >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#fff', boxShadow: '0 0 6px #fff' }} />
+                  {stMeta.l}
+                </span>
               </div>
-            )}
-
-            <div className="flex flex-wrap gap-2 mt-5">
-              {isCancelled ? (
-                <button
-                  onClick={resumeSub}
-                  className="px-4 py-2 rounded-xl font-bold text-sm bg-white transition-all active:scale-95"
-                  style={{ color: '#7C3AED' }}
-                >
-                  Возобновить подписку
-                </button>
-              ) : (
-                <button
-                  onClick={() => setShowCancel(true)}
-                  className="px-4 py-2 rounded-xl font-bold text-sm transition-all active:scale-95"
-                  style={{ background: 'rgba(255,255,255,.18)', color: '#fff', backdropFilter: 'blur(8px)' }}
-                >
-                  Отменить подписку
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Auto-renew toggle */}
-        {!isCancelled && (
-          <div className="rounded-2xl p-4 flex items-center justify-between bg-white" style={{ border: '1px solid rgba(0,0,0,.06)' }}>
-            <div>
-              <p className="text-sm font-semibold" style={{ color: '#0F172A' }}>Авто-продление</p>
-              <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>
-                {sub.auto_renew
-                  ? `Следующее списание: ${fmtDate(sub.next_charge_at || sub.expires_at)}`
-                  : 'Подписка завершится в конце периода'}
+              <h2 className="text-2xl font-extrabold mb-1.5">«{planName}»</h2>
+              <p className="text-sm opacity-95">
+                {isCancelled
+                  ? `Активна до ${fmtDate(sub.expires_at)}, затем будет отключена`
+                  : `Активна до ${fmtDate(sub.expires_at)}`}
               </p>
-            </div>
-            <button
-              onClick={toggleAutoRenew}
-              className="relative w-12 h-7 rounded-full transition-all"
-              style={{ background: sub.auto_renew ? '#10B981' : '#CBD5E1' }}
-              aria-pressed={sub.auto_renew}
-            >
-              <span
-                className="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all"
-                style={{ left: sub.auto_renew ? '22px' : '2px' }}
-              />
-            </button>
-          </div>
-        )}
+              {sub.price_monthly != null && (
+                <div className="mt-4 flex items-baseline gap-1">
+                  <span className="text-3xl font-black">{Number(sub.price_monthly).toLocaleString('ru-RU')} ₽</span>
+                  <span className="text-sm opacity-80">/ мес</span>
+                </div>
+              )}
 
-        {/* Привилегии */}
-        <div>
-          <h3 className="text-base font-bold mb-3" style={{ color: '#0F172A' }}>Ваши привилегии</h3>
-          <Suspense fallback={<div className="h-32 rounded-2xl bg-slate-100" />}>
-            <BenefitsList benefits={benefits || {}} />
+              {/* ═════ Прогресс-бар оставшихся дней ═════ */}
+              {progressPct != null && daysLeft != null && (
+                <div className="mt-5">
+                  <div className="flex items-center justify-between mb-1.5 text-[11px] font-bold opacity-95">
+                    <span>{daysLeft > 0 ? `Осталось ${daysLeft} дн.` : 'Истекает сегодня'}</span>
+                    <span className="opacity-80">{Math.round(progressPct)}%</span>
+                  </div>
+                  <div
+                    className="relative h-2 rounded-full overflow-hidden"
+                    style={{ background: 'rgba(255,255,255,.22)', backdropFilter: 'blur(4px)' }}
+                  >
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full"
+                      style={{
+                        width: `${progressPct}%`,
+                        background: 'linear-gradient(90deg, rgba(255,255,255,.95), rgba(255,255,255,.7))',
+                        boxShadow: '0 0 8px rgba(255,255,255,.5)',
+                        animation: 'psub-progress 1.2s cubic-bezier(.22,1,.36,1)',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 mt-5">
+                {isCancelled ? (
+                  <button
+                    onClick={resumeSub}
+                    className="px-5 py-2.5 rounded-xl font-bold text-sm bg-white transition-transform active:scale-95 inline-flex items-center gap-1.5"
+                    style={{ color: '#7C3AED', boxShadow: '0 4px 14px rgba(255,255,255,.3)' }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>refresh</span>
+                    Возобновить подписку
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowCancel(true)}
+                    className="px-4 py-2 rounded-xl font-bold text-sm transition-transform active:scale-95"
+                    style={{ background: 'rgba(255,255,255,.2)', color: '#fff', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,.25)' }}
+                  >
+                    Отменить подписку
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ═════ Auto-renew toggle — premium glass card ═════ */}
+          {!isCancelled && (
+            <div
+              className="psub-pop rounded-2xl p-4 flex items-center justify-between bg-white"
+              style={{
+                border: '1px solid rgba(0,0,0,.06)',
+                boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+                animationDelay: '.08s',
+              }}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: sub.auto_renew
+                      ? 'linear-gradient(135deg,#34D399,#10B981)'
+                      : 'linear-gradient(135deg,#CBD5E1,#94A3B8)',
+                    boxShadow: sub.auto_renew
+                      ? '0 4px 12px rgba(16,185,129,.28)'
+                      : '0 2px 8px rgba(148,163,184,.2)',
+                  }}
+                >
+                  <span className="material-symbols-outlined text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>
+                    {sub.auto_renew ? 'autorenew' : 'pause_circle'}
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-bold" style={{ color: '#0F172A' }}>Авто-продление</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#64748B' }}>
+                    {sub.auto_renew
+                      ? `Следующее списание: ${fmtDate(sub.next_charge_at || sub.expires_at)}`
+                      : 'Подписка завершится в конце периода'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={toggleAutoRenew}
+                className="relative w-12 h-7 rounded-full transition-all flex-shrink-0"
+                style={{
+                  background: sub.auto_renew
+                    ? 'linear-gradient(135deg,#34D399,#10B981)'
+                    : '#CBD5E1',
+                  boxShadow: sub.auto_renew
+                    ? '0 2px 6px rgba(16,185,129,.3), inset 0 1px 0 rgba(255,255,255,.15)'
+                    : 'inset 0 2px 4px rgba(0,0,0,.08)',
+                }}
+                aria-pressed={sub.auto_renew}
+              >
+                <span
+                  className="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all"
+                  style={{ left: sub.auto_renew ? '22px' : '2px', boxShadow: '0 2px 4px rgba(0,0,0,.15)' }}
+                />
+              </button>
+            </div>
+          )}
+
+          {/* ═════ Привилегии ═════ */}
+          <div className="psub-pop" style={{ animationDelay: '.12s' }}>
+            <h3 className="text-base font-extrabold mb-3 inline-flex items-center gap-1.5" style={{ color: '#0F172A' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 20, color: '#A855F7', fontVariationSettings: "'FILL' 1" }}>verified</span>
+              Ваши привилегии
+            </h3>
+            <Suspense fallback={<div className="h-32 rounded-2xl bg-slate-100 animate-pulse" />}>
+              <BenefitsList benefits={benefits || {}} />
+            </Suspense>
+          </div>
+
+          {/* CancelModal */}
+          <Suspense fallback={null}>
+            {showCancel && (
+              <CancelModal
+                open={showCancel}
+                planName={planName}
+                expiresAt={sub.expires_at}
+                onClose={() => setShowCancel(false)}
+                onSubmit={cancelSub}
+              />
+            )}
           </Suspense>
         </div>
-
-        {/* CancelModal */}
-        <Suspense fallback={null}>
-          {showCancel && (
-            <CancelModal
-              open={showCancel}
-              planName={planName}
-              expiresAt={sub.expires_at}
-              onClose={() => setShowCancel(false)}
-              onSubmit={cancelSub}
-            />
-          )}
-        </Suspense>
-      </div>
+      </>
     )
   }
 
