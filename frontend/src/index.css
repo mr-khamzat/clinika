@@ -39,6 +39,7 @@
   }
 
   body {
+    background: #0A1929;
     @apply text-gray-900 dark:text-gray-100;
   }
 
@@ -177,6 +178,7 @@ html[data-theme="dark"] {
   color-scheme: dark;
 }
 html[data-theme="dark"] body {
+    background: #0A1929;
   background: var(--bg);
   color: var(--fg);
 }
