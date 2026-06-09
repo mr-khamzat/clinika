@@ -670,26 +670,26 @@ function ReferralCard({ referral, index, onQr }) {
       <div className="px-4 py-2.5 space-y-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[13px] text-gray-400">calendar_today</span>
+            <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">calendar_today</span>
             <span className="font-semibold text-gray-700 dark:text-gray-200">
               {referral.appointment_at ? fmt(referral.appointment_at) : fmt(referral.created_at)}
             </span>
           </span>
           {referral.short_code && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px] text-gray-400">tag</span>
+              <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">tag</span>
               <span className="font-bold text-gray-700 dark:text-gray-200 tracking-widest">{referral.short_code}</span>
             </span>
           )}
           {referral.from_clinic_name && (
             <span className="flex items-center gap-1 min-w-0">
-              <span className="material-symbols-outlined text-[13px] text-gray-400">arrow_forward</span>
+              <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">arrow_forward</span>
               <span className="truncate">{referral.from_clinic_name}</span>
             </span>
           )}
         </div>
         {referral.notes && (
-          <p className="text-xs text-gray-400 italic truncate">"{referral.notes}"</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400 italic truncate">"{referral.notes}"</p>
         )}
         {isActive && referral.qr_code && (
           <button onClick={() => onQr(referral.qr_code)}
@@ -746,14 +746,14 @@ function VisitCard({ visit, patientName }) {
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <p className="font-bold text-gray-900 dark:text-gray-100 text-[13px] leading-snug truncate">{first}</p>
-            <p className="text-[11px] text-gray-500 mt-0.5 truncate">{doctor}</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{doctor}</p>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             {isFirst && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,.1)', color: '#7C3AED' }}>1-й</span>}
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${vc.color}1A`, color: vc.color }}>{vc.label}</span>
           </div>
         </div>
-        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-500">
+        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
             <span className="material-symbols-outlined" style={{ fontSize:13 }}>schedule</span>
             {fmtMisDate(visit.time_start)}
@@ -858,18 +858,18 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
       <div className="px-4 py-3 space-y-2">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px] text-gray-400">calendar_today</span>
+            <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">calendar_today</span>
             <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAptDate(apt.appointment_date)}</span>
           </span>
           {(startHHMM || endHHMM) && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px] text-gray-400">schedule</span>
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">schedule</span>
               <span className="font-semibold text-gray-700 dark:text-gray-200">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</span>
             </span>
           )}
           {apt.clinic_name && (
             <span className="flex items-center gap-1 min-w-0">
-              <span className="material-symbols-outlined text-[14px] text-gray-400">location_on</span>
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">location_on</span>
               <span className="truncate">{apt.clinic_name}</span>
             </span>
           )}
@@ -883,7 +883,7 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
               Показать QR
             </button>
           ) : (
-            <span className="text-xs text-gray-400">QR недоступен</span>
+            <span className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400">QR недоступен</span>
           )}
           {apt.short_code && (
             <span className="px-2.5 py-1.5 rounded-lg text-xs font-bold tracking-widest flex-shrink-0"
@@ -936,11 +936,11 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
               {showCal && (
                 <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white dark:bg-gray-900 shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
                   <button onClick={() => { downloadIcs(apt); setShowCal(false) }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50">
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800">
                     .ics (Apple/Outlook)
                   </button>
                   <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)}
-                    className="w-full block text-left px-3 py-2 text-xs hover:bg-gray-50 border-t border-gray-50">
+                    className="w-full block text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-50 dark:border-gray-800">
                     Google Calendar
                   </a>
                 </div>
@@ -1021,8 +1021,8 @@ function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
           </button>
           {showCal && (
             <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white dark:bg-gray-900 shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
-              <button onClick={() => { downloadIcs(apt); setShowCal(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50">.ics (Apple/Outlook)</button>
-              <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)} className="w-full block text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-50">Google Calendar</a>
+              <button onClick={() => { downloadIcs(apt); setShowCal(false) }} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800">.ics (Apple/Outlook)</button>
+              <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)} className="w-full block text-left px-3 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-50 dark:border-gray-800">Google Calendar</a>
             </div>
           )}
         </div>
@@ -1726,7 +1726,7 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
       <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900 dark:text-gray-100 text-base">Перенос записи</h3>
-          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 dark:text-gray-400 text-2xl leading-none">×</button>
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{apt.doctor_name} · {apt.clinic_name}</p>
 
@@ -2084,7 +2084,7 @@ function HealthHub({ sessionToken, phone }) {
       <div className="mb-4 -mx-1 px-1 overflow-x-auto pb-1">
         <Tabs items={tabItems} value={sub} onChange={setSub} />
       </div>
-      <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+      <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
         {sub === 'vitals'        && <VitalsTab sessionToken={sessionToken} phone={phone} />}
         {sub === 'medcard'       && <MedCardTab sessionToken={sessionToken} phone={phone} apiBase={API_BASE} />}
         {sub === 'prescriptions' && <PrescriptionsTab sessionToken={sessionToken} apiBase={API_BASE} />}
@@ -2180,7 +2180,7 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
           </button>
         </div>
 
-        <p className="text-[11px] text-gray-400 mt-3 leading-relaxed">
+        <p className="text-[11px] text-gray-400 dark:text-gray-500 dark:text-gray-400 mt-3 leading-relaxed">
           «Скачать» — JSON-файл со всеми вашими данными в нашей системе:
           профиль, согласия, направления, записи, чаты, документы.
           «Удалить» — анонимизация: имя, телефон, дата рождения обнуляются
@@ -3105,7 +3105,7 @@ export default function PatientCabinet() {
             <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', boxShadow: '0 2px 12px rgba(0,0,0,.04)', border: '1px solid rgba(0,0,0,.05)' }}>
               <button
                 onClick={toggleTheme}
-                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50"
+                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50 dark:active:bg-gray-800"
                 style={{ minHeight: 56, paddingTop: 10, paddingBottom: 10 }}
               >
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#EDE9FE' }}>
@@ -3121,7 +3121,7 @@ export default function PatientCabinet() {
               </button>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50"
+                className="w-full flex items-center gap-3 px-3 text-left active:bg-gray-50 dark:active:bg-gray-800"
                 style={{ minHeight: 56, paddingTop: 10, paddingBottom: 10, borderTop: '1px solid rgba(0,0,0,.05)' }}
               >
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#FEE2E2' }}>
@@ -3139,7 +3139,7 @@ export default function PatientCabinet() {
         {/* ── СЕКЦИЯ: Чаты → унифицированный hub ── */}
         {section === 'chats' && !isApt && (
           <div className="tab-enter -mx-1">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientChatHub
                 sessionToken={localStorage.getItem(SESSION_KEY)}
                 patientPhone={patient_phone}
@@ -3201,7 +3201,7 @@ export default function PatientCabinet() {
                     <span className="material-symbols-outlined" style={{ fontSize: 20, color: item.color, fontVariationSettings:"'FILL' 1" }}>{item.icon}</span>
                   </div>
                   <div>
-                    <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">{item.label}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400 font-semibold uppercase tracking-wide">{item.label}</p>
                     <p className="text-sm font-bold text-gray-800 dark:text-gray-100 mt-0.5">{item.value}</p>
                   </div>
                 </div>
@@ -3422,7 +3422,7 @@ export default function PatientCabinet() {
                 <span className="material-symbols-outlined text-base" style={{ color:'#0097A7' }}>medication</span>
                 <h2 className="font-bold text-gray-800 dark:text-gray-100 text-sm">Мои назначения</h2>
               </div>
-              <p className="text-xs text-gray-400 mt-2">Скоро появится: список лекарств с инструкциями, выписанных врачом</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400 mt-2">Скоро появится: список лекарств с инструкциями, выписанных врачом</p>
             </div>
             */}
 
@@ -3443,7 +3443,7 @@ export default function PatientCabinet() {
         {tab === 'referrals' && !data?.type && (
           <div className="tab-enter">
             <div className="relative mb-4">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl pointer-events-none">search</span>
+              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-xl pointer-events-none">search</span>
               <input type="text" placeholder="Поиск по клинике, услуге..." value={searchQ} onChange={e => setSearchQ(e.target.value)}
                 className="w-full h-12 pl-12 pr-4 rounded-2xl text-sm focus:outline-none focus:ring-2"
                 style={{ background: 'white', border: '1.5px solid rgba(0,0,0,.08)', boxShadow: '0 2px 8px rgba(0,0,0,.05)' }} />
@@ -3511,7 +3511,7 @@ export default function PatientCabinet() {
         {/* ── MESSAGES — Глава 9: премиум-чат с клиниками ── */}
         {tab === 'messages' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientChatSection
                 sessionToken={localStorage.getItem(SESSION_KEY)}
                 onGoSubscription={() => goTo('subscription')}
@@ -3523,7 +3523,7 @@ export default function PatientCabinet() {
         {/* ── CALENDAR — Глава 9: предстоящие приёмы + ICS-подписка ── */}
         {tab === 'calendar' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientCalendarSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3532,7 +3532,7 @@ export default function PatientCabinet() {
         {/* ── APPOINTMENTS — мои записи к врачам ── */}
         {tab === 'appointments' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <AppointmentsTab
                 sessionToken={localStorage.getItem(SESSION_KEY)}
                 onBookNew={() => window.location.href = `${BASE_PATH}/book`}
@@ -3544,7 +3544,7 @@ export default function PatientCabinet() {
         {/* ── HEALTH — медкарта/анализы/назначения/документы/витальные ── */}
         {tab === 'health' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <HealthHub sessionToken={localStorage.getItem(SESSION_KEY)} phone={patient_phone} />
             </Suspense>
           </div>
@@ -3553,7 +3553,7 @@ export default function PatientCabinet() {
         {/* ── LOYALTY — Глава 8: программа лояльности (тиры/баллы/награды) ── */}
         {tab === 'loyalty' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientLoyaltySection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3562,7 +3562,7 @@ export default function PatientCabinet() {
         {/* ── SPENDING — Глава 8: расходник (траты по годам/категориям/клиникам) ── */}
         {tab === 'spending' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientSpendingSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3571,7 +3571,7 @@ export default function PatientCabinet() {
         {/* ── SUBSCRIPTION — Глава 9: премиум-подписка «Здоровье+» ── */}
         {tab === 'subscription' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientSubscriptionSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3580,7 +3580,7 @@ export default function PatientCabinet() {
         {/* ── DOCUMENTS — Глава 9: личное хранилище документов пациента ── */}
         {tab === 'documents' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientDocumentsSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3599,7 +3599,7 @@ export default function PatientCabinet() {
         {/* ── MEDCARD — медкарта (история, диагнозы) ── */}
         {tab === 'medcard' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <MedCardTab primary="#0097A7" mis={mis_info} visits={mis_visits} patientName={patient_name} />
             </Suspense>
           </div>
@@ -3608,7 +3608,7 @@ export default function PatientCabinet() {
         {/* ── VITALS — показатели (вес/рост/давление/пульс) ── */}
         {tab === 'vitals' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <VitalsTab primary="#0097A7" phone={patient_phone} />
             </Suspense>
           </div>
@@ -3617,7 +3617,7 @@ export default function PatientCabinet() {
         {/* ── MEDICAL RECORD — единая электронная медкарта (агрегатор) ── */}
         {tab === 'medical-record' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientMedicalRecord apiBase={API_BASE} sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3626,7 +3626,7 @@ export default function PatientCabinet() {
         {/* ── DYNAMICS — динамика лаб-показателей (line-charts recharts) ── */}
         {tab === 'dynamics' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientLabDynamics apiBase={API_BASE} sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3635,7 +3635,7 @@ export default function PatientCabinet() {
         {/* ── WELLNESS — партнёры скидок (Глава 10) ── */}
         {tab === 'wellness' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientWellnessSection sessionToken={localStorage.getItem(SESSION_KEY)} />
             </Suspense>
           </div>
@@ -3644,7 +3644,7 @@ export default function PatientCabinet() {
         {/* ── FAMILY — семейный профиль (Глава 8) ── */}
         {tab === 'family' && !data?.type && (
           <div className="tab-enter">
-            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
               <PatientFamilySection
                 sessionToken={localStorage.getItem(SESSION_KEY)}
                 ownerName={patient_name}
@@ -3920,7 +3920,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
 
         {/* List */}
         {members.length === 0 ? (
-          <p className="text-center text-sm text-gray-400 py-4">Семейный список пуст</p>
+          <p className="text-center text-sm text-gray-400 dark:text-gray-500 dark:text-gray-400 py-4">Семейный список пуст</p>
         ) : (
           <div className="space-y-2 mb-3">
             {members.map(m => (
@@ -3937,7 +3937,7 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
                   style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', color:'#fff' }}>
                   Войти
                 </button>
-                <button onClick={() => remove(m.id)} className="text-gray-300 text-lg leading-none" title="Удалить">×</button>
+                <button onClick={() => remove(m.id)} className="text-gray-300 dark:text-gray-500 dark:text-gray-400 text-lg leading-none" title="Удалить">×</button>
               </div>
             ))}
           </div>
