@@ -77,6 +77,15 @@ services:
     container_name: clinika-backend
     restart: always
     env_file: .env
+    # Разделение ролей БД (находка #1, RLS-энфорсмент): миграции (alembic) идут под
+    # MIGRATION_DATABASE_URL=clinika (владелец/superuser — нужны DDL-права), а рантайм
+    # (uvicorn) — под DATABASE_URL=clinika_app (NOSUPERUSER NOBYPASSRLS), иначе superuser
+    # обходит RLS и изоляция тенантов не работает. $$ => литерал $ для shell в контейнере
+    # (compose не интерполирует); обе переменные берутся из .env (env_file выше).
+    command:
+      - sh
+      - -c
+      - DATABASE_URL="$$MIGRATION_DATABASE_URL" alembic upgrade heads && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*
     volumes:
       - ./VERSION:/app/VERSION:ro
       - /opt/clinika/uploads:/app/uploads
