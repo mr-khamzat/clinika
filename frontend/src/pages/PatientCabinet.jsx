@@ -474,9 +474,10 @@ function LoginScreen({ onLogin, errorMsg }) {
       try { localStorage.setItem('clinika_remember_me', rememberMe ? '1' : '0') } catch {}
       const r = await axios.post(`${API}/patient/by-code`, { code: parseInt(code), phone })
       setSuccess(true)
+      // короткая анимация успеха, потом переходим — родитель сразу начнёт loadData
       setTimeout(() => {
         onLogin(r.data.referral_id, r.data.patient_token, r.data.session_token, rememberMe)
-      }, 900)
+      }, 500)
     } catch (e) {
       setErr(e.response?.data?.detail || 'Направление не найдено')
       setLoading(false)
