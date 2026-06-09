@@ -115,24 +115,9 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
         overflow: 'hidden',
       }}
     >
-      {/* Цветной индикатор-бар (color_label) — inset, не выходит за карточку */}
-      {labelHex && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 4,
-            top: 10,
-            bottom: 10,
-            width: 3,
-            borderRadius: 2,
-            background: labelHex,
-          }}
-        />
-      )}
-      {/* Аватар клиники/пациента */}
+      {/* Аватар клиники/пациента (с опциональной цветной точкой-меткой color_label) */}
       <div
-        className="flex-shrink-0 grid place-items-center font-bold text-white"
+        className="flex-shrink-0 relative grid place-items-center font-bold text-white"
         style={{
           width: 44, height: 44, borderRadius: 12,
           background: `linear-gradient(135deg, ${color}, ${color}AA)`,
@@ -140,6 +125,21 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
         }}
       >
         {initials}
+        {/* Color-label точка-метка поверх аватара (вместо вертикального бара слева) */}
+        {labelHex && (
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: -3, right: -3,
+              width: 12, height: 12,
+              borderRadius: '50%',
+              background: labelHex,
+              border: '2px solid white',
+              boxShadow: '0 1px 3px rgba(0,0,0,.25)',
+            }}
+          />
+        )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
