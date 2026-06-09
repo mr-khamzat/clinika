@@ -47,6 +47,10 @@
   :root { color-scheme: light; }
   html.dark { color-scheme: dark; }
 
+/* === Cabinet body fond — переменная для light/dark === */
+:root { --cabinet-bg: #F0F4F8; }
+html.dark, html[data-theme="dark"] { --cabinet-bg: #0A1320; }
+
   /* Лучший скроллбар */
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }

@@ -1814,7 +1814,7 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
   const hasSchedule = (profile?.doctor?.has_schedule) ?? doc.has_schedule
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:300, background:'#F0F4F8', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:300, background:'var(--cabinet-bg, #F0F4F8)', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
       <style>{`@keyframes docProfIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
       {/* Header с back-button — z-index приоритетный, чтобы кнопка была кликабельна на мобильнике */}
@@ -2811,7 +2811,7 @@ export default function PatientCabinet() {
       apiBase={API_BASE}
       token={callToken}
     />
-    <div className="min-h-screen pb-24" style={{ background: '#F0F4F8' }}>
+    <div className="min-h-screen pb-24" style={{ background: 'var(--cabinet-bg, #F0F4F8)' }}>
       <style>{`
         @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
