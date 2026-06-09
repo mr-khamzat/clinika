@@ -23,10 +23,37 @@
  *   - анимация прогресс-бара (transition: width 0.5s)
  * ========================================
  */
-import { useEffect, useState, useCallback, lazy, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, lazy, Suspense } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
 import TierBadge, { TIER_PALETTE, paletteFor } from '../components/loyalty/TierBadge'
+
+// ═════ БЛОК: useCountUp — animated number tween (premium hero metric) ═════
+function useCountUp(target, { duration = 1200, enabled = true } = {}) {
+  const [value, setValue] = useState(enabled ? 0 : target)
+  const rafRef = useRef(null)
+  const startRef = useRef(null)
+  useEffect(() => {
+    if (!enabled) { setValue(target); return }
+    const from = 0
+    const to = Number(target) || 0
+    if (to === from) { setValue(to); return }
+    cancelAnimationFrame(rafRef.current)
+    startRef.current = null
+    const step = (ts) => {
+      if (startRef.current == null) startRef.current = ts
+      const elapsed = ts - startRef.current
+      const t = Math.min(1, elapsed / duration)
+      // easeOutExpo
+      const eased = t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+      setValue(Math.round(from + (to - from) * eased))
+      if (t < 1) rafRef.current = requestAnimationFrame(step)
+    }
+    rafRef.current = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [target, duration, enabled])
+  return value
+}
 
 const LoyaltyTransactionsList = lazy(() => import('../components/loyalty/LoyaltyTransactionsList'))
 const LoyaltyRewardsCatalog   = lazy(() => import('../components/loyalty/LoyaltyRewardsCatalog'))
@@ -125,9 +152,9 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
   if (loading) {
     return (
       <div className="px-1 pt-2 space-y-3">
-        <div className="rounded-3xl h-48 animate-pulse" style={{ background: '#e5e7eb' }} />
-        <div className="rounded-2xl h-12 animate-pulse" style={{ background: '#e5e7eb' }} />
-        <div className="rounded-2xl h-32 animate-pulse" style={{ background: '#e5e7eb' }} />
+        <div className="rounded-3xl h-56 animate-pulse bg-gray-200 dark:bg-gray-800" />
+        <div className="rounded-2xl h-12 animate-pulse bg-gray-200 dark:bg-gray-800" />
+        <div className="rounded-2xl h-32 animate-pulse bg-gray-200 dark:bg-gray-800" />
       </div>
     )
   }
@@ -157,111 +184,188 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
   }
 
   const achievements = buildAchievements(account)
+  const animatedPoints = useCountUp(points, { duration: 1200 })
 
   return (
     <div className="px-1 pt-2 pb-6 space-y-4">
       <style>{`
-        @keyframes loyaltyShimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
+        @keyframes loyaltyShimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+        @keyframes loyaltyPop { from{opacity:0; transform:translateY(10px) scale(.98)} to{opacity:1; transform:translateY(0) scale(1)} }
+        @keyframes loyaltyHeroIn { from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:translateY(0)} }
+        @keyframes loyaltyGlow { 0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} 50%{box-shadow:0 0 24px 4px rgba(255,255,255,.35)} }
+        @keyframes loyaltyProgress { from{width:0%} to{width:var(--lp-target,0%)} }
+        .lp-card { animation: loyaltyPop .55s cubic-bezier(.22,1,.36,1) both; }
+        .lp-hero { animation: loyaltyHeroIn .7s cubic-bezier(.22,1,.36,1) both; }
+        .lp-progress-fill {
+          animation: loyaltyProgress 1.2s cubic-bezier(.22,1,.36,1) .15s both;
+          transition: width 0.6s cubic-bezier(.22,1,.36,1);
         }
-        .loyalty-progress-fill { transition: width 0.6s cubic-bezier(.22,1,.36,1); }
+        .lp-tap:active { transform: scale(.97); }
       `}</style>
 
-      {/* ── Hero-карточка тира ── */}
+      {/* ═════ БЛОК: Hero — премиум-карточка тира с count-up баллов ═════ */}
       <div
-        className="relative overflow-hidden rounded-3xl p-6 text-white"
+        className="lp-hero relative overflow-hidden rounded-3xl p-6 text-white"
         style={{
           background: `linear-gradient(135deg, ${palette.from} 0%, ${palette.to} 100%)`,
           color: palette.text,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+          boxShadow: '0 14px 40px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,.35)',
         }}
       >
         {/* shimmer overlay */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
-            background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.25) 50%, transparent 70%)',
-            animation: 'loyaltyShimmer 3.5s ease-in-out infinite',
+            background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.28) 50%, transparent 70%)',
+            animation: 'loyaltyShimmer 3.8s ease-in-out infinite',
           }}
         />
-        {/* декоративная медаль фоном */}
+        {/* декоративная медаль */}
         <span
           className="material-symbols-outlined absolute"
           style={{
-            top: -20, right: -20, fontSize: 200, opacity: 0.12,
+            top: -30, right: -28, fontSize: 220, opacity: 0.13,
             fontVariationSettings: `'FILL' ${palette.fill}`,
             color: palette.text,
             pointerEvents: 'none',
+            transform: 'rotate(-8deg)',
           }}
         >
           {palette.icon}
         </span>
 
         <div className="relative">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Ваш статус</p>
-              <h2 className="text-2xl font-extrabold mt-0.5">{palette.label}</h2>
+          {/* premium tier-badge */}
+          <div className="flex items-center justify-between mb-4">
+            <div
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5"
+              style={{
+                background: 'rgba(255,255,255,0.22)',
+                backdropFilter: 'blur(6px)',
+                border: '1px solid rgba(255,255,255,0.35)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.4)',
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
+              >
+                workspace_premium
+              </span>
+              <span className="text-xs font-extrabold uppercase tracking-wider">{palette.label}</span>
             </div>
             <span
               className="material-symbols-outlined"
-              style={{ fontSize: 44, fontVariationSettings: `'FILL' ${palette.fill}`, color: palette.text }}
+              style={{
+                fontSize: 48,
+                fontVariationSettings: `'FILL' ${palette.fill}`,
+                color: palette.text,
+                filter: 'drop-shadow(0 4px 12px rgba(0,0,0,.25))',
+              }}
             >
               {palette.icon}
             </span>
           </div>
 
-          <div className="mt-4">
-            <p className="text-xs opacity-70 mb-0.5">Баллы на счету</p>
-            <p className="text-5xl font-black leading-none tracking-tight">
-              {points.toLocaleString('ru-RU')}
+          {/* large count-up */}
+          <div className="mt-2">
+            <p className="text-[11px] font-bold uppercase tracking-widest opacity-75">Баллы на счету</p>
+            <p
+              className="font-black leading-none tracking-tight tabular-nums mt-1"
+              style={{ fontSize: 'clamp(40px, 11vw, 56px)' }}
+            >
+              {animatedPoints.toLocaleString('ru-RU')}
               <span className="text-base font-bold ml-2 opacity-80">баллов</span>
             </p>
           </div>
 
           {/* Прогресс до следующего тира */}
           {isMax ? (
-            <div className="mt-5 rounded-xl px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.18)' }}>
-              <p className="text-sm font-bold">Максимальный уровень — вы лучший!</p>
-              <p className="text-xs opacity-80 mt-0.5">Награды и привилегии доступны без ограничений.</p>
+            <div
+              className="mt-5 rounded-2xl px-4 py-3 inline-flex items-center gap-2"
+              style={{
+                background: 'rgba(255,255,255,0.20)',
+                border: '1px solid rgba(255,255,255,0.30)',
+                backdropFilter: 'blur(6px)',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}>diamond</span>
+              <div>
+                <p className="text-sm font-extrabold leading-tight">Максимальный уровень</p>
+                <p className="text-[11px] opacity-85 mt-0.5">Все награды и привилегии доступны</p>
+              </div>
             </div>
           ) : (
             <div className="mt-5">
-              <div className="flex items-center justify-between mb-1.5 text-xs font-semibold">
-                <span className="opacity-90">До {nextLabel}</span>
-                <span>{toNext > 0 ? `осталось ${toNext.toLocaleString('ru-RU')}` : 'почти!'}</span>
+              <div className="flex items-center justify-between mb-2 text-xs font-bold">
+                <span className="opacity-90 inline-flex items-center gap-1">
+                  <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>trending_up</span>
+                  До {nextLabel}
+                </span>
+                <span className="tabular-nums">
+                  {toNext > 0 ? `${toNext.toLocaleString('ru-RU')} баллов` : 'почти!'}
+                </span>
               </div>
               <div
                 className="relative w-full rounded-full overflow-hidden"
-                style={{ height: 10, background: 'rgba(255,255,255,0.25)' }}
+                style={{
+                  height: 12,
+                  background: 'rgba(0,0,0,0.18)',
+                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,.18)',
+                }}
               >
                 <div
-                  className="loyalty-progress-fill h-full rounded-full"
+                  className="lp-progress-fill h-full rounded-full relative overflow-hidden"
                   style={{
+                    '--lp-target': `${progressPct}%`,
                     width: `${progressPct}%`,
-                    background: 'rgba(255,255,255,0.85)',
+                    background: 'linear-gradient(90deg, #fff 0%, rgba(255,255,255,.85) 100%)',
+                    boxShadow: '0 0 12px rgba(255,255,255,.6)',
                   }}
-                />
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background: 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%)',
+                      animation: 'loyaltyShimmer 2.2s ease-in-out infinite',
+                    }}
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between mt-1.5 text-[11px] opacity-75">
+              <div className="flex items-center justify-between mt-1.5 text-[11px] opacity-75 tabular-nums">
                 <span>0</span>
                 {nextTierAt > 0 && <span>{nextTierAt.toLocaleString('ru-RU')}</span>}
               </div>
             </div>
           )}
 
-          {/* Микро-сводка */}
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.18)' }}>
-              <p className="text-[10px] uppercase tracking-wide opacity-70">Потрачено всего</p>
-              <p className="text-sm font-extrabold mt-0.5">
-                {totalSpent.toLocaleString('ru-RU')} ₽
+          {/* Микро-сводка glass-карточки */}
+          <div className="grid grid-cols-2 gap-2.5 mt-5">
+            <div
+              className="rounded-2xl px-3 py-2.5"
+              style={{
+                background: 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,.25)',
+                backdropFilter: 'blur(6px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.3)',
+              }}
+            >
+              <p className="text-[10px] uppercase tracking-wider opacity-75 font-bold">Потрачено</p>
+              <p className="text-base font-extrabold mt-0.5 tabular-nums">
+                {totalSpent.toLocaleString('ru-RU')} <span className="text-xs opacity-85">₽</span>
               </p>
             </div>
-            <div className="rounded-xl px-3 py-2" style={{ background: 'rgba(255,255,255,0.18)' }}>
-              <p className="text-[10px] uppercase tracking-wide opacity-70">В программе с</p>
-              <p className="text-sm font-extrabold mt-0.5">
+            <div
+              className="rounded-2xl px-3 py-2.5"
+              style={{
+                background: 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,.25)',
+                backdropFilter: 'blur(6px)',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,.3)',
+              }}
+            >
+              <p className="text-[10px] uppercase tracking-wider opacity-75 font-bold">В программе с</p>
+              <p className="text-base font-extrabold mt-0.5">
                 {account?.joined_at
                   ? new Date(account.joined_at).toLocaleDateString('ru-RU', { month: 'short', year: 'numeric' })
                   : '—'}
@@ -271,10 +375,12 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
         </div>
       </div>
 
-      {/* ── Tabs ── */}
+      {/* ═════ БЛОК: Tabs — переключатель сегментов ═════ */}
       <div
-        className="flex gap-1 p-1 rounded-2xl overflow-x-auto"
-        style={{ background: '#f3f4f6' }}
+        className="flex gap-1 p-1 rounded-2xl overflow-x-auto bg-gray-100 dark:bg-gray-800/60"
+        style={{
+          boxShadow: 'inset 0 1px 2px rgba(0,0,0,.04)',
+        }}
       >
         {[
           { key: 'history',      label: 'История',     icon: 'history' },
@@ -286,15 +392,22 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all"
+              className="lp-tap flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-bold transition-all"
               style={{
-                background: active ? '#fff' : 'transparent',
+                background: active
+                  ? 'linear-gradient(135deg,#fff 0%,#f8fafc 100%)'
+                  : 'transparent',
                 color: active ? '#0097A7' : '#6b7280',
-                boxShadow: active ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                boxShadow: active
+                  ? '0 4px 12px rgba(0,151,167,.18), inset 0 1px 0 rgba(255,255,255,.6)'
+                  : 'none',
                 whiteSpace: 'nowrap',
               }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: 16, fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}>
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 17, fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0" }}
+              >
                 {t.icon}
               </span>
               {t.label}
@@ -303,16 +416,16 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
         })}
       </div>
 
-      {/* ── Tab content ── */}
+      {/* ═════ БЛОК: Tab content ═════ */}
       <div>
         {tab === 'history' && (
-          <Suspense fallback={<div className="rounded-xl h-32 animate-pulse" style={{ background: '#e5e7eb' }} />}>
+          <Suspense fallback={<div className="rounded-2xl h-32 animate-pulse bg-gray-200 dark:bg-gray-800" />}>
             <LoyaltyTransactionsList sessionToken={sessionToken} />
           </Suspense>
         )}
 
         {tab === 'rewards' && (
-          <Suspense fallback={<div className="rounded-xl h-32 animate-pulse" style={{ background: '#e5e7eb' }} />}>
+          <Suspense fallback={<div className="rounded-2xl h-32 animate-pulse bg-gray-200 dark:bg-gray-800" />}>
             <LoyaltyRewardsCatalog
               sessionToken={sessionToken}
               points={points}
@@ -324,36 +437,70 @@ export default function PatientLoyaltySection({ sessionToken: sessionTokenProp }
 
         {tab === 'achievements' && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-            {achievements.map(a => (
+            {achievements.map((a, idx) => (
               <div
                 key={a.id}
-                className="rounded-2xl p-3 text-center"
+                className="lp-card lp-tap relative rounded-2xl p-3.5 text-center transition-all"
                 style={{
-                  background: a.unlocked ? '#fff' : '#f9fafb',
-                  border: `1px solid ${a.unlocked ? '#e5e7eb' : '#e5e7eb'}`,
+                  animationDelay: `${idx * 0.05}s`,
+                  background: a.unlocked
+                    ? 'linear-gradient(180deg,#ffffff 0%,#f8fafc 100%)'
+                    : '#f9fafb',
+                  border: '1px solid',
+                  borderColor: a.unlocked ? 'rgba(0,151,167,.15)' : '#e5e7eb',
+                  boxShadow: a.unlocked
+                    ? '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)'
+                    : 'inset 0 1px 0 rgba(255,255,255,.4)',
                   opacity: a.unlocked ? 1 : 0.55,
-                  position: 'relative',
                 }}
               >
                 <span
                   className="inline-grid place-items-center mx-auto mb-2"
                   style={{
-                    width: 44, height: 44, borderRadius: 999,
-                    background: a.unlocked ? '#0097A715' : '#e5e7eb',
-                    color: a.unlocked ? '#0097A7' : '#9ca3af',
+                    width: 52, height: 52, borderRadius: 999,
+                    background: a.unlocked
+                      ? 'linear-gradient(135deg,#0097A7 0%,#1565C0 100%)'
+                      : '#e5e7eb',
+                    color: a.unlocked ? '#fff' : '#9ca3af',
+                    boxShadow: a.unlocked
+                      ? '0 6px 16px rgba(0,151,167,.35), inset 0 1px 0 rgba(255,255,255,.4)'
+                      : 'none',
                   }}
                 >
-                  <span className="material-symbols-outlined" style={{ fontSize: 24, fontVariationSettings: a.unlocked ? "'FILL' 1" : "'FILL' 0" }}>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 26, fontVariationSettings: a.unlocked ? "'FILL' 1" : "'FILL' 0" }}
+                  >
                     {a.icon}
                   </span>
                 </span>
-                <p className="text-[11px] font-bold text-gray-800 leading-tight">{a.label}</p>
-                {a.unlocked && (
+                <p className="text-[11px] font-bold leading-tight text-gray-800 dark:text-gray-100">
+                  {a.label}
+                </p>
+                {a.unlocked ? (
                   <span
-                    className="absolute top-1.5 right-1.5 inline-grid place-items-center"
-                    style={{ width: 18, height: 18, borderRadius: 999, background: '#10b981', color: '#fff' }}
+                    className="absolute -top-1.5 -right-1.5 inline-grid place-items-center"
+                    style={{
+                      width: 22, height: 22, borderRadius: 999,
+                      background: 'linear-gradient(135deg,#10B981,#059669)',
+                      color: '#fff',
+                      boxShadow: '0 4px 10px rgba(16,185,129,.45)',
+                      border: '2px solid #fff',
+                    }}
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>check</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 13, fontVariationSettings: "'FILL' 1" }}>check</span>
+                  </span>
+                ) : (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 inline-grid place-items-center"
+                    style={{
+                      width: 22, height: 22, borderRadius: 999,
+                      background: '#fff',
+                      color: '#9ca3af',
+                      border: '2px solid #e5e7eb',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 13 }}>lock</span>
                   </span>
                 )}
               </div>

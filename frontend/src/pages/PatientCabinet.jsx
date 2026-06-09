@@ -2123,51 +2123,214 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
   )
 }
 
-function DoctorCard({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory }) {
+// ═════ БЛОК: SPECIALTY_PALETTE — цвет gradient-border аватара по специальности ═════
+const SPECIALTY_PALETTE = {
+  'Стоматолог':   { from: '#0097A7', to: '#1565C0', chipBg: '#0097A715', chipText: '#0097A7' },
+  'Терапевт':     { from: '#10B981', to: '#0097A7', chipBg: '#10B98115', chipText: '#059669' },
+  'Хирург':       { from: '#EF4444', to: '#F59E0B', chipBg: '#EF444415', chipText: '#DC2626' },
+  'Педиатр':      { from: '#A855F7', to: '#EC4899', chipBg: '#A855F715', chipText: '#9333EA' },
+  'Гинеколог':    { from: '#EC4899', to: '#A855F7', chipBg: '#EC489915', chipText: '#DB2777' },
+  'Кардиолог':    { from: '#EF4444', to: '#F472B6', chipBg: '#EF444415', chipText: '#DC2626' },
+  'Невролог':     { from: '#6366F1', to: '#A855F7', chipBg: '#6366F115', chipText: '#4F46E5' },
+  'Офтальмолог':  { from: '#06B6D4', to: '#1565C0', chipBg: '#06B6D415', chipText: '#0891B2' },
+  'ЛОР':          { from: '#F59E0B', to: '#EF4444', chipBg: '#F59E0B15', chipText: '#B45309' },
+  'Дерматолог':   { from: '#F472B6', to: '#F59E0B', chipBg: '#F472B615', chipText: '#BE185D' },
+}
+function paletteForSpec(spec, fallback = '#0097A7') {
+  return SPECIALTY_PALETTE[spec] || { from: fallback, to: '#1565C0', chipBg: fallback + '15', chipText: fallback }
+}
+
+// ═════ БЛОК: DoctorCard — премиум-карточка врача ═════
+function DoctorCard({ doc, tenantId, primary, patientName, patientPhone, onRefreshHistory, index = 0 }) {
   const [bookOpen, setBookOpen] = useState(false)
   const [revOpen, setRevOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
 
+  const palette = paletteForSpec(doc.specialty, primary)
+  // Эвристика «ближайшего слота» — backend пока не отдаёт точное время,
+  // показываем плейсхолдер только если есть расписание
+  const nextSlot = doc.next_slot_label || (doc.has_schedule ? 'Запись доступна' : null)
+
   return (
-    <div style={{ background:'#fff', borderRadius:18, border:'1px solid #EAECF0', overflow:'hidden', marginBottom:12, boxShadow:'0 2px 10px rgba(0,0,0,.05)' }}>
+    <div
+      className="dc-card"
+      style={{
+        background: '#fff',
+        borderRadius: 20,
+        border: '1px solid rgba(0,0,0,.06)',
+        overflow: 'hidden',
+        marginBottom: 12,
+        boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+        animationDelay: `${index * 0.05}s`,
+      }}
+    >
       {/* Кликабельная область — открывает полный профиль */}
-      <button type="button" onClick={() => setProfileOpen(true)}
-        style={{ display:'block', width:'100%', padding:'18px 16px 14px', background:'transparent', border:'none', textAlign:'left', cursor:'pointer' }}>
+      <button
+        type="button"
+        onClick={() => setProfileOpen(true)}
+        className="dc-tap"
+        style={{ display:'block', width:'100%', padding:'16px 16px 14px', background:'transparent', border:'none', textAlign:'left', cursor:'pointer', transition:'transform .12s' }}
+      >
         <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
-          <DocAvatar name={doc.full_name} photo={doc.photo_url} size={60} primary={primary} />
+          {/* Аватар 64×64 с gradient-ring по специальности */}
+          <div
+            style={{
+              position: 'relative',
+              padding: 3,
+              borderRadius: '50%',
+              background: `conic-gradient(from 200deg, ${palette.from}, ${palette.to}, ${palette.from})`,
+              flexShrink: 0,
+              boxShadow: `0 6px 16px ${palette.from}40`,
+            }}
+          >
+            <div style={{ background:'#fff', padding:2, borderRadius:'50%' }}>
+              <DocAvatar name={doc.full_name} photo={doc.photo_url} size={58} primary={palette.from} />
+            </div>
+          </div>
           <div style={{ flex:1, minWidth:0 }}>
-            <h3 style={{ margin:'0 0 2px', fontSize:15, color:'#1A2B3C', fontWeight:700, lineHeight:1.3 }}>{doc.full_name}</h3>
-            <p style={{ margin:'0 0 3px', fontSize:13, color:primary, fontWeight:600 }}>{doc.specialty||'Врач'}</p>
-            <p style={{ margin:'0 0 5px', fontSize:12, color:'#9CA3AF' }}>
-              {doc.experience_years ? `Стаж ${doc.experience_years} лет · ` : ''}{doc.clinic_name}
+            <div style={{ display:'flex', alignItems:'flex-start', gap:8, flexWrap:'wrap' }}>
+              <h3 style={{ margin:'0 0 2px', fontSize:15, color:'#0A2342', fontWeight:800, lineHeight:1.3, letterSpacing:'-.01em' }}>
+                {doc.full_name}
+              </h3>
+              {doc.experience_years ? (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: '#F3F4F6',
+                    color: '#374151',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 11, fontVariationSettings: "'FILL' 1" }}>workspace_premium</span>
+                  Стаж {doc.experience_years} лет
+                </span>
+              ) : null}
+            </div>
+            {/* Специальность-чип gradient */}
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '3px 10px',
+                marginTop: 4,
+                borderRadius: 999,
+                background: palette.chipBg,
+                color: palette.chipText,
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 13, fontVariationSettings: "'FILL' 1" }}>stethoscope</span>
+              {doc.specialty || 'Врач'}
+            </span>
+            <p style={{ margin:'5px 0 5px', fontSize:12, color:'#9CA3AF' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 12, verticalAlign:'-2px', marginRight:3 }}>location_on</span>
+              {doc.clinic_name}
             </p>
             {doc.avg_rating ? (
-              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <Stars rating={doc.avg_rating} size={13} />
-                <b style={{ fontSize:13, color:'#1A2B3C' }}>{doc.avg_rating}</b>
-                <span style={{ fontSize:12, color:'#C4C9D4' }}>({doc.review_count})</span>
+                <b style={{ fontSize:13, color:'#0A2342' }}>{doc.avg_rating}</b>
+                <span style={{ fontSize:12, color:'#9CA3AF' }}>({doc.review_count} отзывов)</span>
               </div>
-            ) : <span style={{ fontSize:12, color:'#C4C9D4' }}>Нет оценок</span>}
+            ) : (
+              <span style={{ fontSize:12, color:'#9CA3AF' }}>Нет оценок</span>
+            )}
           </div>
           <span className="material-symbols-outlined" style={{ color:'#C4C9D4', fontSize:22 }}>chevron_right</span>
         </div>
         {doc.bio && (
-          <p style={{ margin:'12px 0 0', fontSize:13, color:'#6B7280', lineHeight:1.6, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+          <p style={{
+            margin: '12px 0 0',
+            fontSize: 13,
+            color: '#6B7280',
+            lineHeight: 1.6,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>
             {doc.bio}
           </p>
+        )}
+        {/* Snippet ближайшего слота */}
+        {nextSlot && (
+          <div
+            style={{
+              marginTop: 10,
+              padding: '8px 10px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #10B98112 0%, #0097A712 100%)',
+              border: '1px solid #10B98130',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#10B981', fontVariationSettings: "'FILL' 1" }}>schedule</span>
+            <span style={{ fontSize: 12, color: '#059669', fontWeight: 700 }}>{nextSlot}</span>
+          </div>
         )}
       </button>
 
       <div style={{ display:'flex', borderTop:'1px solid #F3F4F6' }}>
         {doc.has_schedule && (
-          <button onClick={(e) => { e.stopPropagation(); setBookOpen(true) }}
-            style={{ flex:2, padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', letterSpacing:.3 }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setBookOpen(true) }}
+            className="dc-tap"
+            style={{
+              flex: 2,
+              minHeight: 44,
+              padding: '12px',
+              background: `linear-gradient(135deg, ${palette.from} 0%, #1565C0 100%)`,
+              color: '#fff',
+              border: 'none',
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: 'pointer',
+              letterSpacing: .3,
+              boxShadow: `inset 0 1px 0 rgba(255,255,255,.25), 0 -2px 8px ${palette.from}25`,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'transform .12s',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 17, fontVariationSettings: "'FILL' 1" }}>event_available</span>
             Записаться
           </button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); setRevOpen(true) }}
-          style={{ flex:1, padding:'13px', border:'none', borderLeft: doc.has_schedule ? '1px solid rgba(255,255,255,.15)' : '1px solid #F3F4F6', color: doc.has_schedule ? 'rgba(255,255,255,.85)' : '#6B7280', fontSize:12, cursor:'pointer', background: doc.has_schedule ? 'transparent' : '#FAFBFF' }}>
-          ✍️ Отзыв
+        <button
+          onClick={(e) => { e.stopPropagation(); setRevOpen(true) }}
+          className="dc-tap"
+          style={{
+            flex: 1,
+            minHeight: 44,
+            padding: '12px',
+            border: 'none',
+            borderLeft: doc.has_schedule ? '1px solid rgba(255,255,255,.15)' : '1px solid #F3F4F6',
+            color: doc.has_schedule ? 'rgba(255,255,255,.92)' : '#6B7280',
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: 'pointer',
+            background: doc.has_schedule ? 'transparent' : '#FAFBFF',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 5,
+            transition: 'transform .12s',
+          }}
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 15, fontVariationSettings: "'FILL' 1" }}>rate_review</span>
+          Отзыв
         </button>
       </div>
 
@@ -2190,10 +2353,12 @@ function DoctorCard({ doc, tenantId, primary, patientName, patientPhone, onRefre
   )
 }
 
+// ═════ БЛОК: DoctorsTab — список врачей с поиском, фильтрами и stagger ═════
 function DoctorsTab({ primary, patientName, patientPhone, onRefreshHistory }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [specFilter, setSpec] = useState('')
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     axios.get(`${API}/public/${SLUG}/clinic`)
@@ -2202,34 +2367,144 @@ function DoctorsTab({ primary, patientName, patientPhone, onRefreshHistory }) {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div style={{ display:'flex', justifyContent:'center', padding:'40px 0' }}><div style={{ width:32, height:32, border:`3px solid #E0F7FA`, borderTopColor:primary, borderRadius:'50%', animation:'spin .8s linear infinite' }}/></div>
-  if (!data) return <p style={{ textAlign:'center', color:'#9CA3AF', padding:'40px 0' }}>Не удалось загрузить список врачей</p>
+  if (loading) {
+    return (
+      <div style={{ display:'flex', justifyContent:'center', padding:'40px 0' }}>
+        <div style={{ width:32, height:32, border:`3px solid #E0F7FA`, borderTopColor: primary, borderRadius:'50%', animation:'spin .8s linear infinite' }} />
+      </div>
+    )
+  }
+  if (!data) {
+    return (
+      <div className="rounded-2xl p-6 text-center" style={{ background:'#F9FAFB', border:'1px solid #E5E7EB' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: 32, color: '#9CA3AF' }}>cloud_off</span>
+        <p style={{ color:'#6B7280', marginTop: 6, fontSize: 13, fontWeight: 600 }}>Не удалось загрузить список врачей</p>
+      </div>
+    )
+  }
 
   const { specialties = [], doctors = [] } = data
-  const filtered = specFilter ? doctors.filter(d => d.specialty===specFilter) : doctors
-  const sorted = [...filtered.filter(d=>d.has_schedule), ...filtered.filter(d=>!d.has_schedule)]
+  const q = query.trim().toLowerCase()
+  const matched = q
+    ? doctors.filter(d =>
+        (d.full_name || '').toLowerCase().includes(q) ||
+        (d.specialty || '').toLowerCase().includes(q)
+      )
+    : doctors
+  const filtered = specFilter ? matched.filter(d => d.specialty === specFilter) : matched
+  const sorted = [...filtered.filter(d => d.has_schedule), ...filtered.filter(d => !d.has_schedule)]
   const tenantId = data.tenant?.id
 
   return (
     <div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      {specialties.length>1 && (
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes dcPop { from{opacity:0; transform:translateY(10px) scale(.98)} to{opacity:1; transform:translateY(0) scale(1)} }
+        .dc-card { animation: dcPop .55s cubic-bezier(.22,1,.36,1) both; }
+        .dc-tap:active { transform: scale(.97); }
+        .dc-chip:active { transform: scale(.97); }
+      `}</style>
+
+      {/* ═════ БЛОК: Поиск по специальности/имени ═════ */}
+      <div
+        className="flex items-center gap-2 mb-3 rounded-2xl px-3"
+        style={{
+          background: '#fff',
+          border: '1px solid rgba(0,0,0,.06)',
+          boxShadow: '0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.5)',
+          height: 44,
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 20, color: primary, fontVariationSettings: "'FILL' 1" }}>
+          search
+        </span>
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Поиск врача по имени или специальности"
+          className="flex-1 bg-transparent outline-none text-sm font-medium text-gray-800 placeholder:text-gray-400"
+          style={{ minWidth: 0, border: 'none' }}
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            className="dc-tap inline-grid place-items-center rounded-full"
+            style={{ width: 22, height: 22, background: '#F3F4F6', color: '#6B7280', border: 'none', cursor: 'pointer' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+          </button>
+        )}
+      </div>
+
+      {/* ═════ БЛОК: Filter chips по специальностям ═════ */}
+      {specialties.length > 1 && (
         <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4, marginBottom:14, scrollbarWidth:'none' }}>
-          {['', ...specialties].map(s => (
-            <button key={s||'all'} onClick={() => setSpec(s)}
-              style={{ flexShrink:0, padding:'6px 14px', borderRadius:20, border:`1.5px solid ${specFilter===s?primary:'#E5E7EB'}`, background:specFilter===s?primary+'14':'#fff', color:specFilter===s?primary:'#6B7280', fontSize:13, fontWeight:specFilter===s?700:400, cursor:'pointer', whiteSpace:'nowrap' }}>
-              {s||'Все специальности'}
-            </button>
-          ))}
+          {['', ...specialties].map(s => {
+            const active = specFilter === s
+            const pal = s ? paletteForSpec(s, primary) : { from: primary, to: '#1565C0', chipBg: primary + '14', chipText: primary }
+            return (
+              <button
+                key={s || 'all'}
+                onClick={() => setSpec(s)}
+                className="dc-chip"
+                style={{
+                  flexShrink: 0,
+                  padding: '7px 14px',
+                  borderRadius: 999,
+                  border: `1.5px solid ${active ? pal.from : '#E5E7EB'}`,
+                  background: active
+                    ? `linear-gradient(135deg, ${pal.from}, ${pal.to})`
+                    : '#fff',
+                  color: active ? '#fff' : '#6B7280',
+                  fontSize: 13,
+                  fontWeight: active ? 800 : 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  transition: 'transform .12s',
+                  boxShadow: active
+                    ? `0 4px 12px ${pal.from}45, inset 0 1px 0 rgba(255,255,255,.25)`
+                    : '0 1px 2px rgba(0,0,0,.04)',
+                }}
+              >
+                {s || 'Все специальности'}
+              </button>
+            )
+          })}
         </div>
       )}
-      {sorted.length===0
-        ? <p style={{ textAlign:'center', color:'#9CA3AF', padding:'40px 0' }}>Нет врачей</p>
-        : sorted.map(doc => (
-          <DoctorCard key={doc.id} doc={doc} tenantId={tenantId} primary={primary}
-            patientName={patientName} patientPhone={patientPhone} onRefreshHistory={onRefreshHistory} />
+
+      {sorted.length === 0 ? (
+        <div className="rounded-2xl p-8 text-center" style={{ background:'#F9FAFB', border:'1px dashed #E5E7EB' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 36, color: '#9CA3AF' }}>person_search</span>
+          <p style={{ color:'#6B7280', marginTop: 8, fontSize: 13, fontWeight: 600 }}>
+            {query ? 'Ничего не найдено' : 'Нет врачей'}
+          </p>
+          {query && (
+            <button
+              onClick={() => { setQuery(''); setSpec('') }}
+              className="dc-tap mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold"
+              style={{ background: primary + '15', color: primary, border: 'none', cursor: 'pointer' }}
+            >
+              Сбросить фильтр
+            </button>
+          )}
+        </div>
+      ) : (
+        sorted.map((doc, idx) => (
+          <DoctorCard
+            key={doc.id}
+            doc={doc}
+            tenantId={tenantId}
+            primary={primary}
+            patientName={patientName}
+            patientPhone={patientPhone}
+            onRefreshHistory={onRefreshHistory}
+            index={idx}
+          />
         ))
-      }
+      )}
     </div>
   )
 }
