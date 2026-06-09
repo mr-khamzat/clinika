@@ -178,13 +178,13 @@ export async function generateAppointmentsPDF(data, meta) {
       fontSize: 9,
       cellPadding: 4,
       overflow: 'linebreak',
-      font: doc.getFont().fontName,
+      font: 'Roboto',
     },
     headStyles: {
       fillColor: [15, 110, 95],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      font: doc.getFont().fontName,
+      font: 'Roboto',
     },
     alternateRowStyles: { fillColor: [252, 252, 252] },
     columnStyles: {

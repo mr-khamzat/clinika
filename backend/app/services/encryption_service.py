@@ -85,3 +85,54 @@ def decrypt(token: str) -> Optional[str]:
             return None
     # Совместимость со старыми записями без префикса
     return token
+
+
+# ─── Blind-hash для PII lookups (Этап 2 — shadow copy) ─────────────────────
+# Hash phone/email с tenant-pepper для exact-match WHERE phone_hash=:h.
+# Pepper из env PII_HASH_PEPPER хранится ОТДЕЛЬНО от SECRET_KEY (compromise
+# одного не открывает другое).
+import os as _os
+import hashlib as _hashlib
+import re as _re
+
+_PII_PEPPER = _os.environ.get("PII_HASH_PEPPER", "")
+
+
+def normalize_phone(phone: str) -> str:
+    """Каноничный формат: только цифры. Российская 8XXX -> 7XXX."""
+    if not phone:
+        return ""
+    digits = _re.sub(r"\D", "", str(phone))
+    if len(digits) == 11 and digits[0] == "8":
+        digits = "7" + digits[1:]
+    return digits
+
+
+def hash_phone(phone: str) -> str:
+    """SHA-256(normalized_phone + pepper). 64 hex chars."""
+    n = normalize_phone(phone)
+    if not n:
+        return ""
+    return _hashlib.sha256((n + _PII_PEPPER).encode("utf-8")).hexdigest()
+
+
+def normalize_email(email: str) -> str:
+    """lowercase + strip."""
+    if not email:
+        return ""
+    return str(email).strip().lower()
+
+
+def hash_email(email: str) -> str:
+    n = normalize_email(email)
+    if not n:
+        return ""
+    return _hashlib.sha256((n + _PII_PEPPER).encode("utf-8")).hexdigest()
+
+
+def hash_text(value: str) -> str:
+    """Общий blind-hash (для full_name normalized)."""
+    if not value:
+        return ""
+    n = str(value).strip().lower()
+    return _hashlib.sha256((n + _PII_PEPPER).encode("utf-8")).hexdigest()

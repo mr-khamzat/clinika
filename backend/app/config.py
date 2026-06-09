@@ -98,7 +98,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = "noreply@клиниксеть.рф"
-    smtp_from_name: str = "КлиникаСеть"
+    smtp_from_name: str = "КлиникСеть"
     smtp_use_tls: bool = True       # включить TLS (STARTTLS либо implicit SSL)
     smtp_starttls: bool = True      # True = STARTTLS (587), False = implicit SSL (465)
 

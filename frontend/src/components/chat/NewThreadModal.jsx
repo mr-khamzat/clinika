@@ -45,7 +45,7 @@ export default function NewThreadModal({ open, onClose, onCreated, sessionToken,
       const r = await axios.post(
         `${apiBase}/patient/chat/threads`,
         {
-          clinic_id: Number(clinicId),
+          clinic_id: String(clinicId),
           subject: subject.trim() || null,
           initial_message: body.trim(),
         },
@@ -55,7 +55,14 @@ export default function NewThreadModal({ open, onClose, onCreated, sessionToken,
     } catch (e) {
       const code = e?.response?.status
       if (code === 402) setErr('Превышен лимит чатов. Подключите подписку «Здоровье+»')
-      else setErr(e?.response?.data?.detail || 'Не удалось создать чат')
+      else {
+        const d = e?.response?.data?.detail
+        let msg = 'Не удалось создать чат'
+        if (typeof d === 'string') msg = d
+        else if (Array.isArray(d)) msg = d.map(x => x?.msg || x?.loc?.join('.') || JSON.stringify(x)).join('; ')
+        else if (d && typeof d === 'object') msg = d.msg || JSON.stringify(d)
+        setErr(msg)
+      }
     }
     setBusy(false)
   }
@@ -69,7 +76,7 @@ export default function NewThreadModal({ open, onClose, onCreated, sessionToken,
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden"
-        style={{ background: 'var(--bg, #fff)', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}
+        style={{ background: '#ffffff', color: '#0f172a', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}
       >
         <div className="px-5 py-4 flex items-center justify-between border-b" style={{ borderColor: 'var(--border, #e2e8f0)' }}>
           <div>

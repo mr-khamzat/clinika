@@ -30,9 +30,9 @@ class AppointmentOutcome(Base):
         index=True,
     )
     # Текст заключения врача
-    conclusion: Mapped[str] = mapped_column(Text, nullable=False)
+    conclusion_encrypted: Mapped[str] = mapped_column("conclusion_encrypted", Text, nullable=False)
     # Рекомендации (необязательно)
-    recommendations: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recommendations_encrypted: Mapped[str | None] = mapped_column("recommendations_encrypted", Text, nullable=True)
     # Кто создал (User.id — обычно врач)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -46,6 +46,35 @@ class AppointmentOutcome(Base):
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('conclusion', 'conclusion_encrypted'), ('recommendations', 'recommendations_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def conclusion(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.conclusion_encrypted)
+
+    @conclusion.setter
+    def conclusion(self, value):
+        from app.services.encryption_service import encrypt
+        self.conclusion_encrypted = encrypt(value) if value is not None else None
+
+    @property
+    def recommendations(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.recommendations_encrypted)
+
+    @recommendations.setter
+    def recommendations(self, value):
+        from app.services.encryption_service import encrypt
+        self.recommendations_encrypted = encrypt(value) if value is not None else None
 
 class AppointmentAttachment(Base):
     """Файл, прикреплённый к приёму (анализы, исследования и т.п.)."""

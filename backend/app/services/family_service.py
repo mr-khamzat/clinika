@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.patient_account import PatientAccount
-from app.utils.phone import normalize_phone
+from app.utils.phone import normalize_phone, phone_variants
 
 
 VALID_RELATIONS = {"self", "spouse", "child", "parent", "sibling", "other"}
@@ -30,15 +30,17 @@ async def get_or_create_account_by_phone(
 ) -> tuple[PatientAccount, bool]:
     """Найти или создать PatientAccount по телефону. Возвращает (account, is_new)."""
     phone_n = normalize_phone(phone)
+    # Ищем по всем вариантам формата (с +, без +, с 8) — в БД могут лежать смешанные.
+    variants = phone_variants(phone)
     r = await db.execute(
-        select(PatientAccount).where(PatientAccount.phone == phone_n)
+        select(PatientAccount).where(PatientAccount.phone.in_(variants))
     )
     acc = r.scalar_one_or_none()
     if acc:
         return acc, False
     acc = PatientAccount(
         id=uuid.uuid4(),
-        phone=phone_n,
+        phone="+" + phone_n if not phone_n.startswith("+") else phone_n,
         name=name,
         birth_date=birth_date,
         is_active=True,
@@ -49,10 +51,11 @@ async def get_or_create_account_by_phone(
 
 
 async def get_account_by_phone(db: AsyncSession, phone: str) -> PatientAccount | None:
+    variants = phone_variants(phone)
     r = await db.execute(
-        select(PatientAccount).where(PatientAccount.phone == normalize_phone(phone))
+        select(PatientAccount).where(PatientAccount.phone.in_(variants))
     )
-    return r.scalar_one_or_none()
+    return r.scalars().first()
 
 
 async def get_or_create_group(
@@ -127,7 +130,7 @@ async def find_membership(
             and_(FamilyMember.id == member_id, FamilyMember.group_id == group_id)
         )
     )
-    return r.scalar_one_or_none()
+    return r.scalars().first()
 
 
 async def is_member_of(
@@ -139,7 +142,7 @@ async def is_member_of(
                  FamilyMember.patient_id == patient_id)
         )
     )
-    return r.scalar_one_or_none()
+    return r.scalars().first()
 
 
 async def create_invite(
@@ -165,7 +168,7 @@ async def create_invite(
 
 async def find_invite_by_token(db: AsyncSession, token: str) -> FamilyInvite | None:
     r = await db.execute(select(FamilyInvite).where(FamilyInvite.token == token))
-    return r.scalar_one_or_none()
+    return r.scalars().first()
 
 
 async def accept_invite(

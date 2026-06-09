@@ -95,7 +95,7 @@ class TelemedicineSession(Base):
     )
     recording_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     chat_log_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_encrypted: Mapped[str | None] = mapped_column("notes_encrypted", Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
@@ -121,6 +121,25 @@ class TelemedicineSession(Base):
         cascade="all, delete-orphan",
     )
 
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('notes', 'notes_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def notes(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.notes_encrypted)
+
+    @notes.setter
+    def notes(self, value):
+        from app.services.encryption_service import encrypt
+        self.notes_encrypted = encrypt(value) if value is not None else None
 
 class TelemedicineChatMessage(Base):
     """Сообщение чата внутри телемед-сессии (текст + файл)."""
@@ -177,7 +196,7 @@ class TelemedicinePrescription(Base):
         index=True,
     )
     # Тело рецепта — Markdown
-    body: Mapped[str] = mapped_column(Text, nullable=False)
+    body_encrypted: Mapped[str] = mapped_column("body_encrypted", Text, nullable=False)
     # HMAC-SHA256(secret, body || signed_at || signed_by_user_id)
     signature_hash: Mapped[str] = mapped_column(String(128), nullable=False)
     signed_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
@@ -197,3 +216,22 @@ class TelemedicinePrescription(Base):
     session: Mapped["TelemedicineSession"] = relationship(
         "TelemedicineSession", back_populates="prescriptions"
     )
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('body', 'body_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def body(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.body_encrypted)
+
+    @body.setter
+    def body(self, value):
+        from app.services.encryption_service import encrypt
+        self.body_encrypted = encrypt(value) if value is not None else None

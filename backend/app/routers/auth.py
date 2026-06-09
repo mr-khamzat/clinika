@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, update, delete
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.invitation import Invitation
@@ -316,14 +316,18 @@ async def password_login(data: PasswordLoginData, request: Request, db: AsyncSes
 # ─── Обновление access token через refresh ───
 
 @router.post("/refresh")
-async def refresh_access_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Обменивает refresh token на новый access token (не ротирует refresh)."""
+async def refresh_access_token(body: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Обменивает refresh token на новый access + НОВЫЙ refresh (rotation).
+
+    Reuse detection: если приходит уже использованный (revoked) refresh — это сигнал
+    компрометации, ревокаем ВСЕ активные refresh пользователя и кидаем 401.
+    """
+    import logging as _lg
     token_hash = hash_refresh_token(body.refresh_token)
+
+    # SELECT без revoked-фильтра — нужно различать «нет вообще» и «есть, но revoked»
     result = await db.execute(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == token_hash,
-            RefreshToken.revoked == False,  # noqa: E712
-        )
+        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
     )
     rt = result.scalar_one_or_none()
 
@@ -332,17 +336,60 @@ async def refresh_access_token(body: RefreshRequest, db: AsyncSession = Depends(
     if rt.expires_at < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Refresh token истёк")
 
+    # REUSE DETECTION
+    if rt.revoked:
+        # Grace window (2 сек) — игнорируем сетевые ретраи сразу после ротации
+        grace_ok = (
+            rt.revoked_at and (datetime.utcnow() - rt.revoked_at).total_seconds() < 2
+        )
+        if not grace_ok:
+            # Компрометация: revoke всю цепочку для этого user_id
+            await db.execute(
+                update(RefreshToken)
+                .where(RefreshToken.user_id == rt.user_id, RefreshToken.revoked == False)  # noqa: E712
+                .values(revoked=True, revoked_at=datetime.utcnow())
+            )
+            rt.reused_at = datetime.utcnow()
+            await db.commit()
+            _lg.getLogger("auth").warning(
+                f"refresh_token_reuse user_id={rt.user_id} ip={request.client.host if request.client else '?'}"
+            )
+            raise HTTPException(status_code=401, detail="Refresh token compromised")
+        raise HTTPException(status_code=401, detail="Refresh token already used")
+
     user_result = await db.execute(select(User).where(User.id == rt.user_id))
     user = user_result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Пользователь не найден или заблокирован")
+
+    # Ротация: создаём новый refresh, старый помечаем revoked + replaced_by
+    new_raw, new_hash = create_refresh_token(str(user.id))
+    new_rt = RefreshToken(
+        user_id=user.id,
+        token_hash=new_hash,
+        device_info=rt.device_info,
+        ip=(request.client.host if request.client else None),
+        expires_at=datetime.utcnow() + REFRESH_TOKEN_EXPIRE,
+    )
+    db.add(new_rt)
+    await db.flush()
+
+    rt.revoked = True
+    rt.revoked_at = datetime.utcnow()
+    rt.replaced_by_id = new_rt.id
 
     access = create_access_token({
         "sub": str(user.id),
         "role": user.role.value,
         "tid": str(user.tenant_id) if user.tenant_id else None,
     })
-    return {"access_token": access, "token_type": "bearer", "expires_in": 30 * 60}
+    await db.commit()
+    return {
+        "access_token": access,
+        "refresh_token": new_raw,
+        "token_type": "bearer",
+        "expires_in": 30 * 60,
+    }
 
 
 # ─── Выход (revoke refresh token + blacklist access token) ───
@@ -499,10 +546,10 @@ async def register_by_invite(data: InviteRegisterRequest, request: Request, db: 
             from app.services.email_service import schedule_email
             schedule_email(
                 user.email,
-                "Добро пожаловать в КлиникаСеть",
+                "Добро пожаловать в КлиникСеть",
                 body_html=(
                     f"<p>Здравствуйте, {user.full_name}!</p>"
-                    f"<p>Ваш аккаунт в КлиникаСеть успешно создан.</p>"
+                    f"<p>Ваш аккаунт в КлиникСеть успешно создан.</p>"
                     f"<ul>"
                     f"<li>Логин: <b>{user.username}</b></li>"
                     f"<li>Роль: {user.role.value if hasattr(user.role,'value') else user.role}</li>"

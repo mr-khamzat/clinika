@@ -22,6 +22,10 @@ import PinnedMessagesModal from '../components/staff/PinnedMessagesModal'
 import MentionAutocomplete from '../components/staff/MentionAutocomplete'
 import CreatePollModal from '../components/staff/CreatePollModal'
 import GlobalSearchBox from '../components/staff/GlobalSearchBox'
+import StickerPicker from '../components/chat/StickerPicker'
+import { lazy, Suspense } from 'react'
+const ClinicChatSection = lazy(() => import('../sections/ClinicChatSection'))
+import { enableWebPush, getPushPermissionState } from '../lib/webPush'
 
 // Палитра аватаров — детерминированно генерируется из user_id
 const AVATAR_COLORS = [
@@ -129,11 +133,28 @@ export default function StaffChat() {
   const [contacts, setContacts] = useState({ groups: [], total: 0 })
   const [activeRoomId, setActiveRoomId] = useState(null)
   const [messages, setMessages] = useState([])
+  const [stickersOpenStaff, setStickersOpenStaff] = useState(false)
   const [members, setMembers] = useState([])
   const [draft, setDraft] = useState('')
   const [showNewChat, setShowNewChat] = useState(false)
   // Вкладка сайдбара: 'chats' — список комнат, 'contacts' — все сотрудники для быстрого DM
   const [sidebarTab, setSidebarTab] = useState('chats')
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem('clinika_staff_dark') === '1' } catch { return false }
+  })
+  const toggleDark = () => {
+    setDarkMode(v => {
+      const nv = !v
+      try { localStorage.setItem('clinika_staff_dark', nv ? '1' : '0') } catch {}
+      try { document.documentElement.dataset.theme = nv ? 'dark' : 'light' } catch {}
+      return nv
+    })
+  }
+  // Применяем data-theme на старте
+  useEffect(() => {
+    try { document.documentElement.dataset.theme = darkMode ? 'dark' : 'light' } catch {}
+    return () => { try { delete document.documentElement.dataset.theme } catch {} }
+  }, [darkMode])
   const [contactSearch, setContactSearch] = useState('')
   const [searchContact, setSearchContact] = useState('')
   const [collapsedContactGroups, setCollapsedContactGroups] = useState(() => new Set())
@@ -171,6 +192,77 @@ export default function StaffChat() {
   // на каждый scroll.
   const pendingReadIdsRef = useRef(new Set())
   const markReadTimerRef = useRef(null)
+
+  // ── Web Push для уведомлений из чата с пациентами ─────────────────────────
+  // Состояния: 'default' — можно попросить, 'granted' — подписан, 'denied' —
+  // юзер отказал (молча), 'unsupported' — браузер не умеет / iframe.
+  const [pushBannerHidden, setPushBannerHidden] = useState(() => {
+    try { return localStorage.getItem('staffchat_push_banner_dismissed') === '1' } catch { return false }
+  })
+  const [pushPermState, setPushPermState] = useState('default')
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const state = await getPushPermissionState()
+        if (cancelled) return
+        setPushPermState(state)
+        // Если разрешение уже выдано — тихо обновляем/освежаем подписку.
+        // enableWebPush идемпотентен: если PushSubscription уже есть, он не
+        // спросит разрешения повторно, просто POST /push/subscribe заново
+        // (это полезно при смене user_id).
+        if (state === 'granted') {
+          enableWebPush().catch(() => {})
+        }
+      } catch {
+        if (!cancelled) setPushPermState('unsupported')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  const handleEnablePush = useCallback(async () => {
+    const res = await enableWebPush()
+    if (res?.ok) {
+      setPushPermState('granted')
+    } else {
+      // 'denied' либо что-то ещё — больше не показываем баннер
+      try {
+        const s = await getPushPermissionState()
+        setPushPermState(s || 'denied')
+      } catch { setPushPermState('denied') }
+    }
+    setPushBannerHidden(true)
+    try { localStorage.setItem('staffchat_push_banner_dismissed', '1') } catch {}
+  }, [])
+
+  const handleDismissPushBanner = useCallback(() => {
+    setPushBannerHidden(true)
+    try { localStorage.setItem('staffchat_push_banner_dismissed', '1') } catch {}
+  }, [])
+
+  const showPushBanner = !pushBannerHidden && pushPermState === 'default' && !embed
+
+  // SW → Window: при клике на push открываем нужный thread в overlay
+  // "Пациенты". См. sw.js (postMessage type=open-chat-thread).
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (event) => {
+      const data = event.data || {}
+      if (data.type === 'open-chat-thread' && data.thread_id) {
+        // открыть overlay Пациентов и передать thread_id через URL
+        try {
+          const url = new URL(window.location.href)
+          url.searchParams.set('thread', String(data.thread_id))
+          history.replaceState(null, '', url.toString())
+        } catch {}
+        // показываем overlay Пациентов
+        setSidebarTab('patients')
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [])
 
   // ── Загрузка профиля + комнат + контактов ────────────────────────────────
   useEffect(() => {
@@ -773,8 +865,60 @@ export default function StaffChat() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className={'sc-root' + (embed ? ' sc-embed' : '')}>
+    <div className={'sc-root' + (embed ? ' sc-embed' : '') + (darkMode ? ' sc-dark' : '')}>
       <style>{STAFF_CHAT_CSS}</style>
+
+      {showPushBanner && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
+          padding: '10px 16px', background: 'var(--accent, #0097A7)', color: '#fff',
+          display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, fontWeight: 500,
+          boxShadow: '0 2px 8px rgba(0,0,0,.15)',
+        }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>notifications</span>
+          <span style={{ flex: 1 }}>
+            Включить уведомления о новых сообщениях от пациентов?
+          </span>
+          <button
+            onClick={handleEnablePush}
+            style={{
+              padding: '6px 14px', borderRadius: 8, border: 0, background: '#fff',
+              color: 'var(--accent, #0097A7)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+            }}
+          >Включить</button>
+          <button
+            onClick={handleDismissPushBanner}
+            title="Закрыть"
+            style={{
+              width: 30, height: 30, borderRadius: 8, border: 0, background: 'rgba(255,255,255,.15)',
+              color: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer',
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>close</span>
+          </button>
+        </div>
+      )}
+
+      {sidebarTab === 'patients' && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'var(--sc-bg)', color: 'var(--sc-fg)', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ display: 'flex', padding: '10px 14px', borderBottom: '1px solid var(--sc-border)', gap: 8, alignItems: 'center', background: 'var(--sc-bg-alt)' }}>
+            <div className="sc-side-tabs">
+              <button className="sc-side-tab" onClick={() => setSidebarTab('chats')}>Чаты</button>
+              <button className="sc-side-tab" onClick={() => setSidebarTab('contacts')}>Контакты</button>
+              <button className="sc-side-tab is-active" onClick={() => setSidebarTab('patients')}>Пациенты</button>
+            </div>
+            <div style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 600, color: 'var(--sc-fg)' }}>Чаты с пациентами</div>
+            <button onClick={toggleDark} title={darkMode ? 'Светлая тема' : 'Тёмная тема'} style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--sc-bg)', color: 'var(--sc-fg)', border: '1px solid var(--sc-border)', display: 'grid', placeItems: 'center' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{darkMode ? 'light_mode' : 'dark_mode'}</span>
+            </button>
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden', background: 'var(--sc-bg)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: 'var(--sc-fg-3)' }}>Загрузка…</div>}>
+              <ClinicChatSection role="manager" />
+            </Suspense>
+          </div>
+        </div>
+      )}
 
       {/* SIDEBAR */}
       <aside className="sc-sidebar">
@@ -790,6 +934,12 @@ export default function StaffChat() {
               onClick={() => setSidebarTab('contacts')}
               type="button"
             >Контакты</button>
+            <button
+              className={'sc-side-tab' + (sidebarTab === 'patients' ? ' is-active' : '')}
+              onClick={() => setSidebarTab('patients')}
+              type="button"
+              title="Чаты с пациентами"
+            >Пациенты</button>
           </div>
           <div className="sc-header-actions">
             <GlobalSearchBox
@@ -1094,7 +1244,7 @@ export default function StaffChat() {
                         {showSender ? <Avatar name={sender?.name || '?'} id={m.sender_id} size={32} avatarUrl={sender?.avatar_url} /> : <div style={{ width: 32 }} />}
                       </div>
                     )}
-                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '') + (m.pinned_at ? ' is-pinned' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
+                    <div className={'sc-msg-bubble' + (mine ? ' is-mine' : '') + (m.pinned_at ? ' is-pinned' : '') + ((m.attachments?.length === 1 && m.attachments[0]?.type === 'sticker' && !m.body?.trim() && !m.reply_to_id) ? ' is-sticker-only' : '')} onContextMenu={(e) => { e.preventDefault(); openMsgContextMenu(e, m, mine) }}>
                       {showSender && !mine && <div className="sc-msg-sender">{sender?.name || 'Сотрудник'}</div>}
                       {m.pinned_at && (
                         <div className="sc-msg-pin-badge" title="Закреплено">
@@ -1165,7 +1315,17 @@ export default function StaffChat() {
                               </div>
                             )
                           })()}
-                          {m.attachments?.map((a) => (
+                          {m.attachments?.filter((a) => a && a.type === 'sticker').map((a, i) => (
+                            <div key={'st-' + i} style={{ marginTop: 4 }}>
+                              <img
+                                src={a.url}
+                                alt={a.title || 'sticker'}
+                                loading="lazy"
+                                style={{ width: 220, height: 220, objectFit: 'contain', display: 'block' }}
+                              />
+                            </div>
+                          ))}
+                          {m.attachments?.filter((a) => !a || a.type !== 'sticker').map((a) => (
                             <a key={a.id || a.url} href={a.url} onClick={(e) => { e.preventDefault(); downloadAttachment(a) }} className="sc-attach" role="button" title="Кликните чтобы скачать файл на ПК">
                               <span className="sc-attach-icon">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1365,6 +1525,35 @@ export default function StaffChat() {
                     <line x1="18" y1="20" x2="18" y2="8"/>
                   </svg>
                 </button>
+                <button
+                  type="button"
+                  className="sc-icon-btn sc-attach-btn"
+                  onClick={() => setStickersOpenStaff(v => !v)}
+                  title="Стикеры"
+                  aria-label="Стикеры"
+                >
+                  <span style={{ fontSize: 18, lineHeight: 1 }}>😀</span>
+                </button>
+                {stickersOpenStaff && (
+                  <StickerPicker
+                    open={stickersOpenStaff}
+                    onClose={() => setStickersOpenStaff(false)}
+                    onPick={async (url) => {
+                      setStickersOpenStaff(false)
+                      if (!activeRoomId) return
+                      try {
+                        const fileName = url.split('/').pop() || 'sticker.svg'
+                        const title = fileName.replace(/^sticker-\d+-/, '').replace(/\.svg$/, '')
+                        const { data: msg } = await api.post(`/staff-chat/rooms/${activeRoomId}/messages`, {
+                          body: '',
+                          attachments: [{ type: 'sticker', url: url, title: title }],
+                        })
+                        setMessages((prev) => prev.some((x) => x.id === msg.id) ? prev : [...prev, msg])
+                        scrollToBottom()
+                      } catch (e) { console.error('staff sticker send error', e) }
+                    }}
+                  />
+                )}
                 <textarea
                   ref={composerRef}
                   className="sc-input"
@@ -1893,7 +2082,7 @@ const STAFF_CHAT_CSS = `
 .sc-root.sc-embed { height: 100vh; }
 
 @media (prefers-color-scheme: dark) {
-  .sc-root {
+  .sc-root:not(.sc-light) {
     --sc-bg: oklch(0.16 0.01 250);
     --sc-bg-alt: oklch(0.19 0.012 250);
     --sc-surface: oklch(0.21 0.012 250);
@@ -1907,6 +2096,21 @@ const STAFF_CHAT_CSS = `
     --sc-mine-fg: oklch(0.95 0.03 230);
     --sc-peer-bg: oklch(0.24 0.01 250);
   }
+}
+/* Ручной toggle тёмной темы (класс sc-dark) — работает в любой системной теме */
+.sc-root.sc-dark {
+  --sc-bg: oklch(0.16 0.01 250);
+  --sc-bg-alt: oklch(0.19 0.012 250);
+  --sc-surface: oklch(0.21 0.012 250);
+  --sc-border: oklch(0.28 0.012 250);
+  --sc-fg: oklch(0.95 0.01 250);
+  --sc-fg-2: oklch(0.75 0.012 250);
+  --sc-fg-3: oklch(0.6 0.015 250);
+  --sc-accent: oklch(0.7 0.18 230);
+  --sc-accent-soft: oklch(0.3 0.05 230);
+  --sc-mine-bg: oklch(0.32 0.08 230);
+  --sc-mine-fg: oklch(0.95 0.03 230);
+  --sc-peer-bg: oklch(0.24 0.01 250);
 }
 
 /* SIDEBAR */
@@ -2582,5 +2786,21 @@ const STAFF_CHAT_CSS = `
 @media (max-width: 760px) {
   .sc-root { grid-template-columns: 1fr; }
   .sc-root:has(.sc-conv-header) .sc-sidebar { display: none; }
+}
+
+/* Sticker-only bubble — без фона, без padding, без рамки */
+.sc-msg-bubble.is-sticker-only {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  max-width: 240px;
+}
+.sc-msg-bubble.is-sticker-only .sc-msg-meta {
+  padding: 4px 8px;
+  background: rgba(15,23,42,0.4);
+  border-radius: 12px;
+  display: inline-block;
+  color: #fff !important;
 }
 `

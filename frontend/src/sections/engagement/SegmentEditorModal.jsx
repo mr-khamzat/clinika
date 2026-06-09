@@ -85,7 +85,7 @@ export default function SegmentEditorModal({ token, segment, initialFilter, onCl
   const runPreview = useCallback(async () => {
     setBusy(true); setErr('')
     try {
-      const r = await apiFetch(token, `/api/engagement/segments/preview`, {
+      const r = await apiFetch(token, `/engagement/segments/preview`, {
         method: 'POST', body: JSON.stringify({ filter_json: filter })
       })
       if (r.ok) setPreview(await r.json())
@@ -100,8 +100,8 @@ export default function SegmentEditorModal({ token, segment, initialFilter, onCl
     try {
       const payload = { name: name.trim(), description: description.trim(), is_dynamic: isDynamic, filter_json: filter }
       const r = isEdit
-        ? await apiFetch(token, `/api/engagement/segments/${segment.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
-        : await apiFetch(token, `/api/engagement/segments`, { method: 'POST', body: JSON.stringify(payload) })
+        ? await apiFetch(token, `/engagement/segments/${segment.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+        : await apiFetch(token, `/engagement/segments`, { method: 'POST', body: JSON.stringify(payload) })
       if (r.ok) {
         const saved = await r.json()
         setSavedFlag(true)

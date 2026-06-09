@@ -2,7 +2,13 @@
  * ========================================
  * БЛОК: PatientChatSection — премиум-чат пациента (Глава 9)
  * ========================================
- * Используется в PatientCabinet.jsx (вкладка «Сообщения»).
+ * Mobile-first UX редизайн (июнь 2026):
+ *   • viewport <768px: один экран (либо список тредов, либо активный чат)
+ *   • большая кнопка «✚ Написать в клинику» в шапке списка
+ *   • sticky-композер с safe-area-inset-bottom + отступ под tab-bar (pb-20)
+ *   • закрытый тред → CTA «✚ Открыть новый тред» вместо мёртвого текста
+ *   • пузыри сообщений шире на мобильном (88%)
+ *   • date-separator: фиолетовый sticky pill
  *
  * API:
  *   GET    /patient/chat/threads
@@ -10,13 +16,6 @@
  *   GET    /patient/chat/threads/{id}
  *   POST   /patient/chat/threads/{id}/messages (отправка)
  *   POST   /patient/chat/threads/{id}/read     (прочитано)
- *
- * Слой UX:
- *   - Двухколоночный layout на desktop, single-column на mobile
- *   - Пузыри сообщений (Telegram-like)
- *   - Авто-скролл вниз, polling 10s активного треда
- *   - 402 → premium modal с CTA «Здоровье+ 290₽/мес»
- *   - Empty state с inline SVG-иллюстрацией
  * ========================================
  */
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
@@ -28,6 +27,7 @@ import ThreadListItem from '../components/chat/ThreadListItem'
 import PatientSlotRequestPicker from '../components/chat/PatientSlotRequestPicker'
 
 const NewThreadModal = lazy(() => import('../components/chat/NewThreadModal'))
+const StickerPicker = lazy(() => import('../components/chat/StickerPicker'))
 
 const SESSION_KEY = 'clinika_patient_session'
 const POLL_MS = 10_000
@@ -130,10 +130,10 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
 
   // chatslot01: drawer запроса записи (пациент выбирает врача/услугу/даты)
   const [slotRequestOpen, setSlotRequestOpen] = useState(false)
+  const [stickersOpen, setStickersOpen] = useState(false)
 
   const [showNewThread, setShowNewThread] = useState(false)
   const [showPremium, setShowPremium] = useState(false)
-  const [showListMobile, setShowListMobile] = useState(true)
 
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
@@ -296,6 +296,11 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
     )
   }
 
+  // На мобильном видим либо список (activeId=null), либо открытый чат.
+  // На десктопе видим обе панели одновременно.
+  const mobileShowList = activeId == null
+  const mobileShowChat = activeId != null
+
   return (
     <>
       <style>{`
@@ -303,44 +308,66 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
         .msg-in { animation: msg-in .22s cubic-bezier(.22,1,.36,1) }
         .chat-scroll::-webkit-scrollbar { width: 6px }
         .chat-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 6px }
+        /* Мобильный: пузыри шире (88%), на десктопе оставляем дефолт MessageBubble */
+        @media (max-width: 767px) {
+          .pchat-bubbles [data-msg-id] > div:last-child { max-width: 88% !important; }
+        }
+        /* Sticky композер: безопасная зона iPhone + отступ под tab-bar (80px) */
+        .pchat-composer {
+          padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 80px);
+        }
+        @media (min-width: 768px) {
+          .pchat-composer { padding-bottom: 8px; }
+        }
+        /* Sticky date-pill */
+        .pchat-date-pill {
+          position: sticky;
+          top: 8px;
+          z-index: 5;
+        }
       `}</style>
 
       <div
-        className="rounded-2xl overflow-hidden"
+        className="md:rounded-2xl overflow-hidden"
         style={{
           background: 'var(--surface, #fff)',
-          border: '1px solid var(--border, #e2e8f0)',
-          boxShadow: 'var(--shadow-sm, 0 1px 3px rgba(15,23,42,.08))',
-          minHeight: 'min(620px, calc(100vh - 240px))',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0,1fr)',
         }}
       >
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 900 ? '300px 1fr' : '1fr',
-            minHeight: 'min(620px, calc(100vh - 240px))',
-          }}
-        >
-          {/* ── Список тредов ── */}
+        <div className="grid md:grid-cols-[300px_1fr]">
+          {/* ══════════════ Список тредов ══════════════
+              Mobile: full-screen когда activeId=null, скрыт когда открыт чат.
+              Desktop (md+): всегда видим слева. */}
           <div
-            className={`flex-col border-r ${(activeId && !showListMobile) ? 'hidden md:flex' : 'flex'}`}
-            style={{ borderColor: 'var(--border, #e2e8f0)', background: 'var(--bg-1, #f8fafc)' }}
+            className={`${mobileShowList ? 'flex' : 'hidden'} md:flex flex-col md:border-r`}
+            style={{
+              borderColor: 'var(--border, #e2e8f0)',
+              background: 'var(--bg-1, #f8fafc)',
+              minHeight: 'calc(100vh - 200px)',
+            }}
           >
-            <div className="px-4 py-3 flex items-center gap-2 sticky top-0" style={{ background: 'var(--bg-1, #f8fafc)', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
-              <div className="font-bold flex-1" style={{ fontSize: 15, color: 'var(--fg, #0F172A)' }}>Сообщения</div>
+            {/* Шапка с большой кнопкой «Написать в клинику» */}
+            <div className="px-3 pt-3 pb-2 sticky top-0 z-10" style={{ background: 'var(--bg-1, #f8fafc)', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
+              <div className="flex items-center mb-2">
+                <div className="font-bold flex-1" style={{ fontSize: 15, color: 'var(--fg, #0F172A)' }}>Сообщения</div>
+              </div>
               <button
                 onClick={() => setShowNewThread(true)}
-                className="grid place-items-center"
-                style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #0097A7, #0A2342)', color: '#fff', boxShadow: '0 2px 8px rgba(0,151,167,.3)' }}
-                aria-label="Новый чат"
-                title="Новый чат"
+                className="w-full flex items-center justify-center gap-2 rounded-2xl font-bold text-white transition-transform active:scale-[.98]"
+                style={{
+                  minHeight: 48,
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #0097A7, #1565C0)',
+                  boxShadow: '0 4px 14px rgba(0,151,167,.3)',
+                  fontSize: 14,
+                }}
+                aria-label="Написать в клинику"
               >
-                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>edit_square</span>
+                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>edit_square</span>
+                Написать в клинику
               </button>
             </div>
-            <div className="chat-scroll flex-1 overflow-y-auto p-2 space-y-1" style={{ maxHeight: 'calc(100vh - 280px)' }}>
+
+            <div className="chat-scroll flex-1 overflow-y-auto p-2 space-y-1" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom,0px) + 96px)' }}>
               {loadingList && (
                 <div className="text-center py-8" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Загрузка…</div>
               )}
@@ -354,15 +381,8 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                     Пока нет сообщений
                   </div>
                   <div className="mt-1" style={{ fontSize: 12, color: 'var(--fg-2, #475569)' }}>
-                    Напишите первое сообщение клинике
+                    Нажмите «Написать в клинику» выше
                   </div>
-                  <button
-                    onClick={() => setShowNewThread(true)}
-                    className="mt-4 px-4 py-2 rounded-xl font-semibold text-white"
-                    style={{ background: 'linear-gradient(135deg, #0097A7, #0A2342)', fontSize: 13 }}
-                  >
-                    Новое сообщение
-                  </button>
                 </div>
               )}
               {!loadingList && hasThreads && threads.map(t => (
@@ -370,20 +390,22 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                   key={t.id}
                   thread={t}
                   active={activeId === t.id}
-                  onClick={() => { setActiveId(t.id); setShowListMobile(false) }}
+                  onClick={() => { setActiveId(t.id) }}
                   side="patient"
                 />
               ))}
             </div>
           </div>
 
-          {/* ── Активный тред ── */}
+          {/* ══════════════ Активный тред ══════════════
+              Mobile: full-screen когда activeId!=null, иначе скрыт.
+              Desktop: всегда правая колонка. */}
           <div
-            className={`flex-col ${(!activeId || showListMobile) ? 'hidden md:flex' : 'flex'}`}
-            style={{ minHeight: 'min(620px, calc(100vh - 240px))' }}
+            className={`${mobileShowChat ? 'flex' : 'hidden'} md:flex flex-col`}
+            style={{ minHeight: 'calc(100vh - 200px)' }}
           >
             {!activeId && (
-              <div className="flex-1 grid place-items-center p-6 text-center">
+              <div className="hidden md:grid flex-1 place-items-center p-6 text-center">
                 <div>
                   <EmptyChatIllustration size={140} />
                   <div className="mt-4 font-bold" style={{ fontSize: 15, color: 'var(--fg, #0F172A)' }}>Выберите чат</div>
@@ -398,23 +420,23 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                 <div className="px-3 py-2.5 flex items-center gap-2 sticky top-0 z-10"
                      style={{ background: 'var(--surface, #fff)', borderBottom: '1px solid var(--border, #e2e8f0)' }}>
                   <button
-                    onClick={() => { setActiveId(null); setShowListMobile(true) }}
-                    className="md:hidden grid place-items-center"
-                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
-                    aria-label="Назад"
+                    onClick={() => { setActiveId(null) }}
+                    className="md:hidden grid place-items-center flex-shrink-0"
+                    style={{ width: 44, height: 44, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg, #0F172A)' }}
+                    aria-label="Назад к списку"
                   >
-                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 24 }}>arrow_back</span>
                   </button>
                   <div className="flex-1 min-w-0">
-                    <div className="font-bold truncate" style={{ fontSize: 14, color: 'var(--fg, #0F172A)' }}>
+                    <div className="font-bold truncate" style={{ fontSize: 15, color: 'var(--fg, #0F172A)' }}>
                       {active?.thread?.clinic_name || 'Клиника'}
                     </div>
-                    <div className="truncate" style={{ fontSize: 11.5, color: 'var(--fg-3, #94a3b8)' }}>
+                    <div className="truncate" style={{ fontSize: 12, color: 'var(--fg-3, #94a3b8)' }}>
                       {active?.thread?.assigned_doctor_name || active?.thread?.subject || 'поддержка клиники'}
                     </div>
                   </div>
                   {active?.thread?.status === 'closed' && (
-                    <span className="px-2 py-0.5 rounded-full" style={{ background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 600 }}>
+                    <span className="px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#e2e8f0', color: '#475569', fontSize: 11, fontWeight: 600 }}>
                       закрыт
                     </span>
                   )}
@@ -422,12 +444,11 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
 
                 {/* Поток сообщений */}
                 <div
-                  className="chat-scroll flex-1 overflow-y-auto p-3"
+                  className="pchat-bubbles chat-scroll flex-1 overflow-y-auto p-3"
                   style={{
                     background: 'var(--bg-1, #f8fafc)',
                     backgroundImage: 'radial-gradient(rgba(0,151,167,.06) 1px, transparent 1px)',
                     backgroundSize: '24px 24px',
-                    maxHeight: 'calc(100vh - 360px)',
                   }}
                 >
                   {loadingMsgs && (
@@ -443,9 +464,16 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                   )}
                   {!loadingMsgs && renderedMessages.map(item => (
                     item.kind === 'sep'
-                      ? <div key={item.id} className="flex justify-center my-3 msg-in">
-                          <span className="px-3 py-1 rounded-full"
-                                style={{ background: 'rgba(255,255,255,.85)', color: 'var(--fg-3, #64748b)', fontSize: 11, fontWeight: 600, border: '1px solid var(--border, #e2e8f0)' }}>
+                      ? <div key={item.id} className="flex justify-center my-3 pchat-date-pill">
+                          <span
+                            className="px-3 py-1 rounded-full font-semibold text-white shadow-md"
+                            style={{
+                              background: 'linear-gradient(135deg, #7C3AED, #5B21B6)',
+                              fontSize: 11.5,
+                              letterSpacing: '0.02em',
+                              boxShadow: '0 2px 8px rgba(124,58,237,.35)',
+                            }}
+                          >
                             {item.label}
                           </span>
                         </div>
@@ -462,86 +490,148 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
                   <div ref={bottomRef} />
                 </div>
 
-                {/* Input */}
-                {active?.thread?.status === 'closed' ? (
-                  <div className="px-3 py-3 text-center" style={{ borderTop: '1px solid var(--border, #e2e8f0)', color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>
-                    Чат закрыт клиникой
-                  </div>
-                ) : (
-                  <div className="px-2 py-2" style={{ borderTop: '1px solid var(--border, #e2e8f0)', background: 'var(--surface, #fff)' }}>
-                    {pickedFiles.length > 0 && (
-                      <div className="px-2 pb-2 flex flex-wrap gap-1.5">
-                        {pickedFiles.map((f, i) => (
-                          <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'var(--bg-1, #f1f5f9)', fontSize: 12 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>attach_file</span>
-                            <span className="truncate" style={{ maxWidth: 140 }}>{f.name}</span>
-                            <button onClick={() => setPickedFiles(prev => prev.filter((_, j) => j !== i))}
-                                    className="grid place-items-center" style={{ width: 18, height: 18, color: 'var(--fg-3, #94a3b8)' }} aria-label="Убрать">
-                              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
-                            </button>
-                          </div>
-                        ))}
+                {/* Композер — sticky bottom, видим всегда (включая закрытый тред) */}
+                <div
+                  className="pchat-composer sticky bottom-0 z-10"
+                  style={{
+                    borderTop: '1px solid var(--border, #e2e8f0)',
+                    background: 'var(--surface, #fff)',
+                    paddingLeft: 8,
+                    paddingRight: 8,
+                    paddingTop: 8,
+                  }}
+                >
+                  {active?.thread?.status === 'closed' ? (
+                    // Закрытый тред → одна большая кнопка вместо ввода
+                    <button
+                      type="button"
+                      onClick={() => setShowNewThread(true)}
+                      className="w-full flex items-center justify-center gap-2 rounded-2xl font-bold text-white transition-transform active:scale-[.98]"
+                      style={{
+                        minHeight: 52,
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #0097A7, #1565C0)',
+                        boxShadow: '0 4px 14px rgba(0,151,167,.35)',
+                        fontSize: 15,
+                      }}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 24 }}>add_comment</span>
+                      Открыть новый тред
+                    </button>
+                  ) : (
+                    <>
+                      {pickedFiles.length > 0 && (
+                        <div className="pb-2 flex flex-wrap gap-1.5">
+                          {pickedFiles.map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-lg" style={{ background: 'var(--bg-1, #f1f5f9)', fontSize: 12 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>attach_file</span>
+                              <span className="truncate" style={{ maxWidth: 140 }}>{f.name}</span>
+                              <button onClick={() => setPickedFiles(prev => prev.filter((_, j) => j !== i))}
+                                      className="grid place-items-center" style={{ width: 18, height: 18, color: 'var(--fg-3, #94a3b8)' }} aria-label="Убрать">
+                                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>close</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex items-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => fileRef.current?.click()}
+                          className="grid place-items-center flex-shrink-0"
+                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                          aria-label="Прикрепить файл"
+                          title="Прикрепить файл"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>attach_file</span>
+                        </button>
+                        <input
+                          ref={fileRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || [])
+                            setPickedFiles(prev => [...prev, ...files].slice(0, 5))
+                            e.target.value = ''
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSlotRequestOpen(true)}
+                          disabled={!activeId}
+                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40"
+                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: 'var(--accent, #0097A7)' }}
+                          aria-label="Записаться"
+                          title="Запросить запись"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 24 }}>event_available</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStickersOpen(v => !v)}
+                          disabled={!activeId}
+                          className="hidden sm:grid place-items-center flex-shrink-0 disabled:opacity-40"
+                          style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)' }}
+                          aria-label="Стикеры"
+                          title="Стикеры"
+                        >
+                          <span style={{ fontSize: 22 }}>😀</span>
+                        </button>
+                        <Suspense fallback={null}>
+                          {stickersOpen && (
+                            <StickerPicker
+                              open={stickersOpen}
+                              onClose={() => setStickersOpen(false)}
+                              onPick={async (url) => {
+                                setStickersOpen(false)
+                                if (!activeId) return
+                                try {
+                                  const fileName = (url||'').split('/').pop() || 'sticker.svg'
+                                  const title = fileName.replace(/^sticker-\d+-/, '').replace(/\.svg$/, '')
+                                  await axios.post(
+                                    API_BASE + '/patient/chat/threads/' + activeId + '/messages',
+                                    { body: '', attachments: [{ type: 'sticker', url, title }] },
+                                    { params }
+                                  )
+                                  await fetchThread(activeId, true)
+                                  fetchThreads()
+                                } catch (e) {
+                                  const code = e?.response?.status
+                                  if (code === 402) setShowPremium(true)
+                                  else toast?.(e?.response?.data?.detail || 'Не удалось отправить', 'error')
+                                }
+                              }}
+                            />
+                          )}
+                        </Suspense>
+                        <textarea
+                          ref={textareaRef}
+                          value={draft}
+                          onChange={onDraftChange}
+                          onKeyDown={onKeyDown}
+                          rows={1}
+                          placeholder="Напишите сообщение…"
+                          className="flex-1 px-3 py-3 rounded-2xl outline-none resize-none"
+                          style={{ background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', fontSize: 15, color: 'var(--fg, #0F172A)', lineHeight: 1.4, maxHeight: 140, minHeight: 48 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={send}
+                          disabled={sending || (!draft.trim() && pickedFiles.length === 0)}
+                          className="grid place-items-center flex-shrink-0 text-white disabled:opacity-40 transition-transform active:scale-95"
+                          style={{ width: 48, height: 48, borderRadius: 14, background: 'linear-gradient(135deg, #0097A7, #0A2342)', boxShadow: '0 4px 12px rgba(0,151,167,.35)' }}
+                          aria-label="Отправить"
+                          title="Отправить (Enter)"
+                        >
+                          <span className="material-symbols-outlined" style={{ fontSize: 24, fontVariationSettings: "'FILL' 1" }}>
+                            {sending ? 'hourglass_top' : 'send'}
+                          </span>
+                        </button>
                       </div>
-                    )}
-                    <div className="flex items-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => fileRef.current?.click()}
-                        className="grid place-items-center flex-shrink-0"
-                        style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
-                        aria-label="Прикрепить файл"
-                        title="Прикрепить файл"
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 22 }}>attach_file</span>
-                      </button>
-                      <input
-                        ref={fileRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || [])
-                          setPickedFiles(prev => [...prev, ...files].slice(0, 5))
-                          e.target.value = ''
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setSlotRequestOpen(true)}
-                        disabled={!activeId}
-                        className="grid place-items-center flex-shrink-0 disabled:opacity-40"
-                        style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: 'var(--accent, #0097A7)' }}
-                        aria-label="Записаться"
-                        title="Запросить запись"
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 22 }}>event_available</span>
-                      </button>
-                      <textarea
-                        ref={textareaRef}
-                        value={draft}
-                        onChange={onDraftChange}
-                        onKeyDown={onKeyDown}
-                        rows={1}
-                        placeholder="Напишите сообщение…"
-                        className="flex-1 px-3 py-2.5 rounded-2xl outline-none resize-none"
-                        style={{ background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', fontSize: 14, color: 'var(--fg, #0F172A)', lineHeight: 1.4, maxHeight: 140, minHeight: 40 }}
-                      />
-                      <button
-                        type="button"
-                        onClick={send}
-                        disabled={sending || (!draft.trim() && pickedFiles.length === 0)}
-                        className="grid place-items-center flex-shrink-0 text-white disabled:opacity-40"
-                        style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #0097A7, #0A2342)', boxShadow: '0 4px 12px rgba(0,151,167,.35)' }}
-                        aria-label="Отправить"
-                        title="Отправить (Enter)"
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}>
-                          {sending ? 'hourglass_top' : 'send'}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                )}
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -556,7 +646,7 @@ export default function PatientChatSection({ sessionToken: sessionTokenProp, onG
           onCreated={(t) => {
             setShowNewThread(false)
             fetchThreads()
-            if (t?.id) { setActiveId(t.id); setShowListMobile(false) }
+            if (t?.id) { setActiveId(t.id) }
           }}
           sessionToken={sessionToken}
           clinics={clinicsForNew}

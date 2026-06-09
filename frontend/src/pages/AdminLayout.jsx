@@ -30,6 +30,8 @@ const AIKnowledgeSection = lazy(() => import('../sections/AIKnowledgeSection'))
 const AiAssistantSection = lazy(() => import('../sections/AiAssistantSection'))
 const PlatformBillingSection = lazy(() => import('../sections/PlatformBillingSection'))
 const PlatformAnalyticsSection = lazy(() => import('../sections/PlatformAnalyticsSection'))
+// Churn Dashboard — отток тенантов (roadmap #2). Доступен только super_admin.
+const AdminChurn = lazy(() => import('./AdminChurn'))
 const PaymentGatewaysSection = lazy(() => import('../sections/PaymentGatewaysSection'))
 // История и аналитика звонков (CallLog) — для super_admin / franchise_owner
 const CallLogSection = lazy(() => import('../sections/calls/CallLogSection'))
@@ -63,6 +65,12 @@ const CrossClinicDirectorySection = lazy(() => import("../sections/CrossClinicDi
 const LtvAnalyticsSection = lazy(() => import("../sections/ltv/LtvAnalyticsSection"))
 // Журнал безопасности — единый dashboard алертов (super_admin)
 const SecuritySection = lazy(() => import("../sections/SecuritySection"))
+// ── Платформенные расширения 2026-05-23 ───────────────────────────────
+const AdminFeatureFlags = lazy(() => import('./AdminFeatureFlags'))
+const AdminApiQuotas = lazy(() => import('./AdminApiQuotas'))
+const AdminTenantHealth = lazy(() => import('./AdminTenantHealth'))
+const AdminCostAttribution = lazy(() => import('./AdminCostAttribution'))
+const AdminArrLtv = lazy(() => import('./AdminArrLtv'))
 import api from '../api'
 // import HelpModal from '../components/HelpModal' // ушло на /wiki
 import { BrandLogo } from "../components/BrandLogo"
@@ -190,6 +198,12 @@ const NAV = [
   { key: 'acts',       label: 'Акты',          icon: 'receipt_long' },
   { key: 'platform_billing',   label: 'Биллинг платформы',   icon: 'paid' },
   { key: 'platform_analytics', label: 'Аналитика платформы', icon: 'insights' },
+  { key: 'churn', label: 'Churn', icon: 'trending_down' },
+  { key: 'arr_ltv',           label: 'ARR / Cohort LTV',     icon: 'trending_up' },
+  { key: 'tenant_health',     label: 'Tenant Health',        icon: 'monitor_heart' },
+  { key: 'cost_attribution',  label: 'Cost Attribution',     icon: 'data_usage' },
+  { key: 'feature_flags',     label: 'Feature Flags',        icon: 'flag' },
+  { key: 'api_quotas',        label: 'API Quotas',           icon: 'speed' },
   { key: 'payment_gateways',   label: 'Платёжные шлюзы',     icon: 'credit_card' },
   { key: 'loyalty',            label: 'Лояльность',           icon: 'loyalty' },
   { key: 'recordings',         label: 'Запись звонков',       icon: 'mic' },
@@ -233,6 +247,12 @@ const NAV_GROUP_OF = {
   ai_knowledge:       'ANALYTICS',
   ai_assistant:       'CONTENT',
   platform_analytics: 'ANALYTICS',
+  churn:              'ANALYTICS',
+  arr_ltv:            'ANALYTICS',
+  tenant_health:      'ANALYTICS',
+  cost_attribution:   'FINANCE',
+  feature_flags:      'PLATFORM',
+  api_quotas:         'SYSTEM',
   monitoring:         'ANALYTICS',
   audit:              'ANALYTICS',
   calls_log:          'ANALYTICS',
@@ -314,6 +334,12 @@ const PAGE_TITLES = {
   acts:               { title: 'Акты',                 subtitle: 'Расчётные акты для бухгалтерии' },
   platform_billing:   { title: 'Биллинг платформы',    subtitle: 'Финансы платформы КлиникСеть' },
   platform_analytics: { title: 'Аналитика платформы',  subtitle: 'Сводная статистика по всем тенантам' },
+  churn:              { title: 'Churn',                subtitle: 'Отток тенантов: rate, причины, тренды 12 месяцев' },
+  arr_ltv:            { title: 'ARR / Cohort LTV',     subtitle: 'Годовая выручка, кохорта-ретеншн, LTV по планам, прогноз' },
+  tenant_health:      { title: 'Tenant Health',        subtitle: 'Health-score тенантов: активность, оплаты, риск оттока' },
+  cost_attribution:   { title: 'Cost Attribution',     subtitle: 'Кто из тенантов сколько ресурсов расходует и оценка стоимости' },
+  feature_flags:      { title: 'Feature Flags',        subtitle: 'Управление фичами на тенантах, percentage rollout, A/B-тесты' },
+  api_quotas:         { title: 'API Quotas',           subtitle: 'Лимиты RPM/RPD/storage/users по тенантам и текущее потребление' },
   payment_gateways:   { title: 'Платёжные шлюзы',      subtitle: 'YooKassa, ЮMoney, Stripe и др.' },
   loyalty:            { title: 'Программа лояльности', subtitle: 'Тиры, автоначисления, история и каталог обмена баллов' },
   recordings:         { title: 'Запись звонков',       subtitle: 'Аудио/видео запись, расшифровка через Whisper и AI-резюме' },
@@ -6882,6 +6908,37 @@ function SchedulingSection({ token }) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// ── Tenant Health Score badge (roadmap #3) ─────────────────────────────────
+// Цветной кружок (🟢/🟡/🔴) + балл + tooltip с breakdown. Безопасно ведёт себя
+// если данные не загружены (показывает «—»).
+function TenantHealthBadge({ data }) {
+  if (!data) {
+    return (
+      <span title="Здоровье тенанта — загрузка..." className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs">—</span>
+    )
+  }
+  const { score, status, last_active } = data
+  const palette = {
+    green:  { bg: 'bg-emerald-100 dark:bg-emerald-900/30', dot: 'bg-emerald-500', text: 'text-emerald-700 dark:text-emerald-300' },
+    yellow: { bg: 'bg-amber-100 dark:bg-amber-900/30',     dot: 'bg-amber-500',   text: 'text-amber-700 dark:text-amber-300' },
+    red:    { bg: 'bg-rose-100 dark:bg-rose-900/30',       dot: 'bg-rose-500',    text: 'text-rose-700 dark:text-rose-300' },
+  }
+  const p = palette[status] || palette.red
+  const lastStr = last_active ? new Date(last_active).toLocaleString('ru-RU') : 'нет данных'
+  const tooltip = `Health Score: ${score}/100 (${status})\nПоследняя активность: ${lastStr}\n\nBreakdown:\n- Активность 30д (30)\n- Объём записей 30д (25)\n- Оплата счетов (25)\n- Time-to-first-value (20)`
+  return (
+    <span
+      title={tooltip}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${p.bg} ${p.text} cursor-help`}
+      aria-label={`Health Score ${score} (${status})`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />
+      {score}
+    </span>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // SuperAdminSection — Панель владельца платформы (role=super_admin)
 // ---------------------------------------------------------------------------
 
@@ -6900,6 +6957,7 @@ function SuperAdminSection({ token }) {
   const [creating, setCreating] = useState(false)
   const [createErr, setCreateErr] = useState('')
   const [drawerTenant, setDrawerTenant] = useState(null)
+  const [healthByTid, setHealthByTid] = useState({})
 
   const load = () => {
     setLoading(true)
@@ -6913,6 +6971,14 @@ function SuperAdminSection({ token }) {
       setBilling(b.data)
       setLoading(false)
     }).catch(() => setLoading(false))
+    // Health Score (roadmap #3) — отдельным запросом, не блокирует основной UI.
+    apiFetch('get', '/admin/tenants/health-overview', token)
+      .then(r => {
+        const map = {}
+        ;(r.data || []).forEach(h => { map[h.tenant_id] = h })
+        setHealthByTid(map)
+      })
+      .catch(() => {})
   }
 
   useEffect(() => { load() }, [])
@@ -7040,7 +7106,7 @@ function SuperAdminSection({ token }) {
                     <td data-label="Клиники" className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.clinics_count}</td>
                     <td data-label="Польз." className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 text-center">{t.users_count}</td>
                     <td data-label="Активность" className="px-4 py-3 text-center">
-                      <span title="Tenant activity health — coming soon" className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 text-xs cursor-help" aria-label="Активность — coming soon">—</span>
+                      <TenantHealthBadge data={healthByTid[t.id]} />
                     </td>
                     <td data-label="Статус" className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -8106,7 +8172,8 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
     'modules_catalog', 'contacts', 'wiki', 'webhooks', 'ai_analytics',
     'ai_knowledge',
     'patient_chats',
-    'platform_billing', 'platform_analytics', 'payment_gateways',
+    'platform_billing', 'platform_analytics', 'payment_gateways', 'churn',
+    'arr_ltv', 'tenant_health', 'cost_attribution', 'feature_flags', 'api_quotas',
     'roles',
   ])
   // Операционные секции — НЕ показывать платформенному super_admin без SLUG
@@ -8202,6 +8269,12 @@ export default function AdminLayout({ adminToken, user, onLogout }) {
       case 'acts':           return <Suspense fallback={<SectionLoader />}><ActsSection token={adminToken} isSuperAdmin={isSuperAdmin} /></Suspense>
       case 'platform_billing':   return <Suspense fallback={<SectionLoader />}><PlatformBillingSection token={adminToken} /></Suspense>
       case 'platform_analytics': return <Suspense fallback={<SectionLoader />}><PlatformAnalyticsSection token={adminToken} /></Suspense>
+      case 'churn':              return <Suspense fallback={<SectionLoader />}><AdminChurn token={adminToken} /></Suspense>
+      case 'arr_ltv':            return <Suspense fallback={<SectionLoader />}><AdminArrLtv /></Suspense>
+      case 'tenant_health':      return <Suspense fallback={<SectionLoader />}><AdminTenantHealth /></Suspense>
+      case 'cost_attribution':   return <Suspense fallback={<SectionLoader />}><AdminCostAttribution /></Suspense>
+      case 'feature_flags':      return <Suspense fallback={<SectionLoader />}><AdminFeatureFlags /></Suspense>
+      case 'api_quotas':         return <Suspense fallback={<SectionLoader />}><AdminApiQuotas /></Suspense>
       case 'payment_gateways':   return <Suspense fallback={<SectionLoader />}><PaymentGatewaysSection token={adminToken} /></Suspense>
       case 'loyalty':            return <Suspense fallback={<SectionLoader />}><LoyaltySection token={adminToken} /></Suspense>
       case 'recordings':         return <Suspense fallback={<SectionLoader />}><CallRecordingsSection token={adminToken} /></Suspense>

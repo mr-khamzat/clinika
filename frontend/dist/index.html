@@ -3,18 +3,93 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>КлиникаСеть</title>
-  <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#00A7AA" />
+  <title>КлиникСеть — SaaS для медицинских сетей и франшиз | от 9 900 ₽/мес</title>
+  <meta name="description" content="Платформа для управления медицинскими клиниками и сетями: ЭМК, расписание, направления, биллинг, телемедицина, AI-ассистент, лояльность. 14 дней бесплатно. 152-ФЗ. SLA 99.9%." />
+  <meta name="keywords" content="МИС, медицинская информационная система, SaaS клиника, CRM медицинский, телемедицина, ЭМК, программа лояльности клиники, управление франшизой клиник" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://клиниксеть.рф/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://клиниксеть.рф/" />
+  <meta property="og:title" content="КлиникСеть — SaaS для медицинских сетей" />
+  <meta property="og:description" content="Платформа для медицинских клиник и франшиз: ЭМК, биллинг, телемедицина, AI, бонусы. От 9 900 ₽/мес. 14 дней бесплатно." />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:site_name" content="КлиникСеть" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="КлиникСеть — SaaS для медицинских сетей" />
+  <meta name="twitter:description" content="Платформа для медицинских клиник и франшиз. От 9 900 ₽/мес. 14 дней бесплатно." />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "КлиникСеть",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "url": "https://клиниксеть.рф/",
+    "offers": {
+      "@type": "AggregateOffer",
+      "lowPrice": "9900",
+      "highPrice": "49900",
+      "priceCurrency": "RUB",
+      "offerCount": "3"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "5.0",
+      "ratingCount": "10"
+    }
+  }
+  </script>
+  <!-- Golos Text — self-hosted (раньше тянулся с fonts.googleapis.com — медленно/блокируется в РФ) -->
+  <link rel="preload" href="/fonts/golos/golos-text.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+  <link rel="stylesheet" href="/fonts/golos/golos-text.css" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="shortcut icon" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <!-- manifest подключается динамически в PatientCabinet с актуальным start_url (сессионный токен) -->
+  <meta name="theme-color" content="#0097A7" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="КлиникаСеть" />
-  <script async src="https://telegram.org/js/telegram-web-app.js" onerror="console.info([TG] SDK недоступен — работаем как веб-приложение)"></script>
-  <script type="module" crossorigin src="/assets/index-BdrLFWxF.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-xgfRHOQq.css">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="КлиникСеть" />
+  <!-- Material Symbols: preload (rel=preload as=font не блокирует first paint).
+       Имя файла фиксировано через vite.config.assetFileNames. -->
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/material-symbols-outlined-subset.woff2" crossorigin="anonymous" />
+  <!-- Telegram Web App SDK подключается динамически только в PatientCabinet (/p/) — см. lib/tg.js loadTelegramSDK() -->
+  <script type="module" crossorigin src="/assets/index-CzEBM9eF.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/vendor-react-C7mzUqJk.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-markdown-BV_3vDcs.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-misc-BmbujeZZ.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-pdf-qr-PdWyLTbq.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-state-DkTFkU5V.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-axios-BOeqtr82.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-lMYlUqAt.css">
 </head>
 <body>
   <div id="root"></div>
+  <!-- /staff-chat: парсим JWT из URL hash ДО загрузки React-бандла -->
+  <script>
+  (function(){
+    try {
+      var p = window.location.pathname;
+      if (p !== "/staff-chat" && p.indexOf("/staff-chat/") !== 0) return;
+      if (!window.location.hash || window.location.hash.length < 2) return;
+      var params = new URLSearchParams(window.location.hash.slice(1));
+      var at = params.get("access_token");
+      var rt = params.get("refresh_token");
+      if (!at) return;
+      var ROOT = ["admin","staff-chat","design-preview-2","design-preview"];
+      var parts = p.split("/").filter(Boolean);
+      var slug = (parts[0] && ROOT.indexOf(parts[0]) === -1) ? parts[0] : "";
+      localStorage.setItem("clinika_admin_token_" + slug, at);
+      localStorage.setItem("clinika_token_" + slug, at);
+      if (rt) {
+        localStorage.setItem("clinika_admin_refresh_token_" + slug, rt);
+        localStorage.setItem("clinika_refresh_token_" + slug, rt);
+      }
+      history.replaceState(null, "", p + window.location.search);
+      window.__STAFFCHAT_TOKEN_INJECTED__ = true;
+    } catch(e) { console.error("staff-chat bootstrap:", e); }
+  })();
+  </script>
 </body>
 </html>

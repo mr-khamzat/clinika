@@ -11,6 +11,11 @@ import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 
 export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
+  // Patient session token — обязательный query-параметр ?t=... для backend.
+  // Читаем из localStorage (ключ совпадает с PatientCabinet TOKEN_KEY).
+  // session_token (short-lived JWT) лежит в clinika_patient_session — это то что бекенд проверяет
+  const sessionToken = (typeof localStorage !== 'undefined' && localStorage.getItem('clinika_patient_session')) || ''
+  const tParam = sessionToken ? `?t=${encodeURIComponent(sessionToken)}` : ''
   const [open, setOpen] = useState(false)
   // 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
   const [state, setState] = useState('idle')
@@ -27,7 +32,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
     if (!patientPhone || !tenantSlug) return null
     setState('loading')
     try {
-      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations`, {
+      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations${tParam}`, {
         patient_phone: patientPhone,
         tenant_slug:   tenantSlug,
       })
@@ -36,7 +41,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
       setConvStatus(r.data?.status || 'active')
       // Подгружаем историю если уже есть
       try {
-        const h = await axios.get(`${apiBase}/patient-portal/ai/conversations/${id}/messages`)
+        const h = await axios.get(`${apiBase}/patient-portal/ai/conversations/${id}/messages${tParam}`)
         const msgs = Array.isArray(h.data?.messages) ? h.data.messages : []
         setMessages(msgs.filter(m => m.role !== 'system'))
       } catch {}
@@ -64,7 +69,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
     if (!patientPhone || !tenantSlug) return
     // Проверяем доступность модуля «тихо»: легковесная попытка создания
     // (если уже есть — вернётся существующая; если 402 — скроем виджет).
-    axios.post(`${apiBase}/patient-portal/ai/conversations`, {
+    axios.post(`${apiBase}/patient-portal/ai/conversations${tParam}`, {
       patient_phone: patientPhone, tenant_slug: tenantSlug,
     }).then(r => {
       if (!alive) return
@@ -103,7 +108,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
     }])
     try {
       const r = await axios.post(
-        `${apiBase}/patient-portal/ai/conversations/${id}/messages`,
+        `${apiBase}/patient-portal/ai/conversations/${id}/messages${tParam}`,
         { text },
       )
       const answer = r.data?.text || ''
@@ -132,7 +137,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
   async function escalate() {
     if (!convId) return
     try {
-      await axios.post(`${apiBase}/patient-portal/ai/conversations/${convId}/escalate`)
+      await axios.post(`${apiBase}/patient-portal/ai/conversations/${convId}/escalate${tParam}`)
       setConvStatus('escalated')
       setMessages(prev => [...prev, {
         id: 's-' + Date.now(),
@@ -267,3 +272,4 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
     </>
   )
 }
+// cache-bust 1780606462

@@ -99,7 +99,7 @@ def _serialize_config(c: PaymentGatewayConfig) -> dict[str, Any]:
         "clinic_id": str(c.clinic_id),
         "gateway": c.gateway,
         "shop_id": c.shop_id,
-        "secret_key_present": bool(c.secret_key),
+        "secret_key_present": bool(c.secret_key_encrypted),
         "is_active": c.is_active,
         "is_test_mode": c.is_test_mode,
         "config": c.config or {},
@@ -405,12 +405,13 @@ async def upsert_payment_config(
     if cfg is None:
         if not body.secret_key:
             raise HTTPException(status_code=400, detail="secret_key обязателен при создании")
+        from app.services.encryption_service import encrypt as _enc
         cfg = PaymentGatewayConfig(
             tenant_id=tenant.id,
             clinic_id=clinic_id,
             gateway=body.gateway,
             shop_id=body.shop_id,
-            secret_key=body.secret_key,    # TODO: Fernet.encrypt
+            secret_key_encrypted=_enc(body.secret_key),
             is_active=body.is_active,
             is_test_mode=body.is_test_mode,
             config=body.config or {},
@@ -419,7 +420,8 @@ async def upsert_payment_config(
     else:
         cfg.shop_id = body.shop_id
         if body.secret_key:
-            cfg.secret_key = body.secret_key   # TODO: Fernet.encrypt
+            from app.services.encryption_service import encrypt as _enc
+            cfg.secret_key_encrypted = _enc(body.secret_key)
         cfg.is_active = body.is_active
         cfg.is_test_mode = body.is_test_mode
         cfg.config = body.config or cfg.config or {}

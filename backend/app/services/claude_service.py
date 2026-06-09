@@ -1,4 +1,5 @@
 """
+import os
 Claude (Anthropic) сервис для AI-генерации в кабинете врача.
 
 Используется как основной AI-провайдер для:
@@ -51,7 +52,7 @@ def _get_client() -> anthropic.AsyncAnthropic:
         key = (settings.anthropic_api_key or "").strip()
         if not key:
             raise RuntimeError("ANTHROPIC_API_KEY не задан в .env")
-        _client = anthropic.AsyncAnthropic(api_key=key)
+        _client = anthropic.AsyncAnthropic(api_key=key, base_url=os.environ.get("ANTHROPIC_BASE_URL") or None)
     return _client
 
 

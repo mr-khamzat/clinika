@@ -52,19 +52,19 @@ export default function ReassignModal({ open, onClose, threadId, clinicId, onDon
          onClick={onClose}>
       <div onClick={e => e.stopPropagation()}
            className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden"
-           style={{ background: 'var(--bg, #fff)', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
+           style={{ background: '#ffffff', color: '#0f172a', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
         <div className="px-5 py-4 border-b" style={{ borderColor: 'var(--border, #e2e8f0)' }}>
-          <div className="font-bold" style={{ fontSize: 16 }}>Передать тред</div>
+          <div className="font-bold" style={{ fontSize: 16, color: "#0f172a" }}>Передать тред</div>
         </div>
         <div className="p-5 space-y-3">
           {loading ? (
-            <div className="text-center py-4" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Загрузка…</div>
+            <div className="text-center py-4" style={{ color: '#475569', fontSize: 13 }}>Загрузка…</div>
           ) : users.length === 0 ? (
-            <div className="text-center py-4" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Нет доступных сотрудников</div>
+            <div className="text-center py-4" style={{ color: '#475569', fontSize: 13 }}>Нет доступных сотрудников</div>
           ) : (
             <select value={picked} onChange={e => setPicked(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl outline-none"
-                    style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', fontSize: 14 }}>
+                    style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontSize: 14, colorScheme: 'light' }}>
               <option value="">— выберите сотрудника —</option>
               {users.map(u => (
                 <option key={u.id} value={u.id}>
@@ -77,7 +77,7 @@ export default function ReassignModal({ open, onClose, threadId, clinicId, onDon
           <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
                     placeholder="Заметка (необязательно)…"
                     className="w-full px-3 py-2 rounded-xl outline-none resize-none"
-                    style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', fontSize: 14 }} />
+                    style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontSize: 14 }} />
           <div className="flex gap-2 pt-1">
             <button onClick={onClose}
                     className="flex-1 py-2.5 rounded-xl font-semibold"

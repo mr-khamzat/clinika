@@ -137,3 +137,68 @@ async def use_template(
     t.usage_count = (t.usage_count or 0) + 1
     await db.commit()
     return {"body": t.body, "usage_count": t.usage_count}
+
+
+# ── Seed defaults ────────────────────────────────────────────────────────────
+# Платформенные шаблоны для регистратора. Создаются в рамках тенанта пользователя
+# (`created_by_user_id IS NULL` = «общий шаблон тенанта»). Идемпотентно: уже
+# существующие shortcut'ы пропускаются.
+DEFAULT_TEMPLATES = [
+    ("greeting", "прив",   "Приветствие",            "Здравствуйте! Меня зовут {{ user_name }}, регистратор клиники {{ clinic_name }}. Чем могу помочь?"),
+    ("closing",  "спс",    "Благодарность",          "Спасибо за обращение! Если возникнут вопросы — пишите."),
+    ("pricing",  "цены",   "Прайс",                  "Прайс на услуги: {{ clinic_url }}/prices. Уточнить конкретную услугу?"),
+    ("schedule", "граф",   "График работы",          "Мы работаем: Пн-Пт 09:00–20:00, Сб 09:00–18:00, Вс выходной."),
+    ("prep",     "прав",   "Правила подготовки",     "Для подготовки к анализу: за 8–12 часов не есть, утром только воду. Подробнее по ссылке."),
+    ("prep",     "приём",  "Информация о приёме",    "Пожалуйста, приходите за 10 минут до приёма. С собой паспорт и СНИЛС (при первом визите)."),
+    ("schedule", "отмена", "Отмена записи",          "Понимаю, отменим запись. В следующий раз — напишите за 24 часа, чтобы избежать штрафа."),
+    ("schedule", "перенос","Перенос записи",         "Подберём удобное время. Какие дни и время вам подходят?"),
+    ("greeting", "нерад",  "Извинение за задержку",  "Извините за ожидание ответа! Сейчас уточню и вернусь."),
+    ("closing",  "закр",   "Закрытие чата",          "Был рад помочь! Если будут вопросы — пишите снова. Хорошего дня! 🌷"),
+]
+
+
+@router.post("/seed-defaults")
+async def seed_defaults(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Идемпотентный сид 10 платформенных шаблонов в текущий тенант.
+
+    Запускается из админки или вручную manager/franchise_owner/super_admin/director.
+    Существующие shortcut'ы пропускаются (по UNIQUE-ключу tenant+user+shortcut).
+    """
+    _require_staff(user)
+    role_val = user.role.value if hasattr(user.role, "value") else user.role
+    if role_val not in ("manager", "franchise_owner", "super_admin", "director"):
+        raise HTTPException(403, "Только manager/owner/director")
+
+    # Какие shortcut'ы уже есть как «общий» (created_by_user_id IS NULL)
+    existing_rows = (await db.execute(
+        select(MessageTemplate.shortcut)
+        .where(MessageTemplate.tenant_id == user.tenant_id)
+        .where(MessageTemplate.created_by_user_id.is_(None))
+    )).scalars().all()
+    existing = set(existing_rows)
+
+    created = 0
+    skipped = 0
+    for category, shortcut, title, body in DEFAULT_TEMPLATES:
+        if shortcut in existing:
+            skipped += 1
+            continue
+        t = MessageTemplate(
+            tenant_id=user.tenant_id,
+            created_by_user_id=None,  # общий шаблон тенанта
+            shortcut=shortcut,
+            title=title,
+            body=body,
+            category=category,
+        )
+        db.add(t)
+        created += 1
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(500, f"Ошибка сида: {e}")
+    return {"created": created, "skipped": skipped, "total": len(DEFAULT_TEMPLATES)}

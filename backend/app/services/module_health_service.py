@@ -736,6 +736,10 @@ async def _upsert_result(db: AsyncSession,
 
     if new_status == ModuleHealthStatus.OK.value:
         existing.last_success_at = now
+        # Сброс счётчика и сообщения если последняя ошибка была >24ч назад
+        if existing.last_error_at and (now - existing.last_error_at) > timedelta(hours=24):
+            existing.error_count_24h = 0
+            existing.last_error_message = None
     if new_status == ModuleHealthStatus.ERROR.value:
         existing.last_error_at = now
         existing.last_error_message = message[:1000]

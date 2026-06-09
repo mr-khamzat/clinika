@@ -1,25 +1,28 @@
 {
-  "name": "КлиникаСеть",
+  "name": "КлиникаСеть — Кабинет пациента",
   "short_name": "КлиникаСеть",
-  "description": "Медицинская информационная система",
+  "description": "Личный кабинет пациента: направления, история визитов, QR-код",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#F0F5F6",
-  "theme_color": "#00A7AA",
-  "orientation": "portrait",
+  "background_color": "#0A2342",
+  "theme_color": "#0097A7",
+  "orientation": "portrait-primary",
+  "categories": ["health", "medical"],
+  "lang": "ru",
   "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "name": "Мои направления",
+      "short_name": "Направления",
+      "url": "/",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any" }]
     }
-  ]
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
 }

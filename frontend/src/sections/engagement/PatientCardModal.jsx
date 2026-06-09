@@ -27,8 +27,21 @@ function fmtDateTime(s) {
   catch { return s }
 }
 
+// MIS может присылать address как строку или как объект {city,street,house,...}.
+// React #31 крашится при попытке рендерить объект напрямую — нормализуем тут.
+function fmtMisAddress(a) {
+  if (!a) return ''
+  if (typeof a === 'string') return a
+  if (a.fullAddress) return a.fullAddress
+  const parts = [a.zip_code, a.city, a.district, a.street, a.house, a.building]
+  if (a.flat) parts.push('кв.' + a.flat)
+  if (a.metro) parts.push('м.' + a.metro)
+  return parts.filter(Boolean).join(', ')
+}
+
 const TABS = [
   { id: 'profile',   label: 'Профиль',     icon: 'account_circle' },
+  { id: 'codes',     label: 'Коды доступа', icon: 'key' },
   { id: 'prefs',     label: 'Коммуникации', icon: 'tune' },
   { id: 'logins',    label: 'История ЛК',   icon: 'history' },
   { id: 'apps',      label: 'Записи и платежи', icon: 'event' },
@@ -42,7 +55,7 @@ export default function PatientCardModal({ token, patientId, onClose }) {
 
   const reload = useCallback(() => {
     setLoading(true)
-    apiFetch(token, `/api/engagement/patients/${patientId}`)
+    apiFetch(token, `/engagement/patients/${patientId}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setData(d); setLoading(false) })
       .catch(() => setLoading(false))
@@ -59,6 +72,7 @@ export default function PatientCardModal({ token, patientId, onClose }) {
   const recentLogins = data?.recent_logins || []
   const appointments = data?.appointments || []
   const suggestions = data?.suggestions || []
+  const referrals = data?.referrals || []
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[1000] flex items-center justify-center p-4" onClick={onClose}>
@@ -109,6 +123,9 @@ export default function PatientCardModal({ token, patientId, onClose }) {
           {!loading && tab === 'apps' && (
             <AppointmentsTab appointments={appointments} />
           )}
+          {!loading && tab === 'codes' && (
+            <CodesTab referrals={referrals} />
+          )}
           {!loading && tab === 'pushes' && (
             <PushHistoryTab suggestions={suggestions} />
           )}
@@ -128,7 +145,7 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
     if (!newTag.trim()) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/patients/${patientId}/tags`, {
+      await apiFetch(token, `/engagement/patients/${patientId}/tags`, {
         method: 'POST', body: JSON.stringify({ name: newTag.trim() })
       })
       setNewTag(''); onChange()
@@ -137,7 +154,7 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
   async function removeTag(tagId) {
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/patients/${patientId}/tags/${tagId}`, { method: 'DELETE' })
+      await apiFetch(token, `/engagement/patients/${patientId}/tags/${tagId}`, { method: 'DELETE' })
       onChange()
     } finally { setBusy(false) }
   }
@@ -145,7 +162,7 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
     if (!newNote.trim()) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/patients/${patientId}/notes`, {
+      await apiFetch(token, `/engagement/patients/${patientId}/notes`, {
         method: 'POST', body: JSON.stringify({ text: newNote.trim() })
       })
       setNewNote(''); onChange()
@@ -154,7 +171,7 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
   async function toggleNotePin(n) {
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/patients/${patientId}/notes/${n.id}`, {
+      await apiFetch(token, `/engagement/patients/${patientId}/notes/${n.id}`, {
         method: 'PATCH', body: JSON.stringify({ pinned: !n.pinned })
       })
       onChange()
@@ -164,7 +181,7 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
     if (!confirm('Удалить заметку?')) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/patients/${patientId}/notes/${n.id}`, { method: 'DELETE' })
+      await apiFetch(token, `/engagement/patients/${patientId}/notes/${n.id}`, { method: 'DELETE' })
       onChange()
     } finally { setBusy(false) }
   }
@@ -174,14 +191,27 @@ function ProfileTab({ token, patientId, profile, tags, notes, onChange }) {
       {/* Профильные поля */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Field label="Телефон" value={profile.phone} />
-        <Field label="Имя" value={profile.name} />
-        <Field label="Email" value={profile.email} />
-        <Field label="Дата рождения" value={fmtDate(profile.birth_date)} />
+        <Field label="Имя" value={profile.name || profile.mis?.full_name} />
+        <Field label="Email" value={profile.email || profile.mis?.email} />
+        <Field label="Дата рождения" value={fmtDate(profile.birth_date || profile.mis?.birth_date)} />
         <Field label="Логинов" value={profile.login_count ?? '—'} />
         <Field label="Last seen" value={fmtDateTime(profile.last_seen_at)} />
         <Field label="Зарегистрирован" value={fmtDateTime(profile.created_at)} />
         <Field label="Marketing opt-in" value={profile.marketing_opt_in ? 'Да' : 'Нет'} />
       </div>
+
+      {profile.mis && (profile.mis.address || profile.mis.sex || profile.mis.mis_patient_id) && (
+        <div className="rounded-lg border border-cyan-200 dark:border-cyan-800/50 bg-cyan-50/50 dark:bg-cyan-900/20 p-3">
+          <div className="text-xs font-semibold text-cyan-700 dark:text-cyan-400 mb-2 flex items-center gap-1">
+            <span className="material-symbols-outlined text-sm">link</span>Данные из МИС
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            {profile.mis.sex && <div><span className="text-gray-500 dark:text-gray-400">Пол:</span> <b>{profile.mis.sex === 'm' ? 'М' : profile.mis.sex === 'f' ? 'Ж' : profile.mis.sex}</b></div>}
+            {fmtMisAddress(profile.mis.address) && <div className="md:col-span-2"><span className="text-gray-500 dark:text-gray-400">Адрес:</span> <b>{fmtMisAddress(profile.mis.address)}</b></div>}
+            {profile.mis.mis_patient_id && <div><span className="text-gray-500 dark:text-gray-400">ID в МИС:</span> <span className="font-mono text-xs">{profile.mis.mis_patient_id}</span></div>}
+          </div>
+        </div>
+      )}
 
       {/* Tags */}
       <div>
@@ -276,7 +306,7 @@ function PrefsTab({ token, patientId, prefs, onChange }) {
   async function save() {
     setBusy(true); setSaved(false)
     try {
-      const r = await apiFetch(token, `/api/engagement/patients/${patientId}/comm-prefs`, {
+      const r = await apiFetch(token, `/engagement/patients/${patientId}/comm-prefs`, {
         method: 'PATCH', body: JSON.stringify(draft)
       })
       if (r.ok) { setSaved(true); setTimeout(() => setSaved(false), 1800); onChange() }
@@ -430,3 +460,47 @@ function PushHistoryTab({ suggestions }) {
     </div>
   )
 }
+
+function CodesTab({ referrals }) {
+  if (!referrals.length) {
+    return <div className="text-center py-10 text-gray-400">У этого пациента ещё не было направлений с кодами</div>
+  }
+  const statusColors = {
+    PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    CONFIRMED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    COMPLETED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    CANCELLED: 'bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300',
+    REJECTED: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+  }
+  return (
+    <div className="space-y-3">
+      <div className="text-xs text-gray-500 dark:text-gray-400 px-1">
+        Код направления — это пароль пациента для входа в ЛК по телефону.<br/>
+        Кликни на код чтобы скопировать. Самый свежий — первым.
+      </div>
+      {referrals.map(r => (
+        <div key={r.id} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/30">
+          <button
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(String(r.short_code)).catch(()=>{})}
+            title="Скопировать код"
+            className="font-mono text-lg font-bold text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition shrink-0"
+          >
+            {r.short_code || '—'}
+          </button>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{r.service_name || 'Услуга не указана'}</span>
+              <span className={`text-xs px-2 py-0.5 rounded font-medium ${statusColors[r.status] || "bg-gray-100 text-gray-600"}`}>{r.status}</span>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {r.doctor_name && <span>Врач: <b>{r.doctor_name}</b> · </span>}
+              {r.created_at && <span>{new Date(r.created_at).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}</span>}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+

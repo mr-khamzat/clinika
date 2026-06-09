@@ -71,6 +71,7 @@ from app.routers.tenant_api_keys import router as tenant_api_keys_router
 from app.routers.public_api_v1 import router as public_api_v1_router
 from app.routers.ads import router as ads_router
 from app.routers.ads_ai import router as ads_ai_router
+from app.routers.nps import router as nps_router
 from app.routers.ads_analytics import router as ads_analytics_router
 from app.routers.patient_engagement_analytics import router as engagement_analytics_router
 from app.routers.patient_engagement_segments import router as engagement_segments_router
@@ -82,6 +83,7 @@ from app.routers.commercial import router as commercial_router
 from app.routers.marketplace import router as marketplace_router
 from app.routers.ai import router as ai_router
 from app.routers.ai_platform import router as ai_platform_router
+from app.routers.admin_analytics import router as admin_analytics_router
 from app.routers.recruiter import router as recruiter_router
 from app.routers.visiting_doctor import router as visiting_router
 from app.routers.doctor_ai import router as doctor_ai_router
@@ -154,9 +156,14 @@ from app.routers.security import router as security_router
 # Глава 9 — Подписка Здоровье+, async-чат, iCal, document storage
 from app.routers.patient_subscription import router as patient_subscription_router
 from app.routers.admin_subscription_plans import router as admin_subscription_plans_router
+# quota01: API Quotas & Rate Limits по тенантам (super_admin задаёт лимиты)
+from app.routers.admin_api_quotas import router as admin_api_quotas_router
 from app.routers.manager_subscription_cash import router as manager_subscription_cash_router
 from app.routers.patient_chat_threads import router as patient_chat_threads_router
 from app.routers.clinic_chat import router as clinic_chat_router
+# slot-hold + vip-counselor
+from app.routers.slot_holds import router as slot_holds_router
+from app.routers.chat_counselor import router as chat_counselor_router
 # chatslot01: запись через чат — slot_offer от регистратора + slot_request/book-slot от пациента
 from app.routers.clinic_chat_slots import router as clinic_chat_slots_router
 from app.routers.patient_chat_slots import router as patient_chat_slots_router
@@ -164,6 +171,7 @@ from app.routers.staff_chat import router as staff_chat_router, _bot_router as s
 from app.routers.staff_chat_cross import router as staff_chat_cross_router
 from app.routers.owner_bot_webhook import router as owner_bot_webhook_router
 from app.routers.chat_admin import router as chat_admin_router
+from app.routers.chat_ai import router as chat_ai_router  # AI Smart-Reply
 from app.routers.franchise_modules import router as franchise_modules_router
 from app.routers.franchise_revenue import router as franchise_revenue_router
 from app.services.staff_chat_cleanup_job import cleanup_staff_chat_files_job
@@ -175,6 +183,8 @@ from app.routers.doctor_patient_documents import router as doctor_patient_docume
 from app.routers.admin_lab import router as admin_lab_router
 from app.routers.doctor_lab import router as doctor_lab_router
 from app.routers.patient_lab import router as patient_lab_router
+from app.routers.patient_lab_dynamics import router as patient_lab_dynamics_router
+from app.routers.patient_medical_record import router as patient_emr_router
 from app.routers.wellness import router as wellness_router
 from app.routers.admin_aggregator import router as admin_aggregator_router
 from app.routers.public_aggregator import router as public_aggregator_router
@@ -596,9 +606,14 @@ async def module_daily_digest_job():
                     f"  • <b>{r['tenant_name']}</b>: ❌{t_err} ⚠️{t_deg}"
                 )
         head = "📊 <b>Дайджест модулей за сутки</b>"
-        line = (f"\n✅ {totals['ok']}  ⚠️ {totals['degraded']}  "
-                f"❌ {totals['error']}  💤 {totals['idle']}  "
-                f"❔ {totals['unknown']}")
+        line = "\n".join([
+            "",
+            f"✅ Работает: {totals['ok']}",
+            f"⚠️ Деградация: {totals['degraded']}",
+            f"❌ Ошибки: {totals['error']}",
+            f"💤 Не используется: {totals['idle']}",
+            f"❔ Нет данных: {totals['unknown']}",
+        ])
         body = head + line
         if problem_lines:
             body += "\n\n<b>Проблемные тенанты:</b>\n" + "\n".join(
@@ -1025,10 +1040,47 @@ async def _expire_slot_offers_job():
         _logger.exception("expire_slot_offers: outer error: %s", e)
 
 
+async def _quota_flush_job():
+    """quota01: каждые 5 минут перетекаем счётчики rpd/storage/calls из Redis
+    в таблицу quota_usage (UPSERT по tenant_id+period=сегодня)."""
+    import logging as _lg
+    _logger = _lg.getLogger("quota_flush")
+    try:
+        import redis.asyncio as _aior
+        from app.database import AsyncSessionLocal
+        from app.services.quota_service import flush_to_db
+        redis = None
+        try:
+            redis = _aior.from_url(settings.redis_url, decode_responses=True)
+        except Exception as e:
+            _logger.warning("quota_flush: redis init failed: %s", e)
+            return
+        try:
+            async with AsyncSessionLocal() as session:
+                count = await flush_to_db(session, redis)
+                if count:
+                    _logger.info("quota_flush: flushed %d tenants", count)
+        finally:
+            try:
+                await redis.close()
+            except Exception:
+                pass
+    except Exception as e:
+        _logger.exception("quota_flush: outer error: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging(json_logs=True)
     log.info("clinika_starting", version="1.0.0")
+
+    # ── PII shadow-sync: автозаполнение *_encrypted/*_hash на write ──
+    try:
+        from app.services.pii_sync import install_pii_sync
+        install_pii_sync()
+        log.info("pii_sync_installed")
+    except Exception as _e:
+        log.warning("pii_sync_install_failed", error=str(_e))
 
     # ── Phase 0: fail-fast при дефолтных секретах ──
     # Phase 0 audit нашёл: SECRET_KEY=clinika-super-secret-key-change-in-production-2024 (default)
@@ -1152,6 +1204,8 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(disaster_health_check, 'interval', minutes=5, id='disaster_health_check', replace_existing=True)
     # chatslot01: каждые 15 минут помечаем устаревшие slot_offer (>24ч) как expired
     scheduler.add_job(_expire_slot_offers_job, 'interval', minutes=15, id='expire_slot_offers', replace_existing=True)
+    # quota01: каждые 5 минут перетекаем счётчики из Redis в quota_usage (per-tenant daily aggregates)
+    scheduler.add_job(_quota_flush_job, 'interval', minutes=5, id='quota_flush', replace_existing=True)
     scheduler.start()
     # Лог зарегистрированных job'ов — удобно дебажить что реально стартует
     try:
@@ -1300,7 +1354,7 @@ async def _seed_default_tenant(db):
     result = await db.execute(select(Tenant).where(Tenant.slug == "default"))
     if result.scalar_one_or_none():
         return
-    tenant = Tenant(name="КлиникаСеть", slug="default", is_active=True)
+    tenant = Tenant(name="КлиникСеть", slug="default", is_active=True)
     db.add(tenant)
     await db.flush()
     db.add(TenantLicense(
@@ -1313,7 +1367,7 @@ async def _seed_default_tenant(db):
     ))
     db.add(TenantBranding(
         tenant_id=tenant.id,
-        brand_name="КлиникаСеть",
+        brand_name="КлиникСеть",
         primary_color="#0097A7",
         sidebar_color="#004D5F",
         bg_color="#F0F5F6",
@@ -1460,6 +1514,13 @@ async def custom_redoc_html(_: _UserDocs = Depends(_require_super_admin_docs)):
 
 
 app.middleware("http")(SlidingWindowRateLimiter(limit=200, window=60))
+
+# ─── quota01: Per-tenant RateLimit (TenantQuota.requests_per_minute + IP fallback) ─
+# Поднимаем ПОСЛЕ глобального SlidingWindowRateLimiter, чтобы tenant-лимит
+# применялся только к запросам, прошедшим глобальный пер-IP фильтр.
+from app.core.rate_limit_middleware import RateLimitMiddleware as _RLMW
+app.add_middleware(_RLMW, enabled=True)
+
 app.add_middleware(DomainRouterMiddleware)
 
 # ─── Журнал безопасности: блокировка IP по ручному списку super_admin'а ─
@@ -1627,6 +1688,7 @@ app.include_router(tenant_api_keys_router)
 app.include_router(public_api_v1_router)
 app.include_router(ads_router)
 app.include_router(ads_ai_router)
+app.include_router(nps_router)
 app.include_router(ads_analytics_router)
 app.include_router(engagement_analytics_router)
 app.include_router(engagement_segments_router)
@@ -1638,6 +1700,7 @@ app.include_router(commercial_router)
 app.include_router(marketplace_router)
 app.include_router(ai_router)
 app.include_router(ai_platform_router)
+app.include_router(admin_analytics_router)
 app.include_router(recruiter_router)
 app.include_router(visiting_router)
 app.include_router(doctor_ai_router)
@@ -1693,9 +1756,16 @@ app.include_router(security_router)
 # Глава 9 — Подписка/чат/календарь/документы пациента
 app.include_router(patient_subscription_router)
 app.include_router(admin_subscription_plans_router)
+app.include_router(admin_api_quotas_router)  # quota01: /admin/quotas/*
 app.include_router(manager_subscription_cash_router)
 app.include_router(patient_chat_threads_router)
 app.include_router(clinic_chat_router)
+# SLA-цветометки (Intercom-style queue): /clinic/chat/sla/dashboard
+from app.routers.chat_sla_stats import router as chat_sla_stats_router
+app.include_router(chat_sla_stats_router)
+# slot-hold + vip-counselor
+app.include_router(slot_holds_router)
+app.include_router(chat_counselor_router)
 # chatslot01: запись через чат — slot_offer / slot_request / book-slot
 app.include_router(clinic_chat_slots_router)
 app.include_router(patient_chat_slots_router)
@@ -1704,13 +1774,23 @@ app.include_router(staff_chat_bot_router)
 app.include_router(staff_chat_cross_router)
 app.include_router(owner_bot_webhook_router)
 app.include_router(chat_admin_router)
+app.include_router(chat_ai_router)  # AI Smart-Reply: /clinic/chat/threads/{id}/ai-suggest
 # Workflow batch — tenant chat settings (SLA/autoclose) + CRUD message templates
 from app.routers.tenant_settings import router as _tenant_settings_router
 from app.routers.chat_templates import router as _chat_templates_router
+from app.routers.clinic_chat_templates import router as _clinic_chat_templates_router
 app.include_router(_tenant_settings_router)
 app.include_router(_chat_templates_router)
+app.include_router(_clinic_chat_templates_router)
 app.include_router(franchise_modules_router)
 app.include_router(franchise_revenue_router)
+# === ФИЧИ 1-4: P&L, рейтинг клиник, перелив пациентов, gap-анализ модулей ===
+from app.routers.franchise_finance import router as franchise_finance_router
+from app.routers.franchise_analytics_ext import router as franchise_analytics_ext_router
+from app.routers.franchise_module_gaps import router as franchise_module_gaps_router
+app.include_router(franchise_finance_router)
+app.include_router(franchise_analytics_ext_router)
+app.include_router(franchise_module_gaps_router)
 app.include_router(patient_calendar_router)
 app.include_router(patient_health_documents_router)
 app.include_router(doctor_patient_documents_router)
@@ -1718,6 +1798,8 @@ app.include_router(doctor_patient_documents_router)
 app.include_router(admin_lab_router)
 app.include_router(doctor_lab_router)
 app.include_router(patient_lab_router)
+app.include_router(patient_lab_dynamics_router)
+app.include_router(patient_emr_router)
 app.include_router(wellness_router)
 app.include_router(admin_aggregator_router)
 app.include_router(public_aggregator_router)
@@ -1739,6 +1821,30 @@ app.include_router(marketing_ads_router)
 app.include_router(service_norms_router)
 app.include_router(subscription_discounts_router)
 app.include_router(subscription_pending_router)
+
+# ─── Платформенные расширения 2026-05-23: Feature Flags, Tenant Health, Cost Attribution, ARR/LTV ───
+from app.routers.admin_feature_flags import router as admin_feature_flags_router
+from app.routers.admin_tenant_health import router as admin_tenant_health_router
+from app.routers.admin_cost_attribution import router as admin_cost_attribution_router
+from app.routers.admin_arr_ltv import router as admin_arr_ltv_router
+
+app.include_router(admin_feature_flags_router)        # /admin/feature-flags/*
+app.include_router(admin_tenant_health_router)        # /admin/tenant-health/*
+app.include_router(admin_cost_attribution_router)     # /admin/cost-attribution/*
+app.include_router(admin_arr_ltv_router)              # /admin/arr-ltv/*
+
+# ─── Франшиза 2026-05-23: P&L, Перелив пациентов, Остатки модулей ───
+from app.routers.franchise_pnl import router as franchise_pnl_router
+from app.routers.franchise_referral import router as franchise_referral_router
+from app.routers.franchise_module_gaps_by_clinic import router as franchise_module_gaps_by_clinic_router
+
+app.include_router(franchise_pnl_router)                       # /franchise-owner/pnl/*
+app.include_router(franchise_referral_router)                  # /franchise-owner/referrals/*
+app.include_router(franchise_module_gaps_by_clinic_router)     # /franchise-owner/module-gaps/*
+
+# Chat promo-codes (registrars)
+from app.routers.chat_promo import router as chat_promo_router
+app.include_router(chat_promo_router)
 
 # Reviews plugin
 from app.plugins.reviews import ReviewsPlugin

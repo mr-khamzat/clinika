@@ -8,7 +8,7 @@
  *   <Breadcrumbs items={[
  *     { label: 'Платформа' },
  *     { label: 'Тенанты', to: () => onNav('super_admin') },
- *     { label: 'АРЦ КлиникаСеть' },
+ *     { label: 'АРЦ КлиникСеть' },
  *   ]} />
  *
  * Props:

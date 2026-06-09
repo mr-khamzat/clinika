@@ -126,7 +126,7 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
           </Suspense>
         )}
         {segment === 'ai' && (
-          <AiSegment apiBase={API_BASE} patientPhone={patientPhone} tenantSlug={tenantSlug} />
+          <AiSegment apiBase={API_BASE} patientPhone={patientPhone} tenantSlug={tenantSlug} sessionToken={sessionToken} />
         )}
       </div>
     </div>
@@ -507,7 +507,9 @@ function ClinicSegmentWrap({ onGoSubscription, onSwitchToSupport }) {
 }
 
 // ── Сегмент: AI-ассистент ────────────────────────────────────────────────────
-function AiSegment({ apiBase, patientPhone, tenantSlug }) {
+function AiSegment({ apiBase, patientPhone, tenantSlug, sessionToken }) {
+  // Patient session_token обязателен как query ?t=... для backend
+  const tParam = sessionToken ? `?t=${encodeURIComponent(sessionToken)}` : ''
   const [state, setState] = useState('idle') // 'idle'|'loading'|'ready'|'unavailable'|'error'
   const [convId, setConvId] = useState(null)
   const [messages, setMessages] = useState([])
@@ -520,14 +522,14 @@ function AiSegment({ apiBase, patientPhone, tenantSlug }) {
     if (!patientPhone || !tenantSlug) return null
     setState('loading')
     try {
-      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations`, {
+      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations${tParam}`, {
         patient_phone: patientPhone,
         tenant_slug: tenantSlug,
       })
       const id = r.data?.id
       setConvId(id)
       try {
-        const h = await axios.get(`${apiBase}/patient-portal/ai/conversations/${id}/messages`)
+        const h = await axios.get(`${apiBase}/patient-portal/ai/conversations/${id}/messages${tParam}`)
         const msgs = Array.isArray(h.data?.messages) ? h.data.messages : []
         setMessages(msgs.filter(m => m.role !== 'system'))
       } catch {}
@@ -554,7 +556,7 @@ function AiSegment({ apiBase, patientPhone, tenantSlug }) {
     setMessages(prev => [...prev, { id: 'u_' + Date.now(), role: 'user', text: txt }])
     setInput('')
     try {
-      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations/${id}/messages`, { text: txt })
+      const r = await axios.post(`${apiBase}/patient-portal/ai/conversations/${id}/messages${tParam}`, { text: txt })
       const reply = r.data?.reply || r.data?.text || 'Не удалось получить ответ'
       setMessages(prev => [...prev, { id: 'a_' + Date.now(), role: 'assistant', text: reply }])
     } catch (e) {

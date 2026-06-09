@@ -1,5 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="12" fill="#0097A7"/>
-  <rect x="26" y="12" width="12" height="40" rx="3" fill="white"/>
-  <rect x="12" y="26" width="40" height="12" rx="3" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9CBEFF"/>
+      <stop offset="0.5" stop-color="#6E9EF5"/>
+      <stop offset="1" stop-color="#4A7CE8"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="crossShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="6" in="SourceAlpha"/>
+      <feOffset dy="6"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.18"/></feComponentTransfer>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <path d="M 0 0 H 1024 V 360 Q 1024 420 940 420 H 84 Q 0 420 0 360 Z" fill="url(#gloss)"/>
+
+  <g fill="#FFFFFF" filter="url(#crossShadow)">
+    <rect x="450" y="270" width="124" height="484" rx="44"/>
+    <rect x="270" y="450" width="484" height="124" rx="44"/>
+  </g>
 </svg>

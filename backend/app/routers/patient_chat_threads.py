@@ -9,7 +9,7 @@ import uuid
 from typing import Optional, List, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -61,8 +61,14 @@ class CreateThreadIn(BaseModel):
 
 
 class SendMessageIn(BaseModel):
-    body: str = Field(min_length=1, max_length=4000)
+    body: str = Field(default="", max_length=4000)
     attachments: Optional[List[Any]] = None
+
+    @model_validator(mode="after")
+    def _require_body_or_attachments(self):
+        if not (self.body or "").strip() and not self.attachments:
+            raise ValueError("body or attachments required")
+        return self
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -127,7 +133,23 @@ async def create_thread(
         subject=body.subject,
         initial_body=body.initial_message,
     )
+    # Авто-claim на VIP counselor если задан
+    if getattr(acc, "default_counselor_user_id", None):
+        th.assigned_doctor_id = acc.default_counselor_user_id
+        await db.flush()
     await db.commit()
+
+    # web-push: уведомляем регистраторов/менеджеров клиники о первом
+    # сообщении в новом треде. Никогда не падаем.
+    try:
+        from app.services.push_dispatcher import notify_clinic_about_new_message
+        await notify_clinic_about_new_message(db, th, msg)
+    except Exception as _push_exc:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(
+            f"notify_clinic_about_new_message failed for new thread {th.id}: {_push_exc}"
+        )
+
     return {
         "thread": cs.serialize_thread(th, msg),
         "message": cs.serialize_message(msg),
@@ -190,6 +212,17 @@ async def post_message(
         )
     msg = await cs.add_patient_message(db, th, acc.id, body.body, body.attachments)
     await db.commit()
+
+    # web-push: уведомляем регистраторов/менеджеров/etc клиники о новом
+    # сообщении. Никогда не падаем — обёрнуто в try/except.
+    try:
+        from app.services.push_dispatcher import notify_clinic_about_new_message
+        await notify_clinic_about_new_message(db, th, msg)
+    except Exception as _push_exc:
+        import logging as _lg
+        _lg.getLogger(__name__).warning(
+            f"notify_clinic_about_new_message failed for thread {th.id}: {_push_exc}"
+        )
 
     # chatslot01: если у пациента ещё не привязан mis_patient_id — запускаем
     # background identifier (find_by_phone / add_patient в МИС). Не блокируем ответ.

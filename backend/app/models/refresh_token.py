@@ -17,4 +17,10 @@ class RefreshToken(Base):
     ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("refresh_tokens.id", ondelete="SET NULL"),
+        nullable=True, index=True,
+    )
+    reused_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

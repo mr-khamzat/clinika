@@ -39,12 +39,40 @@
     }
   }
   </script>
+  <!-- Performance hints (Этап оптимизации) -->
+  <link rel="preconnect" href="https://клиниксеть.рф" crossorigin />
+  <link rel="dns-prefetch" href="https://клиниксеть.рф" />
   <!-- Golos Text — self-hosted (раньше тянулся с fonts.googleapis.com — медленно/блокируется в РФ) -->
   <link rel="preload" href="/fonts/golos/golos-text.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
+    <!-- Critical CSS: скрываем иконки до загрузки шрифта (предотвращает FOUC) -->
+  <style>
+    .material-symbols-outlined, .material-symbols-rounded { visibility: hidden !important; }
+    html.fonts-loaded .material-symbols-outlined,
+    html.fonts-loaded .material-symbols-rounded { visibility: visible !important; }
+  </style>
+  <script>
+  /* Material Symbols: показываем иконки только после реальной загрузки шрифта */
+  (function(){
+    function show(){ document.documentElement.classList.add('fonts-loaded'); }
+    try {
+      if (document.fonts && document.fonts.load) {
+        Promise.all([
+          document.fonts.load("24px 'Material Symbols Outlined'"),
+          document.fonts.load("24px 'Material Symbols Rounded'").catch(function(){})
+        ]).then(show).catch(show);
+        // Safety net 10s — на самом медленном соединении 3MB шрифт точно дойдёт
+        setTimeout(show, 10000);
+      } else {
+        // Старые браузеры — показываем сразу
+        show();
+      }
+    } catch(e){ show(); }
+  })();
+  </script>
   <link rel="stylesheet" href="/fonts/golos/golos-text.css" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="shortcut icon" href="/favicon.svg" />
-  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <!-- manifest подключается динамически в PatientCabinet с актуальным start_url (сессионный токен) -->
   <meta name="theme-color" content="#0097A7" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -54,6 +82,23 @@
   <!-- Material Symbols: preload (rel=preload as=font не блокирует first paint).
        Имя файла фиксировано через vite.config.assetFileNames. -->
   <link rel="preload" as="font" type="font/woff2" href="/fonts/material-symbols-outlined-subset.woff2" crossorigin="anonymous" />
+    <script>
+  /* Material Symbols: показываем иконки только после загрузки шрифта (избегаем FOUT). */
+  (function(){
+    try {
+      if (document.fonts && document.fonts.load) {
+        document.fonts.load("24px 'Material Symbols Outlined'").finally(function(){
+          document.documentElement.classList.add('fonts-loaded');
+        });
+        // Safety net: на любые проблемы — показываем через 3 сек
+        setTimeout(function(){ document.documentElement.classList.add('fonts-loaded'); }, 3000);
+      } else {
+        // Старые браузеры без CSS Font Loading API — сразу показываем
+        document.documentElement.classList.add('fonts-loaded');
+      }
+    } catch(e){ document.documentElement.classList.add('fonts-loaded'); }
+  })();
+  </script>
   <!-- Telegram Web App SDK подключается динамически только в PatientCabinet (/p/) — см. lib/tg.js loadTelegramSDK() -->
 </head>
 <body>

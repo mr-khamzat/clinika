@@ -69,7 +69,7 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
                 if u and u.email:
                     schedule_email(
                         u.email,
-                        "КлиникаСеть — бонус выплачен",
+                        "КлиникСеть — бонус выплачен",
                         body_html=(
                             f"<p>Здравствуйте, {u.full_name or u.username}!</p>"
                             f"<p>Вам выплачен бонус: <b>{float(bonus.amount):.2f} ₽</b>.</p>"

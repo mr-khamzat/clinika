@@ -139,10 +139,10 @@ async def onboard_tenant(
     try:
         if "@" in admin_username:
             from app.services.email_service import schedule_email
-            subject = f"Добро пожаловать в КлиникаСеть — {name}"
+            subject = f"Добро пожаловать в КлиникСеть — {name}"
             body_html = f"""
             <p>Здравствуйте, {admin_name}!</p>
-            <p>Для вашей сети «<b>{name}</b>» создан аккаунт в платформе КлиникаСеть.</p>
+            <p>Для вашей сети «<b>{name}</b>» создан аккаунт в платформе КлиникСеть.</p>
             <ul>
               <li><b>Логин:</b> {admin_username}</li>
               <li><b>Пароль:</b> {raw_password}</li>
@@ -151,7 +151,7 @@ async def onboard_tenant(
               <li><b>Админ-панель:</b> <a href=\"{result['admin_panel']}\">{result['admin_panel']}</a></li>
             </ul>
             <p>Срок trial — 14 дней. По окончании потребуется выбор тарифа.</p>
-            <p>—<br/>Команда КлиникаСеть</p>
+            <p>—<br/>Команда КлиникСеть</p>
             """
             schedule_email(admin_username, subject, body_html=body_html)
     except Exception:

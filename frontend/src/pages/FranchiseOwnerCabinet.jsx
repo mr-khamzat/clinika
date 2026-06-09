@@ -53,6 +53,7 @@ const AIKnowledgeSection        = lazy(() => import('../sections/AIKnowledgeSect
 const AdsSection                = lazy(() => import('../sections/AdsSection'))
 const PatientEngagement         = lazy(() => import('../sections/engagement/PatientEngagement'))
 const NetworkDashboard          = lazy(() => import('../sections/network/NetworkDashboard'))
+const ClinicChatSection         = lazy(() => import('../sections/ClinicChatSection'))
 const WikiSection               = lazy(() => import('../sections/WikiSection'))
 const ContactsSection           = lazy(() => import('../sections/ContactsSection'))
 const WebhooksSection           = lazy(() => import('../sections/WebhooksSection'))
@@ -85,6 +86,10 @@ const FranchiseSubscriptionPlansSection = lazy(() => import('../sections/Franchi
 const ModuleMonitoringSection    = lazy(() => import('../sections/ModuleMonitoringSection'))
 // Глава 3 ROADMAP — Премиум-аналитика франшизы
 const FranchiseAnalyticsSection = lazy(() => import('../sections/FranchiseAnalyticsSection'))
+// 2026-05-23 — новые секции для франшизы: P&L, перелив пациентов, остатки модулей
+const FranchisePnlSection = lazy(() => import('../sections/FranchisePnlSection'))
+const FranchiseReferralsSection = lazy(() => import('../sections/FranchiseReferralsSection'))
+const FranchiseModuleGapsSection = lazy(() => import('../sections/FranchiseModuleGapsSection'))
 // Глава 7 — Регламент-конструктор: админка (builder-агент) + читатель (мой раздел)
 const RegulationsAdminSection   = lazy(() => import('../sections/RegulationsAdminSection'))
 const RegulationsReaderSection  = lazy(() => import('../sections/RegulationsReaderSection'))
@@ -131,6 +136,10 @@ const NAV_GROUPS = [
       { id: 'inter_inv', label: 'Счета клиник', icon: 'request_quote'        },
       // svcfin01: «Биллинг сети» — кто кому должен в франшизе + ручной триггер biling
       { id: 'network_billing', label: 'Биллинг сети', icon: 'account_tree'   },
+      // 2026-05-23 — P&L по сети, перелив пациентов, остатки модулей
+      { id: 'pnl',             label: 'P&L (доходы/расходы)', icon: 'savings'         },
+      { id: 'referral_matrix', label: 'Перелив пациентов',    icon: 'swap_horiz'      },
+      { id: 'module_gaps',     label: 'Остатки модулей',      icon: 'extension_off'   },
       { id: 'calls',     label: 'Звонки',      icon: 'call'                  },
       { id: 'cross_dir', label: 'Сотрудники сети', icon: 'group'             },
     ],
@@ -141,6 +150,7 @@ const NAV_GROUPS = [
       { id: 'ads',       label: 'Реклама',     icon: 'campaign'              },
       { id: 'network',    label: 'Сводная панель сети', icon: 'dashboard'   },
       { id: 'engagement', label: 'Пациенты ЛК', icon: 'groups'               },
+      { id: 'patient_chats', label: 'Чаты пациентов', icon: 'forum'              },
       { id: 'wiki',      label: 'База знаний', icon: 'menu_book'             },
       { id: 'cms',       label: 'CMS-страницы', icon: 'article'              },
       { id: 'contacts',  label: 'Заявки',      icon: 'contact_mail'          },
@@ -194,6 +204,9 @@ const PAGE_TITLES = {
   overview:   { title: 'Главная',          subtitle: 'Сводная панель сети клиник' },
   tenants:    { title: 'Клиники сети',     subtitle: 'Управление дочерними тенантами франшизы' },
   partners_clinics: { title: 'Клиники-партнёры', subtitle: 'Контракты royalty / per_referral / hybrid' },
+  pnl: { title: 'P&L по сети', subtitle: 'Выручка → маржа → налоги → чистый доход (помесячно и по клиникам)' },
+  referral_matrix: { title: 'Перелив пациентов', subtitle: 'Матрица направлений между клиниками сети' },
+  module_gaps: { title: 'Остатки модулей', subtitle: 'Какие платные модули не подключены к клиникам и потенциальная выручка' },
   telemedicine: { title: 'Телемедицина',          subtitle: 'Сессии телемед-приёмов, чаты и электронные рецепты' },
   loyalty:      { title: 'Программа лояльности',  subtitle: 'Уровни, правила начисления и обмен бонусов' },
   subscription_plans: { title: 'Тарифы подписки', subtitle: 'Тарифы «Здоровье+» для пациентов вашей сети (override на платформенные)' },
@@ -2068,6 +2081,9 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
         </Suspense>
       )
     }
+        if (route === 'patient_chats') {
+          return <ClinicChatSection role="manager" />
+        }
         if (route === 'engagement') {
       return (
         <Suspense fallback={<SectionLoader />}>
@@ -2249,6 +2265,27 @@ export default function FranchiseOwnerCabinet({ adminToken, user, onLogout }) {
     }
     if (route === 'network_billing') {
       return <NetworkBillingSection />
+    }
+    if (route === 'pnl') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <FranchisePnlSection />
+        </Suspense>
+      )
+    }
+    if (route === 'referral_matrix') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <FranchiseReferralsSection />
+        </Suspense>
+      )
+    }
+    if (route === 'module_gaps') {
+      return (
+        <Suspense fallback={<SectionLoader />}>
+          <FranchiseModuleGapsSection />
+        </Suspense>
+      )
     }
     // Глава 7 — Регламент-конструктор (admin + reader для franchise_owner)
     if (route === 'regulations_admin') {

@@ -43,7 +43,7 @@ export default function SuggestionsBoard({ token, onOpenCard, onComposePush }) {
 
   const reload = useCallback(() => {
     setLoading(true)
-    apiFetch(token, `/api/engagement/suggestions?status=${status}`)
+    apiFetch(token, `/engagement/suggestions?status=${status}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setItems(d?.items || d || []); setLoading(false) })
       .catch(() => setLoading(false))
@@ -94,7 +94,7 @@ export default function SuggestionsBoard({ token, onOpenCard, onComposePush }) {
     try {
       const ids = Array.from(selected)
       for (const id of ids) {
-        const path = `/api/engagement/suggestions/${id}/${action}`
+        const path = `/engagement/suggestions/${id}/${action}`
         await apiFetch(token, path, { method: 'POST', body: JSON.stringify(payload || {}) })
       }
       setSelected(new Set())
@@ -106,7 +106,7 @@ export default function SuggestionsBoard({ token, onOpenCard, onComposePush }) {
     if (!confirm('Пересоздать все подсказки на основе текущих данных?')) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/suggestions/regenerate`, { method: 'POST' })
+      await apiFetch(token, `/engagement/suggestions/regenerate`, { method: 'POST' })
       reload()
     } finally { setBusy(false) }
   }

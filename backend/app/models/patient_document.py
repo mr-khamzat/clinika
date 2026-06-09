@@ -58,13 +58,32 @@ class PatientDocument(Base):
     # Абсолютный путь к файлу на диске
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)
     # Описание/комментарий
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_encrypted: Mapped[str | None] = mapped_column("description_encrypted", Text, nullable=True)
     # Дата выдачи документа (отличается от created_at — даты загрузки)
     issued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
     # Глава 9: soft-delete
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('description', 'description_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def description(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.description_encrypted)
+
+    @description.setter
+    def description(self, value):
+        from app.services.encryption_service import encrypt
+        self.description_encrypted = encrypt(value) if value is not None else None
 
 class PatientPrescriptionCache(Base):
     """

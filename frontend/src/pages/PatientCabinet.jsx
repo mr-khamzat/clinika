@@ -25,6 +25,8 @@ const MedCardTab       = lazy(() => import('../sections/patient/MedCardTab'))
 const DocumentsTab     = lazy(() => import('../sections/patient/DocumentsTab'))
 const PrescriptionsTab = lazy(() => import('../sections/patient/PrescriptionsTab'))
 const VitalsTab        = lazy(() => import('../sections/patient/VitalsTab'))
+const PatientLabDynamics = lazy(() => import('../sections/patient/PatientLabDynamics'))
+const PatientMedicalRecord = lazy(() => import('../sections/patient/PatientMedicalRecord'))
 // W6: AI-ассистент пациенту через Gemini — плавающий чат-виджет
 const PatientAiWidget  = lazy(() => import('../sections/patient/PatientAiWidget'))
 // Глава 8/10 — Семья и Wellness-партнёры
@@ -36,6 +38,25 @@ import SubPageNav        from '../components/patient/SubPageNav'
 const PatientChatHub = lazy(() => import("../components/patient/PatientChatHub"))
 
 const API = API_BASE
+// Persistent session storage: cookie + localStorage.
+// На iOS Safari ITP localStorage может очищаться после 7 дней неактивности у PWA,
+// поэтому дублируем session_token в долгоживущую cookie (1 год, samesite=lax).
+const COOKIE_KEY = 'clinika_session'
+function setSessionCookie(v) {
+  try {
+    const secure = location.protocol === 'https:' ? '; secure' : ''
+    document.cookie = COOKIE_KEY + '=' + encodeURIComponent(v) + '; max-age=31536000; path=/; samesite=lax' + secure
+  } catch {}
+}
+function getSessionCookie() {
+  try {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + COOKIE_KEY + '=([^;]*)'))
+    return m ? decodeURIComponent(m[1]) : null
+  } catch { return null }
+}
+function clearSessionCookie() {
+  try { document.cookie = COOKIE_KEY + '=; max-age=0; path=/' } catch {}
+}
 const TOKEN_KEY   = 'clinika_patient_token'
 const REF_KEY     = 'clinika_patient_ref'
 const SESSION_KEY = 'clinika_patient_session'
@@ -440,14 +461,18 @@ function LoginScreen({ onLogin, errorMsg }) {
   const [phone, setPhone] = useState('+7')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState(errorMsg || '')
+  const [rememberMe, setRememberMe] = useState(() => {
+    try { return localStorage.getItem('clinika_remember_me') !== '0' } catch { return true }
+  })
 
   const submit = async (e) => {
     e.preventDefault()
     if (!code || !phone) { setErr('Введите код и телефон'); return }
     setLoading(true); setErr('')
     try {
+      try { localStorage.setItem('clinika_remember_me', rememberMe ? '1' : '0') } catch {}
       const r = await axios.post(`${API}/patient/by-code`, { code: parseInt(code), phone })
-      onLogin(r.data.referral_id, r.data.patient_token, r.data.session_token)
+      onLogin(r.data.referral_id, r.data.patient_token, r.data.session_token, rememberMe)
     } catch (e) { setErr(e.response?.data?.detail || 'Направление не найдено') }
     finally { setLoading(false) }
   }
@@ -485,6 +510,15 @@ function LoginScreen({ onLogin, errorMsg }) {
               style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)' }} />
           </div>
           {err && <div className="flex items-center gap-2 bg-red-500/20 text-red-200 rounded-xl px-3 py-2 text-sm"><span className="material-symbols-outlined text-base">error</span>{err}</div>}
+          <label className="flex items-center gap-2 text-blue-100 text-sm cursor-pointer select-none px-1 py-1">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={e => setRememberMe(e.target.checked)}
+              style={{ width: 18, height: 18, accentColor: '#0097A7' }}
+            />
+            <span>Запомнить меня на этом устройстве</span>
+          </label>
           <button type="submit" disabled={loading}
             className="w-full h-14 rounded-2xl font-bold text-base text-white disabled:opacity-50 transition-all active:scale-[.98]"
             style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', boxShadow: '0 8px 32px rgba(0,151,167,.4)' }}>
@@ -1996,7 +2030,7 @@ function PrivacyTab({ sessionToken, phone, patientName, onLogout }) {
     try {
       await axios.delete(`${API}/patient/forget-personal-data`, { params: { t: sessionToken } })
       // localStorage чистим + редирект на лендинг
-      try { localStorage.removeItem(SESSION_KEY) } catch {}
+      try { localStorage.removeItem(SESSION_KEY); clearSessionCookie() } catch {}
       try { localStorage.removeItem(TOKEN_KEY) } catch {}
       try { localStorage.removeItem(REF_KEY) } catch {}
       if (typeof onLogout === 'function') onLogout()
@@ -2205,8 +2239,22 @@ export default function PatientCabinet() {
   const [section, setSection] = useState('home')
   const [tab, setTab] = useState('home')
   const [onboardSeen, setOnboardSeen] = useState(() => {
-    try { return localStorage.getItem('clinika_patient_onboard') === '1' } catch { return true }
+    // Welcome-баннер: проверяем два ключа для обратной совместимости.
+    // Новый ключ — clinika_welcome_dismissed, старый — clinika_patient_onboard.
+    try {
+      return (
+        localStorage.getItem('clinika_welcome_dismissed') === '1' ||
+        localStorage.getItem('clinika_patient_onboard') === '1'
+      )
+    } catch { return true }
   })
+  const dismissOnboard = () => {
+    setOnboardSeen(true)
+    try {
+      localStorage.setItem('clinika_welcome_dismissed', '1')
+      localStorage.setItem('clinika_patient_onboard', '1')
+    } catch {}
+  }
   // Карта: tab → section (для обратного маппинга, когда setTab вызывается из старого кода)
   const TAB_TO_SECTION = useMemo(() => ({
     home:         'home',
@@ -2215,8 +2263,10 @@ export default function PatientCabinet() {
     history:      'home',
     // Здоровье (health hub)
     health:       'health',
+    'medical-record': 'health',
     medcard:      'health',
     vitals:       'health',
+    dynamics:     'health',
     documents:    'health',
     calendar:     'health',
     // Чаты
@@ -2343,13 +2393,39 @@ export default function PatientCabinet() {
     // Маркер "?s=present" — это уже залогиненный пациент после ensureSession,
     // токен реально лежит в localStorage. Не интерпретируем как session_token.
     if (urlSession && urlSession !== 'present') {
-      localStorage.setItem(SESSION_KEY, urlSession)
+      localStorage.setItem(SESSION_KEY, urlSession); setSessionCookie(urlSession)
       restoreFromSession(urlSession); loadAds(); return
     }
 
     // 3) Автологин по сохранённой long-lived session (PWA-ярлык, повторный заход).
     // Сюда же попадает случай urlSession === 'present' — реальный токен из localStorage.
-    const session = localStorage.getItem(SESSION_KEY)
+    // Fallback на cookie если localStorage пуст (iOS ITP storage purge after 7 days).
+    let session = localStorage.getItem(SESSION_KEY)
+    if (!session) {
+      const ck = getSessionCookie()
+      if (ck) { session = ck; try { localStorage.setItem(SESSION_KEY, ck) } catch {} }
+    }
+    // Последний fallback — IndexedDB (переживёт iOS ITP)
+    if (!session && 'indexedDB' in window) {
+      try {
+        const req = indexedDB.open('clinika_session_db', 1)
+        req.onupgradeneeded = (e) => { e.target.result.createObjectStore('session') }
+        req.onsuccess = (e) => {
+          try {
+            const db = e.target.result
+            const tx = db.transaction('session', 'readonly')
+            const getReq = tx.objectStore('session').get('patient_session')
+            getReq.onsuccess = () => {
+              const idbSession = getReq.result
+              if (idbSession && !localStorage.getItem(SESSION_KEY)) {
+                try { localStorage.setItem(SESSION_KEY, idbSession); setSessionCookie(idbSession) } catch {}
+                restoreFromSession(idbSession); loadAds()
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    }
     if (session) {
       restoreFromSession(session); loadAds(); return
     }
@@ -2366,9 +2442,18 @@ export default function PatientCabinet() {
 
   const ensureSession = async (token) => {
     // ВАЖНО: в URL храним только маркер «s=present», сам session_token — только в localStorage.
-    // Это убирает токен из window.location, истории браузера, рефереров и логов сервера.
-    if (localStorage.getItem(SESSION_KEY)) {
-      updateManifestStartUrl(localStorage.getItem(SESSION_KEY))
+    // SESSION_KEY должен содержать session_token c claim `sid`. Если там лежит patient_token
+    // (claim `ref`, без `sid`) — старая бага, делаем повторный exchange.
+    const existing = localStorage.getItem(SESSION_KEY)
+    const hasValidSession = (() => {
+      if (!existing) return false
+      try {
+        const payload = JSON.parse(atob((existing.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/')))
+        return !!payload && !!payload.sid
+      } catch { return false }
+    })()
+    if (hasValidSession) {
+      updateManifestStartUrl(existing)
       try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
       return
     }
@@ -2376,7 +2461,7 @@ export default function PatientCabinet() {
       const r = await axios.post(`${API}/patient/session/from-token`, { patient_token: token })
       const s = r.data.session_token
       if (s) {
-        localStorage.setItem(SESSION_KEY, s)
+        localStorage.setItem(SESSION_KEY, s); setSessionCookie(s)
         updateManifestStartUrl(s)
         try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
       }
@@ -2417,7 +2502,7 @@ export default function PatientCabinet() {
       try { window.history.replaceState(null, '', `/${SLUG}/p?s=present`) } catch {}
     } catch (e) {
       if (e.response?.status === 401) {
-        localStorage.removeItem(SESSION_KEY)
+        localStorage.removeItem(SESSION_KEY); clearSessionCookie()
         setShowLogin(true)
       } else {
         setError(e.response?.data?.detail || 'Ошибка загрузки')
@@ -2425,9 +2510,31 @@ export default function PatientCabinet() {
     } finally { setLoading(false) }
   }
 
-  const handleLogin = (refId, token, sessionToken) => {
+  const handleLogin = (refId, token, sessionToken, rememberMe = true) => {
     localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(REF_KEY, refId)
-    if (sessionToken) localStorage.setItem(SESSION_KEY, sessionToken)
+    if (sessionToken) {
+      localStorage.setItem(SESSION_KEY, sessionToken)
+      if (rememberMe) {
+        setSessionCookie(sessionToken)
+        // IndexedDB-bekup для iOS Safari ITP (живёт дольше localStorage)
+        try {
+          if ('indexedDB' in window) {
+            const req = indexedDB.open('clinika_session_db', 1)
+            req.onupgradeneeded = (e) => { e.target.result.createObjectStore('session') }
+            req.onsuccess = (e) => {
+              try {
+                const db = e.target.result
+                const tx = db.transaction('session', 'readwrite')
+                tx.objectStore('session').put(sessionToken, 'patient_session')
+                tx.objectStore('session').put(Date.now(), 'saved_at')
+              } catch {}
+            }
+          }
+        } catch {}
+      } else {
+        clearSessionCookie()
+      }
+    }
     setShowLogin(false); loadData(refId, token)
   }
 
@@ -2521,7 +2628,7 @@ export default function PatientCabinet() {
     }
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REF_KEY)
-    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(SESSION_KEY); clearSessionCookie()
     localStorage.removeItem(SLUG_KEY)
     setData(null); setShowLogin(true)
   }
@@ -2567,8 +2674,9 @@ export default function PatientCabinet() {
 
   // ── Меню sub-page внутри секций (для тех, что показывают список) ──
   const HEALTH_MENU = [
-    { key: 'medcard',  icon: 'medical_information', label: 'Медкарта',         hint: 'История записей, диагнозы',           color: { bg: '#E0F2FE', fg: '#075985' } },
+    { key: 'medical-record', icon: 'medical_information', label: 'Медкарта', hint: 'Единая электронная медкарта', color: { bg: '#E0F7FA', fg: '#0097A7' } },
     { key: 'vitals',   icon: 'monitoring',          label: 'Показатели',       hint: 'Вес, рост, давление, пульс',          color: { bg: '#FCE7F3', fg: '#9D174D' } },
+    { key: 'dynamics', icon: 'trending_up',         label: 'Динамика анализов',hint: 'Графики ключевых показателей за 6-12 мес', color: { bg: '#DCFCE7', fg: '#15803D' } },
     { key: 'documents',icon: 'description',         label: 'Анализы и документы', hint: 'Загруженные файлы и результаты',   color: { bg: '#E0F7FA', fg: '#00838F' } },
     { key: 'calendar', icon: 'calendar_month',      label: 'Календарь приёмов',hint: 'Предстоящие визиты + ICS',            color: { bg: '#FEF3C7', fg: '#92400E' } },
     { key: 'appointments', icon: 'event_available', label: 'Мои записи',       hint: 'Все записи к врачам',                 color: { bg: '#E0F7FA', fg: '#0097A7' } },
@@ -3375,6 +3483,24 @@ export default function PatientCabinet() {
           </div>
         )}
 
+        {/* ── MEDICAL RECORD — единая электронная медкарта (агрегатор) ── */}
+        {tab === 'medical-record' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientMedicalRecord apiBase={API_BASE} sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
+        {/* ── DYNAMICS — динамика лаб-показателей (line-charts recharts) ── */}
+        {tab === 'dynamics' && !data?.type && (
+          <div className="tab-enter">
+            <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+              <PatientLabDynamics apiBase={API_BASE} sessionToken={localStorage.getItem(SESSION_KEY)} />
+            </Suspense>
+          </div>
+        )}
+
         {/* ── WELLNESS — партнёры скидок (Глава 10) ── */}
         {tab === 'wellness' && !data?.type && (
           <div className="tab-enter">
@@ -3408,25 +3534,40 @@ export default function PatientCabinet() {
       />
 
       {/* Onboarding-тур (показывается при первом входе) — нативная подсказка,
-          без npm-зависимостей. Tooltip над активной секцией. */}
-      {!onboardSeen && !isApt && (
+          без npm-зависимостей. Tooltip над активной секцией.
+          На вкладке «Чаты» не показываем — мешает чату. */}
+      {!onboardSeen && !isApt && section !== 'chats' && (
         <div
           className="fixed left-0 right-0 z-50 px-4"
           style={{ bottom: 'calc(56px + env(safe-area-inset-bottom,0px) + 12px)' }}
-          onClick={() => { setOnboardSeen(true); try { localStorage.setItem('clinika_patient_onboard','1') } catch {} }}
         >
-          <div className="max-w-lg mx-auto rounded-2xl p-4 flex items-start gap-3 cursor-pointer"
+          <div className="max-w-lg mx-auto rounded-2xl p-4 flex items-start gap-3 relative"
             style={{ background: 'linear-gradient(135deg,#0A2342,#1565C0)', boxShadow: '0 8px 32px rgba(10,35,66,.4)' }}>
             <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'rgba(255,255,255,.15)' }}>
               <span className="material-symbols-outlined text-white text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>tips_and_updates</span>
             </div>
-            <div className="flex-1">
+            <div className="flex-1 pr-8">
               <p className="text-white font-bold text-sm">Добро пожаловать в кабинет</p>
               <p className="text-blue-200 text-[12px] mt-1 leading-snug">
                 Внизу 5 разделов: <b className="text-white">Главная</b>, <b className="text-white">Здоровье</b>, <b className="text-white">Чаты</b>, <b className="text-white">Бонусы</b>, <b className="text-white">Профиль</b>. Внутри каждого — подробные пункты с иконками.
               </p>
-              <p className="text-blue-300 text-[11px] mt-2">Нажмите, чтобы закрыть</p>
             </div>
+            {/* Явная кнопка закрытия (×) */}
+            <button
+              type="button"
+              onClick={dismissOnboard}
+              aria-label="Закрыть подсказку"
+              className="absolute top-2 right-2 grid place-items-center transition-transform active:scale-90"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 999,
+                background: 'rgba(255,255,255,.18)',
+                color: '#fff',
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+            </button>
           </div>
         </div>
       )}
@@ -3449,8 +3590,9 @@ export default function PatientCabinet() {
       )}
 
       {/* W6: AI-ассистент через Gemini — плавающий чат-виджет.
-          Сам прячется при 402 (модуль ai_assistant не подключён). */}
-      {patient_phone && SLUG && (
+          Сам прячется при 402 (модуль ai_assistant не подключён).
+          На вкладке «Чаты» скрываем — мешает send-кнопке. */}
+      {patient_phone && SLUG && section !== 'chats' && (
         <Suspense fallback={null}>
           <PatientAiWidget
             apiBase={API}

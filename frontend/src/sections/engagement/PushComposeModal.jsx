@@ -50,11 +50,11 @@ export default function PushComposeModal({ token, initial, onClose, onCreated })
   const [okMsg, setOkMsg] = useState('')
 
   useEffect(() => {
-    apiFetch(token, '/api/engagement/segments')
+    apiFetch(token, '/engagement/segments')
       .then(r => r.ok ? r.json() : null)
       .then(d => setSegments(d?.items || d || []))
       .catch(() => {})
-    apiFetch(token, '/api/engagement/templates')
+    apiFetch(token, '/engagement/templates')
       .then(r => r.ok ? r.json() : null)
       .then(d => setTemplates(d?.items || d || []))
       .catch(() => {})
@@ -71,11 +71,11 @@ export default function PushComposeModal({ token, initial, onClose, onCreated })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, templates])
 
-  // Real-time preview через /api/ads/substitute-preview (если есть) — иначе локальная подстановка-заглушка
+  // Real-time preview через /ads/substitute-preview (если есть) — иначе локальная подстановка-заглушка
   const refreshPreview = useCallback(async () => {
     if (!body) { setPreview(''); return }
     try {
-      const r = await apiFetch(token, `/api/ads/substitute-preview`, {
+      const r = await apiFetch(token, `/ads/substitute-preview`, {
         method: 'POST', body: JSON.stringify({ text: body })
       })
       if (r.ok) {
@@ -126,16 +126,16 @@ export default function PushComposeModal({ token, initial, onClose, onCreated })
     if (!body.trim())  { setErr('Введите текст'); return }
     setErr(''); setBusy(true)
     try {
-      const r = await apiFetch(token, `/api/engagement/campaigns`, {
+      const r = await apiFetch(token, `/engagement/campaigns`, {
         method: 'POST', body: JSON.stringify(buildPayload())
       })
       if (!r.ok) { setErr('Ошибка создания кампании'); return }
       const camp = await r.json()
       if (action === 'send_now') {
-        await apiFetch(token, `/api/engagement/campaigns/${camp.id}/send`, { method: 'POST' })
+        await apiFetch(token, `/engagement/campaigns/${camp.id}/send`, { method: 'POST' })
         setOkMsg('Кампания отправлена')
       } else if (action === 'schedule') {
-        await apiFetch(token, `/api/engagement/campaigns/${camp.id}/schedule`, {
+        await apiFetch(token, `/engagement/campaigns/${camp.id}/schedule`, {
           method: 'POST', body: JSON.stringify({ scheduled_at: new Date(scheduleAt).toISOString() })
         })
         setOkMsg('Запланирована')

@@ -119,9 +119,20 @@ async def list_doctors(
     q = select(Doctor).where(Doctor.is_active == True)
     if current_user.tenant_id is not None:
         from app.models.clinic import Clinic
-        # Врачи тенанта = врачи, чья клиника принадлежит тенанту
+        from app.models.tenant import Tenant
+        role_val = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+        # franchise_owner видит врачей всех подчинённых тенантов
+        if role_val == "franchise_owner":
+            owned = (await db.execute(
+                select(Tenant.id).where(
+                    (Tenant.franchise_owner_id == current_user.id) | (Tenant.id == current_user.tenant_id)
+                )
+            )).scalars().all()
+            tenant_ids = list(owned) if owned else [current_user.tenant_id]
+        else:
+            tenant_ids = [current_user.tenant_id]
         tenant_clinic_ids = (await db.execute(
-            select(Clinic.id).where(Clinic.tenant_id == current_user.tenant_id)
+            select(Clinic.id).where(Clinic.tenant_id.in_(tenant_ids))
         )).scalars().all()
         q = q.where(Doctor.clinic_id.in_(tenant_clinic_ids))
     if clinic_id:
@@ -338,8 +349,22 @@ async def get_slots(
         raise HTTPException(400, "Нельзя смотреть слоты в прошлом")
     # Tenant isolation
     doctor = (await db.execute(select(Doctor).where(Doctor.id == doctor_id))).scalar_one_or_none()
-    if not doctor or (current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id):
+    if not doctor:
         raise HTTPException(404, "Врач не найден")
+    # franchise_owner может видеть слоты врачей всех подчинённых тенантов
+    role_val = current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
+    if current_user.tenant_id is not None and doctor.tenant_id != current_user.tenant_id:
+        allowed_tenants = {current_user.tenant_id}
+        if role_val == "franchise_owner":
+            from app.models.tenant import Tenant
+            owned = (await db.execute(
+                select(Tenant.id).where(
+                    (Tenant.franchise_owner_id == current_user.id) | (Tenant.id == current_user.tenant_id)
+                )
+            )).scalars().all()
+            allowed_tenants = set(owned) if owned else allowed_tenants
+        if doctor.tenant_id not in allowed_tenants:
+            raise HTTPException(404, "Врач не найден")
     return await get_available_slots(db, doctor_id, target_date)
 
 

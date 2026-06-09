@@ -45,7 +45,7 @@ export default function InviteAccept({ token }) {
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm">
         <div className="text-center mb-6">
           <div className="text-4xl mb-2">👨‍⚕️</div>
-          <h1 className="text-xl font-bold text-gray-800">КлиникаСеть</h1>
+          <h1 className="text-xl font-bold text-gray-800">КлиникСеть</h1>
           <p className="text-sm text-gray-500 mt-1">Регистрация врача</p>
         </div>
 

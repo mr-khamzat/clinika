@@ -14,8 +14,8 @@
     "axios": "^1.7.2",
     "dompurify": "^3.4.2",
     "html5-qrcode": "^2.3.8",
-    "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.8.2",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "jsqr": "^1.4.0",
     "material-symbols": "^0.24.0",
     "react": "^18.3.0",
@@ -24,7 +24,7 @@
     "react-router-dom": "^6.24.0",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^4.5.2"
   },
   "devDependencies": {
@@ -32,6 +32,6 @@
     "autoprefixer": "^10.4.19",
     "postcss": "^8.4.39",
     "tailwindcss": "^3.4.4",
-    "vite": "^5.3.1"
+    "vite": "^5.4.20"
   }
 }

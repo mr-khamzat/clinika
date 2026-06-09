@@ -55,7 +55,10 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
   const name = message.sender_name || (isOwn ? 'Вы' : 'Клиника')
   const color = useMemo(() => avatarColor(name), [name])
   const initials = (name || '?').split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
-  const atts = Array.isArray(message.attachments) ? message.attachments : []
+  const allAtts = Array.isArray(message.attachments) ? message.attachments : []
+  const stickerAtts = allAtts.filter(a => a && a.type === 'sticker')
+  const atts = allAtts.filter(a => !(a && a.type === 'sticker'))
+  const isStickerOnly = stickerAtts.length > 0 && atts.length === 0 && !message.body && !message.reply_to
   const reactions = Array.isArray(message.reactions) ? message.reactions : []
   const [pickerOpen, setPickerOpen] = useState(false)
 
@@ -145,8 +148,14 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
           </div>
         )}
         <div
-          className="px-3 py-2"
-          style={{
+          className={isStickerOnly ? '' : 'px-3 py-2'}
+          style={isStickerOnly ? {
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+            padding: 0,
+            fontSize: 14, lineHeight: 1.45,
+          } : {
             borderRadius: 16,
             borderTopLeftRadius: !isOwn ? 4 : 16,
             borderTopRightRadius: isOwn ? 4 : 16,
@@ -200,6 +209,21 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
             </div>
           )}
 
+          {/* Стикеры — рендерим как картинки без фона/рамки */}
+          {stickerAtts.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: isStickerOnly ? 0 : 4 }}>
+              {stickerAtts.map((a, i) => (
+                <img
+                  key={i}
+                  src={a.url}
+                  alt={a.title || 'sticker'}
+                  loading="lazy"
+                  style={{ width: 160, height: 160, objectFit: 'contain', borderRadius: 12, display: 'block' }}
+                />
+              ))}
+            </div>
+          )}
+
           {/* Вложения */}
           {atts.length > 0 && (
             <div className="mt-2 space-y-2">
@@ -248,7 +272,7 @@ export default function MessageBubble({ message, isOwn, showAvatar = true, onRea
               opacity: 0.7,
               marginTop: 4,
               justifyContent: isOwn ? 'flex-end' : 'flex-start',
-              color: isOwn ? 'rgba(255,255,255,.85)' : 'var(--fg-3, #94a3b8)',
+              color: isStickerOnly ? 'var(--fg-3, #94a3b8)' : (isOwn ? 'rgba(255,255,255,.85)' : 'var(--fg-3, #94a3b8)'),
             }}
           >
             <span>{fmtTime(message.created_at)}</span>

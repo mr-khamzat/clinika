@@ -107,9 +107,29 @@ async def _download_telegram_file(file_id: str, suggested_name: str = "file") ->
 
 
 async def _process_update(update: dict) -> None:
+    # 1) callback_query (нажатие inline-кнопки) → админ-бот
+    if "callback_query" in update:
+        try:
+            from app.services.tg_admin_bot import handle_callback
+            handled = await handle_callback(update["callback_query"])
+            if handled:
+                return
+        except Exception as e:
+            log.warning(f"admin callback failed: {e}")
+            return
+
     msg = update.get("message") or update.get("edited_message")
     if not msg:
         return
+
+    # 2) Команды /start, /help, /admin, /menu → админ-бот
+    try:
+        from app.services.tg_admin_bot import handle_command
+        if await handle_command(msg):
+            return
+    except Exception as e:
+        log.warning(f"admin command failed: {e}")
+
     reply_to = msg.get("reply_to_message")
     if not reply_to:
         return
@@ -245,7 +265,7 @@ async def tg_owner_bot_poll_job() -> None:
     offset = _load_offset()
     proxy = _proxy_url()
     url = f"https://api.telegram.org/bot{token}/getUpdates"
-    params = {"timeout": 20, "allowed_updates": json.dumps(["message", "edited_message"])}
+    params = {"timeout": 20, "allowed_updates": json.dumps(["message", "edited_message", "callback_query"])}
     if offset:
         params["offset"] = offset
     try:

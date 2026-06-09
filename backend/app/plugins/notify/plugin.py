@@ -78,7 +78,7 @@ class NotifyPlugin(BasePlugin):
         email_str = esc(email) if email else "не указан"
         name_str = esc(name) if name else "не указано"
         text = (
-            f"📩 <b>Новое обращение с сайта КлиникаСеть</b>\n\n"
+            f"📩 <b>Новое обращение с сайта КлиникСеть</b>\n\n"
             f"👤 Имя: {name_str}\n"
             f"📞 Телефон: {esc(phone)}\n"
             f"📧 Email: {email_str}\n"

@@ -55,6 +55,13 @@ class Tenant(Base):
     onboarded_at:      Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     onboarding_source: Mapped[str | None]      = mapped_column(String(50), nullable=True)
 
+    # ── Churn tracking (roadmap #2) ──────────────────────────────────────────
+    # Заполняются POST /admin/tenants/{id}/churn или автоматически при
+    # отписке/неоплате. Используются Churn Dashboard в /admin/churn.
+    # Reasons: downgrade | not_renewed | hard_delete | payment_failed | voluntary
+    churned_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    churn_reason:  Mapped[str | None]      = mapped_column(String(30), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     license: Mapped["TenantLicense | None"] = relationship(

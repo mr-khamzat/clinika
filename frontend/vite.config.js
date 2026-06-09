@@ -66,7 +66,8 @@ export default defineConfig({
             if (id.includes('@sentry')) return 'vendor-sentry'
             if (id.includes('axios')) return 'vendor-axios'
             if (id.includes('zustand')) return 'vendor-state'
-            if (id.includes('jspdf') || id.includes('qrcode') || id.includes('html2canvas') || id.includes('html5-qrcode')) return 'vendor-pdf-qr'
+            if (id.includes('jspdf') || id.includes('html2canvas')) return 'vendor-pdf'
+            if (id.includes('qrcode') || id.includes('html5-qrcode')) return 'vendor-qr'
             if (id.includes('xlsx') || id.includes('papaparse')) return 'vendor-sheets'
             return 'vendor-misc'
           }

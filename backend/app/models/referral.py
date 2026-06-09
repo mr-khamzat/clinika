@@ -37,7 +37,7 @@ class Referral(Base):
     qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     patient_qr_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     short_code: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True, unique=True)
-    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes_encrypted: Mapped[str | None] = mapped_column("notes_encrypted", Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.utcnow() + timedelta(days=7))
@@ -82,3 +82,22 @@ class Referral(Base):
     service: Mapped["Service"] = relationship("Service", back_populates="referrals")
     created_by: Mapped["User"] = relationship("User", back_populates="referrals_created", foreign_keys=[created_by_admin_id])
     bonus: Mapped["Bonus | None"] = relationship("Bonus", back_populates="referral", uselist=False)
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('notes', 'notes_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def notes(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.notes_encrypted)
+
+    @notes.setter
+    def notes(self, value):
+        from app.services.encryption_service import encrypt
+        self.notes_encrypted = encrypt(value) if value is not None else None

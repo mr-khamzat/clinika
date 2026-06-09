@@ -30,9 +30,9 @@ class AdminStats(BaseModel):
 
 
 class ClinicFlowEntry(BaseModel):
-    from_clinic_id: UUID
+    from_clinic_id: Optional[UUID] = None
     from_clinic_name: str
-    to_clinic_id: UUID
+    to_clinic_id: Optional[UUID] = None
     to_clinic_name: str
     total: int
     confirmed: int

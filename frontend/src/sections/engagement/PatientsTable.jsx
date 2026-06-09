@@ -86,7 +86,7 @@ export default function PatientsTable({ token, onOpenCard, onCreateCampaign, onS
   const load = useCallback(() => {
     let stop = false
     setLoading(true)
-    apiFetch(token, `/api/engagement/patients?${queryString}`)
+    apiFetch(token, `/engagement/patients?${queryString}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (stop) return
@@ -231,16 +231,17 @@ export default function PatientsTable({ token, onOpenCard, onCreateCampaign, onS
                 <th className="px-3 py-2 hidden lg:table-cell">ДР</th>
                 <th className="px-3 py-2 text-center">Логинов</th>
                 <th className="px-3 py-2">Last seen</th>
+                <th className="px-3 py-2 text-center" title="Код последнего направления">Код</th>
                 <th className="px-3 py-2 hidden xl:table-cell">Тэги</th>
                 <th className="px-3 py-2 text-right">Действия</th>
               </tr>
             </thead>
             <tbody>
               {loading && items.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-8 text-gray-400">Загрузка…</td></tr>
+                <tr><td colSpan={9} className="text-center py-8 text-gray-400">Загрузка…</td></tr>
               )}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-gray-400">
+                <tr><td colSpan={9} className="text-center py-10 text-gray-400">
                   <div className="flex flex-col items-center gap-2">
                     <span className="material-symbols-outlined text-3xl text-gray-300 dark:text-gray-600">search_off</span>
                     Не найдено пациентов по фильтрам
@@ -270,6 +271,23 @@ export default function PatientsTable({ token, onOpenCard, onCreateCampaign, onS
                   </td>
                   <td className="px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-nowrap" title={p.last_seen_at}>
                     {fmtRel(p.last_seen_at)}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {p.last_referral?.short_code ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigator.clipboard?.writeText(String(p.last_referral.short_code)).catch(()=>{})
+                        }}
+                        title={"Скопировать код. Создан: " + (p.last_referral.created_at || '—')}
+                        className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition"
+                      >
+                        {p.last_referral.short_code}
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2 hidden xl:table-cell">
                     <div className="flex flex-wrap gap-1">

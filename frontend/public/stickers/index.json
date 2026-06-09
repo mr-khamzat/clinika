@@ -1,0 +1,97 @@
+{
+  "version": "5.0.0",
+  "brand": "КлиникСеть",
+  "mascot": "Mr.Pill",
+  "stickers": [
+    {
+      "id": "s01",
+      "file": "sticker-01.svg",
+      "title": "Стикер 1",
+      "category": "all"
+    },
+    {
+      "id": "s02",
+      "file": "sticker-02.svg",
+      "title": "Стикер 2",
+      "category": "all"
+    },
+    {
+      "id": "s03",
+      "file": "sticker-03.svg",
+      "title": "Стикер 3",
+      "category": "all"
+    },
+    {
+      "id": "s04",
+      "file": "sticker-04.svg",
+      "title": "Стикер 4",
+      "category": "all"
+    },
+    {
+      "id": "s05",
+      "file": "sticker-05.svg",
+      "title": "Стикер 5",
+      "category": "all"
+    },
+    {
+      "id": "s06",
+      "file": "sticker-06.svg",
+      "title": "Стикер 6",
+      "category": "all"
+    },
+    {
+      "id": "s07",
+      "file": "sticker-07.svg",
+      "title": "Стикер 7",
+      "category": "all"
+    },
+    {
+      "id": "s08",
+      "file": "sticker-08.svg",
+      "title": "Стикер 8",
+      "category": "all"
+    },
+    {
+      "id": "s09",
+      "file": "sticker-09.svg",
+      "title": "Стикер 9",
+      "category": "all"
+    },
+    {
+      "id": "s10",
+      "file": "sticker-10.svg",
+      "title": "Стикер 10",
+      "category": "all"
+    },
+    {
+      "id": "s11",
+      "file": "sticker-11.svg",
+      "title": "Стикер 11",
+      "category": "all"
+    },
+    {
+      "id": "s12",
+      "file": "sticker-12.svg",
+      "title": "Стикер 12",
+      "category": "all"
+    },
+    {
+      "id": "s13",
+      "file": "sticker-13.svg",
+      "title": "Стикер 13",
+      "category": "all"
+    },
+    {
+      "id": "s14",
+      "file": "sticker-14.svg",
+      "title": "Стикер 14",
+      "category": "all"
+    },
+    {
+      "id": "s15",
+      "file": "sticker-15.svg",
+      "title": "Стикер 15",
+      "category": "all"
+    }
+  ]
+}

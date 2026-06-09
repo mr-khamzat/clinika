@@ -37,7 +37,7 @@ function LoginHeatmap({ token }) {
 
   useEffect(() => {
     let stop = false
-    apiFetch(token, `/api/engagement/login-heatmap?days=${days}`)
+    apiFetch(token, `/engagement/login-heatmap?days=${days}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (!stop) setData(d) })
       .catch(() => {})
@@ -121,7 +121,7 @@ function RetentionCohorts({ token }) {
 
   useEffect(() => {
     let stop = false
-    apiFetch(token, `/api/engagement/retention-cohorts?weeks=${weeks}`)
+    apiFetch(token, `/engagement/retention-cohorts?weeks=${weeks}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (!stop) setData(d) })
       .catch(() => {})
@@ -204,7 +204,7 @@ function FunnelChart({ token }) {
 
   useEffect(() => {
     let stop = false
-    apiFetch(token, `/api/engagement/funnel?days=${days}`)
+    apiFetch(token, `/engagement/funnel?days=${days}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (!stop) setData(d) })
       .catch(() => {})
@@ -246,7 +246,7 @@ function FunnelChart({ token }) {
               {i > 0 && s.rate != null && (
                 <div className="flex justify-end pr-2 mb-1">
                   <span className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full">
-                    → {Math.round(s.rate * 100)}%
+                    → {Math.round(s.rate)}%
                   </span>
                 </div>
               )}
@@ -277,7 +277,7 @@ export default function EngagementDashboard({ token }) {
   useEffect(() => {
     let stop = false
     setLoading(true)
-    apiFetch(token, '/api/engagement/dashboard')
+    apiFetch(token, '/engagement/dashboard')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (!stop) { setStats(d); setLoading(false) } })
       .catch(() => { if (!stop) setLoading(false) })

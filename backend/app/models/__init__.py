@@ -198,6 +198,7 @@ from app.models.pending_subscription import PendingSubscriptionRequest
 from app.models.chat import ChatThread, ChatMessage, ChatMessageReaction
 # Workflow batch — шаблоны быстрых ответов в чате (wf03_templates)
 from app.models.message_template import MessageTemplate  # noqa: F401
+from app.models.chat_message_template import ChatMessageTemplate  # noqa: F401
 from app.models.calendar import PatientCalendarToken
 
 # Глава 10 — Интеграции (лаборатория / wellness партнёрки / партнёрская программа агрегаторам)
@@ -236,3 +237,6 @@ from app.models.mis_payment_import import MisPaymentImport  # noqa: F401
 
 # chatslot01 — outbox-таблица для отложенных вызовов МИС (patient.create / appointment.*)
 from app.models.mis_outbox import MisOutbox  # noqa: F401
+
+# quota01 — API Quotas & Rate Limits по тенантам (super_admin)
+from app.models.api_quota import TenantQuota, QuotaUsage  # noqa: F401

@@ -12,7 +12,38 @@
  *                  определяет, какое поле «unread» читать и какие имена показывать
  * ========================================
  */
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
+
+// ── SLA-pulse keyframes (Intercom-style queue) ──────────────────────────────
+// Внедряем @keyframes pulse один раз в head (idempotent, scoped по id), чтобы
+// ThreadListItem оставался самодостаточным и не требовал глобальных стилей.
+const _SLA_STYLE_ID = '__sla_pulse_keyframes__'
+function _ensureSlaPulseStyle() {
+  if (typeof document === 'undefined') return
+  if (document.getElementById(_SLA_STYLE_ID)) return
+  const st = document.createElement('style')
+  st.id = _SLA_STYLE_ID
+  st.textContent = (
+    '@keyframes slaPulse { 0%,100%{opacity:1;transform:scale(1)} ' +
+    '50%{opacity:0.55;transform:scale(1.18)} }'
+  )
+  document.head.appendChild(st)
+}
+
+// Цветовая карта SLA-уровней (Intercom-style):
+//   green  — <5 мин, yellow — 5..15 мин, red — >15 мин.
+const _SLA_COLORS = {
+  red:    '#dc2626',
+  yellow: '#f59e0b',
+  green:  '#16a34a',
+}
+
+function _slaTitle(level, mins) {
+  if (level === 'red')    return `Просрочен · без ответа ${mins ?? '?'} мин`
+  if (level === 'yellow') return `Ожидает ${mins ?? '?'} мин`
+  if (level === 'green')  return `Свежий · ${mins ?? 0} мин назад`
+  return ''
+}
 
 // ── Относительное время — «сейчас» / «10 мин» / «вчера» / «11.05» ───────────
 function fmtRelative(iso) {
@@ -45,6 +76,9 @@ function avatarColor(name) {
 }
 
 export default function ThreadListItem({ thread, active, onClick, side = 'patient' }) {
+  // Гарантируем, что @keyframes для SLA-pulse инжектирован.
+  useEffect(() => { _ensureSlaPulseStyle() }, [])
+
   const title = side === 'patient'
     ? (thread.clinic_name || 'Клиника')
     : (thread.patient_name || thread.patient_phone || 'Пациент')
@@ -100,6 +134,29 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
               style={{ fontSize: 14, color: '#F59E0B', fontVariationSettings: "'FILL' 1" }}
               title="Закреплён"
             >push_pin</span>
+          )}
+          {/* SLA-цветометка (Intercom-style queue) — менеджер сразу видит горящие. */}
+          {thread.sla_level && thread.sla_level !== 'gray' && _SLA_COLORS[thread.sla_level] && (
+            <span
+              aria-label={`SLA ${thread.sla_level}`}
+              title={_slaTitle(thread.sla_level, thread.sla_minutes)}
+              style={{
+                display: 'inline-block',
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                flexShrink: 0,
+                background: _SLA_COLORS[thread.sla_level],
+                boxShadow: thread.sla_level === 'red'
+                  ? '0 0 0 2px rgba(220,38,38,0.18), 0 0 8px rgba(220,38,38,0.55)'
+                  : (thread.sla_level === 'yellow'
+                      ? '0 0 0 2px rgba(245,158,11,0.18)'
+                      : '0 0 0 2px rgba(22,163,74,0.18)'),
+                animation: thread.sla_level === 'red'
+                  ? 'slaPulse 1.4s ease-in-out infinite'
+                  : 'none',
+              }}
+            />
           )}
           <span className="truncate font-semibold" style={{ fontSize: 13.5, color: 'var(--fg, #0F172A)' }}>
             {title}

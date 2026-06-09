@@ -36,7 +36,7 @@ export default function PushTemplatesModal({ token, onClose }) {
   const load = useCallback(() => {
     setLoading(true)
     const q = cat === 'all' ? '' : `?category=${encodeURIComponent(cat)}`
-    apiFetch(token, `/api/engagement/templates${q}`)
+    apiFetch(token, `/engagement/templates${q}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setItems(d?.items || d || []); setLoading(false) })
       .catch(() => setLoading(false))
@@ -48,7 +48,7 @@ export default function PushTemplatesModal({ token, onClose }) {
     if (!confirm('Создать дефолтные шаблоны?')) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/templates/seed-defaults`, { method: 'POST' })
+      await apiFetch(token, `/engagement/templates/seed-defaults`, { method: 'POST' })
       load()
     } finally { setBusy(false) }
   }
@@ -58,8 +58,8 @@ export default function PushTemplatesModal({ token, onClose }) {
     try {
       const payload = { title: tpl.title, body: tpl.body, category: tpl.category }
       const r = tpl.id
-        ? await apiFetch(token, `/api/engagement/templates/${tpl.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
-        : await apiFetch(token, `/api/engagement/templates`, { method: 'POST', body: JSON.stringify(payload) })
+        ? await apiFetch(token, `/engagement/templates/${tpl.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+        : await apiFetch(token, `/engagement/templates`, { method: 'POST', body: JSON.stringify(payload) })
       if (r.ok) { setEdit(null); load() }
     } finally { setBusy(false) }
   }
@@ -67,7 +67,7 @@ export default function PushTemplatesModal({ token, onClose }) {
     if (!confirm('Удалить шаблон?')) return
     setBusy(true)
     try {
-      await apiFetch(token, `/api/engagement/templates/${tpl.id}`, { method: 'DELETE' })
+      await apiFetch(token, `/engagement/templates/${tpl.id}`, { method: 'DELETE' })
       load()
     } finally { setBusy(false) }
   }

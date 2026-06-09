@@ -76,21 +76,62 @@ async def chat_completion(
     model: str = "gemini-2.5-flash",
     max_tokens: int = 600,
 ) -> dict:
-    """Вызов Gemini API.
+    """Вызов AI (приоритет: proxyapi.ru OpenAI → fallback Gemini direct).
 
     Args:
         messages: [{"role": "user"|"assistant", "content": str}, ...]
-        system:   системный промпт (отдельным system_instruction).
-        model:    имя модели Gemini.
+        system:   системный промпт.
+        model:    имя модели (если 'gemini-*' → используем gpt-4o-mini через proxyapi).
         max_tokens: предел вывода.
 
     Returns:
         dict с полями text/escalate/tokens_in/tokens_out/latency_ms/model.
     """
+    # ── PROXYAPI.RU OpenAI gpt-4o-mini (приоритет) ─────────────────────
+    proxyapi_key = os.environ.get("PROXYAPI_API_KEY", "").strip()
+    if proxyapi_key:
+        # mapping: имена gemini → gpt-4o-mini (vision + JSON + дёшево)
+        openai_model = "gpt-4o-mini" if model.startswith("gemini") else model
+        openai_messages = [{"role": "system", "content": system}] + [
+            {"role": ("user" if m.get("role") == "user" else "assistant"), "content": m.get("content", "")}
+            for m in messages
+        ]
+        body = {
+            "model": openai_model,
+            "messages": openai_messages,
+            "max_tokens": max_tokens,
+            "temperature": 0.4,
+        }
+        started = time.monotonic()
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(
+                    "https://api.proxyapi.ru/openai/v1/chat/completions",
+                    json=body,
+                    headers={"Authorization": f"Bearer {proxyapi_key}", "Content-Type": "application/json"},
+                )
+                latency_ms = int((time.monotonic() - started) * 1000)
+                if r.status_code == 200:
+                    data = r.json()
+                    text = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+                    usage = data.get("usage", {}) or {}
+                    return {
+                        "text": text or "Извините, не получилось ответить.",
+                        "escalate": _detect_escalation(text or ""),
+                        "tokens_in": usage.get("prompt_tokens"),
+                        "tokens_out": usage.get("completion_tokens"),
+                        "latency_ms": latency_ms,
+                        "model": openai_model,
+                    }
+                log.warning(f"proxyapi HTTP {r.status_code}: {r.text[:300]}")
+        except Exception as e:
+            log.error(f"proxyapi call failed: {e}")
+        # ↓ Если proxyapi упал — пробуем Gemini direct ниже
+
     api_key = (settings.gemini_api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
 
     if not api_key:
-        log.warning("GEMINI_API_KEY не задан — возвращаем заглушку")
+        log.warning("Ни proxyapi, ни GEMINI_API_KEY не настроены — заглушка")
         return {
             "text": "AI-ассистент временно недоступен. Передаю менеджеру.",
             "escalate": True,

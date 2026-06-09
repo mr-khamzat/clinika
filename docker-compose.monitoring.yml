@@ -1,34 +1,9 @@
-# КлиникСеть — отдельный compose-стек для мониторинга.
-# Поднимается независимо от боевых сервисов (clinika-backend / frontend / db / redis).
-# Запуск:   docker compose -f docker-compose.monitoring.yml up -d
-# Остановка: docker compose -f docker-compose.monitoring.yml down
-#
-# Что внутри:
-#   uptime-kuma           — мониторинг доступности (HTTP/HTTPS/TCP/Ping/DNS/Push)
-#   prometheus            — сбор метрик (опционально, см. ниже)
-#   postgres-exporter     — метрики PostgreSQL для Prometheus
-#   grafana               — дашборды поверх Prometheus
-#
-# По умолчанию включён только uptime-kuma. Остальное — через профиль 'metrics':
-#   docker compose -f docker-compose.monitoring.yml --profile metrics up -d
-#
-# Все порты слушают только 127.0.0.1 — наружу не торчат.
-# Доступ снаружи только через nginx (см. /etc/nginx/sites-enabled/clinikahttps.conf).
+# КлиникСеть — стек мониторинга.
+# uptime-kuma управляется отдельно (docker run, не compose) — не описан здесь.
+# Запуск: docker compose -f docker-compose.monitoring.yml --profile metrics up -d
 
 services:
-  # ── Uptime-Kuma: status-page + Telegram alerts ──────────────────────────────
-  uptime-kuma:
-    image: louislam/uptime-kuma:1
-    container_name: uptime-kuma
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3001:3001"
-    volumes:
-      - uptime-kuma:/app/data
-    networks:
-      - monitoring-net
-
-  # ── Prometheus: time-series база метрик (опционально) ───────────────────────
+  # ── Prometheus ───────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -38,6 +13,7 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/blackbox.yml:/etc/prometheus/blackbox.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -49,11 +25,13 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - monitoring-net
+      - clinika-default
 
-  # ── PostgreSQL exporter: метрики БД для Prometheus (опционально) ────────────
+  # ── PostgreSQL exporter ──────────────────────────────────────────────────
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: postgres-exporter
@@ -66,44 +44,86 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
     networks:
       - monitoring-net
-      - clinika-default      # для доступа к clinika-db
+      - clinika-default
     depends_on:
       - prometheus
 
-  # ── Grafana: дашборды (опционально) ─────────────────────────────────────────
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
+  # ── Redis exporter ───────────────────────────────────────────────────────
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
     restart: unless-stopped
     profiles: ["metrics"]
-    ports:
-      - "127.0.0.1:3002:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_SERVER_ROOT_URL: "https://клиниксеть.рф/grafana/"
-      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
-    volumes:
-      - grafana-data:/var/lib/grafana
+      REDIS_ADDR: "redis://clinika-redis:6379"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health >/dev/null 2>&1 || curl -fsS http://localhost:3000/api/health >/dev/null || exit 1"]
+      test: ["CMD", "/redis_exporter", "-version"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 30s
     networks:
       - monitoring-net
+      - clinika-default
     depends_on:
       - prometheus
 
+  # ── Node exporter (метрики хоста через /proc и /sys mounts) ──────────────
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    profiles: ["metrics"]
+    pid: host
+    command:
+      - '--path.rootfs=/host'
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    networks:
+      - monitoring-net
+
+  # ── cAdvisor (метрики Docker-контейнеров) ────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    restart: unless-stopped
+    profiles: ["metrics"]
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    command:
+      - '--housekeeping_interval=30s'
+      - '--docker_only=true'
+    networks:
+      - monitoring-net
+
+  # ── Blackbox exporter (HTTP/TCP пробы) ───────────────────────────────────
+  blackbox-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: blackbox-exporter
+    restart: unless-stopped
+    profiles: ["metrics"]
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    command:
+      - '--config.file=/etc/blackbox_exporter/config.yml'
+    networks:
+      - monitoring-net
+
 volumes:
-  uptime-kuma:
-    external: true        # уже создан docker run командой при первом запуске
   prometheus-data:
-  grafana-data:
 
 networks:
   monitoring-net:

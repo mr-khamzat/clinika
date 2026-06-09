@@ -112,6 +112,27 @@ async def list_patients(
     }
     stmt = stmt.order_by(sort_map[sort]).limit(limit).offset(offset)
     rows = (await db.execute(stmt)).scalars().all()
+
+    # Последнее активное направление (short_code) для каждого пациента — для колонки "Код" в таблице.
+    # Берём DISTINCT ON по phone — самое свежее referrals.short_code (включая cross-clinic).
+    phones = [p.phone for p in rows if p.phone]
+    last_codes: dict[str, dict] = {}
+    if phones:
+        ref_rows = (await db.execute(text("""
+            SELECT DISTINCT ON (patient_phone)
+                patient_phone, short_code, id::text AS ref_id, created_at, status::text AS status
+            FROM referrals
+            WHERE patient_phone = ANY(:phones) AND short_code IS NOT NULL
+            ORDER BY patient_phone, created_at DESC
+        """), {"phones": phones})).all()
+        for r in ref_rows:
+            last_codes[r.patient_phone] = {
+                "short_code": r.short_code,
+                "ref_id": r.ref_id,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "status": r.status,
+            }
+
     return {
         "total": total,
         "items": [
@@ -125,6 +146,7 @@ async def list_patients(
                 "login_count": p.login_count,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "marketing_opt_in": p.marketing_opt_in,
+                "last_referral": last_codes.get(p.phone),
             }
             for p in rows
         ],
@@ -200,7 +222,7 @@ async def patient_card(
                 text(
                     """
                     SELECT a.id, a.created_at, a.status,
-                           d.name AS doctor_name,
+                           d.full_name AS doctor_name,
                            NULL::text AS service_name
                     FROM appointments a
                     LEFT JOIN doctors d ON d.id = a.doctor_id
@@ -213,6 +235,79 @@ async def patient_card(
             )
         ).all()
 
+    # История направлений с кодами доступа.
+    # Видны все referrals по phone — включая cross-clinic и из других клиник сети.
+    # short_code пациент использует как пароль для restore_session.
+    refs = []
+    if pa.phone:
+        ref_q = await db.execute(text("""
+            SELECT r.id::text AS id, r.short_code, r.created_at,
+                   r.status::text AS status, r.patient_name,
+                   d.full_name AS doctor_name,
+                   s.name AS service_name,
+                   r.target_tenant_id::text AS target_tenant_id
+            FROM referrals r
+            LEFT JOIN doctors d ON d.id = r.target_doctor_id
+            LEFT JOIN services s ON s.id = r.service_id
+            WHERE r.patient_phone = :ph AND r.short_code IS NOT NULL
+            ORDER BY r.created_at DESC
+            LIMIT 50
+        """), {"ph": pa.phone})
+        refs = ref_q.all()
+
+    # Обогащение из МИС: если в локальной БД нет ДР/email — подтянуть из Renovatio.
+    mis_extra: dict = {}
+    if pa.phone and (not pa.birth_date or not pa.email or not pa.name):
+        try:
+            from app.services.mis_sync_service import get_patient_from_mis
+            from app.services.settings_service import get_setting
+            api_url = await get_setting(db, "mis_api_url", "", tenant_id=current_user.tenant_id)
+            api_key = await get_setting(db, "mis_api_key", "", tenant_id=current_user.tenant_id)
+            if api_url and api_key:
+                mis_data = await get_patient_from_mis(pa.phone, api_url=api_url, api_key=api_key)
+                if mis_data:
+                    # Renovatio поля: firstname, lastname, middlename, birthdate (DD.MM.YYYY),
+                    # email, patient_id, sex, address.
+                    fn = (mis_data.get("firstname") or "").strip()
+                    ln = (mis_data.get("lastname") or "").strip()
+                    mn = (mis_data.get("middlename") or "").strip()
+                    full_name = " ".join(x for x in (ln, fn, mn) if x).strip() or None
+                    bd_str = (mis_data.get("birthdate") or "").strip()
+                    bd_iso = None
+                    if bd_str:
+                        for fmt_ in ("%d.%m.%Y", "%Y-%m-%d"):
+                            try:
+                                bd_iso = datetime.strptime(bd_str, fmt_).date().isoformat()
+                                break
+                            except Exception:
+                                pass
+                    mis_extra = {
+                        "full_name": full_name,
+                        "birth_date": bd_iso,
+                        "email": mis_data.get("email") or None,
+                        "sex": mis_data.get("sex") or None,
+                        "address": mis_data.get("address") or None,
+                        "mis_patient_id": mis_data.get("patient_id") or None,
+                    }
+                    # Write-back в локальную БД (чтобы в следующий раз не дёргать МИС)
+                    write_back = False
+                    if not pa.name and full_name:
+                        pa.name = full_name[:200]
+                        write_back = True
+                    if not pa.email and mis_data.get("email"):
+                        pa.email = str(mis_data["email"])[:200]
+                        write_back = True
+                    if not pa.birth_date and bd_iso:
+                        try:
+                            pa.birth_date = datetime.strptime(bd_iso, "%Y-%m-%d").date()
+                            write_back = True
+                        except Exception:
+                            pass
+                    if write_back:
+                        await db.flush()
+        except Exception:
+            mis_extra = {}
+
     return {
         "profile": {
             "id": str(pa.id),
@@ -224,6 +319,7 @@ async def patient_card(
             "login_count": pa.login_count,
             "created_at": pa.created_at.isoformat() if pa.created_at else None,
             "marketing_opt_in": pa.marketing_opt_in,
+            "mis": mis_extra or None,
         },
         "tags": [{"id": str(t.id), "tag": t.tag, "color": t.color} for t in tags],
         "notes": [
@@ -266,6 +362,19 @@ async def patient_card(
                 "created_at": s.created_at.isoformat(),
             }
             for s in suggestions
+        ],
+        "referrals": [
+            {
+                "id": r.id,
+                "short_code": r.short_code,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "status": r.status,
+                "patient_name": r.patient_name,
+                "doctor_name": r.doctor_name,
+                "service_name": r.service_name,
+                "target_tenant_id": r.target_tenant_id,
+            }
+            for r in refs
         ],
     }
 
@@ -459,21 +568,22 @@ async def list_suggestions(
         stmt = stmt.where(EngagementSuggestion.kind == kind)
     stmt = stmt.order_by(EngagementSuggestion.created_at.desc()).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
-    # Группировка по kind для удобства фронта.
+    # Группировка по kind для удобства фронта + плоский items.
     grouped: dict = {}
+    items: list = []
     for s in rows:
-        grouped.setdefault(s.kind, []).append(
-            {
-                "id": str(s.id),
-                "patient_id": str(s.patient_id),
-                "kind": s.kind,
-                "status": s.status,
-                "template_id": str(s.template_id) if s.template_id else None,
-                "meta": s.meta,
-                "created_at": s.created_at.isoformat(),
-            }
-        )
-    return {"groups": grouped, "total": len(rows)}
+        item = {
+            "id": str(s.id),
+            "patient_id": str(s.patient_id),
+            "kind": s.kind,
+            "status": s.status,
+            "template_id": str(s.template_id) if s.template_id else None,
+            "meta": s.meta,
+            "created_at": s.created_at.isoformat(),
+        }
+        grouped.setdefault(s.kind, []).append(item)
+        items.append(item)
+    return {"groups": grouped, "items": items, "total": len(rows)}
 
 
 @router.post("/suggestions/{sug_id}/dismiss")

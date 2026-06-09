@@ -69,6 +69,66 @@ function fmtTime(iso) {
   return m ? `${m[1].padStart(2, '0')}:${m[2]}` : ''
 }
 
+// ── Документы пациента (вспомогалки) ─────────────────────────────────────────
+function docTypeIcon(type) {
+  return ({
+    conclusion: 'description',
+    lab_result: 'science',
+    image:      'image',
+    pdf:        'picture_as_pdf',
+    other:      'attach_file',
+  })[type] || 'attach_file'
+}
+function docTypeColor(type) {
+  return ({
+    conclusion: '#0891b2',
+    lab_result: '#16a34a',
+    image:      '#a855f7',
+    pdf:        '#dc2626',
+    other:      '#64748b',
+  })[type] || '#64748b'
+}
+function fmtSize(bytes) {
+  if (!bytes || bytes < 1) return ''
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+function fmtDocDate(iso) {
+  if (!iso) return ''
+  try {
+    return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })
+  } catch { return '' }
+}
+
+// Скачивание документа через axios (несём Bearer токен) — затем blob → click
+async function downloadDoc(doc) {
+  try {
+    const url = doc.file_url
+    if (!url) return
+    const res = await api.get(url, { responseType: 'blob' })
+    const blobUrl = window.URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    // Имя файла — title (или иначе)
+    const ext = (doc.mime_type || '').includes('pdf')
+      ? '.pdf'
+      : (doc.mime_type || '').startsWith('image/')
+        ? '.' + (doc.mime_type.split('/')[1] || 'img')
+        : (doc.type === 'lab_result' && doc.mime_type === 'application/json')
+          ? '.json'
+          : ''
+    const safeTitle = String(doc.title || 'document').replace(/[\\/:*?"<>|]/g, '_')
+    a.download = safeTitle + (safeTitle.endsWith(ext) ? '' : ext)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000)
+  } catch (e) {
+    alert('Не удалось скачать документ: ' + (e?.response?.data?.detail || e.message || 'ошибка'))
+  }
+}
+
 const APPT_STATUS = {
   pending:   { label: 'Ожидает',     bg: 'rgba(245,158,11,.12)',  fg: '#b45309' },
   confirmed: { label: 'Подтверждён', bg: 'rgba(14,165,233,.12)',  fg: '#0369a1' },
@@ -108,6 +168,7 @@ export default function PatientContextPanel({
 
   const patient = data?.patient || null
   const appointments = data?.appointments || []
+  const documents = data?.documents || []
   const age = useMemo(() => ageFromBirth(patient?.birth_date), [patient?.birth_date])
 
   const body = (
@@ -268,6 +329,69 @@ export default function PatientContextPanel({
                 </div>
               )}
             </div>
+
+            {/* Документы пациента — показываем только если есть хотя бы один */}
+            {documents.length > 0 && (
+              <div>
+                <div className="font-semibold mb-2 flex items-center gap-1.5" style={{ fontSize: 12, color: 'var(--fg-3, #94a3b8)', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#0891b2', fontVariationSettings: "'FILL' 1" }}>folder_open</span>
+                  Документы пациента ({documents.length})
+                </div>
+                <div className="space-y-1.5">
+                  {documents.slice(0, 10).map(d => (
+                    <div
+                      key={d.id + ':' + (d.source || '')}
+                      className="flex items-center gap-2 rounded-xl px-2.5 py-2 transition-colors"
+                      style={{ background: 'var(--bg-1, #f1f5f9)' }}
+                    >
+                      {/* Иконка типа */}
+                      <div
+                        className="grid place-items-center flex-shrink-0"
+                        style={{ width: 36, height: 36, borderRadius: 10, background: docTypeColor(d.type) }}
+                        aria-hidden
+                      >
+                        <span className="material-symbols-outlined" style={{ color: '#fff', fontSize: 18, fontVariationSettings: "'FILL' 1" }}>
+                          {docTypeIcon(d.type)}
+                        </span>
+                      </div>
+                      {/* Текст */}
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--fg, #0F172A)' }} title={d.title}>
+                          {d.title}
+                        </div>
+                        <div className="flex items-center gap-1 truncate" style={{ fontSize: 11, color: 'var(--fg-3, #94a3b8)' }}>
+                          {d.doctor_name && <span className="truncate">{d.doctor_name}</span>}
+                          {d.doctor_name && d.created_at && <span>·</span>}
+                          {d.created_at && <span>{fmtDocDate(d.created_at)}</span>}
+                          {d.file_size > 0 && <span>· {fmtSize(d.file_size)}</span>}
+                        </div>
+                      </div>
+                      {/* Скачать */}
+                      <button
+                        type="button"
+                        onClick={() => downloadDoc(d)}
+                        className="grid place-items-center flex-shrink-0"
+                        style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(8,145,178,.10)', color: '#0891b2' }}
+                        title="Скачать"
+                        aria-label="Скачать документ"
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 17, fontVariationSettings: "'FILL' 1" }}>download</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                {documents.length > 10 && (
+                  <button
+                    type="button"
+                    className="w-full mt-1.5 py-1 rounded-lg hover:underline"
+                    style={{ fontSize: 11.5, color: '#0891b2', background: 'transparent' }}
+                    onClick={() => alert(`Всего документов: ${documents.length}. Полный список появится позже.`)}
+                  >
+                    Показать все ({documents.length})
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -32,6 +32,9 @@ class PatientAccount(Base):
     mis_sync_state: Mapped[str] = mapped_column(
         String(20), nullable=False, default="pending", server_default="pending"
     )
+    # VIP counselor — закрепление пациента за регистратором/менеджером
+    default_counselor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    counselor_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class PatientOTP(Base):

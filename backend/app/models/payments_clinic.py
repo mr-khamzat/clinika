@@ -133,8 +133,9 @@ class PaymentGatewayConfig(Base):
 
     gateway:    Mapped[str] = mapped_column(String(40), nullable=False)
     shop_id:    Mapped[str] = mapped_column(String(255), nullable=False)
-    # TODO: зашифровать через Fernet (cryptography), ключ из settings.payment_secret_fernet_key
-    secret_key: Mapped[str] = mapped_column(Text, nullable=False)
+    # Зашифровано через app.services.encryption_service (Fernet).
+    # Формат: 'enc:&lt;token&gt;' для зашифрованных, 'plain:&lt;val&gt;' для fallback без ключа.
+    secret_key_encrypted: Mapped[str] = mapped_column("secret_key_encrypted", Text, nullable=False)
 
     is_active:    Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_test_mode: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -208,8 +209,8 @@ class OFDConfig(Base):
 
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     inn: Mapped[str] = mapped_column(String(20), nullable=False)
-    # TODO: зашифровать через Fernet
-    api_key: Mapped[str] = mapped_column(Text, nullable=False)
+    # Зашифровано через app.services.encryption_service (Fernet).
+    api_key_encrypted: Mapped[str] = mapped_column("api_key_encrypted", Text, nullable=False)
 
     is_active:      Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_pulled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

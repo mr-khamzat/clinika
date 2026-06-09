@@ -12,6 +12,7 @@
 """
 import uuid
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy import String, Integer, DateTime, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
 from sqlalchemy.orm import Mapped, mapped_column
@@ -29,7 +30,7 @@ class SignupRequest(Base):
     # ── Контакты будущего владельца франшизы ──────────────────────────────
     email:          Mapped[str]       = mapped_column(String(200), nullable=False, index=True)
     phone:          Mapped[str | None]= mapped_column(String(50),  nullable=True)
-    full_name:      Mapped[str]       = mapped_column(String(200), nullable=False)
+    full_name_encrypted: Mapped[str] = mapped_column("full_name_encrypted", sa.Text, nullable=False)
 
     # ── Идентификаторы будущего тенанта ───────────────────────────────────
     franchise_name: Mapped[str]       = mapped_column(String(200), nullable=False)
@@ -69,3 +70,21 @@ class SignupRequest(Base):
         onupdate=datetime.utcnow,
         nullable=False,
     )
+
+    def __init__(self, **kwargs):
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('full_name', 'full_name_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def full_name(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.full_name_encrypted)
+
+    @full_name.setter
+    def full_name(self, value):
+        from app.services.encryption_service import encrypt
+        self.full_name_encrypted = encrypt(value) if value is not None else None

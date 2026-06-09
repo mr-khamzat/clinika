@@ -91,8 +91,8 @@ async def get_my_franchise(
 
     refs_row = (await db.execute(_text("""
         SELECT
-          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL 30 days)         AS month_total,
-          COUNT(*) FILTER (WHERE status = confirmed AND created_at >= NOW() - INTERVAL 30 days) AS month_confirmed
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days')                                    AS month_total,
+          COUNT(*) FILTER (WHERE status = 'confirmed' AND created_at >= NOW() - INTERVAL '30 days')           AS month_confirmed
         FROM appointments
         WHERE tenant_id IN (SELECT id FROM tenants WHERE franchise_id = :fid)
     """), {"fid": str(f.id)})).one()

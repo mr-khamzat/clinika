@@ -24,6 +24,24 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
                       clinic_name: str | None = None,
                       patient_name: str | None = None,
                       patient_phone: str | None = None) -> dict:
+    # SLA-уровень на основе last_inbound_message_at (Intercom-style):
+    #   green  — <5 мин (свежий)
+    #   yellow — 5..15 мин (требует внимания)
+    #   red    — >15 мин (просрочен)
+    #   gray   — thread не open или нет входящих
+    sla_level = "gray"
+    sla_minutes = None
+    last_inbound_at = getattr(t, "last_inbound_message_at", None)
+    if t.status == "open" and last_inbound_at:
+        delta_sec = (datetime.utcnow() - last_inbound_at).total_seconds()
+        sla_minutes = int(delta_sec // 60)
+        if delta_sec < 300:
+            sla_level = "green"
+        elif delta_sec < 900:
+            sla_level = "yellow"
+        else:
+            sla_level = "red"
+
     return {
         "clinic_name": clinic_name,
         "patient_name": patient_name,
@@ -58,6 +76,12 @@ def serialize_thread(t: ChatThread, last_msg: ChatMessage | None = None,
         ),
         # Quick Wins #4: цветовая метка (red/yellow/green/blue/None).
         "color_label": getattr(t, "color_label", None),
+        # SLA-цветометка (Intercom-style queue):
+        "sla_level": sla_level,
+        "sla_minutes": sla_minutes,
+        "last_inbound_message_at": (
+            last_inbound_at.isoformat() if last_inbound_at else None
+        ),
     }
 
 
@@ -236,6 +260,8 @@ async def create_thread(
         subject=subject,
         status="open",
         last_message_at=now,
+        # SLA queue: первое сообщение от пациента — начинаем таймер.
+        last_inbound_message_at=now,
         unread_for_patient=0,
         unread_for_clinic=1,
     )
@@ -267,9 +293,12 @@ async def add_patient_message(
         attachments=attachments,
     )
     db.add(msg)
-    thread.last_message_at = datetime.utcnow()
+    now = datetime.utcnow()
+    thread.last_message_at = now
+    # SLA queue: входящее от пациента — обновляем таймер для цветометки.
+    thread.last_inbound_message_at = now
     thread.unread_for_clinic = int(thread.unread_for_clinic or 0) + 1
-    thread.updated_at = datetime.utcnow()
+    thread.updated_at = now
     if thread.status == "closed":
         # повторное обращение пациента — переоткрываем
         thread.status = "open"

@@ -161,3 +161,22 @@
     }
   }
 }
+
+/* === Ручная тёмная тема через data-theme="dark" (toggle из StaffChat/Calls) === */
+html[data-theme="dark"] {
+  --bg: oklch(0.16 0.01 250);
+  --bg-1: oklch(0.21 0.01 250);
+  --bg-2: oklch(0.24 0.01 250);
+  --bg-alt: oklch(0.19 0.012 250);
+  --fg: oklch(0.95 0.01 250);
+  --fg-2: oklch(0.75 0.01 250);
+  --fg-3: oklch(0.6 0.01 250);
+  --border: oklch(0.28 0.01 250);
+  --accent: oklch(0.7 0.18 230);
+  --accent-soft: oklch(0.3 0.05 230);
+  color-scheme: dark;
+}
+html[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--fg);
+}

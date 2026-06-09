@@ -36,7 +36,7 @@ export default function CampaignsList({ token, onCompose, onOpenDetails }) {
   const reload = useCallback(() => {
     setLoading(true)
     const q = status === 'all' ? '' : `?status=${status}`
-    apiFetch(token, `/api/engagement/campaigns${q}`)
+    apiFetch(token, `/engagement/campaigns${q}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setItems(d?.items || d || []); setLoading(false) })
       .catch(() => setLoading(false))
@@ -46,17 +46,17 @@ export default function CampaignsList({ token, onCompose, onOpenDetails }) {
 
   async function cancelCampaign(c) {
     if (!confirm(`Отменить кампанию «${c.title}»?`)) return
-    await apiFetch(token, `/api/engagement/campaigns/${c.id}/cancel`, { method: 'POST' })
+    await apiFetch(token, `/engagement/campaigns/${c.id}/cancel`, { method: 'POST' })
     reload()
   }
   async function sendNow(c) {
     if (!confirm(`Отправить кампанию «${c.title}» прямо сейчас?`)) return
-    await apiFetch(token, `/api/engagement/campaigns/${c.id}/send`, { method: 'POST' })
+    await apiFetch(token, `/engagement/campaigns/${c.id}/send`, { method: 'POST' })
     reload()
   }
   async function removeCampaign(c) {
     if (!confirm(`Удалить кампанию «${c.title}»?`)) return
-    await apiFetch(token, `/api/engagement/campaigns/${c.id}`, { method: 'DELETE' })
+    await apiFetch(token, `/engagement/campaigns/${c.id}`, { method: 'DELETE' })
     reload()
   }
 
@@ -223,8 +223,8 @@ export function CampaignDetailsModal({ token, campaignId, onClose }) {
   useEffect(() => {
     if (!campaignId) return
     Promise.all([
-      apiFetch(token, `/api/engagement/campaigns/${campaignId}`).then(r => r.ok ? r.json() : null),
-      apiFetch(token, `/api/engagement/campaigns/${campaignId}/stats`).then(r => r.ok ? r.json() : null),
+      apiFetch(token, `/engagement/campaigns/${campaignId}`).then(r => r.ok ? r.json() : null),
+      apiFetch(token, `/engagement/campaigns/${campaignId}/stats`).then(r => r.ok ? r.json() : null),
     ]).then(([cd, st]) => { setC(cd); setStats(st); setLoading(false) })
   }, [token, campaignId])
 

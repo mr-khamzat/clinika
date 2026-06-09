@@ -62,9 +62,15 @@ import { useToast } from '../design'
 import MessageBubble from '../components/chat/MessageBubble'
 import ThreadListItem from '../components/chat/ThreadListItem'
 import PatientContextPanel from '../components/chat/PatientContextPanel'
+import useAuthStore from '../store/auth' 
 import ReassignModal from '../components/chat/ReassignModal'
 import TemplateAutocomplete from '../components/chat/TemplateAutocomplete'
+import TemplateManagerModal from '../components/chat/TemplateManagerModal'
 import ClinicSlotPicker from '../components/chat/ClinicSlotPicker'
+import CreateReferralDrawer from '../components/chat/CreateReferralDrawer'
+import PriceCalculatorDrawer from '../components/chat/PriceCalculatorDrawer'
+import StickerPicker from '../components/chat/StickerPicker'
+import PromoCodeButton from '../components/chat/PromoCodeButton'
 import useChatSoundNotification from '../hooks/useChatSoundNotification'
 import { enableWebPush, disableWebPush, getPushPermissionState } from '../lib/webPush'
 
@@ -138,7 +144,7 @@ function AssignDoctorModal({ open, onClose, onAssign, clinicId }) {
     if (!picked) return
     setBusy(true)
     try {
-      await onAssign?.(Number(picked))
+      await onAssign?.(String(picked))
     } finally { setBusy(false) }
   }
 
@@ -148,9 +154,9 @@ function AssignDoctorModal({ open, onClose, onAssign, clinicId }) {
          onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()}
            className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl overflow-hidden"
-           style={{ background: 'var(--bg, #fff)', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
+           style={{ background: '#ffffff', color: '#0f172a', boxShadow: '0 20px 60px rgba(0,0,0,.35)' }}>
         <div className="px-5 py-4 flex items-center justify-between border-b" style={{ borderColor: 'var(--border, #e2e8f0)' }}>
-          <div className="font-bold" style={{ fontSize: 16 }}>Назначить врача</div>
+          <div className="font-bold" style={{ fontSize: 16, color: "#0f172a" }}>Назначить врача</div>
           <button onClick={onClose} className="grid place-items-center"
                   style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
@@ -158,15 +164,15 @@ function AssignDoctorModal({ open, onClose, onAssign, clinicId }) {
         </div>
         <div className="p-5 space-y-3">
           {loading ? (
-            <div className="text-center py-4" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Загрузка врачей…</div>
+            <div className="text-center py-4" style={{ color: '#475569', fontSize: 13 }}>Загрузка врачей…</div>
           ) : doctors.length === 0 ? (
-            <div className="text-center py-4" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Нет доступных врачей</div>
+            <div className="text-center py-4" style={{ color: '#475569', fontSize: 13 }}>Нет доступных врачей</div>
           ) : (
             <select
               value={picked}
               onChange={(e) => setPicked(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl outline-none"
-              style={{ background: 'var(--bg-1, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', fontSize: 14 }}
+              style={{ background: '#ffffff', color: '#0f172a', border: '1px solid #cbd5e1', fontSize: 14, colorScheme: 'light' }}
             >
               <option value="">— выберите —</option>
               {doctors.map(d => (
@@ -222,6 +228,7 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
   const [assignOpen, setAssignOpen] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
   const [tplQuery, setTplQuery] = useState(null)                 // null = неактивен, '' = открыт пустой, иначе текст после '/'
+  const [tplManageOpen, setTplManageOpen] = useState(false)      // модалка управления шаблонами
   const [showPatientCard, setShowPatientCard] = useState(false)  // mobile drawer карточки пациента
   const [labelMenuOpen, setLabelMenuOpen] = useState(false)
   const [soundEnabled, setSoundEnabled] = useState(() => {
@@ -239,6 +246,9 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
 
   // chatslot01: drawer выбора слотов + дефолты из slot_request пациента
   const [slotPickerOpen, setSlotPickerOpen] = useState(false)
+  const [calcOpen, setCalcOpen] = useState(false)
+  const [stickersOpen, setStickersOpen] = useState(false)
+  const [referralDrawerOpen, setReferralDrawerOpen] = useState(false)
   const [slotPickerDefaults, setSlotPickerDefaults] = useState({})
   const handleOfferRequest = useCallback((req) => {
     setSlotPickerDefaults(req || {})
@@ -267,21 +277,58 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
 
   // ── Quick actions: ссылки на запись / направление ──────────────────────
   // /manager/schedules доступен только manager/franchise_owner.
-  const canBook = role === 'manager' || role === 'franchise_owner'
+  const canBook = role === 'manager' || role === 'franchise_owner' || role === 'reg' || role === 'super_admin' || role === 'admin'
+  const meId = useAuthStore(s => s.user?.id) || null
+  const meUser = useAuthStore(s => s.user) || null
+  const canTakeOver = ['manager','director','deputy_director','franchise_owner','super_admin','admin'].includes(role)
+  const canManageTemplates = ['manager','franchise_owner','super_admin','director','admin'].includes(role)
+
+  // ── Шаблоны: подстановка плейсхолдеров ────────────────────────────────────
+  // Шаблон может содержать {{ patient_name }}, {{ user_name }}, {{ clinic_name }}, {{ clinic_url }}
+  // Все остальные плейсхолдеры остаются как есть (регистратор допишет вручную).
+  const substituteTemplatePlaceholders = useCallback((body) => {
+    if (!body || typeof body !== 'string') return body || ''
+    const patient = active?.thread?.patient_name || 'пациент'
+    const clinicName =
+      active?.thread?.clinic_name ||
+      active?.thread?.clinic?.name ||
+      meUser?.tenant_name || meUser?.tenant?.name || 'нашей клиники'
+    const userName =
+      meUser?.full_name || meUser?.name ||
+      (typeof window !== 'undefined' ? (() => {
+        try {
+          const raw = localStorage.getItem('user') || localStorage.getItem('auth_user')
+          if (!raw) return ''
+          const j = JSON.parse(raw)
+          return j?.full_name || j?.name || ''
+        } catch { return '' }
+      })() : '') || 'регистратор'
+    const slug =
+      active?.thread?.clinic_slug ||
+      active?.thread?.clinic?.slug ||
+      meUser?.tenant_slug || ''
+    const clinicUrl = slug
+      ? `https://клиниксеть.рф/${slug}`
+      : 'https://клиниксеть.рф'
+    return body
+      .replace(/\{\{\s*patient_name\s*\}\}/gi, patient)
+      .replace(/\{\{\s*user_name\s*\}\}/gi, userName)
+      .replace(/\{\{\s*clinic_name\s*\}\}/gi, clinicName)
+      .replace(/\{\{\s*clinic_url\s*\}\}/gi, clinicUrl)
+  }, [active, meUser])
+  const takeOver = async () => {
+    if (!activeId) return
+    try {
+      await api.post('/clinic/chat/threads/' + activeId + '/reassign', { to_user_id: meId, note: 'Перехват' })
+      fetchThread(activeId, true)
+      fetchThreads()
+    } catch (e) { console.error(e) }
+  }
   const patientPhone = active?.thread?.patient_phone || ''
   const patientName  = active?.thread?.patient_name || ''
-  const goBookAppointment = () => {
-    const qs = new URLSearchParams()
-    if (patientPhone) qs.set('patient_phone', patientPhone)
-    if (patientName)  qs.set('patient_name', patientName)
-    nav('/manager/schedules' + (qs.toString() ? '?' + qs.toString() : ''))
-  }
-  const goCreateReferral = () => {
-    const qs = new URLSearchParams()
-    if (patientPhone) qs.set('patient_phone', patientPhone)
-    if (patientName)  qs.set('patient_name', patientName)
-    nav('/create' + (qs.toString() ? '?' + qs.toString() : ''))
-  }
+  // Открываем inline-drawer прямо в чате — без перехода на другую страницу
+  const goBookAppointment = () => { setSlotPickerDefaults({}); setSlotPickerOpen(true) }
+  const goCreateReferral = () => { setReferralDrawerOpen(true) }
 
   // ── Fetch threads ─────────────────────────────────────────────────────────
   const fetchThreads = useCallback(async () => {
@@ -326,6 +373,10 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
   }, [toast])
 
   // ── Effects ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!activeId) return
+    api.post('/clinic/chat/threads/' + activeId + '/read').catch(() => {})
+  }, [activeId]) // mark_clinic_read
   useEffect(() => { fetchThreads() }, [fetchThreads])
   useEffect(() => {
     if (!activeId) { setActive(null); return }
@@ -533,6 +584,21 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
         .msg-in { animation: msg-in .22s cubic-bezier(.22,1,.36,1) }
         .chat-scroll::-webkit-scrollbar { width: 6px }
         .chat-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 6px }
+        /* Grid layout responsive (CSS — реагирует на resize окна, не inline JS) */
+        .clinic-chat-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          height: 100%;
+          min-height: 0;
+        }
+        @media (min-width: 900px) {
+          .clinic-chat-grid { grid-template-columns: 280px 1fr; }
+        }
+        @media (min-width: 1100px) {
+          .clinic-chat-grid.has-active { grid-template-columns: 280px minmax(0, 1fr) 300px; }
+        }
+        /* Защита от переполнения — чат-колонка может уменьшаться без деформации */
+        .clinic-chat-grid > * { min-width: 0; min-height: 0; }
         /* 3-я колонка (карточка пациента) — только на широких экранах при выбранном треде */
         .clinic-chat-patient-col { display: none; }
         @media (min-width: 1100px) {
@@ -545,23 +611,21 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
       `}</style>
 
       <div
-        className="rounded-2xl overflow-hidden"
+        className="clinic-chat-shell overflow-hidden"
         style={{
           background: 'var(--surface, #fff)',
           border: '1px solid var(--border, #e2e8f0)',
           boxShadow: 'var(--shadow-sm, 0 1px 3px rgba(15,23,42,.08))',
+          borderRadius: 16,
+          height: '100%',
+          minHeight: 'min(640px, calc(100vh - 220px))',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <div
-          className="grid"
-          style={{
-            // Desktop: список 320 | чат 1fr | карточка 300 (если выбран тред); иначе 320 | 1fr.
-            // Mobile: одна колонка, переключение между списком/тредом; карточка — overlay-drawer.
-            gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth >= 1100
-              ? (activeId ? '320px 1fr 300px' : '320px 1fr')
-              : (typeof window !== 'undefined' && window.innerWidth >= 900 ? '320px 1fr' : '1fr'),
-            minHeight: 'min(640px, calc(100vh - 220px))',
-          }}
+          className={'clinic-chat-grid' + (activeId ? ' has-active' : '')}
+          style={{ flex: 1, minHeight: 0 }}
         >
           {/* Список тредов */}
           <div
@@ -620,7 +684,7 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                 </div>
               )}
             </div>
-            <div className="chat-scroll flex-1 overflow-y-auto p-2 space-y-1" style={{ maxHeight: 'calc(100vh - 320px)' }}>
+            <div className="chat-scroll flex-1 overflow-y-auto p-2 space-y-1" style={{ minHeight: 0 }}>
               {loadingList && <div className="text-center py-8" style={{ color: 'var(--fg-3, #94a3b8)', fontSize: 13 }}>Загрузка…</div>}
               {!loadingList && listErr && (
                 <div className="rounded-xl p-3 m-2" style={{ background: '#fee2e2', color: '#991b1b', fontSize: 13 }}>{listErr}</div>
@@ -648,7 +712,7 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
           {/* Активный тред */}
           <div
             className={`flex-col ${(!activeId || showListMobile) ? 'hidden md:flex' : 'flex'}`}
-            style={{ minHeight: 'min(640px, calc(100vh - 220px))' }}
+            style={{ minHeight: 0, height: '100%' }}
           >
             {!activeId && (
               <div className="flex-1 grid place-items-center p-6 text-center">
@@ -728,6 +792,16 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                     </div>
                   </div>
                   {/* Quick-actions: запись / направление / карточка пациента */}
+                  {canTakeOver && active?.thread?.assigned_doctor_user_id && active.thread.assigned_doctor_user_id !== meId && (
+                    <button
+                      onClick={takeOver}
+                      className="grid place-items-center"
+                      style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-soft, #fef3c7)', color: 'var(--accent, #b45309)' }}
+                      title={"Перехватить (сейчас у " + active.thread.assigned_doctor_name + ")"}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 20 }}>swap_horiz</span>
+                    </button>
+                  )}
                   {canBook && (
                     <button
                       onClick={goBookAppointment}
@@ -746,6 +820,31 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                   >
                     <span className="material-symbols-outlined" style={{ fontSize: 20 }}>assignment_add</span>
                   </button>
+                  <button
+                    onClick={() => setCalcOpen(true)}
+                    className="grid place-items-center"
+                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--fg-2, #475569)' }}
+                    title="Калькулятор стоимости"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>calculate</span>
+                  </button>
+                  {activeId && <PromoCodeButton threadId={activeId} onIssued={(code) => { fetchThread(activeId, true); fetchThreads() }} />}
+                  {canTakeOver && active?.thread?.patient_id && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.post('/clinic/chat/patients/' + active.thread.patient_id + '/assign-counselor', { user_id: meId })
+                          alert('Вы закреплены как личный регистратор этого пациента')
+                          fetchThread(activeId, true)
+                        } catch (e) { alert('Ошибка: ' + (e.response?.data?.detail || e.message)) }
+                      }}
+                      className="grid place-items-center"
+                      style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: '#fff' }}
+                      title="Сделать меня личным регистратором (VIP)"
+                    >
+                      <span style={{ fontSize: 18 }}>👑</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowPatientCard(true)}
                     className="clinic-chat-patient-toggle grid place-items-center"
@@ -822,6 +921,16 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                       </div>
                     )}
                   </div>
+                  {/* Templates manager */}
+                  <button
+                    onClick={() => setTplManageOpen(true)}
+                    className="grid place-items-center"
+                    style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-1, #f1f5f9)', color: 'var(--accent, #0097A7)' }}
+                    title="Шаблоны быстрых ответов (или наберите / в поле ввода)"
+                    aria-label="Шаблоны"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>quick_reference</span>
+                  </button>
                   {/* Sound toggle */}
                   <button
                     onClick={toggleSound}
@@ -1026,10 +1135,22 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                     <TemplateAutocomplete
                       query={tplQuery}
                       onPick={async (t) => {
-                        try { const r = await api.post(`/chat/templates/${t.id}/use`); setDraft(r.data?.body || t.body) }
-                        catch { setDraft(t.body) }
+                        let body = t.body
+                        try {
+                          const r = await api.post(`/chat/templates/${t.id}/use`)
+                          body = r.data?.body || t.body
+                        } catch { /* offline: используем t.body как есть */ }
+                        setDraft(substituteTemplatePlaceholders(body))
                         setTplQuery(null)
-                        setTimeout(() => textareaRef.current?.focus(), 30)
+                        setTimeout(() => {
+                          const ta = textareaRef.current
+                          if (ta) {
+                            ta.focus()
+                            // авто-resize после подстановки
+                            ta.style.height = 'auto'
+                            ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
+                          }
+                        }, 30)
                       }}
                       onClose={() => setTplQuery(null)}
                     />
@@ -1044,6 +1165,35 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
                       >
                         <span className="material-symbols-outlined" style={{ fontSize: 22 }}>event</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setStickersOpen(v => !v)}
+                        className="grid place-items-center flex-shrink-0"
+                        style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--bg-1, #f1f5f9)', border: '1px solid var(--border, #e2e8f0)', color: '#f59e0b', position: 'relative' }}
+                        aria-label="Стикеры КлиникСеть"
+                        title="Стикеры"
+                      >
+                        <span style={{ fontSize: 20 }}>😀</span>
+                      </button>
+                      {stickersOpen && (
+                        <StickerPicker
+                          open={stickersOpen}
+                          onClose={() => setStickersOpen(false)}
+                          onPick={async (url) => {
+                            setStickersOpen(false)
+                            if (!activeId) return
+                            try {
+                              const fileName = url.split('/').pop() || 'sticker.svg'
+                              const title = fileName.replace(/^sticker-\d+-/, '').replace(/\.svg$/, '')
+                              await api.post(`/clinic/chat/threads/${activeId}/messages`, {
+                                body: '',
+                                attachments: [{ type: 'sticker', url: url, title: title }],
+                              })
+                              await fetchThread(activeId, true)
+                            } catch (e) { console.error('sticker send error', e) }
+                          }}
+                        />
+                      )}
                       <textarea
                         ref={textareaRef}
                         value={draft}
@@ -1125,8 +1275,46 @@ function ClinicChatSectionInner({ role = 'doctor', clinicId: clinicIdProp }) {
         open={slotPickerOpen}
         onClose={() => setSlotPickerOpen(false)}
         threadId={activeId}
+        clinicId={active?.thread?.clinic_id || clinicIdProp}
         defaults={slotPickerDefaults}
         onSent={() => fetchThread(activeId, true)}
+      />
+      <PriceCalculatorDrawer
+        open={calcOpen}
+        onClose={() => setCalcOpen(false)}
+        threadId={activeId}
+        clinicId={active?.thread?.clinic_id || clinicIdProp}
+        onSent={() => { setCalcOpen(false); fetchThread(activeId, true) }}
+      />
+      <CreateReferralDrawer
+        open={referralDrawerOpen}
+        onClose={() => setReferralDrawerOpen(false)}
+        threadId={activeId}
+        clinicId={active?.thread?.clinic_id || clinicIdProp}
+        patientPhone={patientPhone}
+        patientName={patientName}
+        onCreated={() => { setReferralDrawerOpen(false); fetchThread(activeId, true) }}
+      />
+      <TemplateManagerModal
+        open={tplManageOpen}
+        onClose={() => setTplManageOpen(false)}
+        canManage={canManageTemplates}
+        onPick={async (t) => {
+          let body = t.body
+          try {
+            const r = await api.post(`/chat/templates/${t.id}/use`)
+            body = r.data?.body || t.body
+          } catch { /* offline */ }
+          setDraft(substituteTemplatePlaceholders(body))
+          setTimeout(() => {
+            const ta = textareaRef.current
+            if (ta) {
+              ta.focus()
+              ta.style.height = 'auto'
+              ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'
+            }
+          }, 30)
+        }}
       />
     </>
   )

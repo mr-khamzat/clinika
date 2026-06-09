@@ -47,7 +47,7 @@ MINI_APP_URL = os.environ.get(
 )
 
 SUPPORT_BOT_TOKEN = os.environ.get(
-    "SUPPORT_BOT_TOKEN", "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
+    "SUPPORT_BOT_TOKEN", ""
 )
 SUPPORT_BOT_SECRET = os.environ.get(
     "SUPPORT_BOT_SECRET", "clinika-support-bot-secret-2024"
@@ -493,21 +493,25 @@ async def run_app(app: Application):
 async def main_async():
     tasks = []
 
-    # Support bot — всегда запускаем (через прокси)
-    support_app = (
-        Application.builder()
-        .token(SUPPORT_BOT_TOKEN)
-        .request(_make_request())
-        .get_updates_request(_make_request())
-        .build()
-    )
-    support_app.add_handler(CommandHandler("menu", cmd_menu))
-    support_app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^adm:"))
-    support_app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, support_reply_handler)
-    )
-    tasks.append(run_app(support_app))
-    log.info("[SupportBot] Инициализирован (прокси: %s)", TELEGRAM_PROXY_URL.split("@")[-1])
+    # Support bot — запускаем только если задан SUPPORT_BOT_TOKEN
+    # (legacy: ранее тут был хардкод; теперь поддержка через backend tg_admin_bot.py)
+    if SUPPORT_BOT_TOKEN and SUPPORT_BOT_TOKEN not in ("YOUR_BOT_TOKEN_HERE", ""):
+        support_app = (
+            Application.builder()
+            .token(SUPPORT_BOT_TOKEN)
+            .request(_make_request())
+            .get_updates_request(_make_request())
+            .build()
+        )
+        support_app.add_handler(CommandHandler("menu", cmd_menu))
+        support_app.add_handler(CallbackQueryHandler(admin_callback, pattern=r"^adm:"))
+        support_app.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, support_reply_handler)
+        )
+        tasks.append(run_app(support_app))
+        log.info("[SupportBot] Инициализирован (прокси: %s)", TELEGRAM_PROXY_URL.split("@")[-1])
+    else:
+        log.info("[SupportBot] SUPPORT_BOT_TOKEN не задан, пропускаем (используется backend admin-bot)")
 
     # Основной бот — только если задан и отличается от SUPPORT_BOT_TOKEN
     # (в текущем .env они совпадают → запускаем только support)

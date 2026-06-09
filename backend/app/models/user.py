@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+import sqlalchemy as sa
 from sqlalchemy import String, DateTime, Boolean, ForeignKey, Enum as SAEnum, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -61,7 +62,7 @@ class User(Base):
     consent_version: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Тип врача: internal | external | visiting
     doctor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    address: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    address_encrypted: Mapped[str | None] = mapped_column("address_encrypted", sa.Text, nullable=True)
     specialization: Mapped[str | None] = mapped_column(String(100), nullable=True)
     # Менеджер привлечения (для partner_doctor/visiting_doctor)
     manager_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -96,3 +97,21 @@ class User(Base):
     bonuses: Mapped[list["Bonus"]] = relationship("Bonus", back_populates="admin")
     recruiter: Mapped["User | None"] = relationship("User", remote_side="User.id", foreign_keys=[recruiter_id])
     doctor_clinic_access: Mapped[list["DoctorClinicAccess"]] = relationship("DoctorClinicAccess", back_populates="doctor", foreign_keys="DoctorClinicAccess.doctor_id")
+
+    def __init__(self, **kwargs):
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('address', 'address_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def address(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.address_encrypted)
+
+    @address.setter
+    def address(self, value):
+        from app.services.encryption_service import encrypt
+        self.address_encrypted = encrypt(value) if value is not None else None

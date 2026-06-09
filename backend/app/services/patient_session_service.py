@@ -8,12 +8,34 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.patient_session import PatientSession
+from app.models.patient_account import PatientAccount
 from app.core.security import (
     make_patient_session_token,
     decode_patient_session_token,
     hash_session_secret,
 )
 from app.utils.phone import normalize_phone
+
+
+async def _bump_patient_account_activity(db: AsyncSession, phone_n: str) -> None:
+    """При создании/восстановлении session: инкрементить login_count и обновить last_seen_at у PatientAccount.
+
+    Без этого dashboard 'Пациенты ЛК' остаётся пустым — все active_*d метрики
+    смотрят на last_seen_at, и login_count используется как фильтр 'кто реально заходил'.
+    Если аккаунта по phone нет — тихо игнорируем (его создаст другая ветка onboarding).
+    """
+    try:
+        acc = (await db.execute(
+            select(PatientAccount).where(PatientAccount.phone == phone_n)
+        )).scalar_one_or_none()
+        if acc is None:
+            return
+        acc.login_count = (acc.login_count or 0) + 1
+        acc.last_seen_at = datetime.utcnow()
+        await db.flush()
+    except Exception:
+        # никогда не ломаем основной flow логина из-за статистики
+        pass
 
 
 SESSION_TTL_DAYS = 365
@@ -41,6 +63,7 @@ async def create_session(
     )
     db.add(session)
     await db.flush()
+    await _bump_patient_account_activity(db, phone_n)
     token = make_patient_session_token(
         str(session.id), phone_n, str(tenant_id) if tenant_id else None
     )
@@ -74,6 +97,7 @@ async def restore_session(
     session.last_used_at = datetime.utcnow()
     session.expires_at = datetime.utcnow() + timedelta(days=SESSION_TTL_DAYS)
     await db.flush()
+    await _bump_patient_account_activity(db, normalize_phone(session.phone))
     return session
 
 

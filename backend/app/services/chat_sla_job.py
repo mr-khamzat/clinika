@@ -107,7 +107,11 @@ async def _check_thread_sla(
 def _should_autoclose(thread: ChatThread, days: int) -> bool:
     if thread.status != "open" or not thread.last_message_at:
         return False
-    return (datetime.utcnow() - thread.last_message_at) >= timedelta(days=days)
+    lm = thread.last_message_at
+    # Нормализуем: если БД вернула tz-aware (TIMESTAMPTZ), отрезаем tz для сравнения с utcnow().
+    if lm.tzinfo is not None:
+        lm = lm.replace(tzinfo=None)
+    return (datetime.utcnow() - lm) >= timedelta(days=days)
 
 
 async def chat_sla_checker_job() -> None:

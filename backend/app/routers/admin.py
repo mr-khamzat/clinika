@@ -1875,3 +1875,235 @@ async def delete_ip_allowlist(
     await db.commit()
     return {"ok": True, "deleted_id": str(entry_id)}
 
+
+
+# ── Tenant Health Score (фича roadmap #3) ────────────────────────────────────
+# Композитный показатель «здоровья» тенанта — используется на странице
+# "Тенанты" в /admin (колонка «Активность»). См. services/tenant_health.py.
+
+@router.get("/tenants/health-overview")
+async def tenants_health_overview(
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Массив health-score'ов по всем активным тенантам — для таблицы."""
+    from app.services.tenant_health import compute_health
+
+    res = await db.execute(
+        select(Tenant).where(Tenant.is_active == True).order_by(Tenant.created_at.desc())
+    )
+    tenants = res.scalars().all()
+
+    out = []
+    for t in tenants:
+        h = await compute_health(t.id, db)
+        out.append({
+            "tenant_id": str(t.id),
+            "name": t.name,
+            "score": h["score"],
+            "status": h["status"],
+            "last_active": h["last_active"],
+        })
+    return out
+
+
+@router.get("/tenants/{tenant_id}/health")
+async def tenant_health(
+    tenant_id: uuid.UUID,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Детальный health-score одного тенанта с разбивкой по метрикам."""
+    from app.services.tenant_health import compute_health
+
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+    return await compute_health(tenant_id, db)
+
+
+# ── Churn Dashboard (фича roadmap #2) ────────────────────────────────────────
+# Дашборд оттока тенантов. Использует поля tenants.churned_at / churn_reason
+# (миграция tenantchurn01_churn_fields).
+
+CHURN_REASONS = ("downgrade", "not_renewed", "hard_delete", "payment_failed", "voluntary")
+VOLUNTARY_REASONS = {"downgrade", "voluntary"}
+INVOLUNTARY_REASONS = {"not_renewed", "hard_delete", "payment_failed"}
+
+
+class ChurnMarkRequest(BaseModel):
+    reason: str = Field(..., pattern=r'^(downgrade|not_renewed|hard_delete|payment_failed|voluntary)$')
+    churned_at: Optional[datetime] = None
+
+
+@router.post("/tenants/{tenant_id}/churn")
+async def mark_tenant_churned(
+    tenant_id: uuid.UUID,
+    payload: ChurnMarkRequest,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Помечает тенанта как churned: проставляет churned_at + churn_reason.
+    Также деактивирует тенанта (is_active = False)."""
+    from sqlalchemy import text as sa_text
+
+    t = await db.get(Tenant, tenant_id)
+    if not t:
+        raise HTTPException(status_code=404, detail="Тенант не найден")
+
+    when = payload.churned_at or datetime.utcnow()
+    # Используем raw SQL для churned_at/churn_reason — поля добавляются миграцией
+    # tenantchurn01; raw SQL не зависит от того, был ли перечитан model-cache ORM.
+    await db.execute(
+        sa_text(
+            "UPDATE tenants SET churned_at=:w, churn_reason=:r, is_active=false "
+            "WHERE id=:tid"
+        ),
+        {"w": when, "r": payload.reason, "tid": tenant_id},
+    )
+    await db.commit()
+    return {
+        "ok": True,
+        "tenant_id": str(tenant_id),
+        "churned_at": when.isoformat(),
+        "churn_reason": payload.reason,
+    }
+
+
+@router.get("/churn/summary")
+async def churn_summary(
+    period: Optional[str] = None,
+    _: User = Depends(require_super_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Сводка по оттоку тенантов.
+
+    period: YYYY-MM (default = текущий месяц UTC).
+    Возвращает:
+      - churn_rate (% от активных на начало месяца)
+      - by_reason: {reason: count}
+      - voluntary_vs_involuntary: {voluntary: %, involuntary: %}
+      - trend_12m: [{month, churned, rate}, ...]
+    """
+    now = datetime.utcnow()
+    if period:
+        try:
+            year, month = period.split("-")
+            month_start = datetime(int(year), int(month), 1)
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=400, detail="period должен быть в формате YYYY-MM")
+    else:
+        month_start = datetime(now.year, now.month, 1)
+
+    # конец месяца
+    if month_start.month == 12:
+        next_month = datetime(month_start.year + 1, 1, 1)
+    else:
+        next_month = datetime(month_start.year, month_start.month + 1, 1)
+
+    # Активные тенанты на начало месяца (created_at < month_start AND
+    # (churned_at IS NULL OR churned_at >= month_start))
+    base_q = await db.execute(
+        select(func.count()).select_from(Tenant).where(
+            Tenant.created_at < month_start,
+        )
+    )
+    total_at_start_raw = int(base_q.scalar() or 0)
+
+    # Уже отчурненные ДО начала месяца — вычитаем.
+    # Используем text() чтобы безопасно работать когда поле ещё нет в модели.
+    from sqlalchemy import text as sa_text
+    pre_churned = await db.execute(
+        sa_text(
+            "SELECT COUNT(*) FROM tenants "
+            "WHERE churned_at IS NOT NULL AND churned_at < :ms"
+        ),
+        {"ms": month_start},
+    )
+    pre_churned_n = int(pre_churned.scalar() or 0)
+    active_at_start = max(0, total_at_start_raw - pre_churned_n)
+
+    # Отчурненные В период
+    churned_in_period_r = await db.execute(
+        sa_text(
+            "SELECT churn_reason, COUNT(*) FROM tenants "
+            "WHERE churned_at IS NOT NULL "
+            "AND churned_at >= :ms AND churned_at < :me "
+            "GROUP BY churn_reason"
+        ),
+        {"ms": month_start, "me": next_month},
+    )
+    by_reason: dict[str, int] = {r: 0 for r in CHURN_REASONS}
+    total_churned = 0
+    for reason, cnt in churned_in_period_r.all():
+        key = reason if reason in by_reason else "voluntary"
+        by_reason[key] += int(cnt)
+        total_churned += int(cnt)
+
+    churn_rate = round((total_churned / active_at_start) * 100, 2) if active_at_start else 0.0
+
+    # Voluntary vs Involuntary (в процентах от total_churned)
+    vol_cnt = sum(by_reason[r] for r in VOLUNTARY_REASONS if r in by_reason)
+    invol_cnt = sum(by_reason[r] for r in INVOLUNTARY_REASONS if r in by_reason)
+    if total_churned > 0:
+        voluntary_pct = round(vol_cnt * 100 / total_churned, 1)
+        involuntary_pct = round(invol_cnt * 100 / total_churned, 1)
+    else:
+        voluntary_pct = involuntary_pct = 0.0
+
+    # Trend за последние 12 месяцев (включая текущий)
+    trend: list[dict] = []
+    # Стартуем за 11 месяцев назад от month_start
+    y, m = month_start.year, month_start.month
+    months: list[tuple[int, int]] = []
+    for i in range(11, -1, -1):
+        mm = m - i
+        yy = y
+        while mm <= 0:
+            mm += 12
+            yy -= 1
+        months.append((yy, mm))
+
+    for yy, mm in months:
+        m_start = datetime(yy, mm, 1)
+        m_end = datetime(yy + 1, 1, 1) if mm == 12 else datetime(yy, mm + 1, 1)
+
+        active_r = await db.execute(
+            sa_text(
+                "SELECT COUNT(*) FROM tenants "
+                "WHERE created_at < :ms "
+                "AND (churned_at IS NULL OR churned_at >= :ms)"
+            ),
+            {"ms": m_start},
+        )
+        active_n = int(active_r.scalar() or 0)
+
+        churned_r = await db.execute(
+            sa_text(
+                "SELECT COUNT(*) FROM tenants "
+                "WHERE churned_at IS NOT NULL "
+                "AND churned_at >= :ms AND churned_at < :me"
+            ),
+            {"ms": m_start, "me": m_end},
+        )
+        churned_n = int(churned_r.scalar() or 0)
+        rate = round((churned_n / active_n) * 100, 2) if active_n else 0.0
+
+        trend.append({
+            "month": f"{yy:04d}-{mm:02d}",
+            "churned": churned_n,
+            "rate": rate,
+        })
+
+    return {
+        "period": f"{month_start.year:04d}-{month_start.month:02d}",
+        "active_at_start": active_at_start,
+        "total_churned": total_churned,
+        "churn_rate": churn_rate,
+        "by_reason": by_reason,
+        "voluntary_vs_involuntary": {
+            "voluntary": voluntary_pct,
+            "involuntary": involuntary_pct,
+        },
+        "trend_12m": trend,
+    }

@@ -212,11 +212,11 @@ async def network_patients(
             SELECT
                 a.patient_phone,
                 COUNT(*) AS visits,
-                MAX(a.start_at) AS last_visit_at,
+                MAX((a.appointment_date + a.start_time)::timestamp) AS last_visit_at,
                 a.tenant_id,
                 ROW_NUMBER() OVER (
                     PARTITION BY a.patient_phone
-                    ORDER BY COUNT(*) DESC, MAX(a.start_at) DESC
+                    ORDER BY COUNT(*) DESC, MAX((a.appointment_date + a.start_time)::timestamp) DESC
                 ) AS rn
             FROM appointments a
             WHERE a.tenant_id::text = ANY(:tids_arr)
@@ -294,13 +294,13 @@ async def network_patient_details(
 
     # Визиты пациента по клиникам сети
     visits = (await db.execute(text("""
-        SELECT a.id, a.start_at, a.end_at, a.tenant_id, a.status,
+        SELECT a.id, (a.appointment_date + a.start_time)::timestamp AS start_at, (a.appointment_date + a.end_time)::timestamp AS end_at, a.tenant_id, a.status,
                a.doctor_id, u.full_name AS doctor_name
         FROM appointments a
         LEFT JOIN users u ON u.id = a.doctor_id
         WHERE a.patient_phone = :phone
           AND a.tenant_id::text = ANY(:tids_arr)
-        ORDER BY a.start_at DESC
+        ORDER BY (a.appointment_date + a.start_time) DESC
         LIMIT 50
     """), {"phone": r.phone, "tids_arr": [str(t) for t in tids]})).all()
 

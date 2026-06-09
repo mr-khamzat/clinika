@@ -21,15 +21,21 @@ import uuid
 
 router = APIRouter(prefix="/support", tags=["support"])
 
-# Дефолтные токены (для arc тенанта / обратная совместимость)
-_DEFAULT_BOT_TOKEN = "8689519551:AAHeH7apnU-gZfL59w8aBTpLrhDW5IdcIHU"
-_DEFAULT_ADMIN_CHAT_ID = 293633093
+# Бот-конфиг читается ТОЛЬКО из env / DB settings.
+# Hardcoded token удалён (был security-leak в git history).
+_DEFAULT_BOT_TOKEN = os.environ.get("SUPPORT_BOT_TOKEN", "")
+_DEFAULT_ADMIN_CHAT_ID_STR = os.environ.get("SUPPORT_ADMIN_CHAT_ID", "")
+try:
+    _DEFAULT_ADMIN_CHAT_ID = int(_DEFAULT_ADMIN_CHAT_ID_STR) if _DEFAULT_ADMIN_CHAT_ID_STR else 0
+except ValueError:
+    _DEFAULT_ADMIN_CHAT_ID = 0
 SUPPORT_BOT_TOKEN = _DEFAULT_BOT_TOKEN
 ADMIN_CHAT_ID = _DEFAULT_ADMIN_CHAT_ID
 
 
 async def _get_bot_config(db, tenant_id=None):
-    """Вернуть (bot_token, chat_id) для тенанта из DB настроек или дефолт."""
+    """Вернуть (bot_token, chat_id) для тенанта из DB настроек или env-дефолт.
+    Возвращает (None, 0) если нигде не сконфигурировано — caller обязан проверить."""
     from app.services.settings_service import get_setting
     token = await get_setting(db, "support_bot_token", "", tenant_id=tenant_id)
     chat_id_str = await get_setting(db, "support_admin_chat_id", "", tenant_id=tenant_id)
@@ -41,7 +47,7 @@ async def _get_bot_config(db, tenant_id=None):
             chat_id = int(chat_id_str)
         except Exception:
             pass
-    return token, chat_id
+    return (token or None), chat_id
 UPLOAD_DIR = "/app/uploads/support"
 OPERATOR_REDIS_KEY = "support:operator_online"
 OPERATOR_TTL = 300  # 5 минут

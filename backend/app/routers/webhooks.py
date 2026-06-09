@@ -205,7 +205,7 @@ async def test_webhook(
         raise HTTPException(404, "Вебхук не найден")
 
     await send_event(db, current_user.tenant_id, "test_ping", {
-        "message": "Тестовый запрос от КлиникаСеть",
+        "message": "Тестовый запрос от КлиникСеть",
         "webhook_id": str(webhook_id),
     })
     return {"status": "sent"}

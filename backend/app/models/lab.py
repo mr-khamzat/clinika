@@ -69,7 +69,7 @@ class LabOrder(Base):
     external_order_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     # JSONB array of test codes
     test_codes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    notes_encrypted: Mapped[str | None] = mapped_column("notes_encrypted", Text, nullable=True)
     # created | sent | in_progress | results_ready | delivered | cancelled | error
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="created", index=True)
     requested_at: Mapped[datetime] = mapped_column(
@@ -84,6 +84,25 @@ class LabOrder(Base):
         "LabResult", back_populates="order", cascade="all, delete-orphan"
     )
 
+
+    def __init__(self, **kwargs):
+        # Прозрачное шифрование PII-полей на __init__
+        from app.services.encryption_service import encrypt as _enc
+        for plain, enc_col in [('notes', 'notes_encrypted')]:
+            if plain in kwargs:
+                val = kwargs.pop(plain)
+                kwargs[enc_col] = _enc(val) if val is not None else None
+        super().__init__(**kwargs)
+
+    @property
+    def notes(self):
+        from app.services.encryption_service import decrypt
+        return decrypt(self.notes_encrypted)
+
+    @notes.setter
+    def notes(self, value):
+        from app.services.encryption_service import encrypt
+        self.notes_encrypted = encrypt(value) if value is not None else None
 
 class LabResult(Base):
     __tablename__ = "lab_results"
