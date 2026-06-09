@@ -12,7 +12,7 @@
  *   • Заглавный header — выровнен по дизайну Home
  *   • Stagger pop-in анимация (60ms между пунктами)
  *   • Активный tap — scale(.97) + лёгкое затемнение
- *   • Поддержка badge остаётся, типография согласована
+ *   • DARK MODE: Tailwind dark:bg-* + dark:text-* (вместо var() — надёжнее)
  *
  * props:
  *   items: [{
@@ -36,18 +36,12 @@ export default function SubPageNav({ items, onOpen, title }) {
       <style>{`
         @keyframes spnPop { from{opacity:0;transform:translateY(8px) scale(.98)} to{opacity:1;transform:translateY(0) scale(1)} }
         .spn-card { animation: spnPop .42s cubic-bezier(.22,1.4,.36,1) both; transition: transform .15s, box-shadow .2s, background .2s }
-        .spn-card:active { transform: scale(.97); background: rgba(0,0,0,.025) }
-        @media (prefers-color-scheme: dark) {
-          .spn-card:active { background: rgba(255,255,255,.04) }
-        }
+        .spn-card:active { transform: scale(.97) }
       `}</style>
 
       {/* ── Заголовок группы (необязательный) ── */}
       {title && (
-        <h2
-          className="text-[13px] font-bold uppercase tracking-wide px-1"
-          style={{ color: 'var(--fg-3, #6B7280)' }}
-        >
+        <h2 className="text-[13px] font-bold uppercase tracking-wide px-1 text-gray-500 dark:text-gray-400">
           {title}
         </h2>
       )}
@@ -61,13 +55,11 @@ export default function SubPageNav({ items, onOpen, title }) {
             <button
               key={it.key}
               onClick={() => onOpen(it.key)}
-              className="spn-card w-full flex items-center gap-3 px-3.5 py-3 text-left rounded-2xl"
+              className="spn-card w-full flex items-center gap-3 px-3.5 py-3 text-left rounded-2xl bg-white dark:bg-gray-800 border border-black/5 dark:border-white/10 active:bg-gray-50 dark:active:bg-gray-700"
               style={{
                 animationDelay: `${i * 0.05}s`,
                 minHeight: 68,
-                background: 'var(--bg, #fff)',
-                border: '1px solid rgba(0,0,0,.05)',
-                boxShadow: '0 2px 10px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+                boxShadow: '0 2px 10px rgba(0,0,0,.05)',
               }}
             >
               {/* Icon-chip с gradient + drop-shadow */}
@@ -94,16 +86,13 @@ export default function SubPageNav({ items, onOpen, title }) {
               {/* Текст: label + hint */}
               <div className="flex-1 min-w-0">
                 <p
-                  className="text-[14px] font-bold truncate"
-                  style={{ color: 'var(--fg, #0A2342)', letterSpacing: '-0.01em' }}
+                  className="text-[14px] font-bold truncate text-gray-900 dark:text-gray-50"
+                  style={{ letterSpacing: '-0.01em' }}
                 >
                   {it.label}
                 </p>
                 {it.hint && (
-                  <p
-                    className="text-[12px] truncate mt-0.5"
-                    style={{ color: 'var(--fg-3, #6B7280)' }}
-                  >
+                  <p className="text-[12px] truncate mt-0.5 text-gray-500 dark:text-gray-400">
                     {it.hint}
                   </p>
                 )}
@@ -120,10 +109,7 @@ export default function SubPageNav({ items, onOpen, title }) {
               ) : null}
 
               {/* Chevron-стрелка */}
-              <span
-                className="material-symbols-outlined flex-shrink-0"
-                style={{ fontSize: 20, color: '#9CA3AF' }}
-              >
+              <span className="material-symbols-outlined flex-shrink-0 text-gray-400 dark:text-gray-500" style={{ fontSize: 20 }}>
                 chevron_right
               </span>
             </button>
