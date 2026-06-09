@@ -35,8 +35,41 @@ const ALL_ORDER = [
   'steps', 'weight_kg', 'height_cm', 'sleep_minutes', 'hrv',
 ]
 
+// ═════ БЛОК: METRIC_THEME — gradient-палитра по типу метрики ═════
+// Каждая метрика имеет свой premium-gradient для иконки-чипа + sparkline accent.
+// Логика: трактуем рост/падение каждой метрики так, чтобы стрелка показывала
+// корректное «лучше/хуже» (например, рост веса — нейтрально, рост температуры — плохо).
+const METRIC_THEME = {
+  heart_rate:         { from: '#EC4899', to: '#BE185D', soft: 'rgba(236,72,153,0.12)', tint: '#EC4899', deltaBad: 'up' },
+  blood_pressure_sys: { from: '#EF4444', to: '#DC2626', soft: 'rgba(239,68,68,0.12)',  tint: '#EF4444', deltaBad: 'up' },
+  blood_pressure_dia: { from: '#EF4444', to: '#DC2626', soft: 'rgba(239,68,68,0.12)',  tint: '#EF4444', deltaBad: 'up' },
+  spo2:               { from: '#06B6D4', to: '#0E7490', soft: 'rgba(6,182,212,0.12)',  tint: '#06B6D4', deltaBad: 'down' },
+  glucose:            { from: '#A855F7', to: '#7C3AED', soft: 'rgba(168,85,247,0.12)', tint: '#A855F7', deltaBad: 'up' },
+  weight_kg:          { from: '#3B82F6', to: '#1D4ED8', soft: 'rgba(59,130,246,0.12)', tint: '#3B82F6', deltaBad: 'neutral' },
+  height_cm:          { from: '#0EA5E9', to: '#0369A1', soft: 'rgba(14,165,233,0.12)', tint: '#0EA5E9', deltaBad: 'neutral' },
+  temperature:        { from: '#F97316', to: '#EA580C', soft: 'rgba(249,115,22,0.12)', tint: '#F97316', deltaBad: 'up' },
+  steps:              { from: '#10B981', to: '#047857', soft: 'rgba(16,185,129,0.12)', tint: '#10B981', deltaBad: 'down' },
+  sleep_minutes:      { from: '#6366F1', to: '#4338CA', soft: 'rgba(99,102,241,0.12)', tint: '#6366F1', deltaBad: 'down' },
+  hrv:                { from: '#14B8A6', to: '#0F766E', soft: 'rgba(20,184,166,0.12)', tint: '#14B8A6', deltaBad: 'down' },
+}
+
+const DEFAULT_THEME = { from: '#0EA5E9', to: '#0369A1', soft: 'rgba(14,165,233,0.12)', tint: '#0EA5E9', deltaBad: 'neutral' }
+const themeFor = (k) => METRIC_THEME[k] || DEFAULT_THEME
+
+// Определяет цвет дельты по правилу метрики:
+// deltaBad: 'up' → рост = плохо (red), падение = хорошо (green)
+// deltaBad: 'down' → рост = хорошо (green), падение = плохо (red)
+// deltaBad: 'neutral' → нейтральный gray-tone
+function deltaSentiment(metricKey, delta) {
+  if (delta == null || delta === 0) return 'neutral'
+  const rule = themeFor(metricKey).deltaBad
+  if (rule === 'neutral') return 'neutral'
+  if (rule === 'up') return delta > 0 ? 'bad' : 'good'
+  return delta > 0 ? 'good' : 'bad'
+}
+
 // Простой SVG-sparkline без зависимостей.
-function Sparkline({ points, width = 280, height = 64, color = '#0097A7' }) {
+function Sparkline({ points, width = 280, height = 64, color = '#0097A7', fillColor = null }) {
   if (!points || points.length < 2) {
     return <div className="text-xs text-gray-400 dark:text-gray-500 italic py-6 text-center">Недостаточно данных</div>
   }
@@ -59,44 +92,142 @@ function Sparkline({ points, width = 280, height = 64, color = '#0097A7' }) {
   const fillPath = `${path} L ${lastX} ${height} L 0 ${height} Z`
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16" preserveAspectRatio="none">
-      <path d={fillPath} fill={color} fillOpacity="0.12" />
+      <path d={fillPath} fill={fillColor || color} fillOpacity={fillColor ? 1 : 0.12} />
       <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
 
-// Карточка KPI: крупное значение + delta vs неделя.
-function KpiCard({ metricKey, data }) {
+// ═════ БЛОК: VitalsCard — премиум-карточка метрики с trend + sparkline ═════
+// Большая gradient-иконка, крупное значение, цветной trend-arrow, мини-sparkline,
+// дата последнего замера. Используется в основной сетке метрик кабинета.
+function VitalsCard({ metricKey, data, sparkPoints, index = 0 }) {
   const meta = METRICS[metricKey]
+  const theme = themeFor(metricKey)
   if (!meta) return null
+
   const value = data?.value
   const delta = data?.delta_week
-  const deltaSign = delta == null ? null : (delta > 0 ? '+' : '')
-  const deltaColor = delta == null ? 'text-gray-400 dark:text-gray-500'
-    : (delta > 0 ? 'text-rose-600' : 'text-emerald-600')
+  const sentiment = deltaSentiment(metricKey, delta)
+  const arrow = delta == null || delta === 0 ? '—' : (delta > 0 ? '↑' : '↓')
+  const deltaColor =
+    sentiment === 'bad'  ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10'
+  : sentiment === 'good' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10'
+                         : 'text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/40'
+
+  const measuredAt = data?.measured_at || data?.last_at
+  const dateLabel = measuredAt
+    ? new Date(measuredAt).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' })
+    : null
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col gap-1 min-w-0">
-      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
-        <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
-        <span className="truncate">{meta.label}</span>
-      </div>
-      <div className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
-        {value != null ? meta.fmt(value) : '—'}
-      </div>
-      <div className="text-[11px] text-gray-400 dark:text-gray-500">{meta.unit}</div>
-      {delta != null && (
-        <div className={`text-[11px] font-medium ${deltaColor}`}>
-          {deltaSign}{Number(delta).toFixed(1)} за неделю
+    <div
+      className="vitals-card relative bg-white dark:bg-gray-800 rounded-2xl p-3 flex flex-col gap-2 min-w-0 overflow-hidden active:scale-[.97] transition-transform"
+      style={{
+        boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+        animation: `vitalsPop .42s cubic-bezier(.22,.61,.36,1) both`,
+        animationDelay: `${index * 0.05}s`,
+      }}
+    >
+      {/* Декоративный gradient blob в углу */}
+      <div
+        className="absolute -top-8 -right-8 w-24 h-24 rounded-full opacity-[0.10] dark:opacity-[0.18] pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${theme.from} 0%, transparent 70%)` }}
+      />
+
+      {/* Иконка-чип с gradient */}
+      <div className="flex items-start justify-between gap-2">
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            background: `linear-gradient(135deg, ${theme.from} 0%, ${theme.to} 100%)`,
+            boxShadow: `0 6px 14px -4px ${theme.from}55, inset 0 1px 0 rgba(255,255,255,.35)`,
+          }}
+        >
+          <span
+            className="material-symbols-outlined text-white"
+            style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}
+          >
+            {meta.icon}
+          </span>
         </div>
-      )}
+        {delta != null && (
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full inline-flex items-center gap-0.5 ${deltaColor}`}>
+            <span>{arrow}</span>
+            <span>{Math.abs(Number(delta)).toFixed(1)}</span>
+          </span>
+        )}
+      </div>
+
+      {/* Название */}
+      <div className="text-[12px] font-semibold text-gray-700 dark:text-gray-300 truncate leading-tight">
+        {meta.label}
+      </div>
+
+      {/* Значение + единица */}
+      <div className="flex items-baseline gap-1 leading-none">
+        <span className="text-[26px] font-black text-gray-900 dark:text-gray-50 tracking-tight">
+          {value != null ? meta.fmt(value) : '—'}
+        </span>
+        <span className="text-[11px] font-medium text-gray-400 dark:text-gray-500 truncate">
+          {meta.unit}
+        </span>
+      </div>
+
+      {/* Sparkline за неделю */}
+      <div className="-mx-1">
+        <MiniSparkline points={sparkPoints} color={theme.tint} fillColor={theme.soft} />
+      </div>
+
+      {/* Дата последнего замера */}
+      <div className="flex items-center justify-between text-[10px] text-gray-400 dark:text-gray-500 -mt-1">
+        <span>{dateLabel || 'нет данных'}</span>
+        <span>неделя</span>
+      </div>
     </div>
   )
 }
 
-// Карточка с графиком (sparkline) по конкретной метрике.
-function MetricChartCard({ metricKey, sessionToken }) {
+// ═════ БЛОК: MiniSparkline — компактный SVG-график для VitalsCard ═════
+function MiniSparkline({ points, color = '#0EA5E9', fillColor = 'rgba(14,165,233,0.12)' }) {
+  const width = 120
+  const height = 32
+  const valid = (points || []).filter(p => p != null && p.v != null && !isNaN(p.v))
+  if (valid.length < 2) {
+    return (
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-8" preserveAspectRatio="none">
+        <line x1="0" y1={height / 2} x2={width} y2={height / 2}
+              stroke={color} strokeOpacity="0.25" strokeDasharray="3 3" strokeWidth="1.5" />
+      </svg>
+    )
+  }
+  const values = valid.map(p => p.v)
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const stepX = width / (valid.length - 1)
+  const coords = valid.map((p, i) => {
+    const x = (i * stepX)
+    const y = (height - ((p.v - min) / range) * (height - 6) - 3)
+    return [x, y]
+  })
+  const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
+  const lastX = coords[coords.length - 1][0].toFixed(1)
+  const fillPath = `${path} L ${lastX} ${height} L 0 ${height} Z`
+  const [lx, ly] = coords[coords.length - 1]
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-8" preserveAspectRatio="none">
+      <path d={fillPath} fill={fillColor} />
+      <path d={path} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lx.toFixed(1)} cy={ly.toFixed(1)} r="2.2" fill={color} stroke="#fff" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+// ═════ БЛОК: MetricChartCard — premium widescreen-карточка с графиком за 30 дней ═════
+function MetricChartCard({ metricKey, sessionToken, index = 0 }) {
   const meta = METRICS[metricKey]
+  const theme = themeFor(metricKey)
   const [points, setPoints] = useState(null)
   const [loading, setLoading] = useState(false)
 
@@ -116,19 +247,45 @@ function MetricChartCard({ metricKey, sessionToken }) {
   const last = points && points.length ? points[points.length - 1].v : null
 
   return (
-    <div className="snap-start shrink-0 w-64 bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-800">
-      <div className="flex items-center gap-1 mb-1">
-        <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{meta.label}</span>
+    <div
+      className="snap-start shrink-0 w-64 bg-white dark:bg-gray-800 rounded-2xl p-3.5 relative overflow-hidden active:scale-[.97] transition-transform"
+      style={{
+        boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+        animation: `vitalsPop .42s cubic-bezier(.22,.61,.36,1) both`,
+        animationDelay: `${index * 0.05}s`,
+      }}
+    >
+      <div
+        className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-[0.10] dark:opacity-[0.18] pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${theme.from} 0%, transparent 70%)` }}
+      />
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{
+            background: `linear-gradient(135deg, ${theme.from} 0%, ${theme.to} 100%)`,
+            boxShadow: `0 4px 10px -3px ${theme.from}55, inset 0 1px 0 rgba(255,255,255,.35)`,
+          }}
+        >
+          <span
+            className="material-symbols-outlined text-white"
+            style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
+          >
+            {meta.icon}
+          </span>
+        </div>
+        <span className="text-[13px] font-semibold text-gray-700 dark:text-gray-200 truncate">{meta.label}</span>
       </div>
-      <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-        {last != null ? meta.fmt(last) : '—'}
-        <span className="text-xs text-gray-400 dark:text-gray-500 font-normal ml-1">{meta.unit}</span>
+      <div className="flex items-baseline gap-1 mb-1">
+        <span className="text-xl font-black text-gray-900 dark:text-gray-50 tracking-tight">
+          {last != null ? meta.fmt(last) : '—'}
+        </span>
+        <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">{meta.unit}</span>
       </div>
       {loading
         ? <div className="text-xs text-gray-400 dark:text-gray-500 py-6 text-center">Загрузка…</div>
-        : <Sparkline points={points || []} />}
-      <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right">за 30 дней</div>
+        : <Sparkline points={points || []} color={theme.tint} fillColor={theme.soft} />}
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right mt-1">за 30 дней</div>
     </div>
   )
 }
@@ -248,6 +405,8 @@ export default function VitalsTab({ token, sessionToken, phone }) {
   const [loading, setLoading] = useState(true)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [syncStatus, setSyncStatus] = useState(null)
+  // sparkPoints[metricKey] = массив точек за 7 дней (для премиум-карточек метрик)
+  const [sparkPoints, setSparkPoints] = useState({})
 
   const isIOS = useMemo(() => /iPhone|iPad/.test(navigator.userAgent), [])
   const hasBridge = typeof window !== 'undefined' && !!window.ClinikaBridge?.requestHealthSync
@@ -269,6 +428,31 @@ export default function VitalsTab({ token, sessionToken, phone }) {
   }, [sessionToken])
 
   useEffect(() => { reload() }, [reload])
+
+  // ═════ БЛОК: загрузка sparkline-точек за 7 дней для каждой видимой метрики ═════
+  useEffect(() => {
+    if (!sessionToken) return
+    const visibleKeys = Object.keys(summary).filter(
+      k => k !== 'blood_pressure_dia' && summary[k]?.value != null
+    )
+    const keysToLoad = [...new Set([...KPI_ORDER, ...visibleKeys])]
+    let cancelled = false
+    Promise.all(
+      keysToLoad.map(k =>
+        axios.get(`${API}/patient/vitals/series`, {
+          params: { metric: k, days: 7, session_token: sessionToken },
+        })
+          .then(r => [k, r.data?.points || []])
+          .catch(() => [k, []])
+      )
+    ).then(results => {
+      if (cancelled) return
+      const next = {}
+      results.forEach(([k, pts]) => { next[k] = pts })
+      setSparkPoints(next)
+    })
+    return () => { cancelled = true }
+  }, [sessionToken, summary])
 
   const submitManual = async (payload) => {
     await axios.post(`${API}/patient/vitals`, payload, {
@@ -311,36 +495,76 @@ export default function VitalsTab({ token, sessionToken, phone }) {
     }
   }
 
+  // Базовый набор + любые дополнительные метрики где у пациента есть данные
+  const extraKeys = Object.keys(summary).filter(k =>
+    !KPI_ORDER.includes(k) && k !== 'blood_pressure_dia' && summary[k]?.value != null
+  )
+  const visibleMetricKeys = [...KPI_ORDER, ...extraKeys]
+
   return (
     <div className="px-3 pt-3 pb-24">
-      <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      {/* ═════ БЛОК: keyframes для премиум-карточек VitalsTab ═════ */}
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes vitalsPop {
+          0%   { opacity: 0; transform: translateY(8px) scale(.96); }
+          60%  { opacity: 1; transform: translateY(-1px) scale(1.01); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes vitalsFabPulse {
+          0%, 100% { box-shadow: 0 10px 28px -8px rgba(0,151,167,.55), 0 4px 14px rgba(0,0,0,.10), inset 0 1px 0 rgba(255,255,255,.35); }
+          50%      { box-shadow: 0 14px 36px -8px rgba(0,151,167,.75), 0 4px 14px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.35); }
+        }
+      `}</style>
 
-      {/* KPI cards */}
-      <div className="grid grid-cols-2 gap-2 mb-4">
-        {(() => {
-          // Базовый набор + любые дополнительные метрики где у пациента есть данные
-          const extraKeys = Object.keys(summary).filter(k =>
-            !KPI_ORDER.includes(k) && k !== 'blood_pressure_dia' && summary[k]?.value != null
-          )
-          const allKeys = [...KPI_ORDER, ...extraKeys]
-          return allKeys.map(k => <KpiCard key={k} metricKey={k} data={summary[k]} />)
-        })()}
+      {/* ═════ БЛОК: сетка премиум-карточек метрик (2 cols mobile / 3 cols tablet) ═════ */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-5">
+        {visibleMetricKeys.map((k, i) => (
+          <VitalsCard
+            key={k}
+            metricKey={k}
+            data={summary[k]}
+            sparkPoints={sparkPoints[k]}
+            index={i}
+          />
+        ))}
       </div>
 
-      {/* Apple Health — только если модуль health_apple активен у тенанта */}
+      {/* ═════ БЛОК: Apple Health-карточка (premium glass) ═════ */}
       {availableSources.includes('apple') && isIOS && (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 mb-4 shadow-sm border border-gray-100 dark:border-gray-800">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="material-symbols-outlined" style={{ color: '#FF3B30' }}>favorite</span>
-            <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Apple Health</span>
+        <div
+          className="relative overflow-hidden rounded-2xl p-4 mb-5 bg-white dark:bg-gray-800"
+          style={{
+            boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+            animation: 'vitalsPop .42s cubic-bezier(.22,.61,.36,1) both',
+          }}
+        >
+          <div
+            className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-[0.12] dark:opacity-[0.20] pointer-events-none"
+            style={{ background: 'radial-gradient(circle, #FF3B30 0%, transparent 70%)' }}
+          />
+          <div className="flex items-center gap-2.5 mb-2">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: 'linear-gradient(135deg,#FF3B30 0%,#B91C1C 100%)',
+                boxShadow: '0 6px 14px -4px rgba(255,59,48,.45), inset 0 1px 0 rgba(255,255,255,.35)',
+              }}
+            >
+              <span className="material-symbols-outlined text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>favorite</span>
+            </div>
+            <span className="text-[15px] font-bold text-gray-900 dark:text-gray-50">Apple Health</span>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+          <p className="text-[12px] text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
             Синхронизируйте показатели с iPhone и Apple Watch.
           </p>
           <button
             onClick={handleAppleHealth}
-            className="w-full py-2.5 rounded-xl text-white font-medium text-sm"
-            style={{ background: '#000' }}
+            className="w-full py-2.5 rounded-xl text-white font-semibold text-[13px] active:scale-[.97] transition-transform"
+            style={{
+              background: 'linear-gradient(135deg,#1f2937 0%,#000 100%)',
+              boxShadow: '0 6px 14px -4px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.18)',
+            }}
           >
             Синхронизировать с Apple Health
           </button>
@@ -350,22 +574,28 @@ export default function VitalsTab({ token, sessionToken, phone }) {
         </div>
       )}
 
-      {/* Charts row — горизонтальный скролл */}
-      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 px-1">Графики</h3>
-      <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory -mx-3 px-3 pb-2 mb-4"
+      {/* ═════ БЛОК: Графики 30-дней — горизонтальный snap-скролл ═════ */}
+      <div className="flex items-center justify-between mb-2.5 px-1">
+        <h3 className="text-[15px] font-bold text-gray-900 dark:text-gray-50 tracking-tight">Графики</h3>
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 dark:text-gray-500">30 дней</span>
+      </div>
+      <div className="flex gap-2.5 overflow-x-auto snap-x snap-mandatory -mx-3 px-3 pb-3 mb-4"
            style={{ scrollbarWidth: 'none' }}>
-        {ALL_ORDER.map(k => (
-          <MetricChartCard key={k} metricKey={k} sessionToken={sessionToken} />
+        {ALL_ORDER.map((k, i) => (
+          <MetricChartCard key={k} metricKey={k} sessionToken={sessionToken} index={i} />
         ))}
       </div>
 
-      {/* Add manual button */}
+      {/* ═════ БЛОК: FAB — добавить запись вручную ═════ */}
       <button
         onClick={() => setSheetOpen(true)}
-        className="fixed bottom-20 right-4 z-30 rounded-full shadow-lg px-4 py-3 flex items-center gap-1 text-white font-medium text-sm"
-        style={{ background: '#0097A7' }}
+        className="fixed bottom-20 right-4 z-30 rounded-full px-4 py-3 flex items-center gap-1.5 text-white font-semibold text-sm active:scale-[.95] transition-transform"
+        style={{
+          background: 'linear-gradient(135deg,#06B6D4 0%,#0097A7 60%,#0E7490 100%)',
+          animation: 'vitalsFabPulse 2.6s ease-in-out infinite',
+        }}
       >
-        <span className="material-symbols-outlined text-base">add</span>
+        <span className="material-symbols-outlined text-base" style={{ fontVariationSettings: "'FILL' 1" }}>add</span>
         Добавить
       </button>
 
@@ -373,9 +603,17 @@ export default function VitalsTab({ token, sessionToken, phone }) {
         <div className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">Загрузка показателей…</div>
       )}
       {!loading && Object.keys(summary).length === 0 && (
-        <div className="text-center py-8">
-          <span className="material-symbols-outlined text-5xl text-gray-300 dark:text-gray-500">monitor_heart</span>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Пока нет записей</p>
+        <div className="text-center py-10">
+          <div
+            className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(135deg,#EF4444 0%,#DC2626 100%)',
+              boxShadow: '0 10px 24px -8px rgba(239,68,68,.45), inset 0 1px 0 rgba(255,255,255,.35)',
+            }}
+          >
+            <span className="material-symbols-outlined text-white" style={{ fontSize: 32, fontVariationSettings: "'FILL' 1" }}>monitor_heart</span>
+          </div>
+          <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">Пока нет записей</p>
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Добавьте показатели вручную или через Apple Health</p>
         </div>
       )}

@@ -1,6 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 
+// ═════ БЛОК: STATUS_THEME — premium палитра по статусу аналита ═════
+// Каждый статус — свой gradient для иконки-чипа + soft tint для pill.
+const STATUS_THEME = {
+  ok:   { from: '#10B981', to: '#047857', soft: 'rgba(16,185,129,0.14)', tint: '#10B981', label: 'В норме' },
+  high: { from: '#EF4444', to: '#B91C1C', soft: 'rgba(239,68,68,0.14)',  tint: '#EF4444', label: 'Выше нормы' },
+  low:  { from: '#F59E0B', to: '#B45309', soft: 'rgba(245,158,11,0.16)', tint: '#F59E0B', label: 'Ниже нормы' },
+  na:   { from: '#94A3B8', to: '#475569', soft: 'rgba(148,163,184,0.18)', tint: '#64748B', label: '—' },
+}
+const themeForStatus = (s) => STATUS_THEME[s] || STATUS_THEME.na
+
 /**
  * Динамика лабораторных показателей пациента.
  *
@@ -41,6 +51,21 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
     return () => { cancelled = true }
   }, [apiBase, sessionToken, months])
 
+  // ═════ БЛОК: keyframes для premium-анимаций PatientLabDynamics ═════
+  const labStyles = (
+    <style>{`
+      @keyframes labPop {
+        0%   { opacity: 0; transform: translateY(8px) scale(.97); }
+        60%  { opacity: 1; transform: translateY(-1px) scale(1.01); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes labExpand {
+        from { opacity: 0; transform: translateY(-4px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+    `}</style>
+  )
+
   if (loading) {
     return (
       <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
@@ -63,8 +88,16 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
   if (!analytes.length) {
     return (
       <div className="p-6 text-center">
-        <div className="text-5xl mb-3">📊</div>
-        <div className="text-gray-700 dark:text-gray-200 text-sm font-semibold">Пока нет данных анализов</div>
+        <div
+          className="w-16 h-16 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg,#06B6D4 0%,#0E7490 100%)',
+            boxShadow: '0 10px 24px -8px rgba(6,182,212,.45), inset 0 1px 0 rgba(255,255,255,.35)',
+          }}
+        >
+          <span className="material-symbols-outlined text-white" style={{ fontSize: 32, fontVariationSettings: "'FILL' 1" }}>monitoring</span>
+        </div>
+        <div className="text-gray-800 dark:text-gray-100 text-sm font-semibold">Пока нет данных анализов</div>
         <div className="text-gray-400 dark:text-gray-500 text-xs mt-1">
           После первого анализа здесь появится динамика ваших показателей
         </div>
@@ -74,34 +107,71 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
 
   return (
     <div className="space-y-3 p-2">
-      {/* Заголовок и селектор периода */}
-      <div className="px-2">
-        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          Изменение показателей за выбранный период. Зелёная зона на графике — диапазон нормы.
+      {labStyles}
+
+      {/* ═════ БЛОК: Хедер с селектором периода (premium pills) ═════ */}
+      <div
+        className="relative overflow-hidden rounded-2xl p-3.5 bg-white dark:bg-gray-800"
+        style={{
+          boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+          animation: 'labPop .42s cubic-bezier(.22,.61,.36,1) both',
+        }}
+      >
+        <div
+          className="absolute -top-12 -right-10 w-32 h-32 rounded-full opacity-[0.12] dark:opacity-[0.20] pointer-events-none"
+          style={{ background: 'radial-gradient(circle, #06B6D4 0%, transparent 70%)' }}
+        />
+        <div className="flex items-center gap-2.5 mb-2.5">
+          <div
+            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            style={{
+              background: 'linear-gradient(135deg,#06B6D4 0%,#0E7490 100%)',
+              boxShadow: '0 6px 14px -4px rgba(6,182,212,.45), inset 0 1px 0 rgba(255,255,255,.35)',
+            }}
+          >
+            <span className="material-symbols-outlined text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>monitoring</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-bold text-gray-900 dark:text-gray-50 tracking-tight leading-tight">Динамика анализов</div>
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight mt-0.5">
+              Зелёная зона на графике — диапазон нормы
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          {[6, 12, 24].map(m => (
-            <button
-              key={m}
-              onClick={() => setMonths(m)}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold transition"
-              style={{
-                background: months === m ? '#0097A7' : '#f1f5f9',
-                color: months === m ? '#fff' : '#475569',
-                boxShadow: months === m ? '0 2px 8px rgba(0,151,167,0.25)' : 'none',
-              }}
-            >
-              {m} мес
-            </button>
-          ))}
+        <div className="flex gap-1.5">
+          {[6, 12, 24].map(m => {
+            const active = months === m
+            return (
+              <button
+                key={m}
+                onClick={() => setMonths(m)}
+                className="flex-1 px-3 py-2 rounded-xl text-[12px] font-bold tracking-tight active:scale-[.97] transition-transform"
+                style={
+                  active
+                    ? {
+                        background: 'linear-gradient(135deg,#06B6D4 0%,#0E7490 100%)',
+                        color: '#fff',
+                        boxShadow: '0 6px 14px -4px rgba(6,182,212,.45), inset 0 1px 0 rgba(255,255,255,.35)',
+                      }
+                    : {
+                        background: 'rgba(148,163,184,0.10)',
+                        color: 'rgb(71,85,105)',
+                      }
+                }
+              >
+                {m} мес
+              </button>
+            )
+          })}
         </div>
       </div>
 
-      {/* Список показателей */}
-      {analytes.map(a => (
+      {/* ═════ БЛОК: Список premium-карточек аналитов ═════ */}
+      {analytes.map((a, i) => (
         <AnalyteCard
           key={a.name}
           a={a}
+          index={i}
           isExpanded={expandedName === a.name}
           onToggle={() => setExpandedName(expandedName === a.name ? null : a.name)}
         />
@@ -116,74 +186,135 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
 }
 
 
-function AnalyteCard({ a, isExpanded, onToggle }) {
-  const statusColor =
-    a.status === 'ok'   ? '#16a34a' :
-    a.status === 'high' ? '#dc2626' :
-    a.status === 'low'  ? '#f59e0b' : '#64748b'
-  const statusLabel =
-    a.status === 'ok'   ? 'В норме' :
-    a.status === 'high' ? 'Повышен' :
-    a.status === 'low'  ? 'Понижен' : '—'
-
+// ═════ БЛОК: AnalyteCard — premium-карточка лабораторного аналита ═════
+// Хедер с gradient-иконкой теста, крупное значение + единицы, status pill,
+// диапазон нормы. По тапу раскрывается inline-chart с зоной нормы.
+function AnalyteCard({ a, isExpanded, onToggle, index = 0 }) {
+  const theme = themeForStatus(a.status)
+  const statusColor = theme.tint
   const hasNorm = a.norm_min != null && a.norm_max != null && a.norm_max < 999
+
+  // Дельта-семантика: рост — нейтрален, ориентируемся по статусу.
+  const deltaUp = a.delta_pct != null && a.delta_pct > 0
+  const deltaDown = a.delta_pct != null && a.delta_pct < 0
+  const showDelta = a.delta_pct != null && a.delta_pct !== 0
+
+  // Иконка теста: если в a.icon emoji — оставим, иначе fallback на material symbol.
+  const isEmoji = a.icon && /[\uD800-\uDBFF☀-➿]/.test(a.icon)
 
   return (
     <div
-      className="rounded-2xl border bg-white dark:bg-gray-800 shadow-sm overflow-hidden transition"
-      style={{ borderColor: isExpanded ? statusColor : '#e5e7eb' }}
+      className="rounded-2xl bg-white dark:bg-gray-800 overflow-hidden relative active:scale-[.99] transition-transform"
+      style={{
+        boxShadow: isExpanded
+          ? `0 8px 28px -6px ${statusColor}40, 0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)`
+          : '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+        animation: 'labPop .42s cubic-bezier(.22,.61,.36,1) both',
+        animationDelay: `${Math.min(index, 8) * 0.05}s`,
+      }}
     >
+      {/* Декоративный gradient blob */}
+      <div
+        className="absolute -top-10 -right-10 w-28 h-28 rounded-full opacity-[0.10] dark:opacity-[0.20] pointer-events-none"
+        style={{ background: `radial-gradient(circle, ${theme.from} 0%, transparent 70%)` }}
+      />
+
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50 dark:bg-gray-700/30"
+        className="w-full px-3.5 py-3 flex items-center gap-3 text-left relative active:bg-gray-50/50 dark:active:bg-gray-700/30"
       >
-        <div className="text-2xl flex-shrink-0" aria-hidden>{a.icon}</div>
+        {/* Иконка-чип gradient */}
+        <div
+          className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+          style={{
+            background: `linear-gradient(135deg, ${theme.from} 0%, ${theme.to} 100%)`,
+            boxShadow: `0 6px 14px -4px ${theme.from}66, inset 0 1px 0 rgba(255,255,255,.35)`,
+          }}
+        >
+          {isEmoji ? (
+            <span className="text-xl leading-none" aria-hidden>{a.icon}</span>
+          ) : (
+            <span
+              className="material-symbols-outlined text-white"
+              style={{ fontSize: 22, fontVariationSettings: "'FILL' 1" }}
+            >
+              {a.icon || 'science'}
+            </span>
+          )}
+        </div>
+
+        {/* Название + статус */}
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm truncate">{a.name}</div>
-          <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+          <div className="font-bold text-[14px] text-gray-900 dark:text-gray-50 truncate tracking-tight leading-tight">
+            {a.name}
+          </div>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
+              style={{ background: theme.soft, color: statusColor }}
+            >
+              {theme.label}
+            </span>
+            {showDelta && (
+              <span
+                className="text-[10px] font-bold inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full"
+                style={{
+                  background: deltaUp ? 'rgba(239,68,68,0.10)' : 'rgba(16,185,129,0.10)',
+                  color: deltaUp ? '#DC2626' : '#059669',
+                }}
+              >
+                <span>{deltaUp ? '↑' : '↓'}</span>
+                <span>{Math.abs(a.delta_pct)}%</span>
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 truncate">
             {a.count} {a.count === 1 ? 'измерение' : a.count < 5 ? 'измерения' : 'измерений'}
             {a.last_date && ` · ${new Date(a.last_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}`}
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
-          <div className="font-bold text-lg leading-tight" style={{ color: statusColor }}>
-            {a.last_value}
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-normal ml-1">{a.unit}</span>
-          </div>
-          <div className="flex items-center gap-1.5 justify-end mt-0.5">
-            <span
-              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-              style={{ background: statusColor + '22', color: statusColor }}
-            >
-              {statusLabel}
+
+        {/* Значение + норма */}
+        <div className="text-right shrink-0">
+          <div className="flex items-baseline gap-0.5 justify-end leading-none">
+            <span className="font-black text-[22px] tracking-tight" style={{ color: statusColor }}>
+              {a.last_value}
             </span>
-            {a.delta_pct != null && a.delta_pct !== 0 && (
-              <span
-                className="text-[10px] font-semibold"
-                style={{ color: a.delta_pct > 0 ? '#16a34a' : '#dc2626' }}
-              >
-                {a.delta_pct > 0 ? '↑' : '↓'} {Math.abs(a.delta_pct)}%
-              </span>
-            )}
+            <span className="text-[11px] text-gray-400 dark:text-gray-500 font-medium">{a.unit}</span>
           </div>
+          {hasNorm && (
+            <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 whitespace-nowrap">
+              норма {a.norm_min}–{a.norm_max}
+            </div>
+          )}
         </div>
+
+        {/* Chevron */}
         <span
-          className="material-symbols-outlined text-gray-400 dark:text-gray-500 ml-1 transition-transform"
-          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', fontSize: 20 }}
+          className="material-symbols-outlined text-gray-400 dark:text-gray-500 transition-transform shrink-0"
+          style={{
+            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+            fontSize: 22,
+            fontVariationSettings: "'FILL' 1",
+          }}
           aria-hidden
         >
           expand_more
         </span>
       </button>
 
+      {/* Раскрывающийся график */}
       {isExpanded && (
-        <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: '#f1f5f9' }}>
+        <div
+          className="px-3 pb-3 pt-2 border-t border-gray-100 dark:border-gray-700/60 relative"
+          style={{ animation: 'labExpand .28s cubic-bezier(.22,.61,.36,1) both' }}
+        >
           <SvgLineChart analyte={a} statusColor={statusColor} hasNorm={hasNorm} />
           {hasNorm && (
-            <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-1">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-1.5">
               Норма:{' '}
-              <span className="font-semibold text-green-700">
+              <span className="font-bold" style={{ color: '#059669' }}>
                 {a.norm_min} – {a.norm_max} {a.unit}
               </span>
             </div>
