@@ -739,60 +739,58 @@ function VisitCard({ visit, patientName }) {
   const canPdf = (services.length > 0) || total > 0
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.05)' }}>
-      <div className="flex items-stretch">
-        {/* Left color bar */}
-        <div className="w-1 flex-shrink-0 rounded-l-2xl" style={{ background: vc.color }} />
-        <div className="flex-1 p-4">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-gray-900 dark:text-gray-100 text-sm leading-snug truncate">{first}</p>
-              <p className="text-xs text-gray-400 mt-0.5 truncate">{doctor}</p>
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {isFirst && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,.1)', color: '#7C3AED' }}>1-й</span>}
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${vc.color}18`, color: vc.color }}>{vc.label}</span>
-            </div>
+    <div className="relative bg-white dark:bg-gray-900 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 10px rgba(0,0,0,.04)' }}>
+      {/* Inset color-bar — НЕ выходит за карточку */}
+      <span aria-hidden="true" style={{ position:'absolute', left:6, top:10, bottom:10, width:3, borderRadius:2, background: vc.color }} />
+      <div className="pl-4 pr-3 py-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-gray-900 dark:text-gray-100 text-[13px] leading-snug truncate">{first}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5 truncate">{doctor}</p>
           </div>
-          <div className="flex items-center gap-3 mt-2">
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <span className="material-symbols-outlined text-sm">schedule</span>
-              {fmtMisDate(visit.time_start)}
-            </span>
-            <span className="flex items-center gap-1 text-xs text-gray-400 truncate">
-              <span className="material-symbols-outlined text-sm">location_on</span>
-              <span className="truncate">{clinic}</span>
-            </span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {isFirst && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,.1)', color: '#7C3AED' }}>1-й</span>}
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: `${vc.color}1A`, color: vc.color }}>{vc.label}</span>
           </div>
-          {(total > 0 || services.length > 1) && (
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-50">
-              {total > 0 && <span className="text-sm font-extrabold" style={{ color: '#0097A7' }}>{total.toLocaleString('ru-RU')} ₽</span>}
-              {services.length > 1 && (
-                <button onClick={() => setOpen(v => !v)} className="flex items-center gap-0.5 text-xs font-semibold ml-auto" style={{ color: '#1565C0' }}>
-                  {open ? 'Скрыть' : `${services.length} услуг`}
-                  <span className="material-symbols-outlined text-sm">{open ? 'expand_less' : 'expand_more'}</span>
-                </button>
-              )}
-            </div>
-          )}
         </div>
+        <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-500">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined" style={{ fontSize:13 }}>schedule</span>
+            {fmtMisDate(visit.time_start)}
+          </span>
+          <span className="flex items-center gap-1 truncate min-w-0">
+            <span className="material-symbols-outlined" style={{ fontSize:13 }}>location_on</span>
+            <span className="truncate">{clinic}</span>
+          </span>
+        </div>
+        {(total > 0 || services.length > 1) && (
+          <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+            {total > 0 && <span className="text-[13px] font-extrabold" style={{ color: '#0097A7' }}>{total.toLocaleString('ru-RU')} ₽</span>}
+            {services.length > 1 && (
+              <button onClick={() => setOpen(v => !v)} className="flex items-center gap-0.5 text-[11px] font-semibold ml-auto" style={{ color: '#1565C0' }}>
+                {open ? 'Скрыть' : `${services.length} услуг`}
+                <span className="material-symbols-outlined" style={{ fontSize:14 }}>{open ? 'expand_less' : 'expand_more'}</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {open && services.length > 0 && (
-        <div className="px-4 pb-4 space-y-1.5">
+        <div className="px-3 pl-4 pb-3 space-y-1">
           {services.map((s, i) => (
-            <div key={i} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-              <span className="text-xs text-gray-600 dark:text-gray-300 flex-1 mr-3 truncate">{s.title || '—'}</span>
-              {(s.value || s.price) && <span className="text-xs font-bold text-gray-800 dark:text-gray-100 flex-shrink-0">{parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽</span>}
+            <div key={i} className="flex items-center justify-between py-1 border-b border-gray-50 dark:border-gray-800 last:border-0">
+              <span className="text-[11px] text-gray-600 dark:text-gray-300 flex-1 mr-2 truncate">{s.title || '—'}</span>
+              {(s.value || s.price) && <span className="text-[11px] font-bold text-gray-800 dark:text-gray-100 flex-shrink-0">{parseInt(s.value || s.price || 0).toLocaleString('ru-RU')} ₽</span>}
             </div>
           ))}
         </div>
       )}
       {canPdf && (
-        <div className="px-4 pb-3 -mt-1">
+        <div className="px-3 pl-4 pb-2.5">
           <button onClick={async () => { if (pdfBusy) return; setPdfBusy(true); await downloadVisitPdf(visit, patientName, toast); setPdfBusy(false) }}
-            className="w-full h-9 rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold transition-all active:scale-[.97]"
+            className="w-full h-8 rounded-lg flex items-center justify-center gap-1 text-[11px] font-semibold transition-all active:scale-[.97]"
             style={{ background:'#F1F5F9', color:'#1E293B', border:'1px solid #E2E8F0' }}>
-            <span className="material-symbols-outlined text-base">download</span>
+            <span className="material-symbols-outlined" style={{ fontSize:14 }}>download</span>
             {pdfBusy ? 'Готовим PDF...' : 'Скачать чек (PDF)'}
           </button>
         </div>
