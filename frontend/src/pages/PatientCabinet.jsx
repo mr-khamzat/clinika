@@ -487,16 +487,23 @@ function LoginScreen({ onLogin, errorMsg }) {
     <div className="relative min-h-screen flex flex-col items-center justify-center px-5 overflow-hidden" style={{ background: 'linear-gradient(160deg,#0A1929 0%,#0F3460 40%,#0A4B6E 75%,#0F7185 100%)' }}>
       <style>{`
         @keyframes floatIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes blob1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.1)} 66%{transform:translate(-20px,40px) scale(.95)} }
-        @keyframes blob2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-50px,30px) scale(1.05)} 66%{transform:translate(30px,-20px) scale(1.15)} }
-        @keyframes blob3 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(25px,40px) scale(1.08)} 66%{transform:translate(-35px,-30px) scale(.92)} }
+        @keyframes blob1 { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 25%{transform:translate(80px,-60px) scale(1.2) rotate(40deg)} 50%{transform:translate(-40px,50px) scale(.9) rotate(80deg)} 75%{transform:translate(60px,30px) scale(1.1) rotate(120deg)} }
+        @keyframes blob2 { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 25%{transform:translate(-80px,60px) scale(1.15) rotate(-50deg)} 50%{transform:translate(70px,-40px) scale(1.25) rotate(-100deg)} 75%{transform:translate(-30px,-50px) scale(.95) rotate(-150deg)} }
+        @keyframes blob3 { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 33%{transform:translate(50px,80px) scale(1.2) rotate(60deg)} 66%{transform:translate(-70px,-50px) scale(.85) rotate(-60deg)} }
+        @keyframes blob4 { 0%,100%{transform:translate(0,0) scale(1) rotate(0deg)} 50%{transform:translate(40px,-70px) scale(1.18) rotate(180deg)} }
+        @keyframes drift { 0%{transform:translate(0,0)} 50%{transform:translate(15px,20px)} 100%{transform:translate(0,0)} }
+        @keyframes gradientShift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
         @keyframes pulse-glow { 0%,100%{box-shadow:0 0 40px rgba(0,151,167,.4),0 0 80px rgba(21,101,192,.25),0 20px 60px rgba(0,0,0,.3)} 50%{box-shadow:0 0 70px rgba(0,151,167,.7),0 0 120px rgba(21,101,192,.4),0 20px 60px rgba(0,0,0,.3)} }
         @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
-        @keyframes orbit { from{transform:rotate(0) translateX(60px) rotate(0)} to{transform:rotate(360deg) translateX(60px) rotate(-360deg)} }
-        @keyframes twinkle { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:.9;transform:scale(1.1)} }
+        @keyframes shimmer-title { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+        @keyframes twinkle { 0%,100%{opacity:.15;transform:scale(.6)} 50%{opacity:1;transform:scale(1.2)} }
+        @keyframes float-particle { 0%{transform:translateY(0) translateX(0);opacity:0} 10%{opacity:.8} 90%{opacity:.6} 100%{transform:translateY(-100vh) translateX(40px);opacity:0} }
         @keyframes successPop { 0%{opacity:0;transform:scale(.4) rotate(-30deg)} 60%{opacity:1;transform:scale(1.15) rotate(8deg)} 100%{opacity:1;transform:scale(1) rotate(0)} }
         @keyframes checkmark { from{stroke-dashoffset:48} to{stroke-dashoffset:0} }
         @keyframes ringExpand { 0%{transform:scale(.5);opacity:.8} 100%{transform:scale(2.4);opacity:0} }
+        .bg-wave { position:absolute; inset:0; background: linear-gradient(125deg, rgba(0,200,220,.15) 0%, transparent 35%, rgba(79,70,229,.12) 65%, transparent 100%); background-size: 300% 300%; animation: gradientShift 18s ease-in-out infinite; pointer-events:none }
+        .brand-title { background: linear-gradient(120deg, #ffffff 0%, #a5f3fc 30%, #67e8f9 50%, #ffffff 70%, #a5f3fc 100%); background-size: 200% auto; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: shimmer-title 6s ease-in-out infinite; text-shadow: 0 6px 32px rgba(0,200,220,.35); filter: drop-shadow(0 4px 16px rgba(0,200,220,.4)) }
+        .particle { position:absolute; bottom:-10px; width:4px; height:4px; background:rgba(255,255,255,.85); border-radius:50%; box-shadow:0 0 8px rgba(0,200,220,.9); animation: float-particle linear infinite; pointer-events:none }
         .login-card { animation: floatIn .6s cubic-bezier(.22,1,.36,1) both }
         .blob { position:absolute; border-radius:50%; filter:blur(60px); opacity:.5; mix-blend-mode:screen; pointer-events:none }
         .star { position:absolute; width:3px; height:3px; background:rgba(255,255,255,.85); border-radius:50%; box-shadow:0 0 6px rgba(255,255,255,.6); animation: twinkle 3s ease-in-out infinite }
@@ -511,11 +518,16 @@ function LoginScreen({ onLogin, errorMsg }) {
         .check-path { stroke-dasharray:48; animation: checkmark .5s ease-out .25s both }
       `}</style>
 
+      {/* Wave gradient overlay */}
+      <div className="bg-wave" />
+
       {/* Animated mesh blobs */}
-      <div className="blob" style={{ width: 380, height: 380, background: '#00C8DC', top: '-100px', left: '-80px', animation: 'blob1 14s ease-in-out infinite' }} />
-      <div className="blob" style={{ width: 420, height: 420, background: '#1A5DC8', bottom: '-120px', right: '-100px', animation: 'blob2 16s ease-in-out infinite' }} />
-      <div className="blob" style={{ width: 300, height: 300, background: '#00E0A8', top: '40%', right: '-60px', animation: 'blob3 18s ease-in-out infinite', opacity: .35 }} />
-      <div className="blob" style={{ width: 280, height: 280, background: '#4F46E5', bottom: '25%', left: '-50px', animation: 'blob1 20s ease-in-out infinite reverse', opacity: .4 }} />
+      <div className="blob" style={{ width: 380, height: 380, background: '#00C8DC', top: '-100px', left: '-80px', animation: 'blob1 11s ease-in-out infinite' }} />
+      <div className="blob" style={{ width: 420, height: 420, background: '#1A5DC8', bottom: '-120px', right: '-100px', animation: 'blob2 13s ease-in-out infinite' }} />
+      <div className="blob" style={{ width: 300, height: 300, background: '#00E0A8', top: '40%', right: '-60px', animation: 'blob3 14s ease-in-out infinite', opacity: .42 }} />
+      <div className="blob" style={{ width: 280, height: 280, background: '#4F46E5', bottom: '25%', left: '-50px', animation: 'blob1 16s ease-in-out infinite reverse', opacity: .45 }} />
+      <div className="blob" style={{ width: 220, height: 220, background: '#06B6D4', top: '20%', left: '50%', animation: 'blob4 12s ease-in-out infinite', opacity: .3 }} />
+      <div className="blob" style={{ width: 200, height: 200, background: '#8B5CF6', bottom: '50%', right: '30%', animation: 'blob3 15s ease-in-out infinite reverse', opacity: .28 }} />
 
       {/* Twinkling stars */}
       {[
@@ -527,8 +539,25 @@ function LoginScreen({ onLogin, errorMsg }) {
         { top: '78%', left: '82%', delay: '2s' },
         { top: '88%', left: '40%', delay: '2.4s' },
         { top: '8%', left: '55%', delay: '2.8s' },
+        { top: '24%', left: '38%', delay: '.6s' },
+        { top: '54%', left: '50%', delay: '1.4s' },
+        { top: '72%', left: '28%', delay: '2.2s' },
+        { top: '38%', left: '70%', delay: '3s' },
       ].map((s, i) => (
         <span key={i} className="star" style={{ top: s.top, left: s.left, animationDelay: s.delay }} />
+      ))}
+
+      {/* Rising particles */}
+      {[
+        { left: '8%', delay: '0s', duration: '14s' },
+        { left: '22%', delay: '3s', duration: '18s' },
+        { left: '38%', delay: '6s', duration: '16s' },
+        { left: '55%', delay: '2s', duration: '20s' },
+        { left: '70%', delay: '5s', duration: '15s' },
+        { left: '85%', delay: '1s', duration: '17s' },
+        { left: '92%', delay: '8s', duration: '19s' },
+      ].map((p, i) => (
+        <span key={`p${i}`} className="particle" style={{ left: p.left, animationDelay: p.delay, animationDuration: p.duration }} />
       ))}
 
       {/* Success overlay */}
@@ -549,14 +578,14 @@ function LoginScreen({ onLogin, errorMsg }) {
         <div className="w-24 h-24 rounded-3xl mx-auto mb-5 flex items-center justify-center logo-glow" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,.25)' }}>
           <span className="material-symbols-outlined text-white text-5xl" style={{ fontVariationSettings:"'FILL' 1", filter: 'drop-shadow(0 4px 12px rgba(0,200,220,.6))' }}>medical_services</span>
         </div>
-        <h1 className="text-4xl font-black text-white tracking-tight" style={{ textShadow: '0 4px 24px rgba(0,200,220,.4)' }}>Clinika</h1>
-        <p className="text-blue-200 mt-2">Личный кабинет пациента</p>
+        <h1 className="text-5xl font-black tracking-tight brand-title" style={{ fontFamily: '"Manrope","Inter","SF Pro Display",-apple-system,system-ui,sans-serif', letterSpacing: '-.02em' }}>Клиника</h1>
+        <p className="text-blue-200 mt-2 tracking-wide">Личный кабинет пациента</p>
       </div>
 
       {/* Card */}
       <div className="relative w-full max-w-sm login-card" style={{ animationDelay: '.12s', background: 'linear-gradient(180deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,.05) 100%)', backdropFilter: 'blur(28px)', borderRadius: 28, border: '1px solid rgba(255,255,255,.15)', padding: 28, boxShadow: '0 30px 80px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15)' }}>
-        <h2 className="text-xl font-bold text-white mb-1">Войти в кабинет</h2>
-        <p className="text-blue-200 text-sm mb-6">Введите код из направления или записи к врачу и ваш телефон</p>
+        <h2 className="text-xl font-bold text-white mb-1 text-center">Войти в кабинет</h2>
+        <p className="text-blue-200 text-sm mb-6 text-center">Введите код из направления или записи к врачу и ваш телефон</p>
         <form onSubmit={submit} className="space-y-3">
           <div className="relative input-row login-card" style={{ animationDelay: '.2s', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 16 }}>
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-cyan-300 text-xl pointer-events-none">tag</span>
