@@ -55,9 +55,12 @@ async def _get_session(
 
 
 async def _account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
-    acc = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: ищем/создаём аккаунт в рамках тенанта сессии.
+    acc = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not acc:
-        acc, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        acc, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     return acc
 

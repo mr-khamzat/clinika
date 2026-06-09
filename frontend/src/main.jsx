@@ -27,6 +27,29 @@ class LocalErrorBoundary extends React.Component {
   }
   render() {
     if (this.state.error) {
+      // idx 45: в проде не показываем пользователю сырой stack trace (PII/внутренности).
+      // Дружелюбный экран + кнопка перезагрузки; технические детали — только в DEV.
+      // Ошибка уже логируется в Sentry (см. инициализацию ниже), а не в DOM.
+      if (!import.meta.env.DEV) {
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg, #f8fafc)', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '24px' }}>
+            <div style={{ textAlign: 'center', maxWidth: '440px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+              <h2 style={{ color: '#1f2937', marginBottom: '8px', fontSize: '20px' }}>Что-то пошло не так</h2>
+              <p style={{ color: '#6b7280', marginBottom: '20px', fontSize: '14px', lineHeight: 1.5 }}>
+                Произошла непредвиденная ошибка. Мы уже получили уведомление.
+                Попробуйте обновить страницу — если проблема повторится, напишите в поддержку.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', cursor: 'pointer' }}
+              >
+                Обновить страницу
+              </button>
+            </div>
+          </div>
+        )
+      }
       return (
         <div style={{ padding: '24px', fontFamily: 'monospace', background: '#fff', minHeight: '100vh' }}>
           <h2 style={{ color: '#c00', marginBottom: '12px' }}>Ошибка приложения</h2>

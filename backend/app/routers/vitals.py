@@ -82,16 +82,18 @@ class AppleHealthSyncBody(BaseModel):
 
 
 def _serialize(v: PatientVital) -> dict:
+    # #17 PHI: note/value_extra — через расшифрованные property *_plain
+    # (lazy-decrypt, fallback на legacy). value_num не шифруется (числовой показатель).
     return {
         "id": str(v.id),
         "metric": v.metric,
         "value": float(v.value_num) if v.value_num is not None else None,
-        "extra": v.value_extra,
+        "extra": v.value_extra_plain,
         "unit": v.unit,
         "measured_at": v.measured_at.isoformat() if v.measured_at else None,
         "source": v.source,
         "device": v.device_info,
-        "note": v.note,
+        "note": v.note_plain,
     }
 
 
@@ -191,7 +193,8 @@ async def vitals_series(
             {
                 "t": r.measured_at.isoformat() if r.measured_at else None,
                 "v": float(r.value_num) if r.value_num is not None else None,
-                "extra": r.value_extra,
+                # #17 PHI: value_extra через расшифрованное property *_plain.
+                "extra": r.value_extra_plain,
             }
             for r in rows
         ],

@@ -381,8 +381,10 @@ async def dashboard(
     )
     patients = 0
     if tenant_ids:
+        # #2 PHI cutover: уникальных пациентов считаем по blind-index
+        # patient_phone_hash (plaintext не читаем); count(distinct) эквивалентен.
         r = await db.execute(
-            select(func.count(func.distinct(Appointment.patient_phone))).where(
+            select(func.count(func.distinct(Appointment.patient_phone_hash))).where(
                 and_(
                     Appointment.tenant_id.in_(tenant_ids),
                     Appointment.appointment_date >= period_from,
@@ -1464,8 +1466,10 @@ async def clinics_list(
             appts_cnt = int(r.scalar() or 0)
 
             # Уникальные пациенты
+            # #2 PHI cutover: count(distinct) по blind-index patient_phone_hash
+            # (plaintext не читаем) — счёт уникальных пациентов эквивалентен.
             r = await db.execute(
-                select(func.count(func.distinct(Appointment.patient_phone))).where(
+                select(func.count(func.distinct(Appointment.patient_phone_hash))).where(
                     and_(
                         Appointment.clinic_id == c.id,
                         Appointment.appointment_date >= period_from,

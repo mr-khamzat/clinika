@@ -35,7 +35,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.database import get_db
 from app.models.activity_log import ActivityLog
 from app.models.audit import AuditEntry
@@ -257,7 +257,7 @@ async def _get_disabled_categories(db: AsyncSession, user_id: uuid.UUID) -> set[
 @router.get("/recent")
 async def recent_notifications(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Последние 10 событий: audit_log + activity_log + contact_requests (если есть права).
@@ -386,7 +386,7 @@ async def recent_notifications(
 async def mark_notification_read(
     notif_id: str = Path(..., min_length=3, max_length=80),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """notif_id формата 'kind:uuid' (audit:..., activity:..., contact:...)."""
     if ":" not in notif_id:
@@ -419,7 +419,7 @@ async def mark_notification_read(
 @router.post("/read-all")
 async def mark_all_read(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Отметить ВСЕ текущие непрочитанные уведомления из recent.
@@ -456,7 +456,7 @@ async def mark_all_read(
 @router.get("/preferences")
 async def get_preferences(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список всех категорий + какие отключены у текущего юзера."""
     disabled = await _get_disabled_categories(db, current_user.id)
@@ -470,7 +470,7 @@ async def get_preferences(
 async def update_preferences(
     payload: dict = Body(..., example={"disabled": ["region", "security"]}),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Сохранить список отключённых категорий.

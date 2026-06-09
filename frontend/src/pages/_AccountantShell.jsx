@@ -12,7 +12,7 @@
  * Пункты меню: summary / cash / acts / payments / payroll / spending / reports.
  * Акцент — бирюзовый (#0097A7). Активный пункт — заливка var(--accent-soft)
  * + левая рамка цветом акцента.
- * Кнопка «Выйти» снизу очищает токен и редиректит на /{slug}/login.
+ * Кнопка «Выйти» снизу очищает токен и редиректит на /{slug}/.
  *
  * Mobile (≤880px):
  *   • Верхняя панель с burger-кнопкой + название раздела + clinic name
@@ -25,6 +25,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
 import { SLUG } from '../config'
+import { clearAllAuth } from '../lib/authKeys'
 
 // ─── Карта разделов кабинета бухгалтера ─────────────────────────────────────
 export const ACC_NAV = [
@@ -44,13 +45,9 @@ const ACC_ACCENT_LINE = 'rgba(0, 151, 167, 0.28)'
 const MOBILE_BREAKPOINT = 880
 
 function logout() {
-  try {
-    localStorage.removeItem('clinika_token_' + SLUG)
-    localStorage.removeItem('clinika_admin_token_' + SLUG)
-    localStorage.removeItem('clinika_refresh_token_' + SLUG)
-    localStorage.removeItem('clinika_admin_refresh_token_' + SLUG)
-  } catch (_) { /* noop */ }
-  window.location.href = '/' + SLUG + '/login'
+  // Единый хелпер чистит все 4 ключа (access+refresh, user+admin) — см. lib/authKeys
+  clearAllAuth(SLUG)
+  window.location.href = '/' + SLUG + '/'
 }
 
 function useIsMobile() {

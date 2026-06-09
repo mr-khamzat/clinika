@@ -8,7 +8,7 @@
  *   GET    /patient/documents            — список
  *   POST   /patient/documents/upload     — multipart (file+category+title+description+visibility)
  *   GET    /patient/documents/{id}/download — file response (window.open)
- *   DELETE /patient/documents/{id}       — удалить
+ *   (DELETE пациентом не поддерживается бэком — удаление только через клинику)
  *
  * Структура:
  *   1. Категории как табы (Все/Анализы/Рецепты/Направления/Выписки/МРТ/Рентген/Прочее)
@@ -21,7 +21,7 @@
 import { useEffect, useState, useCallback, lazy, Suspense, useMemo } from 'react'
 import axios from 'axios'
 import { API_BASE } from '../config'
-import { useToast, useConfirm } from '../design'
+import { useToast } from '../design'
 
 const DocumentCard        = lazy(() => import('../components/documents/DocumentCard'))
 const DocumentUploadModal = lazy(() => import('../components/documents/DocumentUploadModal'))
@@ -58,7 +58,6 @@ function EmptyIllustration() {
 export default function PatientDocumentsSection({ sessionToken: sessionTokenProp }) {
   const sessionToken = sessionTokenProp || (typeof window !== 'undefined' ? localStorage.getItem(SESSION_KEY) : null)
   const { toast } = useToast()
-  const { confirm, ConfirmHost } = useConfirm()
 
   const [docs, setDocs]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -110,21 +109,6 @@ export default function PatientDocumentsSection({ sessionToken: sessionTokenProp
     // Для preview формируем URL с токеном — браузер откроет в lightbox через img/iframe.
     const file_url = `${API_BASE}/patient/documents/${doc.id}/download?t=${encodeURIComponent(sessionToken || '')}`
     setPreview({ ...doc, file_url })
-  }
-
-  const deleteDoc = async (doc) => {
-    const ok = await confirm(
-      `«${doc.title || 'документ'}» будет безвозвратно удалён.`,
-      { title: 'Удалить документ?', okText: 'Удалить', cancelText: 'Отмена', danger: true }
-    )
-    if (!ok) return
-    try {
-      await axios.delete(`${API_BASE}/patient/documents/${doc.id}`, { params: { t: sessionToken } })
-      setDocs(d => d.filter(x => x.id !== doc.id))
-      toast('Документ удалён', 'info', 2500)
-    } catch (e) {
-      toast(e?.response?.data?.detail || 'Не удалось удалить', 'error', 3000)
-    }
   }
 
   const onUploaded = (newDoc) => {
@@ -298,7 +282,6 @@ export default function PatientDocumentsSection({ sessionToken: sessionTokenProp
                 doc={d}
                 onPreview={previewDoc}
                 onDownload={downloadDoc}
-                onDelete={deleteDoc}
               />
             ))}
           </div>
@@ -329,9 +312,6 @@ export default function PatientDocumentsSection({ sessionToken: sessionTokenProp
           />
         )}
       </Suspense>
-
-      {/* Confirm dialog host */}
-      <ConfirmHost />
     </div>
   )
 }

@@ -15,6 +15,7 @@ from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.core.deps import get_tenant_db
 from app.models.user import User
 from app.models.payments_clinic import ClinicPayment
 from app.routers.accountant.deps import require_accountant
@@ -42,7 +43,7 @@ async def list_payments(
     clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники тенанта"),
     limit: int = Query(100, le=500),
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if date_from is None:
         date_from = date.today() - timedelta(days=30)

@@ -2,7 +2,7 @@
 Сервис лабораторных интеграций.
 
 Содержит:
-  - encrypt_api_key / decrypt_api_key — обёртка над secrets_service (fallback на plaintext)
+  - encrypt_api_key / decrypt_api_key — обёртка над encryption_service (fallback на plaintext)
   - test_provider_connection         — проверка api_key (для разных provider_type)
   - send_order_to_provider           — фейк-имплементация: установит 'sent' → через 30 сек 'in_progress'
   - parse_webhook_payload            — нормализация webhook'а от любого провайдера
@@ -17,14 +17,15 @@ from app.models.lab import LabProvider, LabOrder, LabResult
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Шифрование API-ключей. Используем secrets_service если есть; иначе
-# просто маркер 'plain:' + сам ключ, чтобы было видно что не зашифровано.
+# Шифрование API-ключей. Используем encryption_service (Fernet); при недоступности
+# cryptography/ключа он сам отдаёт маркер 'plain:' + значение, чтобы было видно,
+# что значение не зашифровано.
 # ─────────────────────────────────────────────────────────────────────
 def encrypt_api_key(raw: str | None) -> str | None:
     if not raw:
         return None
     try:
-        from app.services.secrets_service import encrypt  # type: ignore
+        from app.services.encryption_service import encrypt
         return encrypt(raw)
     except Exception:
         return f"plain:{raw}"
@@ -36,7 +37,7 @@ def decrypt_api_key(stored: str | None) -> str | None:
     if stored.startswith("plain:"):
         return stored[len("plain:"):]
     try:
-        from app.services.secrets_service import decrypt  # type: ignore
+        from app.services.encryption_service import decrypt
         return decrypt(stored)
     except Exception:
         return stored

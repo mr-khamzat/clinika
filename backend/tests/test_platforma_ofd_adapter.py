@@ -18,6 +18,9 @@ pytestmark = pytest.mark.unit
 def _mk_config(login: str = "test_login", password: str = "test_pass", inn: str = "0606123456"):
     cfg = MagicMock()
     cfg.api_key = f"{login}:{password}"
+    # Адаптер после фикса #5/#10 читает дешифрованную property decrypted_api_key
+    # (а не сырой api_key) — на MagicMock её надо задать явно, иначе fail-closed RuntimeError.
+    cfg.decrypted_api_key = f"{login}:{password}"
     cfg.inn = inn
     cfg.config = {"tax_system": "general", "api_base": "https://lkapi.platformaofd.ru"}
     return cfg

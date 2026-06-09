@@ -1,6 +1,48 @@
 """
 Чат пациента (вариант D — гибрид AI + регистратура).
 
+DEPRECATED (см. находку #40): используйте чат-движок ChatThread
+(app/routers/patient_chat_threads.py + app/routers/clinic_chat.py поверх
+модели app/models/chat.py и сервиса app/services/chat_service.py).
+
+Почему этот движок — ЛЕГАСИ, а ChatThread — актуальный:
+* ChatThread — это «Глава 9» (async-треды пациент↔клиника). Он шире
+  используется фронтом: ~13 модулей (sections/PatientChatSection.jsx
+  «премиум-чат пациента (Глава 9)», sections/ClinicChatSection.jsx,
+  components/chat/* — ThreadListItem/ReassignModal/PatientCardSidebar/
+  NewThreadModal/MessageBubble/SlotOfferBubble, components/AdminSupportPanel.jsx,
+  api/chatSlots.js, components/patient/PatientChatHub.jsx) и развивается
+  (SLA-эскалация, reassign-история, pin/цвет-метки, реакции, индикатор
+  «печатает…», бронь слотов, drag-drop). Сам docstring patient_chat_threads.py
+  явно помечает /patient/chat как legacy.
+* Этот движок (PatientChat / /patient/chat) — старый «AI-ассистент + админ».
+  Фронт зовёт его лишь из устаревшего SupportTab в pages/PatientCabinet.jsx
+  (см. комментарий «Аналог SupportTab, но через /patient/chat — AI-ассистент
+  + админ») и его клона PatientCabinetPreview.jsx, плюс админ-вкладка
+  sections/PatientChatsSection.jsx (/admin/patient-chats). Новые кабинеты
+  (PatientChatHub → PatientChatSection) уже используют ChatThread.
+
+ВНИМАНИЕ: роуты, таблицы (patient_chats / patient_chat_messages) и данные НЕ
+удаляются здесь намеренно — движок ещё вызывается живым фронтом, а вынос
+требует миграции данных. Это отдельная задача (см. план миграции ниже).
+
+──────────────────────────────────────────────────────────────────────────
+ПЛАН МИГРАЦИИ (отдельной задачей, не входит в эту правку):
+  1. Перевести устаревший SupportTab в pages/PatientCabinet.jsx (и клон
+     PatientCabinetPreview.jsx) на ChatThread (PatientChatSection / threads),
+     либо полностью заменить SupportTab на PatientChatHub. AI-ассистент
+     (chat_with_ai из patient_chat_ai) при необходимости подключить как
+     отдельный сегмент внутри тредового UI, а не как параллельный движок.
+  2. Перевести админ-вкладку sections/PatientChatsSection.jsx
+     (/admin/patient-chats) на тредовую админку (clinic_chat / chat_admin).
+  3. Data-миграция: перенести историю из patient_chats/patient_chat_messages
+     в chat_threads/chat_messages (маппинг PatientChat→ChatThread,
+     PatientChatMessage→ChatMessage; сопоставить sender/mode). Идемпотентно,
+     в maintenance-окне, с бэкапом и проверкой ПДн (телефон/ФИО).
+  4. После полного перехода фронта и переноса данных — удалить роуты этого
+     модуля, его include_router в app/main.py (строка ~1612) и, отдельной
+     alembic-миграцией, таблицы patient_chats/patient_chat_messages.
+
 Пациентские эндпоинты (защита через session_token из patient_session_service):
 * GET  /patient/chat?t=<session_token>
 * GET  /patient/chat/{chat_id}/messages?t=<session_token>
@@ -23,7 +65,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db, assert_same_tenant, _is_super_admin
 from app.models.user import User
 from app.models.patient_chat import (
     PatientChat,
@@ -105,9 +147,12 @@ async def _get_or_create_chat(
 ) -> PatientChat:
     """Найти ветку чата по (phone, tenant) или создать новую."""
     phone_n = normalize_phone(phone)
-    q = select(PatientChat).where(PatientChat.patient_phone == phone_n)
-    if tenant_id:
-        q = q.where(PatientChat.tenant_id == tenant_id)
+    # Находка #7: строгий фильтр по tenant_id всегда (NULL==NULL включительно),
+    # чтобы не подобрать чужую ветку при tenant_id=NULL.
+    q = select(PatientChat).where(
+        PatientChat.patient_phone == phone_n,
+        PatientChat.tenant_id == tenant_id,
+    )
     chat = (await db.execute(q.order_by(desc(PatientChat.created_at)).limit(1))).scalar_one_or_none()
     if chat:
         return chat
@@ -156,9 +201,12 @@ async def list_patient_chats(
     """Список чатов пациента (обычно один на тенант)."""
     sess = await _require_session(db, t)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientChat).where(PatientChat.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientChat.tenant_id == sess.tenant_id)
+    # Находка #7: тенант пациентской сессии накладывается ВСЕГДА (строгое
+    # равенство, в т.ч. NULL==NULL), чтобы не утекали чаты чужих тенантов.
+    q = select(PatientChat).where(
+        PatientChat.patient_phone == phone_n,
+        PatientChat.tenant_id == sess.tenant_id,
+    )
     chats = (await db.execute(q.order_by(desc(PatientChat.updated_at)))).scalars().all()
     return {"chats": [_serialize_chat(c) for c in chats]}
 
@@ -180,7 +228,9 @@ async def get_patient_chat_messages(
         raise HTTPException(404, "chat not found")
     if normalize_phone(chat.patient_phone) != normalize_phone(sess.phone):
         raise HTTPException(403, "forbidden")
-    if sess.tenant_id and chat.tenant_id and chat.tenant_id != sess.tenant_id:
+    # Находка #7: строгое fail-closed сравнение тенанта пациентской сессии
+    # с чатом (без super_admin-исключения и без пропуска NULL).
+    if sess.tenant_id != chat.tenant_id:
         raise HTTPException(403, "forbidden")
 
     msgs = (await db.execute(
@@ -232,6 +282,9 @@ async def patient_send_message(
         if not chat:
             raise HTTPException(404, "chat not found")
         if normalize_phone(chat.patient_phone) != phone_n:
+            raise HTTPException(403, "forbidden")
+        # Находка #7: строгая tenant-изоляция пациентской сессии.
+        if sess.tenant_id != chat.tenant_id:
             raise HTTPException(403, "forbidden")
     else:
         chat = await _get_or_create_chat(db, phone_n, tenant_id)
@@ -341,6 +394,9 @@ async def patient_request_manual(
         raise HTTPException(404, "chat not found")
     if normalize_phone(chat.patient_phone) != normalize_phone(sess.phone):
         raise HTTPException(403, "forbidden")
+    # Находка #7: строгая tenant-изоляция пациентской сессии.
+    if sess.tenant_id != chat.tenant_id:
+        raise HTTPException(403, "forbidden")
 
     chat.mode = PatientChatMode.MANUAL
     sys_msg = PatientChatMessage(
@@ -365,11 +421,13 @@ async def patient_request_manual(
 @router.get("/admin/patient-chats")
 async def admin_list_chats(
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список чатов клиники (тенанта пользователя). Сортировка: свежие сверху."""
     q = select(PatientChat)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id накладывается ВСЕГДА для тенантного
+    # пользователя; пропуск (все тенанты) — только для super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientChat.tenant_id == user.tenant_id)
     q = q.order_by(desc(PatientChat.last_message_at), desc(PatientChat.updated_at)).limit(500)
     chats = (await db.execute(q)).scalars().all()
@@ -383,7 +441,7 @@ async def admin_list_chats(
 async def admin_get_messages(
     chat_id: str,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История сообщений + сброс unread_admin."""
     try:
@@ -393,8 +451,8 @@ async def admin_get_messages(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     msgs = (await db.execute(
         select(PatientChatMessage)
@@ -418,7 +476,7 @@ async def admin_reply(
     chat_id: str,
     body: AdminReplyBody,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Ответ администратора. mode → manual (навсегда для этой ветки)."""
     text = (body.text or "").strip()
@@ -433,8 +491,8 @@ async def admin_reply(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     chat.mode = PatientChatMode.MANUAL
     msg = PatientChatMessage(
@@ -457,7 +515,7 @@ async def admin_reply(
 async def admin_toggle_mode(
     chat_id: str,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Переключить mode AI ↔ MANUAL (вернуть AI-ассистента в строй)."""
     try:
@@ -467,8 +525,8 @@ async def admin_toggle_mode(
     chat = await db.get(PatientChat, cid)
     if not chat:
         raise HTTPException(404, "chat not found")
-    if user.tenant_id and chat.tenant_id and chat.tenant_id != user.tenant_id:
-        raise HTTPException(403, "forbidden (other tenant)")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, chat)
 
     chat.mode = (
         PatientChatMode.AI if chat.mode == PatientChatMode.MANUAL else PatientChatMode.MANUAL

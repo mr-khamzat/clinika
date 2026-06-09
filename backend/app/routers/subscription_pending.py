@@ -36,7 +36,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.database import get_db
 from app.models.clinic import Clinic
 from app.models.patient_account import PatientAccount
@@ -78,9 +78,12 @@ async def _get_session(
 
 
 async def _account(db: AsyncSession, sess: PatientSession) -> PatientAccount:
-    acc = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: ищем/создаём аккаунт в рамках тенанта сессии.
+    acc = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     if not acc:
-        acc, _ = await fs.get_or_create_account_by_phone(db, sess.phone)
+        acc, _ = await fs.get_or_create_account_by_phone(
+            db, sess.phone, tenant_id=sess.tenant_id
+        )
         await db.commit()
     return acc
 
@@ -232,7 +235,7 @@ def _serialize_request(
 async def manager_list_pending(
     status: str = Query("pending", pattern=r"^(pending|approved|rejected|expired|all)$"),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список заявок на подписку, отфильтрованный по статусу."""
     if not user.tenant_id:
@@ -266,7 +269,7 @@ async def manager_approve_pending(
     request_id: uuid.UUID,
     body: ApproveIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Одобрить заявку → создать PatientSubscription.
 
@@ -351,7 +354,7 @@ async def manager_reject_pending(
     request_id: uuid.UUID,
     body: RejectIn,
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Отклонить заявку с обязательной причиной."""
     if not user.tenant_id:

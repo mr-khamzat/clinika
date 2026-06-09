@@ -15,9 +15,10 @@
  *   • При вводе в «Клиника»: ["оплата","подписка","пароль","SMS"]
  *     → подсказка «Это вопрос поддержки → переключить»
  *
- * Backend support — пока mock. Endpoint /patient/support/messages
- * (optional). Если бекенд возвращает 404/501 → показываем «Скоро»
- * с инструкцией написать в support@клиниксеть.рф.
+ * Backend support: GET /support/patient/thread?phone= и
+ * POST /support/patient/send {phone,text}. Если бекенд недоступен
+ * (нет phone / 404) → показываем «Скоро» с инструкцией написать
+ * в support@клиниксеть.рф.
  *
  * Сохранение последнего активного сегмента в localStorage:
  *   'clinika_chat_hub_segment' = 'support' | 'clinic' | 'ai'
@@ -114,6 +115,7 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
         {segment === 'support' && (
           <SupportSegment
             sessionToken={sessionToken}
+            patientPhone={patientPhone}
             onSwitchToClinic={() => setSegment('clinic')}
             pendingInquiry={pendingInquiry}
             onInquiryConsumed={consumeInquiry}
@@ -134,7 +136,7 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
 }
 
 // ── Сегмент: Поддержка ────────────────────────────────────────────────────────
-function SupportSegment({ sessionToken, onSwitchToClinic, pendingInquiry, onInquiryConsumed, onGoSubscription }) {
+function SupportSegment({ sessionToken, patientPhone, onSwitchToClinic, pendingInquiry, onInquiryConsumed, onGoSubscription }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -202,12 +204,14 @@ function SupportSegment({ sessionToken, onSwitchToClinic, pendingInquiry, onInqu
   }, [pendingInquiry])
 
   useEffect(() => {
-    if (!sessionToken) { setBackendAvailable(false); return }
+    if (!patientPhone) { setBackendAvailable(false); return }
     let alive = true
-    axios.get(`${API_BASE}/patient/support/messages`, { params: { t: sessionToken } })
+    axios.get(`${API_BASE}/support/patient/thread`, { params: { phone: patientPhone } })
       .then(r => {
         if (!alive) return
-        const msgs = Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.messages) ? r.data.messages : [])
+        const raw = Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.messages) ? r.data.messages : [])
+        // Бэк отдаёт sender ('patient' | 'staff'); SupportBubble ждёт role ('user' | 'support')
+        const msgs = raw.map(m => ({ ...m, role: m.role || (m.sender === 'patient' ? 'user' : 'support') }))
         setMessages(msgs)
         setBackendAvailable(true)
       })
@@ -215,7 +219,7 @@ function SupportSegment({ sessionToken, onSwitchToClinic, pendingInquiry, onInqu
         if (alive) setBackendAvailable(false)
       })
     return () => { alive = false }
-  }, [sessionToken])
+  }, [patientPhone])
 
   useEffect(() => {
     // Контекстная подсказка по ключевым словам
@@ -243,9 +247,8 @@ function SupportSegment({ sessionToken, onSwitchToClinic, pendingInquiry, onInqu
     try {
       if (backendAvailable) {
         const r = await axios.post(
-          `${API_BASE}/patient/support/messages`,
-          { text: msg },
-          { params: { t: sessionToken } }
+          `${API_BASE}/support/patient/send`,
+          { phone: patientPhone, text: msg }
         )
         // Сервер может вернуть auto-reply
         if (r.data?.reply) {

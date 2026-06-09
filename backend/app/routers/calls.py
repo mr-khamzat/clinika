@@ -28,7 +28,7 @@ from fastapi.responses import Response
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.database import get_db
 from app.models.clinic import Clinic
 from app.models.franchise import Franchise
@@ -230,7 +230,7 @@ async def list_call_log(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История звонков с фильтрами. Manager+ видит всех в скоупе, остальные — только свои."""
     cond = await _build_filters(db, user, date_from, date_to, user_id, call_type, status, clinic_id)
@@ -292,7 +292,7 @@ async def call_stats(
     clinic_id: Optional[uuid.UUID] = Query(None),
     period_days: int = Query(30, ge=1, le=365),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Агрегаты по звонкам для аналитического дашборда."""
     # Дефолт периода: последние period_days дней
@@ -432,7 +432,7 @@ async def export_call_log_csv(  # noqa: N802 — статический путь
     status: Optional[str]         = Query(None),
     user_id: Optional[uuid.UUID]  = Query(None),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """CSV-выгрузка истории звонков. UTF-8 BOM + разделитель «;» для Excel."""
     cond = await _build_filters(db, user, date_from, date_to, user_id, call_type, status, clinic_id)
@@ -490,7 +490,7 @@ async def export_call_log_csv(  # noqa: N802 — статический путь
 async def get_call(
     call_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     row = (await db.execute(select(CallLog).where(CallLog.id == call_id))).scalar_one_or_none()
     if not row:
@@ -534,7 +534,7 @@ async def call_directory(
     role: Optional[str] = Query(None, description="Фильтр по роли (manager/reg/doctor/...)"),
     search: Optional[str] = Query(None, description="Подстрока по ФИО"),
     user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список сотрудников всех связанных клиник для cross-clinic звонков.
 

@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.database import get_db
 from app.models.doctor import Appointment, AppointmentStatus, Doctor
 from app.models.user import User, UserRole
@@ -57,7 +57,7 @@ async def get_kanban(
     date_from: Optional[_date] = Query(None, description="ISO date YYYY-MM-DD"),
     date_to:   Optional[_date] = Query(None, description="ISO date YYYY-MM-DD"),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Возвращает 4 колонки Kanban (scheduled/confirmed/in_progress/completed)
@@ -162,7 +162,7 @@ async def patch_appointment_status(
     appointment_id: uuid.UUID,
     body: StatusPatch,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Drag-and-drop смены статуса записи (Kanban-доска).

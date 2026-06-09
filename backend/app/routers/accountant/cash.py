@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.core.deps import get_tenant_db
 from app.models.user import User, UserRole
 from app.models.cash_shift import (
     CashShift, CashShiftEntry,
@@ -140,7 +141,7 @@ def _shift_to_out(shift: CashShift, in_total: Decimal, out_total: Decimal, count
 async def open_shift(
     body: OpenShiftRequest,
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Открыть кассовую смену. Если уже открыта — вернёт её (с пометкой)."""
     clinic_id = _user_clinic_id(user)
@@ -194,7 +195,7 @@ async def add_entry(
     shift_id: uuid.UUID,
     body: AddEntryRequest,
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Добавить операцию (приход/расход) в открытую смену."""
     shift = await db.get(CashShift, shift_id)
@@ -231,7 +232,7 @@ async def close_shift(
     shift_id: uuid.UUID,
     body: CloseShiftRequest,
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Закрыть смену: посчитать expected, сравнить с actual, записать discrepancy."""
     shift = await db.get(CashShift, shift_id)
@@ -265,7 +266,7 @@ async def close_shift(
 @router.get("/current", response_model=Optional[ShiftDetailsOut])
 async def current_shift(
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Открытая смена клиники пользователя (или null)."""
     clinic_id = _user_clinic_id(user)
@@ -299,7 +300,7 @@ async def shift_history(
     clinic_id: Optional[uuid.UUID] = Query(None, description="Сузить до одной клиники (по умолчанию — все клиники тенанта)"),
     limit: int = Query(50, le=200),
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """История смен тенанта за период. По умолчанию — последние 30 дней,
     все клиники сети. clinic_id query-параметром сужает."""
@@ -334,7 +335,7 @@ async def shift_history(
 async def shift_details(
     shift_id: uuid.UUID,
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Детали смены с операциями."""
     shift = await db.get(CashShift, shift_id)
@@ -362,7 +363,7 @@ async def shift_details(
 @router.post("/sync-mis-payments")
 async def sync_mis_payments_now(
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Ручной запуск синхронизации платежей из МИС в открытую смену.
 

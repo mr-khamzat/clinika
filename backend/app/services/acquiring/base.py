@@ -26,9 +26,16 @@ class PaymentInitResult:
 
 @dataclass
 class PaymentStatusResult:
-    """Результат опроса/получения статуса платежа."""
+    """Результат опроса/получения статуса платежа.
+
+    `amount` — авторитетная сумма платежа по версии шлюза (если её можно
+    извлечь). Используется сервисом для сверки против ClinicPayment.amount
+    перед переводом платежа в succeeded (защита от подмены суммы в webhook).
+    Если адаптер не заполнил поле — сервис попробует достать сумму из `raw`.
+    """
     status: str                             # pending | succeeded | cancelled | refunded
     paid_at: datetime | None = None
+    amount: Decimal | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 

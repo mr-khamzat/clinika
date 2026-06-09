@@ -10,7 +10,13 @@
 ВАЖНО: эти модели НЕ путать с app.models.billing.Payment — там подписки платформы
 (тенант → платформа), здесь оплаты пациента клинике.
 
-TODO: secret_key/api_key — зашифровать через Fernet (cryptography). Пока plain text.
+Шифрование секретов: secret_key шлюза (PaymentGatewayConfig) и api_key ОФД
+(OFDConfig) хранятся зашифрованными в колонках secret_key_encrypted /
+api_key_encrypted. Значение прогоняется через encryption_service (префикс
+'enc:'/'plain:', шифрует router при записи — миграция fern_pay01). Чтение —
+через property decrypted_secret_key / decrypted_api_key (lazy import, decrypt
+совместим со старыми записями без префикса). Property названы decrypted_*,
+чтобы не конфликтовать с mapped_column колонок *_encrypted.
 """
 import uuid
 from datetime import datetime
@@ -134,7 +140,8 @@ class PaymentGatewayConfig(Base):
     gateway:    Mapped[str] = mapped_column(String(40), nullable=False)
     shop_id:    Mapped[str] = mapped_column(String(255), nullable=False)
     # Зашифровано через app.services.encryption_service (Fernet).
-    # Формат: 'enc:&lt;token&gt;' для зашифрованных, 'plain:&lt;val&gt;' для fallback без ключа.
+    # Формат: 'enc:<token>' для зашифрованных, 'plain:<val>' для fallback без ключа.
+    # Запись шифрует роутер, чтение — через property decrypted_secret_key ниже.
     secret_key_encrypted: Mapped[str] = mapped_column("secret_key_encrypted", Text, nullable=False)
 
     is_active:    Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -145,6 +152,22 @@ class PaymentGatewayConfig(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    @property
+    def decrypted_secret_key(self) -> str | None:
+        """Расшифрованный secret_key для использования адаптером эквайринга.
+
+        Возвращает None, если секрет не задан или расшифровка не удалась
+        (например, при несовпадении SECRET_KEY на проде) — вызывающий обязан
+        трактовать None как «шлюз неработоспособен» и НЕ молча уходить в чужой
+        ENV платформы. Совместимо со старыми записями без префикса (decrypt
+        отдаёт их как есть).
+        """
+        raw = self.secret_key_encrypted
+        if not raw:
+            return None
+        from app.services.encryption_service import decrypt  # lazy: избегаем циклов
+        return decrypt(raw)
 
 
 # ── Фискальный чек 54-ФЗ ─────────────────────────────────────────────────────
@@ -209,7 +232,8 @@ class OFDConfig(Base):
 
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     inn: Mapped[str] = mapped_column(String(20), nullable=False)
-    # Зашифровано через app.services.encryption_service (Fernet).
+    # Зашифровано через app.services.encryption_service (Fernet): 'enc:'/'plain:'.
+    # Запись шифрует роутер, чтение — через property decrypted_api_key ниже.
     api_key_encrypted: Mapped[str] = mapped_column("api_key_encrypted", Text, nullable=False)
 
     is_active:      Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -219,3 +243,16 @@ class OFDConfig(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    @property
+    def decrypted_api_key(self) -> str | None:
+        """Расшифрованный api_key ('login:password' и т.п.) для ОФД-адаптера.
+
+        None при отсутствии/ошибке расшифровки. Совместимо со старыми записями
+        без префикса (decrypt отдаёт их как есть).
+        """
+        raw = self.api_key_encrypted
+        if not raw:
+            return None
+        from app.services.encryption_service import decrypt  # lazy
+        return decrypt(raw)

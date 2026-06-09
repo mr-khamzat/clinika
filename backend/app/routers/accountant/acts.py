@@ -17,6 +17,7 @@ from sqlalchemy import select, and_, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.core.deps import get_tenant_db
 from app.models.user import User
 from app.models.billing import Invoice
 from app.routers.accountant.deps import require_accountant
@@ -45,7 +46,7 @@ async def list_acts(
     status_filter: Optional[str] = Query(None, alias="status"),
     limit: int = Query(100, le=500),
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список актов tenant'а пользователя. Фильтры: период (по issued_at),
     статус (draft/generated/signed/paid/overdue)."""

@@ -1,11 +1,25 @@
 # КлиникСеть — стек мониторинга.
-# uptime-kuma управляется отдельно (docker run, не compose) — не описан здесь.
+# uptime-kuma описан здесь (status-page + Telegram alerts).
 # Запуск: docker compose -f docker-compose.monitoring.yml --profile metrics up -d
 
 services:
-  # ── Prometheus ───────────────────────────────────────────────────────────
+  # ── Uptime-Kuma: status-page + Telegram alerts ───────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - uptime-kuma:/app/data
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - monitoring-net
+
+  # ── Prometheus: time-series база метрик ──────────────────────────────────
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.54.1
     container_name: prometheus
     restart: unless-stopped
     profiles: ["metrics"]
@@ -20,6 +34,8 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
+    mem_limit: 1g
+    cpus: 1.0
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -33,12 +49,14 @@ services:
 
   # ── PostgreSQL exporter ──────────────────────────────────────────────────
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: postgres-exporter
     restart: unless-stopped
     profiles: ["metrics"]
     environment:
-      DATA_SOURCE_NAME: "postgresql://clinika:clinika_pass@clinika-db:5432/clinika?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://clinika:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@clinika-db:5432/clinika?sslmode=disable"
+    mem_limit: 128m
+    cpus: 0.25
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9187/metrics"]
       interval: 30s
@@ -63,6 +81,29 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - monitoring-net
+      - clinika-default
+    depends_on:
+      - prometheus
+
+  # ── Grafana: дашборды ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    restart: unless-stopped
+    profiles: ["metrics"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # Fail-fast: без GRAFANA_ADMIN_PASSWORD в .env сервис НЕ стартует
+      # (раньше тихо дефолтился на admin/admin — небезопасно).
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      GF_SERVER_ROOT_URL: "https://клиниксеть.рф/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    mem_limit: 512m
+    cpus: 0.5
     networks:
       - monitoring-net
       - clinika-default
@@ -124,6 +165,8 @@ services:
 
 volumes:
   prometheus-data:
+  grafana-data:
+  uptime-kuma:
 
 networks:
   monitoring-net:

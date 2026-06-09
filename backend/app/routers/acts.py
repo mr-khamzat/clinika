@@ -7,7 +7,7 @@ from app.database import get_db
 from app.core.tenant import get_current_tenant
 from app.services.acts_service import ActsService
 from app.models.billing import Invoice, Subscription
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User
 from sqlalchemy import select
 import uuid as _uuid
@@ -35,7 +35,7 @@ class PayActIn(BaseModel):
 @router.get("/")
 async def list_acts(
     act_status: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -50,7 +50,7 @@ async def list_acts(
 @router.post("/generate")
 async def generate_act(
     data: GenerateActIn,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -77,7 +77,7 @@ async def sign_act(
     act_number: str,
     data: SignActIn,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -172,7 +172,7 @@ async def _act_pdf_response(db: AsyncSession, act_id: str, tenant, user: User) -
 @router.get("/{act_id}/pdf")
 async def get_act_pdf(
     act_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -182,7 +182,7 @@ async def get_act_pdf(
 @inter_clinic_router.get("/{act_id}/pdf")
 async def get_inter_clinic_act_pdf(
     act_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -200,7 +200,7 @@ class ElectronicSignIn(BaseModel):
 async def sign_act_electronic(
     act_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -224,7 +224,7 @@ async def sign_act_electronic(
 async def sign_inter_clinic_act_electronic(
     act_id: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     tenant=Depends(get_current_tenant),
     current_user: User = Depends(get_current_user),
 ):

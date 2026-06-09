@@ -79,7 +79,8 @@ async def spending_summary_pdf(
     _validate_year(year)
     sess = await _get_session(db, request, authorization, x_patient_session, session_token, t)
 
-    pa = await fs.get_account_by_phone(db, sess.phone)
+    # [#18] Изоляция: имя берём из аккаунта в рамках тенанта сессии.
+    pa = await fs.get_account_by_phone(db, sess.phone, tenant_id=sess.tenant_id)
     patient_name = pa.name if pa else None
 
     summary = await compute_spending_summary(db, sess.phone, year, sess.tenant_id)

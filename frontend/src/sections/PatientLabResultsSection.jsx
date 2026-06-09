@@ -14,7 +14,6 @@
  * UX:
  *   • Карточки заявок (status='delivered' / 'results_ready' включаем),
  *     развёртываются по клику → таблица результатов.
- *   • Кнопка «Скачать PDF» (заглушка-toast если backend не отдал).
  * ========================================
  */
 import { useEffect, useState, useCallback } from 'react'
@@ -80,24 +79,6 @@ export default function PatientLabResultsSection({ sessionToken: sessionTokenPro
   }, [sessionToken])
 
   useEffect(() => { load() }, [load])
-
-  const downloadPdf = async (order) => {
-    try {
-      const r = await axios.get(`${API_BASE}/patient/lab-results/${order.id}/pdf`, {
-        params: { t: sessionToken },
-        responseType: 'blob',
-      })
-      const blob = new Blob([r.data], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `lab-${order.id}.pdf`
-      document.body.appendChild(a); a.click(); document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch {
-      alert('PDF пока недоступен — попросите врача или регистратора прислать результаты.')
-    }
-  }
 
   if (error === 'module_off') {
     return (
@@ -224,20 +205,6 @@ export default function PatientLabResultsSection({ sessionToken: sessionTokenPro
                 {isOpen && (
                   <div className="px-4 pb-4">
                     <LabResultsTable results={Array.isArray(o.results) ? o.results : []} />
-                    <div className="flex items-center justify-end pt-3">
-                      <button
-                        onClick={() => downloadPdf(o)}
-                        className="inline-flex items-center gap-1.5 rounded-xl transition-all active:scale-95"
-                        style={{
-                          padding: '8px 14px',
-                          background: 'linear-gradient(135deg, #0ea5e9, #0369a1)',
-                          color: '#fff', fontSize: 12.5, fontWeight: 700,
-                        }}
-                      >
-                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>download</span>
-                        Скачать PDF
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>

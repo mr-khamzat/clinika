@@ -3,7 +3,7 @@
 """
 import uuid
 from datetime import datetime, date
-from sqlalchemy import Integer, String, Boolean, DateTime, Date
+from sqlalchemy import Integer, String, Boolean, DateTime, Date, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -15,6 +15,12 @@ class PatientAccount(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     phone: Mapped[str] = mapped_column(String(30), unique=True, nullable=False, index=True)
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # ── Shadow-колонки шифрования ФИО (#18) ──────────────────────────────────
+    # ФИО пациента — ПДн; держим plaintext-источник истины (name) до миграции
+    # drop, а listener pii_sync (#18) синхронно заполняет name_encrypted/name_hash.
+    # Колонки СОЗДАЁТ отдельная миграция (агент-миграция); имена 1:1 с миграцией.
+    name_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -35,6 +41,28 @@ class PatientAccount(Base):
     # VIP counselor — закрепление пациента за регистратором/менеджером
     default_counselor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     counselor_since: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # ── Accessors шифрования ФИО (#18) ───────────────────────────────────────
+    # Паттерн lazy-decrypt как у Appointment.patient_name_plain: plaintext-источник
+    # остаётся в `name` (его читает ~весь существующий код), а *_encrypted/_hash
+    # синхронно заполняет listener pii_sync. Если шифртекста ещё нет — отдаём `name`.
+    @property
+    def name_plain(self) -> str | None:
+        """Расшифрованное ФИО (или legacy-plaintext, если ещё не зашифровано)."""
+        if self.name_encrypted:
+            from app.services.encryption_service import decrypt
+            val = decrypt(self.name_encrypted)
+            if val is not None:
+                return val
+        return self.name
+
+    def set_name(self, value: str | None) -> None:
+        """Записать ФИО: plaintext-колонка (legacy) + шифр + blind-index."""
+        from app.services.encryption_service import encrypt
+        from app.models.doctor import hash_name
+        self.name = value
+        self.name_encrypted = encrypt(value) if value else None
+        self.name_hash = hash_name(value)
 
 
 class PatientOTP(Base):

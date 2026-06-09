@@ -534,7 +534,19 @@ async def register_by_invite(data: InviteRegisterRequest, request: Request, db: 
         is_active=True,
     )
     db.add(user)
-    invite.uses_count += 1
+
+    # Атомарный расход инвайта: инкремент uses_count под условием
+    # uses_count < max_uses на уровне БД — закрывает гонку check-then-increment
+    # (два параллельных register-invite не смогут оба пройти лимит).
+    upd = await db.execute(
+        update(Invitation)
+        .where(Invitation.id == invite.id, Invitation.uses_count < Invitation.max_uses)
+        .values(uses_count=Invitation.uses_count + 1)
+    )
+    if upd.rowcount == 0:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail="Инвайт исчерпан")
+
     await db.commit()
     await db.refresh(user)
 

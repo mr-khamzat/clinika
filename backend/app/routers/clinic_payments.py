@@ -24,10 +24,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
+from app.models.clinic import Clinic
 from app.models.payments_clinic import (
     ClinicPayment,
     ClinicPaymentStatus,
@@ -47,6 +48,20 @@ from app.services.acquiring_service import (
 router = APIRouter(tags=["clinic_payments"])
 
 _pay_module = Depends(require_module("online_payments_pro"))
+
+
+async def _verify_clinic(db: AsyncSession, tenant_id: uuid.UUID, clinic_id: uuid.UUID) -> Clinic:
+    """Проверяет, что clinic_id принадлежит тенанту (защита от IDOR).
+
+    Строгое равенство по tenant_id: клиника с tenant_id=NULL не пройдёт.
+    Возвращаем 404 (а не 403), чтобы не подтверждать существование чужого clinic_id.
+    """
+    clinic = (await db.execute(
+        select(Clinic).where(Clinic.id == clinic_id, Clinic.tenant_id == tenant_id)
+    )).scalar_one_or_none()
+    if not clinic:
+        raise HTTPException(status_code=404, detail="Клиника не найдена")
+    return clinic
 
 
 # ── Pydantic ─────────────────────────────────────────────────────────────────
@@ -114,7 +129,7 @@ async def init_payment(
     body: PaymentInitRequest,
     user: User = Depends(get_current_user),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Старт оплаты пациентом. Возвращает payment_url для редиректа.
@@ -163,7 +178,7 @@ async def init_payment(
 async def get_payment(
     payment_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await db.get(ClinicPayment, payment_id)
     if not p or (tenant and p.tenant_id != tenant.id):
@@ -178,7 +193,7 @@ async def refund_payment(
     payment_id: uuid.UUID = Path(...),
     amount: Optional[Decimal] = Body(None, embed=True),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await db.get(ClinicPayment, payment_id)
     if not p or (tenant and p.tenant_id != tenant.id):
@@ -222,15 +237,43 @@ async def payment_webhook(
     body = await request.body()
     headers = {k.lower(): v for k, v in request.headers.items()}
 
-    # Берём первый активный конфиг (для адаптеров, которым он нужен). Если
-    # конфига нет — адаптер обязан использовать ENV и сам бросить RuntimeError,
-    # если ENV пуст. Для ЮKassa verify_webhook не требует ни того, ни другого.
-    cfg = (await db.execute(
-        select(PaymentGatewayConfig).where(
-            PaymentGatewayConfig.gateway == gateway,
-            PaymentGatewayConfig.is_active == True,  # noqa: E712
-        ).limit(1)
-    )).scalar_one_or_none()
+    # Сначала пытаемся определить платёж ДО verify по metadata.internal_payment_id
+    # из сырого тела — чтобы выбрать конфиг шлюза ИМЕННО этого тенанта/клиники
+    # (его секрет), а не первого попавшегося активного конфига.
+    pre_payment: ClinicPayment | None = None
+    try:
+        import json as _json
+        _raw_pre = _json.loads(body.decode("utf-8") or "{}")
+        _meta_pre = (_raw_pre.get("object") or {}).get("metadata") or {}
+        _internal_pre = _meta_pre.get("internal_payment_id")
+        if _internal_pre:
+            pre_payment = await db.get(ClinicPayment, uuid.UUID(str(_internal_pre)))
+    except (UnicodeDecodeError, ValueError, TypeError):
+        pre_payment = None
+
+    cfg = None
+    if pre_payment is not None:
+        # Конфиг строго того же тенанта/клиники/шлюза, что и платёж.
+        cfg = (await db.execute(
+            select(PaymentGatewayConfig).where(
+                PaymentGatewayConfig.gateway == gateway,
+                PaymentGatewayConfig.tenant_id == pre_payment.tenant_id,
+                PaymentGatewayConfig.clinic_id == pre_payment.clinic_id,
+                PaymentGatewayConfig.is_active == True,  # noqa: E712
+            ).limit(1)
+        )).scalar_one_or_none()
+
+    if cfg is None:
+        # Fallback: платёж не опознан заранее (или конфиг для него не настроен) —
+        # берём первый активный конфиг шлюза. Если его нет — адаптер обязан
+        # использовать ENV и сам бросить RuntimeError, если ENV пуст. Для ЮKassa
+        # verify_webhook не требует ни того, ни другого.
+        cfg = (await db.execute(
+            select(PaymentGatewayConfig).where(
+                PaymentGatewayConfig.gateway == gateway,
+                PaymentGatewayConfig.is_active == True,  # noqa: E712
+            ).limit(1)
+        )).scalar_one_or_none()
 
     adapter = get_gateway(gateway, cfg)  # cfg может быть None — адаптер должен это пережить
     try:
@@ -275,12 +318,24 @@ async def payment_webhook(
             paid_at = None
 
     if payment is not None:
+        # Сумма из webhook'а (для сверки против payment.amount перед succeeded).
+        # У ЮKassa лежит в object.amount.value; для прочих — None (тогда сверка
+        # опирается на authoritative get_status, см. acquiring_service).
+        webhook_amount: Optional[Decimal] = None
+        yk_amount_val = ((raw.get("object") or {}).get("amount") or {}).get("value")
+        if yk_amount_val is not None:
+            try:
+                webhook_amount = Decimal(str(yk_amount_val))
+            except (ValueError, ArithmeticError):
+                webhook_amount = None
         await update_clinic_payment_status(
             db,
             payment_id=payment.id,
             status=new_status or payment.status,
             paid_at=paid_at,
             raw=raw,
+            webhook_amount=webhook_amount,
+            gateway_payment_id=gateway_payment_id,
         )
 
     # 3) Ветка для подписки платформы (Invoice → record_payment).
@@ -335,10 +390,11 @@ async def list_clinic_payments(
     date_to: Optional[datetime] = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=500),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if tenant is None:
         return []
+    await _verify_clinic(db, tenant.id, clinic_id)
     q = select(ClinicPayment).where(
         ClinicPayment.tenant_id == tenant.id,
         ClinicPayment.clinic_id == clinic_id,
@@ -360,11 +416,12 @@ async def list_clinic_payments(
 async def get_payment_config(
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Чтение конфига доступно даже без подписки (видно «Подключите модуль»)."""
     if tenant is None:
         return {"configs": [], "available_gateways": list_gateways()}
+    await _verify_clinic(db, tenant.id, clinic_id)
     rows = (await db.execute(
         select(PaymentGatewayConfig).where(
             PaymentGatewayConfig.tenant_id == tenant.id,
@@ -382,11 +439,14 @@ async def upsert_payment_config(
     body: PaymentConfigBody,
     clinic_id: uuid.UUID = Path(...),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создаёт или обновляет конфиг шлюза (uniq по clinic_id+gateway)."""
     if tenant is None:
         raise HTTPException(status_code=403, detail="Тенант не определён")
+    # IDOR-защита: clinic_id из path обязан принадлежать тенанту (404, иначе чужой
+    # эквайринг можно перезаписать, подставив clinic_id другого тенанта).
+    await _verify_clinic(db, tenant.id, clinic_id)
     if body.gateway not in list_gateways():
         raise HTTPException(
             status_code=400,
@@ -396,22 +456,27 @@ async def upsert_payment_config(
     cfg = (await db.execute(
         select(PaymentGatewayConfig).where(
             and_(
+                PaymentGatewayConfig.tenant_id == tenant.id,
                 PaymentGatewayConfig.clinic_id == clinic_id,
                 PaymentGatewayConfig.gateway == body.gateway,
             )
         )
     )).scalar_one_or_none()
 
+    # Секрет шифруем перед записью (encryption_service: 'enc:'/'plain:').
+    # Чтение — через PaymentGatewayConfig.decrypted_secret_key.
+    from app.services.encryption_service import encrypt as _encrypt_secret
+
     if cfg is None:
         if not body.secret_key:
             raise HTTPException(status_code=400, detail="secret_key обязателен при создании")
-        from app.services.encryption_service import encrypt as _enc
         cfg = PaymentGatewayConfig(
             tenant_id=tenant.id,
             clinic_id=clinic_id,
             gateway=body.gateway,
             shop_id=body.shop_id,
-            secret_key_encrypted=_enc(body.secret_key),
+            # Прод-имя колонки secret_key_encrypted; шифруем единым encryption_service.
+            secret_key_encrypted=_encrypt_secret(body.secret_key),
             is_active=body.is_active,
             is_test_mode=body.is_test_mode,
             config=body.config or {},
@@ -420,8 +485,7 @@ async def upsert_payment_config(
     else:
         cfg.shop_id = body.shop_id
         if body.secret_key:
-            from app.services.encryption_service import encrypt as _enc
-            cfg.secret_key_encrypted = _enc(body.secret_key)
+            cfg.secret_key_encrypted = _encrypt_secret(body.secret_key)
         cfg.is_active = body.is_active
         cfg.is_test_mode = body.is_test_mode
         cfg.config = body.config or cfg.config or {}

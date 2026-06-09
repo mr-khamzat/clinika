@@ -165,10 +165,14 @@ async def _patients_split(
     if not clinic_ids:
         return (0, 0)
 
-    # Все телефоны с appointments в окне
+    # Все уникальные пациенты с appointments в окне.
+    # #2 PHI cutover: считаем по детерминированному blind-index
+    # patient_phone_hash (plaintext-колонку не читаем). new/returning по хэшу
+    # эквивалентны — hash 1:1 с нормализованным номером, а membership-проверка
+    # ниже тоже идёт по хэшам (hash-к-хэшу).
     phones_in = (
         await db.execute(
-            select(distinct(Appointment.patient_phone)).where(
+            select(distinct(Appointment.patient_phone_hash)).where(
                 Appointment.clinic_id.in_(clinic_ids),
                 Appointment.appointment_date >= start.date(),
                 Appointment.appointment_date < end.date(),
@@ -182,10 +186,10 @@ async def _patients_split(
     # Кто из них уже был до start
     prior = (
         await db.execute(
-            select(distinct(Appointment.patient_phone)).where(
+            select(distinct(Appointment.patient_phone_hash)).where(
                 Appointment.clinic_id.in_(clinic_ids),
                 Appointment.appointment_date < start.date(),
-                Appointment.patient_phone.in_(phones),
+                Appointment.patient_phone_hash.in_(phones),
             )
         )
     ).all()

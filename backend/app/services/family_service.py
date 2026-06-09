@@ -18,17 +18,51 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.family import FamilyGroup, FamilyMember, FamilyInvite
 from app.models.patient_account import PatientAccount
+from app.models.tenant_patient import TenantPatient
 from app.utils.phone import normalize_phone, phone_variants
 
 
 VALID_RELATIONS = {"self", "spouse", "child", "parent", "sibling", "other"}
 
 
+async def link_patient_to_tenant(
+    db: AsyncSession, patient_id: uuid.UUID, tenant_id: uuid.UUID,
+) -> TenantPatient:
+    """[#18] Get-or-create связь TenantPatient(tenant_id, patient_id).
+
+    Идемпотентно: если связь уже есть — возвращаем её. UniqueConstraint
+    (tenant_id, patient_id) гарантирует отсутствие дублей.
+    """
+    r = await db.execute(
+        select(TenantPatient).where(
+            and_(TenantPatient.tenant_id == tenant_id,
+                 TenantPatient.patient_id == patient_id)
+        )
+    )
+    link = r.scalar_one_or_none()
+    if link:
+        return link
+    link = TenantPatient(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        patient_id=patient_id,
+    )
+    db.add(link)
+    await db.flush()
+    return link
+
+
 async def get_or_create_account_by_phone(
     db: AsyncSession, phone: str, name: str | None = None,
     birth_date: date | None = None,
+    tenant_id: uuid.UUID | None = None,
 ) -> tuple[PatientAccount, bool]:
-    """Найти или создать PatientAccount по телефону. Возвращает (account, is_new)."""
+    """Найти или создать ГЛОБАЛЬНЫЙ PatientAccount по телефону. Возвращает (account, is_new).
+
+    [#18] Если передан tenant_id — дополнительно линкуем аккаунт к тенанту через
+    M2M TenantPatient (get-or-create). Сам PatientAccount остаётся глобальным
+    (один телефон = одна запись на платформу), изоляция строится через линк.
+    """
     phone_n = normalize_phone(phone)
     # Ищем по всем вариантам формата (с +, без +, с 8) — в БД могут лежать смешанные.
     variants = phone_variants(phone)
@@ -37,6 +71,8 @@ async def get_or_create_account_by_phone(
     )
     acc = r.scalar_one_or_none()
     if acc:
+        if tenant_id is not None:
+            await link_patient_to_tenant(db, acc.id, tenant_id)
         return acc, False
     acc = PatientAccount(
         id=uuid.uuid4(),
@@ -47,13 +83,37 @@ async def get_or_create_account_by_phone(
     )
     db.add(acc)
     await db.flush()
+    if tenant_id is not None:
+        await link_patient_to_tenant(db, acc.id, tenant_id)
     return acc, True
 
 
-async def get_account_by_phone(db: AsyncSession, phone: str) -> PatientAccount | None:
+async def get_account_by_phone(
+    db: AsyncSession, phone: str, tenant_id: uuid.UUID | None = None,
+) -> PatientAccount | None:
+    """Найти PatientAccount по телефону.
+
+    Поиск по всем вариантам формата (7..., +7..., 8...) — в БД могут лежать
+    смешанные форматы (прод-логика Wave A/B, как в get_or_create_account_by_phone).
+
+    [#18] Если передан tenant_id — JOIN+фильтр по TenantPatient: вернёт аккаунт
+    ТОЛЬКО если он связан с этим тенантом (None — «пациент не из этой клиники»).
+    tenant_id=None сохраняет старое глобальное поведение (нужно для дедупликации
+    по глобальному phone в identify_patient — не фильтровать по тенанту).
+    """
     variants = phone_variants(phone)
+    if tenant_id is None:
+        r = await db.execute(
+            select(PatientAccount).where(PatientAccount.phone.in_(variants))
+        )
+        return r.scalars().first()
     r = await db.execute(
-        select(PatientAccount).where(PatientAccount.phone.in_(variants))
+        select(PatientAccount)
+        .join(TenantPatient, TenantPatient.patient_id == PatientAccount.id)
+        .where(
+            and_(PatientAccount.phone.in_(variants),
+                 TenantPatient.tenant_id == tenant_id)
+        )
     )
     return r.scalars().first()
 

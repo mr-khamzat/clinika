@@ -20,7 +20,7 @@ async def mark_bonus_paid(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus | None
             await add_entry(
                 db=db,
                 user_id=bonus.admin_id,
-                amount=-float(bonus.amount),
+                amount=-bonus.amount,
                 operation_type=OpType.BONUS_PAID,
                 reference_id=bonus.id,
                 reference_type="bonus",
@@ -95,7 +95,7 @@ async def mark_bonus_cancelled(db: AsyncSession, bonus_id: uuid.UUID) -> Bonus |
             await add_entry(
                 db=db,
                 user_id=bonus.admin_id,
-                amount=-float(bonus.amount),
+                amount=-bonus.amount,
                 operation_type=OpType.BONUS_CANCELLED,
                 reference_id=bonus.id,
                 reference_type="bonus",

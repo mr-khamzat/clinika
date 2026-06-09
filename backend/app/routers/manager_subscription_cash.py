@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.database import get_db
 from app.models.billing_ledger import BillingLedger
 from app.models.clinic import Clinic
@@ -72,7 +72,7 @@ class ActivateIn(BaseModel):
 async def activate(
     body: ActivateIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _require_cash_role(user)
     tenant_id = user.tenant_id
@@ -157,7 +157,7 @@ async def activate(
 async def receipt_pdf(
     ledger_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _require_cash_role(user)
     le = (await db.execute(
@@ -233,7 +233,7 @@ async def history(
     clinic_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(200, ge=1, le=1000),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _require_cash_role(user)
     tenant_id = user.tenant_id
@@ -250,7 +250,7 @@ async def history(
 async def stats(
     period: str = Query("30d", pattern=r"^(7d|30d|90d|365d)$"),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _require_cash_role(user)
     tenant_id = user.tenant_id
@@ -292,7 +292,7 @@ async def search_patients(
                    description="ФИО или телефон (≥ 2 символа)"),
     limit: int = Query(8, ge=1, le=20),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Поиск пациента для активации подписки за наличные.
 
@@ -420,7 +420,7 @@ class EnsurePatientIn(BaseModel):
 async def ensure_patient(
     body: EnsurePatientIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Find-or-create PatientAccount по телефону.
 

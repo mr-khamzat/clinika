@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.doctor_clinic_access import DoctorClinicAccess
 from app.models.clinic import Clinic
@@ -30,7 +30,7 @@ class ResetCredentialsRequest(BaseModel):
 @router.get("/recruiter-doctors")
 async def list_recruiter_doctors(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все врачи, зарегистрированные рекрутерами этого тенанта."""
     result = await db.execute(
@@ -76,7 +76,7 @@ async def reset_doctor_credentials(
     doctor_id: uuid.UUID,
     body: ResetCredentialsRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Сменить логин и/или пароль врача (только менеджер франшизы)."""
     doctor = await db.get(User, doctor_id)
@@ -128,7 +128,7 @@ async def reset_doctor_credentials(
 async def toggle_doctor_active(
     doctor_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Включить/отключить доступ врача."""
     doctor = await db.get(User, doctor_id)
@@ -180,7 +180,7 @@ async def update_doctor_profile(
     doctor_id: uuid.UUID,
     body: UpdateStaffProfileRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Полное редактирование профиля сотрудника (без логин/пароль).
     Поддерживает смену роли в пределах ROLE_CHANGE_ALLOWED.
@@ -340,7 +340,7 @@ class RegisterExternalDoctorRequest(BaseModel):
 async def get_visiting_settings(
     doctor_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает условия (цена приёма + % врачу) для visiting_doctor.
     Если запись в visiting_doctor_settings не создана — возвращает null."""
@@ -376,7 +376,7 @@ async def get_visiting_settings(
 @router.get("/all-partner-doctors")
 async def list_all_partner_doctors(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Врачи-партнёры (PARTNER_DOCTOR) текущего тенанта.
 
@@ -449,7 +449,7 @@ _ROLE_LABELS = {
 @router.get("/all-external-doctors")
 async def list_all_external_doctors(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Все сотрудники в скоупе менеджера.
 
@@ -522,7 +522,7 @@ async def list_all_external_doctors(
 async def register_external_doctor(
     body: RegisterExternalDoctorRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Зарегистрировать привлечённого или приезжего врача."""
     import uuid as _uuid
@@ -633,7 +633,7 @@ class SetPercentRequest(BaseModel):
 @router.get("/recruiters")
 async def list_recruiters(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from sqlalchemy import func
     from app.models.recruiter_bonus import RecruiterBonus
@@ -682,7 +682,7 @@ async def set_recruiter_percent(
     recruiter_id: uuid.UUID,
     body: SetPercentRequest,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     rec = await db.get(User, recruiter_id)
     if not rec or rec.tenant_id != current_user.tenant_id:
@@ -698,7 +698,7 @@ async def set_recruiter_percent(
 async def get_recruiter_doctors(
     recruiter_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     rec = await db.get(User, recruiter_id)
     if not rec or rec.tenant_id != current_user.tenant_id:
@@ -734,7 +734,7 @@ async def get_recruiter_doctors(
 async def delete_external_doctor(
     doctor_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     doctor = await db.get(User, doctor_id)
     if not doctor or doctor.tenant_id != current_user.tenant_id:

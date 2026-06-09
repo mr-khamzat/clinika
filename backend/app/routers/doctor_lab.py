@@ -15,7 +15,7 @@ from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db, AsyncSessionLocal
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, require_role, get_tenant_db
 from app.models.user import User, UserRole
 from app.models.lab import LabProvider, LabOrder, LabResult
 from app.services import lab_service
@@ -62,14 +62,16 @@ def _serialize_order(o: LabOrder, results: list[LabResult] | None = None) -> dic
 
 
 def _serialize_result(r: LabResult) -> dict:
+    # #17 PHI: value/reference_range — спец. категория ПДн (результаты анализов),
+    # читаем через расшифрованные property *_plain (lazy-decrypt, fallback на legacy).
     return {
         "id": str(r.id),
         "order_id": str(r.order_id),
         "test_code": r.test_code,
         "test_name": r.test_name,
-        "value": r.value,
+        "value": r.value_plain,
         "unit": r.unit,
-        "reference_range": r.reference_range,
+        "reference_range": r.reference_range_plain,
         "flagged": r.flagged,
         "result_date": r.result_date.isoformat() if r.result_date else None,
     }
@@ -80,7 +82,7 @@ def _serialize_result(r: LabResult) -> dict:
 async def create_order(
     payload: LabOrderIn,
     user: User = _REQUIRE_DOCTOR,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:
@@ -138,7 +140,7 @@ async def list_orders(
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     user: User = _REQUIRE_DOCTOR,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     if not current_user.tenant_id:
@@ -157,7 +159,7 @@ async def list_orders(
 async def get_order(
     order_id: uuid.UUID,
     user: User = _REQUIRE_DOCTOR,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     o = (await db.execute(
@@ -175,7 +177,7 @@ async def get_order(
 async def get_order_results(
     order_id: uuid.UUID,
     user: User = _REQUIRE_DOCTOR,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     o = (await db.execute(
@@ -197,7 +199,7 @@ async def get_order_results(
 async def cancel_order(
     order_id: uuid.UUID,
     user: User = _REQUIRE_DOCTOR,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
     current_user: User = Depends(get_current_user),
 ):
     o = (await db.execute(

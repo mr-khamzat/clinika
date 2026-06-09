@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.tenant import get_current_tenant, require_module
 from app.models.user import User
 from app.models.tenant import Tenant
@@ -175,7 +175,7 @@ async def get_account(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает баланс лояльности пациента (создаёт пустой при отсутствии)."""
     acc = await _get_or_create_account(db, phone, _tenant_id(tenant))
@@ -191,7 +191,7 @@ async def list_transactions(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает историю транзакций пациента (новые сверху)."""
     tid = _tenant_id(tenant)
@@ -213,7 +213,7 @@ async def earn_points(
     user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Начисление баллов за оплату пациента (1 балл = 100 ₽).
@@ -261,7 +261,7 @@ async def redeem_points(
     user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Списание баллов с проверкой достаточности баланса."""
     tid = _tenant_id(tenant)
@@ -296,7 +296,7 @@ async def redeem_points(
 async def list_tiers(
     _user: User = Depends(get_current_user),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список настроенных уровней (порог в рублях ↑) — доступен любой авторизованной роли."""
     result = await db.execute(
@@ -313,7 +313,7 @@ async def create_tier(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создание/настройка уровня лояльности (имя уникально в рамках тенанта)."""
     tid = _tenant_id(tenant)
@@ -351,7 +351,7 @@ async def update_tier(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Редактирование уровня лояльности."""
     tid = _tenant_id(tenant)
@@ -376,7 +376,7 @@ async def delete_tier(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удаление уровня лояльности."""
     tid = _tenant_id(tenant)
@@ -464,7 +464,7 @@ async def list_rules(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Список правил автоначисления (новые сверху)."""
     tid = _tenant_id(tenant)
@@ -482,7 +482,7 @@ async def create_rule(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создание правила автоначисления."""
     rule = LoyaltyRule(tenant_id=_tenant_id(tenant), **body.model_dump())
@@ -499,7 +499,7 @@ async def update_rule(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Редактирование правила."""
     tid = _tenant_id(tenant)
@@ -523,7 +523,7 @@ async def delete_rule(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Удаление правила."""
     tid = _tenant_id(tenant)
@@ -545,7 +545,7 @@ async def list_rewards(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Каталог наград (по sort_order, потом cost_points)."""
     tid = _tenant_id(tenant)
@@ -563,7 +563,7 @@ async def create_reward(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     reward = LoyaltyReward(tenant_id=_tenant_id(tenant), **body.model_dump())
     db.add(reward)
@@ -579,7 +579,7 @@ async def update_reward(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tid = _tenant_id(tenant)
     result = await db.execute(
@@ -602,7 +602,7 @@ async def delete_reward(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     tid = _tenant_id(tenant)
     result = await db.execute(
@@ -623,7 +623,7 @@ async def exchange_reward(
     user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Обмен баллов пациента на награду.
@@ -680,7 +680,7 @@ async def list_all_transactions(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Лента всех транзакций по тенанту (для UI «История начислений»)."""
     tid = _tenant_id(tenant)
@@ -715,7 +715,7 @@ async def list_tiers_with_top(
     _user: User = Depends(require_manager),
     _mod=Depends(require_module("loyalty_pro")),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Возвращает тиры тенанта с топ-N пациентами в каждом и общим счётчиком.

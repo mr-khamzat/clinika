@@ -1,29 +1,12 @@
 import { NavLink } from 'react-router-dom'
 import useAuthStore from '../store/auth'
 
-const partnerItems = [
-  { to: '/',               icon: 'home',          label: 'Главная'    },
-  { to: '/partner/create', icon: 'add_circle',    label: 'Записать'   },
-  { to: '/history',        icon: 'list_alt',      label: 'История'    },
-  { to: '/bonuses',        icon: 'payments',      label: 'Бонусы'     },
-]
-
 const baseItems = [
   { to: '/',        icon: 'home',            label: 'Главная'    },
   { to: '/create',  icon: 'add_circle',      label: 'Направление'},
   { to: '/scan',    icon: 'qr_code_scanner', label: 'Сканер'     },
   { to: '/history', icon: 'list_alt',        label: 'История'    },
   { to: '/bonuses', icon: 'payments',        label: 'Бонусы'     },
-]
-
-// Менеджер: 6 вкладок, Главная = /manager
-const managerItems = [
-  { to: '/manager',          icon: 'home',       label: 'Главная'    },
-  { to: '/create',           icon: 'add_circle', label: 'Направление'},
-  { to: '/history',          icon: 'list_alt',   label: 'История'    },
-  { to: '/bonuses',          icon: 'payments',   label: 'Бонусы'     },
-  { to: '/admin-panel',      icon: 'group',      label: 'Персонал'   },
-  { to: '/manager/analytics',icon: 'bar_chart',  label: 'Отчёты'     },
 ]
 
 export default function BottomNav() {
@@ -34,9 +17,9 @@ export default function BottomNav() {
   // менеджер ходит через ManagerShell на /manager/history, /manager/bonuses.
   if (user?.role === 'manager') return null
 
-  const items =
-    user?.role === 'partner_doctor' ? partnerItems :
-    baseItems
+  // partner_doctor / visiting_doctor сюда не доходят (редирект на /admin в App.jsx),
+  // поэтому отдельной partner-навигации больше нет — все роли используют baseItems.
+  const items = baseItems
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-[#1a2232] border-t border-[#eceef0] dark:border-[#ffffff10] shadow-[0_-4px_20px_rgba(25,28,30,0.06)] z-50">
@@ -45,7 +28,7 @@ export default function BottomNav() {
           <NavLink
             key={to}
             to={to}
-            end={to === '/manager' || to === '/'}
+            end={to === '/'}
             className={({ isActive }) =>
               `flex-shrink-0 flex-1 min-w-[48px] flex flex-col items-center py-2 text-[10px] transition-colors ${
                 isActive ? 'text-[#0097A7] dark:text-[#4dd0e1]' : 'text-[#727783] dark:text-slate-500'

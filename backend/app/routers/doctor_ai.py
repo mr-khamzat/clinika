@@ -40,7 +40,7 @@ from sqlalchemy import select, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import get_current_user, get_tenant_db, require_role
 from app.models.user import User
 from app.models.doctor import Appointment, Doctor
 from app.models.medcard import PatientDiagnosis, PatientAllergy
@@ -206,7 +206,7 @@ async def get_appointment_briefing(
     appointment_id: uuid.UUID,
     refresh: int = Query(0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Pre-visit briefing с AI-рекомендациями. Кеш Redis 1 час."""
     cache_key = _briefing_cache_key(appointment_id)
@@ -402,7 +402,7 @@ async def create_treatment_plan(
     appointment_id: uuid.UUID,
     body: GeneratePlanBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """AI-генерация плана лечения. Сохраняет как draft."""
     appt = await _get_appt_or_404(db, appointment_id, current_user)
@@ -468,7 +468,7 @@ async def list_treatment_plans(
     appointment_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     q = select(TreatmentPlan).where(TreatmentPlan.doctor_id == current_user.id)
     if current_user.tenant_id:
@@ -498,7 +498,7 @@ async def _get_plan_or_404(db: AsyncSession, plan_id: uuid.UUID, user: User) -> 
 async def get_treatment_plan(
     plan_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await _get_plan_or_404(db, plan_id, current_user)
     return _plan_to_dict(p)
@@ -509,7 +509,7 @@ async def update_treatment_plan(
     plan_id: uuid.UUID,
     body: UpdatePlanBody,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     p = await _get_plan_or_404(db, plan_id, current_user)
 
@@ -536,7 +536,7 @@ async def update_treatment_plan(
 async def copy_plan_to_medcard(
     plan_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Копирует план в AppointmentOutcome.recommendations (создаёт/обновляет).

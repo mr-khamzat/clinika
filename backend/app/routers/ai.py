@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_manager, require_super_admin
+from app.core.deps import get_current_user, get_tenant_db, require_manager, require_super_admin
 from app.core.tenant import require_feature, require_module
 from app.models.user import User
 
@@ -451,7 +451,7 @@ async def list_ai_models(sa: User = Depends(require_super_admin)):
 async def get_ai_history(
     limit: int = Query(20, ge=1, le=30),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not current_user.tenant_id:
         return {"history": []}
@@ -649,7 +649,7 @@ async def analyze(
     type: str = Query("overview", regex=f"^({ALL_ANALYSIS_TYPES})$"),
     days: int = Query(30, ge=7, le=365),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     cfg = _load_config()
     _, _, model_id, _ = _get_provider_settings(cfg)
@@ -868,7 +868,7 @@ class AskRequest(BaseModel):
 async def ask_ai(
     body: AskRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     cfg = _load_config()
     _, _, model_id, _ = _get_provider_settings(cfg)

@@ -75,7 +75,7 @@ def upgrade() -> None:
             ['tenant_id'], ['id'], ondelete='SET NULL',
         )
 
-    op.drop_index('ix_mis_log_created', table_name='mis_integration_log')
+    op.execute("DROP INDEX IF EXISTS ix_mis_log_created")
     op.drop_index('ix_mis_log_event', table_name='mis_integration_log')
     op.drop_table('mis_integration_log')
     op.drop_index('bonuses_referral_type_idx', table_name='bonuses')

@@ -18,6 +18,7 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.core.deps import get_tenant_db
 from app.models.user import User
 from app.models.cash_shift import CashShift, CashShiftEntry, CashShiftStatus
 from app.models.payments_clinic import ClinicPayment, ClinicPaymentStatus
@@ -59,7 +60,7 @@ class SummaryOut(BaseModel):
 async def summary(
     period_from: Optional[date] = Query(None),
     user: User = Depends(require_accountant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     clinic_id = user.clinic_id
     tenant_id = user.tenant_id

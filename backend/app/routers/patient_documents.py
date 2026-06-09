@@ -24,7 +24,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user, require_role
+from app.core.deps import (
+    get_current_user,
+    get_tenant_db,
+    require_role,
+    assert_same_tenant,
+    assert_can_create_in_tenant,
+    _is_super_admin,
+)
 from app.models.user import User
 from app.models.patient_document import PatientDocument
 from app.services.patient_session_service import restore_session
@@ -77,9 +84,12 @@ async def patient_docs_list(
 ):
     sess = await _patient_session_or_401(db, session_token or t, x_patient_session)
     phone_n = normalize_phone(sess.phone)
-    q = select(PatientDocument).where(PatientDocument.patient_phone == phone_n)
-    if sess.tenant_id:
-        q = q.where(PatientDocument.tenant_id == sess.tenant_id)
+    # Находка #7: строгий фильтр по tenant_id пациентской сессии всегда
+    # (NULL==NULL включительно), без пропуска при NULL.
+    q = select(PatientDocument).where(
+        PatientDocument.patient_phone == phone_n,
+        PatientDocument.tenant_id == sess.tenant_id,
+    )
     q = q.order_by(PatientDocument.issued_at.desc().nulls_last(),
                    PatientDocument.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -106,7 +116,9 @@ async def patient_doc_download(
     # Owner-check: пациент должен соответствовать
     if normalize_phone(d.patient_phone) != normalize_phone(sess.phone):
         raise HTTPException(403, "Нет доступа к документу")
-    if sess.tenant_id and d.tenant_id and d.tenant_id != sess.tenant_id:
+    # Находка #7: строгое fail-closed сравнение тенанта пациентской сессии
+    # с документом (без пропуска NULL).
+    if sess.tenant_id != d.tenant_id:
         raise HTTPException(403, "Нет доступа к документу")
     if not os.path.exists(d.file_path):
         raise HTTPException(404, "Файл не найден на сервере")
@@ -131,9 +143,11 @@ async def staff_upload_document(
     issued_at: Optional[str] = Form(None),
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Загрузить документ для пациента. Файл сохраняется на /app/uploads/patient_docs/<tenant>/<uuid>.<ext>."""
+    # Находка #7: запрет рождения документа с tenant_id=NULL.
+    assert_can_create_in_tenant(user)
     if doc_type not in ALLOWED_DOC_TYPES:
         doc_type = "other"
 
@@ -202,15 +216,17 @@ async def staff_upload_document(
 async def staff_delete_document(
     doc_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(doc_id)
     except ValueError:
         raise HTTPException(404, "Документ не найден")
     d = await db.get(PatientDocument, did)
-    if not d or (user.tenant_id and d.tenant_id != user.tenant_id):
+    if not d:
         raise HTTPException(404, "Документ не найден")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, d)
     # Удаляем файл с диска
     try:
         if d.file_path and os.path.exists(d.file_path):
@@ -226,11 +242,13 @@ async def staff_delete_document(
 async def staff_list_documents(
     patient_phone: str = Query(...),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     phone_n = normalize_phone(patient_phone)
     q = select(PatientDocument).where(PatientDocument.patient_phone == phone_n)
-    if user.tenant_id:
+    # Находка #7: фильтр по tenant_id всегда для тенантного пользователя;
+    # пропуск (все тенанты) — только super_admin по роли.
+    if not _is_super_admin(user):
         q = q.where(PatientDocument.tenant_id == user.tenant_id)
     q = q.order_by(PatientDocument.issued_at.desc().nulls_last(), PatientDocument.created_at.desc())
     rows = (await db.execute(q)).scalars().all()
@@ -241,15 +259,17 @@ async def staff_list_documents(
 async def staff_download_document(
     doc_id: str,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     try:
         did = uuid.UUID(doc_id)
     except ValueError:
         raise HTTPException(404, "Документ не найден")
     d = await db.get(PatientDocument, did)
-    if not d or (user.tenant_id and d.tenant_id != user.tenant_id):
+    if not d:
         raise HTTPException(404, "Документ не найден")
+    # Находка #7: fail-closed — NULL tenant_id больше не пропускается.
+    assert_same_tenant(user, d)
     if not os.path.exists(d.file_path):
         raise HTTPException(404, "Файл не найден на сервере")
     return FileResponse(d.file_path, media_type=d.mime or "application/octet-stream", filename=d.filename)

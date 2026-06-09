@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_tenant_db
 from app.models.user import User
 from app.services import document_service as ds
 
@@ -30,7 +30,7 @@ def _ensure_doctor_role(user: User) -> None:
 async def list_patient_documents(
     patient_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_doctor_role(user)
     docs = await ds.list_documents_for_doctor(db, patient_id)
@@ -44,7 +44,7 @@ async def list_patient_documents(
 async def download_patient_document(
     doc_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     _ensure_doctor_role(user)
     doc = await ds.get_document(db, doc_id)

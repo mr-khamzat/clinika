@@ -29,7 +29,7 @@ from sqlalchemy import select, and_, or_, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.doctor import Appointment
 from app.models.doctor import Doctor
 from app.models.clinic import Clinic
@@ -87,7 +87,7 @@ async def doctor_retention(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[DoctorRetentionRow]:
     """Возвратность пациентов по врачам за период."""
     df, dt = _default_period(date_from, date_to)
@@ -105,12 +105,16 @@ async def doctor_retention(
         # Менеджер привязанный к клинике видит только её.
         conds.append(Appointment.clinic_id == me.clinic_id)
 
+    # #2 PHI cutover: retention-логика работает по детерминированному blind-index
+    # patient_phone_hash (plaintext-телефон не читаем). Эта агрегатная функция
+    # отдаёт только счётчики (unique/first/repeat) и имя ВРАЧА из таблицы doctors —
+    # ФИО пациента здесь не отображается, поэтому patient_phone/patient_name не
+    # выбираем вовсе. Хэш детерминирован → repeat/first/unique эквивалентны.
     appts_q = await db.execute(
         select(
             Appointment.id,
             Appointment.doctor_id,
-            Appointment.patient_phone,
-            Appointment.patient_name,
+            Appointment.patient_phone_hash,
             Appointment.clinic_id,
         ).where(and_(*conds))
     )
@@ -118,21 +122,21 @@ async def doctor_retention(
     if not appts:
         return []
 
-    # 2) Список пар (doctor_id, phone) — для bulk-запроса prior
-    pairs = list({(a.doctor_id, a.patient_phone) for a in appts})
+    # 2) Список пар (doctor_id, phone_hash) — для bulk-запроса prior
+    pairs = list({(a.doctor_id, a.patient_phone_hash) for a in appts})
     prior_set: set[tuple[uuid.UUID, str]] = set()
     if pairs:
         # Тяжёлый запрос для большого периода/клиники — но мы фильтруем по уже
         # известному множеству пар, так что Postgres использует индекс
-        # (doctor_id) + (patient_phone). Для типичного месяца это быстро.
+        # (doctor_id) + (patient_phone_hash). Для типичного месяца это быстро.
         prior_q = await db.execute(
-            select(Appointment.doctor_id, Appointment.patient_phone)
+            select(Appointment.doctor_id, Appointment.patient_phone_hash)
             .where(
                 and_(
                     Appointment.tenant_id == me.tenant_id,
                     Appointment.appointment_date < df,
                     Appointment.status.notin_(EXCLUDED_STATUSES),
-                    tuple_(Appointment.doctor_id, Appointment.patient_phone).in_(pairs),
+                    tuple_(Appointment.doctor_id, Appointment.patient_phone_hash).in_(pairs),
                 )
             )
             .distinct()
@@ -146,10 +150,11 @@ async def doctor_retention(
     for a in appts:
         s = agg[a.doctor_id]
         s["total"] += 1
-        s["phones"].add(a.patient_phone)
+        # уникальность пациента считаем по blind-index (детерминирован 1:1 с номером)
+        s["phones"].add(a.patient_phone_hash)
         if not s["clinic_id"]:
             s["clinic_id"] = a.clinic_id
-        if (a.doctor_id, a.patient_phone) in prior_set:
+        if (a.doctor_id, a.patient_phone_hash) in prior_set:
             s["repeat"] += 1
         else:
             s["first"] += 1
@@ -207,7 +212,7 @@ async def doctor_retention_patients(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[RetentionPatientRow]:
     """Drill-down: пациенты конкретного врача за период с признаком повторных."""
     df, dt = _default_period(date_from, date_to)
@@ -233,36 +238,39 @@ async def doctor_retention_patients(
     elif me.clinic_id and me.role.value == "manager":
         conds.append(Appointment.clinic_id == me.clinic_id)
 
+    # #2 PHI cutover: drill-down ОТОБРАЖАЕТ ПДн → грузим ORM-объекты Appointment,
+    # группируем по детерминированному blind-index patient_phone_hash (plaintext
+    # не читаем), а телефон/ФИО для ответа берём через расшифрованные property
+    # patient_phone_plain / patient_name_plain (fallback на legacy-plaintext).
     appts_q = await db.execute(
-        select(
-            Appointment.patient_phone,
-            Appointment.patient_name,
-            Appointment.appointment_date,
-        ).where(and_(*conds))
+        select(Appointment).where(and_(*conds))
     )
-    period_appts = appts_q.all()
+    period_appts = appts_q.scalars().all()
     if not period_appts:
         return []
 
-    # 2) Сгруппировать по phone в периоде
+    # 2) Сгруппировать по phone_hash в периоде (display-телефон/имя — через property)
     per_phone: dict[str, dict] = defaultdict(lambda: {
-        "name": None, "visits": 0, "last_date": None
+        "phone": None, "name": None, "visits": 0, "last_date": None
     })
-    for r in period_appts:
-        ph = r.patient_phone
-        s = per_phone[ph]
+    for a in period_appts:
+        h = a.patient_phone_hash
+        s = per_phone[h]
         s["visits"] += 1
-        if not s["name"] and r.patient_name:
-            s["name"] = r.patient_name
-        if not s["last_date"] or r.appointment_date > s["last_date"]:
-            s["last_date"] = r.appointment_date
+        if not s["phone"]:
+            s["phone"] = a.patient_phone_plain
+        if not s["name"] and a.patient_name_plain:
+            s["name"] = a.patient_name_plain
+        if not s["last_date"] or a.appointment_date > s["last_date"]:
+            s["last_date"] = a.appointment_date
 
-    phones = list(per_phone.keys())
+    phone_hashes = list(per_phone.keys())
 
-    # 3) Для каждого телефона — самый ранний приём к этому врачу за всю историю
+    # 3) Для каждого пациента — самый ранний приём к этому врачу за всю историю
+    #    (join по blind-index hash-к-хэшу)
     first_q = await db.execute(
         select(
-            Appointment.patient_phone,
+            Appointment.patient_phone_hash,
             Appointment.appointment_date,
         )
         .where(
@@ -270,22 +278,22 @@ async def doctor_retention_patients(
                 Appointment.doctor_id == doctor_id,
                 Appointment.tenant_id == me.tenant_id,
                 Appointment.status.notin_(EXCLUDED_STATUSES),
-                Appointment.patient_phone.in_(phones),
+                Appointment.patient_phone_hash.in_(phone_hashes),
             )
         )
         .order_by(Appointment.appointment_date.asc())
     )
     first_overall: dict[str, date] = {}
-    for ph, dt_row in first_q.all():
-        if ph not in first_overall:
-            first_overall[ph] = dt_row
+    for ph_hash, dt_row in first_q.all():
+        if ph_hash not in first_overall:
+            first_overall[ph_hash] = dt_row
 
     # 4) Собрать ответ
     rows: list[RetentionPatientRow] = []
-    for ph, s in per_phone.items():
-        fv = first_overall.get(ph)
+    for ph_hash, s in per_phone.items():
+        fv = first_overall.get(ph_hash)
         rows.append(RetentionPatientRow(
-            patient_phone=ph,
+            patient_phone=s["phone"] or "",
             patient_name=s["name"],
             visits_in_period=s["visits"],
             last_visit_in_period=s["last_date"],

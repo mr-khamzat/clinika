@@ -60,7 +60,7 @@ from sqlalchemy import and_, or_, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.core.security import decode_token
 from app.core.tenant import require_module
 from app.database import AsyncSessionLocal, get_db
@@ -242,7 +242,7 @@ class ConsentRequest(BaseModel):
 async def create_session(
     body: CreateSessionRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Создаёт телемед-сессию и возвращает join-ссылку для пациента."""
     if not current_user.tenant_id:
@@ -330,7 +330,7 @@ async def list_sessions(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not current_user.tenant_id:
         return {"items": [], "total": 0}
@@ -395,7 +395,7 @@ def _session_to_dict(s: TelemedicineSession) -> dict:
 async def get_session(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     return _session_to_dict(s)
@@ -411,7 +411,7 @@ async def get_session(
 async def doctor_ice_config(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     return _ice_servers_for(f"telemed:{s.id}:doctor")
@@ -427,7 +427,7 @@ async def doctor_ice_config(
 async def start_session(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     if s.status == TelemedicineSessionStatus.ENDED:
@@ -447,7 +447,7 @@ async def start_session(
 async def end_session(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     now = datetime.utcnow()
@@ -481,7 +481,7 @@ async def end_session(
 async def cancel_incoming(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """
     Отменить «звонок» в ЛК пациента (если пациент не отвечает > 60с).
@@ -512,7 +512,7 @@ async def list_messages(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     total = (
@@ -559,7 +559,7 @@ async def post_message(
     text: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     if not text and not file:
@@ -631,7 +631,7 @@ async def create_prescription(
     session_id: uuid.UUID,
     body: PrescriptionRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
 
@@ -670,7 +670,7 @@ async def create_prescription(
 async def list_prescriptions(
     session_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     s = await _get_session_for_user(db, session_id, current_user)
     rows = (

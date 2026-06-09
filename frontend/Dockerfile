@@ -6,8 +6,9 @@ ARG VITE_SENTRY_ENVIRONMENT="production"
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ENV VITE_SENTRY_ENVIRONMENT=$VITE_SENTRY_ENVIRONMENT
 
-COPY package.json ./
-RUN npm install
+# idx 55: npm ci + lockfile — детерминированная сборка из точных версий package-lock.json
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY . .
 ENV NODE_OPTIONS=--max-old-space-size=6144
 RUN npm run build

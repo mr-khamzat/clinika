@@ -18,10 +18,13 @@
   PUT  /admin/tenants/{id}/modules/{key}/config    — изменить config (role matrix и т.д.)
   PUT  /admin/tenants/{id}/modules/{key}/price     — переговорная цена
 """
+import ipaddress
+import socket
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -417,6 +420,36 @@ async def _get_integration(db: AsyncSession, tenant_id: uuid.UUID, int_id: uuid.
     return obj
 
 
+def _validate_integration_url(raw_url: str) -> str:
+    """SSRF-guard: только https и публичный (не приватный/loopback/metadata) хост.
+
+    Бросает ValueError с человекочитаемой причиной, если URL не проходит проверку.
+    Резолвим хост и убеждаемся, что НИ ОДИН из его адресов не приватный — это
+    закрывает DNS-rebinding на уровне проверки (httpx может зарезолвить иначе,
+    но базовая защита от очевидных internal-целей здесь).
+    """
+    parsed = urlparse(raw_url or "")
+    if parsed.scheme != "https":
+        raise ValueError("base_url должен использовать https://")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("base_url не содержит хоста")
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise ValueError("не удалось разрешить хост base_url")
+    for info in infos:
+        ip_str = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise ValueError("base_url указывает на приватный/служебный адрес")
+    return raw_url
+
+
 async def _do_test(obj: TenantIntegration) -> tuple[str, str | None]:
     """Пробный запрос к интеграции. Возвращает (status, error_text|None)."""
     headers = {"Authorization": f"Bearer {obj.api_key}", "Content-Type": "application/json"}
@@ -424,9 +457,17 @@ async def _do_test(obj: TenantIntegration) -> tuple[str, str | None]:
     if "headers" in extra:
         headers.update(extra["headers"])
     try:
-        async with httpx.AsyncClient(timeout=8, verify=False) as client:
+        # SSRF-guard перед отправкой API-ключа на tenant-контролируемый URL.
+        safe_url = _validate_integration_url(obj.base_url)
+    except ValueError as e:
+        return "error", str(e)[:200]
+    try:
+        # verify=True (по умолчанию): не отключаем TLS-проверку — иначе API-ключ
+        # уходит по незащищённому каналу. follow_redirects=False, чтобы редирект
+        # не увёл запрос на приватный адрес в обход проверки.
+        async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
             # Пробуем GET на базовый URL
-            r = await client.get(obj.base_url, headers=headers)
+            r = await client.get(safe_url, headers=headers)
         if r.status_code < 500:
             return "ok", None
         return "error", f"HTTP {r.status_code}"

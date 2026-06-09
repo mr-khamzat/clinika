@@ -210,6 +210,9 @@ async def _aggregate_patients(
     db: AsyncSession, clinic_ids: list[uuid.UUID], months: list[str]
 ) -> dict[uuid.UUID, dict[str, float]]:
     """Distinct patient_phone из Appointment по clinic_id и месяцу."""
+    # #2 PHI cutover: уникальных пациентов считаем по детерминированному
+    # blind-index patient_phone_hash (plaintext-колонку не читаем). Счёт
+    # distinct эквивалентен — hash детерминирован 1:1 с нормализованным номером.
     if not clinic_ids:
         return {}
     start_year, start_month = months[0].split("-")
@@ -219,7 +222,7 @@ async def _aggregate_patients(
             select(
                 Appointment.clinic_id,
                 func.to_char(Appointment.appointment_date, "YYYY-MM").label("ym"),
-                func.count(func.distinct(Appointment.patient_phone)).label("cnt"),
+                func.count(func.distinct(Appointment.patient_phone_hash)).label("cnt"),
             )
             .where(
                 Appointment.clinic_id.in_(clinic_ids),

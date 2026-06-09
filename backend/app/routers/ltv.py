@@ -35,7 +35,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.tenant import get_current_tenant, require_module
 from app.database import get_db
 from app.models.ltv import PatientLtvSnapshot
@@ -163,7 +163,7 @@ async def list_top_patients(
     ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Топ пациентов по LTV (DESC). Поддержка фильтров «повторные» / «спящие».
 
@@ -224,7 +224,7 @@ async def list_top_patients(
 async def list_cohorts(
     period: str = Query("quarter", pattern="^(quarter)$"),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Сводка по когортам (по умолчанию — квартал первого визита)."""
     if tenant is None:
@@ -241,7 +241,7 @@ async def get_summary(
     ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Общие метрики: avg LTV, avg NetLTV, total patients, churn rate, at-risk.
 
@@ -324,7 +324,7 @@ async def recompute(
     clinic_id: Optional[uuid.UUID] = Query(None),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Принудительный пересчёт LTV-снапшотов. Возвращает {updated, patients}."""
     if tenant is None:
@@ -358,7 +358,7 @@ async def export_pdf(
     ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """PDF-отчёт LTV: KPI, топ-50 пациентов, когорты, диаграммы."""
     if tenant is None:
@@ -388,7 +388,7 @@ async def export_xlsx(
     ),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Excel-отчёт LTV: листы Сводка / Топ пациентов / Когорты."""
     if tenant is None:
@@ -564,7 +564,7 @@ async def export_contacts(
     format: str = Query("csv", pattern="^(csv|xlsx)$", description="Формат: csv|xlsx"),
     user: User = Depends(require_manager),
     tenant: Tenant | None = Depends(get_current_tenant),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Экспорт контактов пациентов (телефон, ФИО, визиты, даты, суммы)."""
     if tenant is None:

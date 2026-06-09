@@ -1378,7 +1378,7 @@ function PartnerDoctorsSection({ adminToken }) {
 
   const loadReferrals = async (doctorId) => {
     try {
-      const r = await api.get('/manager/referrals/', {
+      const r = await api.get('/manager/reports/referrals', {
         params: { author_id: doctorId, limit: 30 },
       })
       setReferrals({ doctor_id: doctorId, items: Array.isArray(r.data?.items) ? r.data.items : (Array.isArray(r.data) ? r.data : []) })

@@ -8009,12 +8009,15 @@ function CallsConfigSection({ token }) {
 // (deep-links /admin/<section>). Источник истины — switch в renderSection().
 // При добавлении новой секции добавляйте ключ сюда же.
 const ADMIN_SECTIONS = new Set([
-  'home','wiki','settings','analytics','audit','billing','billing_ledger',
+  'home','wiki','settings','analytics','audit','security','billing','billing_ledger',
   'monitoring','contacts','reviews','modules_catalog','roles','mis_sync',
-  'doctors','patient_chats','calls_cfg','calls_log','push_notify','webhooks',
-  'ads','engagement','network','ai_analytics','ai_knowledge','super_admin','franchises','branding',
+  'doctors','clinics','patient_chats','calls_cfg','calls_log','cross_dir','ltv_patients',
+  'push_notify','webhooks',
+  'ads','engagement','network','ai_analytics','ai_knowledge','ai_assistant',
+  'super_admin','sa_users','franchises','branding',
   'cms','acts','platform_billing','platform_analytics','payment_gateways',
   'loyalty','recordings','telemedicine','sms_marketing','inventory','subscription_plans',
+  'platform_modules','franchise_modules','franchise_revenue','chat_settings','chat_groups',
 ])
 
 // Извлекает section-ключ из текущего URL: /admin/audit → 'audit', /admin → 'home'.

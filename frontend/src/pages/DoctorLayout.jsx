@@ -8,7 +8,7 @@
  * Бизнес-логика API не изменена:
  *   GET /my-doctor                          — карточка врача
  *   GET /appointments?doctor_id=...&limit=  — записи
- *   GET /manager/referrals/?limit=          — направления
+ *   GET /referrals/?limit=                  — направления (свои, created_by_admin_id == текущий пользователь)
  *
  * Структура:
  *   Sidebar (desktop) — профиль, навигация по 9 секциям
@@ -546,13 +546,13 @@ function ReferralsPage({ token }) {
   // После успешного создания направления — закрываем модалку и обновляем список.
   // Опционально открываем QR-страницу нового направления (как было на /arc/create).
   const reload = useCallback(() => {
-    apiFetch('get', '/manager/referrals/?limit=50', token)
+    apiFetch('get', '/referrals/?limit=50', token)
       .then(r => setRefs(Array.isArray(r.data) ? r.data : r.data?.referrals || []))
       .catch(() => {})
   }, [token])
 
   useEffect(() => {
-    apiFetch('get', '/manager/referrals/?limit=50', token)
+    apiFetch('get', '/referrals/?limit=50', token)
       .then(r => setRefs(Array.isArray(r.data) ? r.data : r.data?.referrals || []))
       .catch(() => setRefs([]))
       .finally(() => setLoading(false))

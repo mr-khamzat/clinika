@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.core.region_lock import enforce_region_lock
 from app.models.user import User
 from app.models.referral import Referral, ReferralStatus
@@ -30,7 +30,7 @@ router = APIRouter(tags=["manager:bonuses"])
 async def mark_bonus_paid(
     bonus_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(Bonus).where(Bonus.id == bonus_id))
     bonus = result.scalar_one_or_none()
@@ -55,7 +55,7 @@ async def mark_bonus_paid(
 async def mark_all_paid(
     admin_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     # Tenant isolation: проверяем что admin принадлежит нашему тенанту
     admin_obj = (await db.execute(select(User).where(User.id == admin_id))).scalar_one_or_none()
@@ -80,7 +80,7 @@ async def mark_all_paid(
 @router.get("/cancel-requests/", response_model=list[dict])
 async def list_cancel_requests(
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     from sqlalchemy import or_ as _or_
     _q = select(Referral).where(
@@ -117,7 +117,7 @@ async def list_cancel_requests(
 async def approve_cancel(
     referral_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Подтверждение отмены направления.
 
@@ -190,7 +190,7 @@ async def approve_cancel(
 async def reject_cancel(
     referral_id: uuid.UUID,
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     result = await db.execute(select(Referral).where(Referral.id == referral_id))
     referral = result.scalar_one_or_none()

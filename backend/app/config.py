@@ -58,8 +58,9 @@ class Settings(BaseSettings):
     webhook_api_key: str = ""
 
     # CORS — через запятую (продакшн: только ваш домен)
-    # Дефолт жёстко закрыт: prod-домены + localhost для разработки фронта
-    allowed_origins: str = "https://xn--e1afagcdp8ak4h.xn--p1ai,https://клиниксеть.рф,http://localhost:5173"
+    # Дефолт жёстко закрыт: только prod-домены. localhost для dev-фронта
+    # добавляется в get_allowed_origins() условно при environment != "production".
+    allowed_origins: str = "https://xn--e1afagcdp8ak4h.xn--p1ai,https://клиниксеть.рф"
 
     # Ключ для защиты эндпоинта /tenant/create
     onboarding_secret: str = ""
@@ -119,11 +120,20 @@ class Settings(BaseSettings):
 
     def get_allowed_origins(self) -> List[str]:
         """Возвращает список разрешённых origin для CORS.
-        
+
+        В production используются только origin'ы из allowed_origins.
+        Вне production (development/staging) к ним добавляются localhost-origin'ы
+        для локальной разработки фронта (Vite на :5173).
+
         Returns:
             List of allowed CORS origins
         """
-        return [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
+        origins = [x.strip() for x in self.allowed_origins.split(",") if x.strip()]
+        if self.environment != "production":
+            for dev_origin in ("http://localhost:5173", "http://127.0.0.1:5173"):
+                if dev_origin not in origins:
+                    origins.append(dev_origin)
+        return origins
 
 
 settings = Settings()

@@ -14,6 +14,10 @@
   POST   /marketing/ad-spend                — добавить запись расходов.
   PATCH  /marketing/ad-spend/{id}           — обновить.
   DELETE /marketing/ad-spend/{id}           — удалить.
+  GET    /marketing/attribution            — список атрибуций пациент↔канал.
+  POST   /marketing/attribution            — связать пациента с каналом.
+  PATCH  /marketing/attribution/{id}       — обновить атрибуцию.
+  DELETE /marketing/attribution/{id}       — удалить атрибуцию.
 
 ROI и sources считаются в `/director/marketing/*` (router director.py).
 """
@@ -25,12 +29,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_user, require_manager
 from app.database import get_db
-from app.models.marketing import AdSpendEntry, MarketingChannel
+from app.models.marketing import AdSpendEntry, MarketingChannel, PatientAttribution
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/marketing", tags=["marketing"])
@@ -135,6 +139,65 @@ class AdSpendUpdateRequest(BaseModel):
     impressions_count: Optional[int] = Field(None, ge=0)
     notes: Optional[str] = None
     external_id: Optional[str] = Field(None, max_length=100)
+
+
+class _PatientRef(BaseModel):
+    id: uuid.UUID
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+class _ChannelRef(BaseModel):
+    id: uuid.UUID
+    code: Optional[str] = None
+    name: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class AttributionOut(BaseModel):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    patient_phone: Optional[str]
+    patient_user_id: Optional[uuid.UUID]
+    patient: Optional[_PatientRef]
+    channel_id: Optional[uuid.UUID]
+    channel: Optional[_ChannelRef]
+    utm_source: Optional[str]
+    utm_medium: Optional[str]
+    utm_campaign: Optional[str]
+    utm_content: Optional[str]
+    utm_term: Optional[str]
+    source_detail: Optional[str]
+    referrer: Optional[str]
+    first_touch_at: Optional[datetime]
+    last_touch_at: Optional[datetime]
+    created_at: datetime
+
+
+class AttributionCreateRequest(BaseModel):
+    patient_phone: Optional[str] = Field(None, max_length=32)
+    patient_user_id: Optional[uuid.UUID] = None
+    channel_id: uuid.UUID
+    utm_source: Optional[str] = Field(None, max_length=100)
+    utm_medium: Optional[str] = Field(None, max_length=100)
+    utm_campaign: Optional[str] = Field(None, max_length=100)
+    utm_content: Optional[str] = Field(None, max_length=100)
+    utm_term: Optional[str] = Field(None, max_length=100)
+    source_detail: Optional[str] = Field(None, max_length=200)
+    referrer: Optional[str] = Field(None, max_length=500)
+
+
+class AttributionUpdateRequest(BaseModel):
+    patient_phone: Optional[str] = Field(None, max_length=32)
+    patient_user_id: Optional[uuid.UUID] = None
+    channel_id: Optional[uuid.UUID] = None
+    utm_source: Optional[str] = Field(None, max_length=100)
+    utm_medium: Optional[str] = Field(None, max_length=100)
+    utm_campaign: Optional[str] = Field(None, max_length=100)
+    utm_content: Optional[str] = Field(None, max_length=100)
+    utm_term: Optional[str] = Field(None, max_length=100)
+    source_detail: Optional[str] = Field(None, max_length=200)
+    referrer: Optional[str] = Field(None, max_length=500)
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -387,6 +450,265 @@ async def delete_ad_spend(
     tid = getattr(user, "tenant_id", None)
     if obj.tenant_id != tid:
         raise HTTPException(403, "Запись принадлежит другому тенанту")
+    await db.delete(obj)
+    await db.commit()
+    return None
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Patient attribution (пациент ↔ канал привлечения + UTM)
+# ════════════════════════════════════════════════════════════════════════════
+
+
+def _attribution_out(
+    a: PatientAttribution,
+    ch: Optional[MarketingChannel],
+    patient: Optional[User],
+) -> AttributionOut:
+    """Сборка ответа с вложенными channel / patient (как ждёт фронт)."""
+    return AttributionOut(
+        id=a.id,
+        tenant_id=a.tenant_id,
+        patient_phone=a.patient_phone,
+        patient_user_id=a.patient_user_id,
+        patient=(
+            _PatientRef(
+                id=patient.id,
+                full_name=patient.full_name,
+                phone=patient.phone_number,
+            )
+            if patient is not None
+            else None
+        ),
+        channel_id=a.channel_id,
+        channel=(
+            _ChannelRef(id=ch.id, code=ch.code, name=ch.name, icon=ch.icon)
+            if ch is not None
+            else None
+        ),
+        utm_source=a.utm_source,
+        utm_medium=a.utm_medium,
+        utm_campaign=a.utm_campaign,
+        utm_content=a.utm_content,
+        utm_term=a.utm_term,
+        source_detail=a.source_detail,
+        referrer=a.referrer,
+        first_touch_at=a.first_touch_at,
+        last_touch_at=a.last_touch_at,
+        created_at=a.created_at,
+    )
+
+
+def _norm_phone_digits(s: Optional[str]) -> str:
+    """Только цифры — для поиска по телефону вне зависимости от форматирования."""
+    return "".join(ch for ch in (s or "") if ch.isdigit())
+
+
+async def _resolve_channel_for_tenant(
+    db: AsyncSession, channel_id: uuid.UUID, tid: uuid.UUID
+) -> MarketingChannel:
+    """Канал должен быть системным (tenant_id IS NULL) либо текущего тенанта."""
+    ch = await db.get(MarketingChannel, channel_id)
+    if not ch:
+        raise HTTPException(404, "Канал не найден")
+    if ch.tenant_id is not None and ch.tenant_id != tid:
+        raise HTTPException(403, "Канал принадлежит другому тенанту")
+    return ch
+
+
+async def _resolve_patient_for_tenant(
+    db: AsyncSession, patient_user_id: Optional[uuid.UUID], tid: uuid.UUID
+) -> Optional[User]:
+    """Резолв пациента строго в рамках тенанта (защита ПДн от кросс-тенант join)."""
+    if not patient_user_id:
+        return None
+    res = await db.execute(
+        select(User).where(
+            and_(User.id == patient_user_id, User.tenant_id == tid)
+        )
+    )
+    return res.scalar_one_or_none()
+
+
+@router.get("/attribution", response_model=list[AttributionOut])
+async def list_attribution(
+    search: Optional[str] = Query(None, max_length=80),
+    channel_id: Optional[uuid.UUID] = Query(None),
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(_require_read_access),
+    db: AsyncSession = Depends(get_db),
+):
+    """Список атрибуций текущего тенанта с резолвом вложенных patient/channel.
+
+    Tenant-изоляция: жёсткий фильтр `PatientAttribution.tenant_id == tid`.
+    Пациент резолвится тоже строго по тенанту (см. `_resolve_patient_for_tenant`),
+    чтобы join по user_id не подтянул чужого пациента.
+    """
+    tid = getattr(user, "tenant_id", None)
+    if not tid:
+        # super_admin без тенанта: показывать нечего (атрибуция тенант-скоупная)
+        return []
+
+    conds = [PatientAttribution.tenant_id == tid]
+    if channel_id:
+        conds.append(PatientAttribution.channel_id == channel_id)
+    if search and search.strip():
+        term = search.strip()
+        phone_digits = _norm_phone_digits(term)
+        like = f"%{term.lower()}%"
+        sub = []
+        if phone_digits:
+            sub.append(PatientAttribution.patient_phone.like(f"%{phone_digits}%"))
+        # поиск по ФИО — через связанного User того же тенанта
+        name_users = await db.execute(
+            select(User.id).where(
+                and_(
+                    User.tenant_id == tid,
+                    func.lower(User.full_name).like(like),
+                )
+            )
+        )
+        matched_ids = [uid for (uid,) in name_users.all()]
+        if matched_ids:
+            sub.append(PatientAttribution.patient_user_id.in_(matched_ids))
+        if sub:
+            conds.append(or_(*sub))
+        else:
+            # есть поисковый запрос, но ничего не сматчилось → пустой результат
+            return []
+
+    q = (
+        select(PatientAttribution, MarketingChannel)
+        .outerjoin(
+            MarketingChannel,
+            MarketingChannel.id == PatientAttribution.channel_id,
+        )
+        .where(and_(*conds))
+        .order_by(
+            PatientAttribution.last_touch_at.desc().nullslast(),
+            PatientAttribution.created_at.desc(),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    r = await db.execute(q)
+    rows = r.all()
+
+    # Батч-резолв пациентов строго по тенанту
+    user_ids = {a.patient_user_id for a, _ in rows if a.patient_user_id}
+    patients: dict[uuid.UUID, User] = {}
+    if user_ids:
+        pr = await db.execute(
+            select(User).where(
+                and_(User.id.in_(user_ids), User.tenant_id == tid)
+            )
+        )
+        patients = {u.id: u for u in pr.scalars().all()}
+
+    return [
+        _attribution_out(a, ch, patients.get(a.patient_user_id))
+        for a, ch in rows
+    ]
+
+
+@router.post("/attribution", response_model=AttributionOut, status_code=201)
+async def create_attribution(
+    body: AttributionCreateRequest,
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    """Связать пациента (по телефону и/или user_id) с каналом привлечения."""
+    tid = getattr(user, "tenant_id", None)
+    if not tid:
+        raise HTTPException(400, "У пользователя нет tenant_id")
+
+    phone = (body.patient_phone or "").strip() or None
+    if not phone and not body.patient_user_id:
+        raise HTTPException(400, "Укажите телефон пациента или patient_user_id")
+
+    ch = await _resolve_channel_for_tenant(db, body.channel_id, tid)
+    patient = await _resolve_patient_for_tenant(db, body.patient_user_id, tid)
+    if body.patient_user_id and patient is None:
+        raise HTTPException(404, "Пациент не найден в этом тенанте")
+
+    now = datetime.utcnow()
+    obj = PatientAttribution(
+        tenant_id=tid,
+        patient_phone=phone,
+        patient_user_id=body.patient_user_id,
+        channel_id=body.channel_id,
+        utm_source=body.utm_source,
+        utm_medium=body.utm_medium,
+        utm_campaign=body.utm_campaign,
+        utm_content=body.utm_content,
+        utm_term=body.utm_term,
+        source_detail=body.source_detail,
+        referrer=body.referrer,
+        first_touch_at=now,
+        last_touch_at=now,
+    )
+    db.add(obj)
+    await db.commit()
+    await db.refresh(obj)
+    return _attribution_out(obj, ch, patient)
+
+
+@router.patch("/attribution/{attribution_id}", response_model=AttributionOut)
+async def update_attribution(
+    attribution_id: uuid.UUID,
+    body: AttributionUpdateRequest,
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    obj = await db.get(PatientAttribution, attribution_id)
+    if not obj:
+        raise HTTPException(404, "Атрибуция не найдена")
+    tid = getattr(user, "tenant_id", None)
+    if obj.tenant_id != tid:
+        raise HTTPException(403, "Атрибуция принадлежит другому тенанту")
+
+    data = body.model_dump(exclude_unset=True)
+
+    # Резолв нового канала (если меняют) — с проверкой принадлежности тенанту
+    if "channel_id" in data and data["channel_id"] is not None:
+        await _resolve_channel_for_tenant(db, data["channel_id"], tid)
+
+    # Нормализуем телефон
+    if "patient_phone" in data:
+        data["patient_phone"] = (data["patient_phone"] or "").strip() or None
+
+    # Резолв нового пациента (если меняют) — строго в рамках тенанта
+    if "patient_user_id" in data and data["patient_user_id"] is not None:
+        p = await _resolve_patient_for_tenant(db, data["patient_user_id"], tid)
+        if p is None:
+            raise HTTPException(404, "Пациент не найден в этом тенанте")
+
+    for k, v in data.items():
+        setattr(obj, k, v)
+    obj.last_touch_at = datetime.utcnow()
+
+    await db.commit()
+    await db.refresh(obj)
+    ch_final = (
+        await db.get(MarketingChannel, obj.channel_id) if obj.channel_id else None
+    )
+    patient = await _resolve_patient_for_tenant(db, obj.patient_user_id, tid)
+    return _attribution_out(obj, ch_final, patient)
+
+
+@router.delete("/attribution/{attribution_id}", status_code=204)
+async def delete_attribution(
+    attribution_id: uuid.UUID,
+    user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+):
+    obj = await db.get(PatientAttribution, attribution_id)
+    if not obj:
+        raise HTTPException(404, "Атрибуция не найдена")
+    tid = getattr(user, "tenant_id", None)
+    if obj.tenant_id != tid:
+        raise HTTPException(403, "Атрибуция принадлежит другому тенанту")
     await db.delete(obj)
     await db.commit()
     return None

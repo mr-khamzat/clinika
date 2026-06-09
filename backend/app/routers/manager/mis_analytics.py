@@ -31,7 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.models.clinic import Clinic
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -285,7 +285,7 @@ async def retention_mis(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[RetentionMisRow]:
     """Возвратность пациентов по врачам, используя флаги МИС.
 
@@ -353,7 +353,7 @@ async def attribution(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[AttributionRow]:
     """Маркетинговая атрибуция: распределение приёмов и выручки по источникам.
 
@@ -414,7 +414,7 @@ async def programs(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[ProgramRow]:
     """Программы/абонементы клиники.
 
@@ -509,7 +509,7 @@ async def noshow(
     date_to: Optional[date] = Query(None),
     clinic_id: Optional[uuid.UUID] = Query(None),
     me: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ) -> list[NoShowRow]:
     """Рейтинг no-show пациентов за период (топ-100)."""
     df, dt = _default_period(date_from, date_to)

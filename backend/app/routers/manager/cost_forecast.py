@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import require_manager
+from app.core.deps import require_manager, get_tenant_db
 from app.database import get_db
 from app.models.bonus import Bonus
 from app.models.user import User
@@ -86,7 +86,7 @@ async def cost_forecast(
     clinic_id: Optional[uuid.UUID] = Query(None),
     months_ahead: int = Query(3, ge=1, le=12),
     current_user: User = Depends(require_manager),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     """Возвращает 12-мес. историю + прогноз на N месяцев."""
     # ── 0. Скоуп клиники ─────────────────────────────────────────────────

@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import get_current_user, require_manager
+from app.core.deps import get_current_user, require_manager, get_tenant_db
 from app.database import get_db
 from app.models.user import User
 
@@ -84,7 +84,7 @@ async def list_discounts(
     scope: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -102,7 +102,7 @@ async def list_discounts(
 async def create_discount(
     body: DiscountRuleIn,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -129,7 +129,7 @@ async def update_discount(
     rule_id: uuid.UUID,
     body: DiscountRulePatch,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
@@ -152,7 +152,7 @@ async def update_discount(
 async def delete_discount(
     rule_id: uuid.UUID,
     user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_tenant_db),
 ):
     if not user.tenant_id:
         raise HTTPException(403, "Нет привязки к тенанту")
