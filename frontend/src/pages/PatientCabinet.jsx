@@ -460,6 +460,7 @@ function LoginScreen({ onLogin, errorMsg }) {
   const [code, setCode] = useState('')
   const [phone, setPhone] = useState('+7')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   const [err, setErr] = useState(errorMsg || '')
   const [rememberMe, setRememberMe] = useState(() => {
     try { return localStorage.getItem('clinika_remember_me') !== '0' } catch { return true }
@@ -472,56 +473,114 @@ function LoginScreen({ onLogin, errorMsg }) {
     try {
       try { localStorage.setItem('clinika_remember_me', rememberMe ? '1' : '0') } catch {}
       const r = await axios.post(`${API}/patient/by-code`, { code: parseInt(code), phone })
-      onLogin(r.data.referral_id, r.data.patient_token, r.data.session_token, rememberMe)
-    } catch (e) { setErr(e.response?.data?.detail || 'Направление не найдено') }
-    finally { setLoading(false) }
+      setSuccess(true)
+      setTimeout(() => {
+        onLogin(r.data.referral_id, r.data.patient_token, r.data.session_token, rememberMe)
+      }, 900)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Направление не найдено')
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-5" style={{ background: 'linear-gradient(160deg,#0A2342 0%,#1565C0 60%,#0097A7 100%)' }}>
+    <div className="relative min-h-screen flex flex-col items-center justify-center px-5 overflow-hidden" style={{ background: 'linear-gradient(160deg,#0A1929 0%,#0F3460 40%,#0A4B6E 75%,#0F7185 100%)' }}>
       <style>{`
         @keyframes floatIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
-        .login-card { animation: floatIn .5s cubic-bezier(.22,1,.36,1) }
+        @keyframes blob1 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(40px,-30px) scale(1.1)} 66%{transform:translate(-20px,40px) scale(.95)} }
+        @keyframes blob2 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(-50px,30px) scale(1.05)} 66%{transform:translate(30px,-20px) scale(1.15)} }
+        @keyframes blob3 { 0%,100%{transform:translate(0,0) scale(1)} 33%{transform:translate(25px,40px) scale(1.08)} 66%{transform:translate(-35px,-30px) scale(.92)} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 40px rgba(0,151,167,.4),0 0 80px rgba(21,101,192,.25),0 20px 60px rgba(0,0,0,.3)} 50%{box-shadow:0 0 70px rgba(0,151,167,.7),0 0 120px rgba(21,101,192,.4),0 20px 60px rgba(0,0,0,.3)} }
+        @keyframes shimmer { 0%{background-position:-200% center} 100%{background-position:200% center} }
+        @keyframes orbit { from{transform:rotate(0) translateX(60px) rotate(0)} to{transform:rotate(360deg) translateX(60px) rotate(-360deg)} }
+        @keyframes twinkle { 0%,100%{opacity:.2;transform:scale(.8)} 50%{opacity:.9;transform:scale(1.1)} }
+        @keyframes successPop { 0%{opacity:0;transform:scale(.4) rotate(-30deg)} 60%{opacity:1;transform:scale(1.15) rotate(8deg)} 100%{opacity:1;transform:scale(1) rotate(0)} }
+        @keyframes checkmark { from{stroke-dashoffset:48} to{stroke-dashoffset:0} }
+        @keyframes ringExpand { 0%{transform:scale(.5);opacity:.8} 100%{transform:scale(2.4);opacity:0} }
+        .login-card { animation: floatIn .6s cubic-bezier(.22,1,.36,1) both }
+        .blob { position:absolute; border-radius:50%; filter:blur(60px); opacity:.5; mix-blend-mode:screen; pointer-events:none }
+        .star { position:absolute; width:3px; height:3px; background:rgba(255,255,255,.85); border-radius:50%; box-shadow:0 0 6px rgba(255,255,255,.6); animation: twinkle 3s ease-in-out infinite }
+        .logo-glow { animation: pulse-glow 3.5s ease-in-out infinite }
+        .input-row { transition: transform .25s, box-shadow .25s, border-color .25s }
+        .input-row:focus-within { transform: translateY(-1px); box-shadow: 0 0 0 2px rgba(0,200,220,.3), 0 8px 24px rgba(0,151,167,.25); border-color: rgba(0,200,220,.6) }
+        .btn-shimmer { background-size:200% auto; animation: shimmer 4s linear infinite }
+        .btn-shimmer:hover { transform: translateY(-1px); filter: brightness(1.08) }
+        .success-overlay { position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background: radial-gradient(ellipse at center, rgba(0,151,167,.5) 0%, rgba(10,35,66,.95) 70%); backdrop-filter: blur(12px); animation: floatIn .4s ease-out }
+        .success-circle { width:120px; height:120px; border-radius:50%; background: linear-gradient(135deg,#00C896,#0097A7); display:flex; align-items:center; justify-content:center; position:relative; animation: successPop .55s cubic-bezier(.22,1.5,.36,1) both; box-shadow:0 30px 80px rgba(0,200,150,.5) }
+        .success-ring { position:absolute; inset:-8px; border:3px solid rgba(0,200,150,.6); border-radius:50%; animation: ringExpand 1.2s ease-out infinite }
+        .check-path { stroke-dasharray:48; animation: checkmark .5s ease-out .25s both }
       `}</style>
-      {/* Logo */}
-      <div className="mb-10 text-center login-card">
-        <div className="w-24 h-24 rounded-3xl mx-auto mb-5 flex items-center justify-center" style={{ background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,.2)', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
-          <span className="material-symbols-outlined text-white text-5xl" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
+
+      {/* Animated mesh blobs */}
+      <div className="blob" style={{ width: 380, height: 380, background: '#00C8DC', top: '-100px', left: '-80px', animation: 'blob1 14s ease-in-out infinite' }} />
+      <div className="blob" style={{ width: 420, height: 420, background: '#1A5DC8', bottom: '-120px', right: '-100px', animation: 'blob2 16s ease-in-out infinite' }} />
+      <div className="blob" style={{ width: 300, height: 300, background: '#00E0A8', top: '40%', right: '-60px', animation: 'blob3 18s ease-in-out infinite', opacity: .35 }} />
+      <div className="blob" style={{ width: 280, height: 280, background: '#4F46E5', bottom: '25%', left: '-50px', animation: 'blob1 20s ease-in-out infinite reverse', opacity: .4 }} />
+
+      {/* Twinkling stars */}
+      {[
+        { top: '12%', left: '20%', delay: '0s' },
+        { top: '18%', left: '78%', delay: '.4s' },
+        { top: '30%', left: '8%', delay: '.8s' },
+        { top: '46%', left: '90%', delay: '1.2s' },
+        { top: '62%', left: '15%', delay: '1.6s' },
+        { top: '78%', left: '82%', delay: '2s' },
+        { top: '88%', left: '40%', delay: '2.4s' },
+        { top: '8%', left: '55%', delay: '2.8s' },
+      ].map((s, i) => (
+        <span key={i} className="star" style={{ top: s.top, left: s.left, animationDelay: s.delay }} />
+      ))}
+
+      {/* Success overlay */}
+      {success && (
+        <div className="success-overlay">
+          <div className="success-circle">
+            <div className="success-ring" />
+            <div className="success-ring" style={{ animationDelay: '.4s' }} />
+            <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+              <path className="check-path" d="M15 30 L26 41 L46 19" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
         </div>
-        <h1 className="text-4xl font-black text-white tracking-tight">Clinika</h1>
+      )}
+
+      {/* Logo */}
+      <div className="relative mb-10 text-center login-card">
+        <div className="w-24 h-24 rounded-3xl mx-auto mb-5 flex items-center justify-center logo-glow" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,.25)' }}>
+          <span className="material-symbols-outlined text-white text-5xl" style={{ fontVariationSettings:"'FILL' 1", filter: 'drop-shadow(0 4px 12px rgba(0,200,220,.6))' }}>medical_services</span>
+        </div>
+        <h1 className="text-4xl font-black text-white tracking-tight" style={{ textShadow: '0 4px 24px rgba(0,200,220,.4)' }}>Clinika</h1>
         <p className="text-blue-200 mt-2">Личный кабинет пациента</p>
       </div>
 
       {/* Card */}
-      <div className="w-full max-w-sm login-card" style={{ animationDelay: '.1s', background: 'rgba(255,255,255,.07)', backdropFilter: 'blur(24px)', borderRadius: 28, border: '1px solid rgba(255,255,255,.12)', padding: 28 }}>
+      <div className="relative w-full max-w-sm login-card" style={{ animationDelay: '.12s', background: 'linear-gradient(180deg, rgba(255,255,255,.1) 0%, rgba(255,255,255,.05) 100%)', backdropFilter: 'blur(28px)', borderRadius: 28, border: '1px solid rgba(255,255,255,.15)', padding: 28, boxShadow: '0 30px 80px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.15)' }}>
         <h2 className="text-xl font-bold text-white mb-1">Войти в кабинет</h2>
         <p className="text-blue-200 text-sm mb-6">Введите код из направления или записи к врачу и ваш телефон</p>
         <form onSubmit={submit} className="space-y-3">
-          <div className="relative">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 text-xl pointer-events-none">tag</span>
+          <div className="relative input-row login-card" style={{ animationDelay: '.2s', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 16 }}>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-cyan-300 text-xl pointer-events-none">tag</span>
             <input type="number" inputMode="numeric" placeholder="Код направления" value={code} onChange={e => setCode(e.target.value)}
-              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none focus:ring-2 focus:ring-white/30"
-              style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)' }} />
+              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none bg-transparent" />
           </div>
-          <div className="relative">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 text-xl pointer-events-none">phone</span>
+          <div className="relative input-row login-card" style={{ animationDelay: '.28s', background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.15)', borderRadius: 16 }}>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-cyan-300 text-xl pointer-events-none">phone</span>
             <input type="tel" placeholder="+7 900 000-00-00" value={phone} onChange={e => setPhone(e.target.value)}
-              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none focus:ring-2 focus:ring-white/30"
-              style={{ background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.15)' }} />
+              className="w-full h-14 pl-12 pr-4 rounded-2xl text-white placeholder-blue-300/60 text-base focus:outline-none bg-transparent" />
           </div>
-          {err && <div className="flex items-center gap-2 bg-red-500/20 text-red-200 rounded-xl px-3 py-2 text-sm"><span className="material-symbols-outlined text-base">error</span>{err}</div>}
-          <label className="flex items-center gap-2 text-blue-100 text-sm cursor-pointer select-none px-1 py-1">
+          {err && <div className="flex items-center gap-2 bg-red-500/20 text-red-200 rounded-xl px-3 py-2 text-sm login-card"><span className="material-symbols-outlined text-base">error</span>{err}</div>}
+          <label className="flex items-center gap-2 text-blue-100 text-sm cursor-pointer select-none px-1 py-1 login-card" style={{ animationDelay: '.36s' }}>
             <input
               type="checkbox"
               checked={rememberMe}
               onChange={e => setRememberMe(e.target.checked)}
-              style={{ width: 18, height: 18, accentColor: '#0097A7' }}
+              style={{ width: 18, height: 18, accentColor: '#00C896' }}
             />
             <span>Запомнить меня на этом устройстве</span>
           </label>
           <button type="submit" disabled={loading}
-            className="w-full h-14 rounded-2xl font-bold text-base text-white disabled:opacity-50 transition-all active:scale-[.98]"
-            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', boxShadow: '0 8px 32px rgba(0,151,167,.4)' }}>
+            className="w-full h-14 rounded-2xl font-bold text-base text-white disabled:opacity-60 transition-all active:scale-[.98] btn-shimmer login-card"
+            style={{ animationDelay: '.44s', backgroundImage: 'linear-gradient(90deg,#0097A7 0%,#00C896 25%,#1565C0 50%,#00C896 75%,#0097A7 100%)', boxShadow: '0 12px 40px rgba(0,200,150,.4), inset 0 1px 0 rgba(255,255,255,.25)' }}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -531,7 +590,7 @@ function LoginScreen({ onLogin, errorMsg }) {
           </button>
         </form>
       </div>
-      <p className="text-blue-300/60 text-xs mt-8">КлиникСеть — современная медицина</p>
+      <p className="text-blue-300/60 text-xs mt-8 relative">КлиникСеть — современная медицина</p>
     </div>
   )
 }
