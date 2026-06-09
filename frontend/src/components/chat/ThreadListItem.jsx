@@ -107,14 +107,29 @@ export default function ThreadListItem({ thread, active, onClick, side = 'patien
         display: 'flex',
         alignItems: 'flex-start',
         gap: 10,
-        padding: '12px 12px',
+        padding: '12px 12px 12px 14px',
         borderRadius: 14,
         background: active ? 'var(--accent-soft, rgba(0,151,167,.08))' : 'transparent',
         border: `1px solid ${active ? 'var(--accent-line, rgba(0,151,167,.25))' : 'transparent'}`,
-        borderLeft: labelHex ? `3px solid ${labelHex}` : (active ? '1px solid var(--accent-line, rgba(0,151,167,.25))' : '1px solid transparent'),
         minHeight: 64,
+        overflow: 'hidden',
       }}
     >
+      {/* Цветной индикатор-бар (color_label) — inset, не выходит за карточку */}
+      {labelHex && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 4,
+            top: 10,
+            bottom: 10,
+            width: 3,
+            borderRadius: 2,
+            background: labelHex,
+          }}
+        />
+      )}
       {/* Аватар клиники/пациента */}
       <div
         className="flex-shrink-0 grid place-items-center font-bold text-white"
