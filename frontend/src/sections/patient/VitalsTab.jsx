@@ -38,11 +38,11 @@ const ALL_ORDER = [
 // Простой SVG-sparkline без зависимостей.
 function Sparkline({ points, width = 280, height = 64, color = '#0097A7' }) {
   if (!points || points.length < 2) {
-    return <div className="text-xs text-gray-400 italic py-6 text-center">Недостаточно данных</div>
+    return <div className="text-xs text-gray-400 dark:text-gray-500 italic py-6 text-center">Недостаточно данных</div>
   }
   const values = points.map(p => p.v).filter(v => v != null && !isNaN(v))
   if (values.length < 2) {
-    return <div className="text-xs text-gray-400 italic py-6 text-center">Недостаточно данных</div>
+    return <div className="text-xs text-gray-400 dark:text-gray-500 italic py-6 text-center">Недостаточно данных</div>
   }
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -72,19 +72,19 @@ function KpiCard({ metricKey, data }) {
   const value = data?.value
   const delta = data?.delta_week
   const deltaSign = delta == null ? null : (delta > 0 ? '+' : '')
-  const deltaColor = delta == null ? 'text-gray-400'
+  const deltaColor = delta == null ? 'text-gray-400 dark:text-gray-500'
     : (delta > 0 ? 'text-rose-600' : 'text-emerald-600')
 
   return (
-    <div className="bg-white rounded-2xl p-3 shadow-sm border border-gray-100 flex flex-col gap-1 min-w-0">
-      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500">
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-800 flex flex-col gap-1 min-w-0">
+      <div className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-gray-500 dark:text-gray-400">
         <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
         <span className="truncate">{meta.label}</span>
       </div>
-      <div className="text-xl font-bold text-gray-900 leading-tight">
+      <div className="text-xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
         {value != null ? meta.fmt(value) : '—'}
       </div>
-      <div className="text-[11px] text-gray-400">{meta.unit}</div>
+      <div className="text-[11px] text-gray-400 dark:text-gray-500">{meta.unit}</div>
       {delta != null && (
         <div className={`text-[11px] font-medium ${deltaColor}`}>
           {deltaSign}{Number(delta).toFixed(1)} за неделю
@@ -116,19 +116,19 @@ function MetricChartCard({ metricKey, sessionToken }) {
   const last = points && points.length ? points[points.length - 1].v : null
 
   return (
-    <div className="snap-start shrink-0 w-64 bg-white rounded-2xl p-3 shadow-sm border border-gray-100">
+    <div className="snap-start shrink-0 w-64 bg-white dark:bg-gray-800 rounded-2xl p-3 shadow-sm border border-gray-100 dark:border-gray-800">
       <div className="flex items-center gap-1 mb-1">
         <span className="material-symbols-outlined text-base" style={{ color: '#0097A7' }}>{meta.icon}</span>
-        <span className="text-sm font-medium text-gray-700">{meta.label}</span>
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{meta.label}</span>
       </div>
-      <div className="text-lg font-semibold text-gray-900">
+      <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
         {last != null ? meta.fmt(last) : '—'}
-        <span className="text-xs text-gray-400 font-normal ml-1">{meta.unit}</span>
+        <span className="text-xs text-gray-400 dark:text-gray-500 font-normal ml-1">{meta.unit}</span>
       </div>
       {loading
-        ? <div className="text-xs text-gray-400 py-6 text-center">Загрузка…</div>
+        ? <div className="text-xs text-gray-400 dark:text-gray-500 py-6 text-center">Загрузка…</div>
         : <Sparkline points={points || []} />}
-      <div className="text-[10px] text-gray-400 text-right">за 30 дней</div>
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 text-right">за 30 дней</div>
     </div>
   )
 }
@@ -169,18 +169,18 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onClose}>
       <div
-        className="w-full bg-white rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto"
+        className="w-full bg-white dark:bg-gray-800 rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
         style={{ animation: 'slideUp 0.2s ease-out' }}
       >
         <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-3" />
-        <h3 className="text-lg font-semibold mb-3 text-gray-900">Добавить запись</h3>
+        <h3 className="text-lg font-semibold mb-3 text-gray-900 dark:text-gray-100">Добавить запись</h3>
 
-        <label className="block text-xs text-gray-500 mb-1">Показатель</label>
+        <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Показатель</label>
         <select
           value={metric}
           onChange={e => setMetric(e.target.value)}
-          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mb-3 text-sm bg-gray-50"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 mb-3 text-sm bg-gray-50 dark:bg-gray-700/30"
         >
           {ALL_ORDER.filter(k => k !== 'blood_pressure_dia').map(k => (
             <option key={k} value={k}>{METRICS[k].label}</option>
@@ -190,7 +190,7 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
         {isBp ? (
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Систолическое</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Систолическое</label>
               <input
                 type="number" inputMode="numeric"
                 value={value} onChange={e => setValue(e.target.value)}
@@ -199,7 +199,7 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">Диастолическое</label>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Диастолическое</label>
               <input
                 type="number" inputMode="numeric"
                 value={extraDia} onChange={e => setExtraDia(e.target.value)}
@@ -210,7 +210,7 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
           </div>
         ) : (
           <>
-            <label className="block text-xs text-gray-500 mb-1">Значение ({meta.unit})</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Значение ({meta.unit})</label>
             <input
               type="number" inputMode="decimal" step="0.1"
               value={value} onChange={e => setValue(e.target.value)}
@@ -230,7 +230,7 @@ function AddVitalSheet({ open, onClose, onSubmit }) {
         </button>
         <button
           onClick={onClose}
-          className="w-full py-3 mt-2 rounded-xl text-gray-600 font-medium text-sm"
+          className="w-full py-3 mt-2 rounded-xl text-gray-600 dark:text-gray-300 font-medium text-sm"
         >
           Отмена
         </button>
@@ -329,12 +329,12 @@ export default function VitalsTab({ token, sessionToken, phone }) {
 
       {/* Apple Health — только если модуль health_apple активен у тенанта */}
       {availableSources.includes('apple') && isIOS && (
-        <div className="bg-white rounded-2xl p-3 mb-4 shadow-sm border border-gray-100">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 mb-4 shadow-sm border border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-2 mb-2">
             <span className="material-symbols-outlined" style={{ color: '#FF3B30' }}>favorite</span>
-            <span className="text-sm font-semibold text-gray-800">Apple Health</span>
+            <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">Apple Health</span>
           </div>
-          <p className="text-xs text-gray-500 mb-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
             Синхронизируйте показатели с iPhone и Apple Watch.
           </p>
           <button
@@ -345,13 +345,13 @@ export default function VitalsTab({ token, sessionToken, phone }) {
             Синхронизировать с Apple Health
           </button>
           {syncStatus && (
-            <div className="text-xs text-gray-500 mt-2 text-center">{syncStatus}</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">{syncStatus}</div>
           )}
         </div>
       )}
 
       {/* Charts row — горизонтальный скролл */}
-      <h3 className="text-sm font-semibold text-gray-700 mb-2 px-1">Графики</h3>
+      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2 px-1">Графики</h3>
       <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory -mx-3 px-3 pb-2 mb-4"
            style={{ scrollbarWidth: 'none' }}>
         {ALL_ORDER.map(k => (
@@ -370,13 +370,13 @@ export default function VitalsTab({ token, sessionToken, phone }) {
       </button>
 
       {loading && (
-        <div className="text-xs text-gray-400 text-center py-4">Загрузка показателей…</div>
+        <div className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">Загрузка показателей…</div>
       )}
       {!loading && Object.keys(summary).length === 0 && (
         <div className="text-center py-8">
-          <span className="material-symbols-outlined text-5xl text-gray-300">monitor_heart</span>
-          <p className="text-sm text-gray-500 mt-2">Пока нет записей</p>
-          <p className="text-xs text-gray-400 mt-1">Добавьте показатели вручную или через Apple Health</p>
+          <span className="material-symbols-outlined text-5xl text-gray-300 dark:text-gray-500">monitor_heart</span>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Пока нет записей</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Добавьте показатели вручную или через Apple Health</p>
         </div>
       )}
 

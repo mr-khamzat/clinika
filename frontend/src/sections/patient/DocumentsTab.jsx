@@ -34,7 +34,7 @@ function formatSize(bytes) {
 function DocCard({ doc, onDownload, downloading }) {
   const meta = DOC_TYPE[doc.doc_type] || DOC_TYPE.other
   return (
-    <div className="bg-white rounded-3xl p-4"
+    <div className="bg-white dark:bg-gray-800 rounded-3xl p-4"
          style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
@@ -46,11 +46,11 @@ function DocCard({ doc, onDownload, downloading }) {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
                   style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
           </div>
-          <p className="font-semibold text-gray-800 text-sm mt-1 break-words">{doc.filename}</p>
+          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm mt-1 break-words">{doc.filename}</p>
           {doc.description && (
-            <p className="text-xs text-gray-600 mt-1 break-words">{doc.description}</p>
+            <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 break-words">{doc.description}</p>
           )}
-          <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 flex-wrap">
+          <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
             {doc.issued_at && <span>{formatDate(doc.issued_at)}</span>}
             {doc.size_bytes ? <span>· {formatSize(doc.size_bytes)}</span> : null}
           </div>
@@ -131,7 +131,7 @@ export default function DocumentsTab({ sessionToken, apiBase = '/api' }) {
     return (
       <div className="space-y-3">
         {[0,1].map(i => (
-          <div key={i} className="bg-white rounded-3xl p-5 animate-pulse"
+          <div key={i} className="bg-white dark:bg-gray-800 rounded-3xl p-5 animate-pulse"
                style={{ border: '1px solid rgba(0,0,0,.06)' }}>
             <div className="h-5 bg-gray-100 rounded w-3/4 mb-2" />
             <div className="h-3 bg-gray-100 rounded w-1/2" />
@@ -143,7 +143,7 @@ export default function DocumentsTab({ sessionToken, apiBase = '/api' }) {
 
   if (error) {
     return (
-      <div className="bg-white rounded-3xl p-5 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)' }}>
         <p className="text-sm text-red-500">{error}</p>
         <button onClick={load} className="text-xs text-blue-500 mt-2">Повторить</button>
@@ -153,14 +153,14 @@ export default function DocumentsTab({ sessionToken, apiBase = '/api' }) {
 
   if (docs.length === 0) {
     return (
-      <div className="bg-white rounded-3xl p-8 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
         <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
              style={{ background: 'linear-gradient(135deg,#FEF3C7,#FDE68A)' }}>
           <span className="material-symbols-outlined text-amber-500 text-3xl">folder_open</span>
         </div>
-        <p className="text-gray-700 font-bold">Документов пока нет</p>
-        <p className="text-gray-400 text-sm mt-1">Когда клиника выпишет вам справку или выписку — она появится здесь</p>
+        <p className="text-gray-700 dark:text-gray-200 font-bold">Документов пока нет</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Когда клиника выпишет вам справку или выписку — она появится здесь</p>
       </div>
     )
   }

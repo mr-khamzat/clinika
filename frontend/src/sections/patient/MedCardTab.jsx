@@ -35,11 +35,11 @@ function formatDate(iso) {
 function Section({ icon, title, count, color, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="bg-white rounded-3xl overflow-hidden"
+    <div className="bg-white dark:bg-gray-800 rounded-3xl overflow-hidden"
          style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
       <button
         onClick={() => setOpen(!open)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-3 active:bg-gray-50"
+        className="w-full px-5 py-4 flex items-center justify-between gap-3 active:bg-gray-50 dark:bg-gray-700/30"
         type="button"
       >
         <div className="flex items-center gap-3">
@@ -48,11 +48,11 @@ function Section({ icon, title, count, color, children, defaultOpen = true }) {
             <span className="material-symbols-outlined text-xl" style={{ color }}>{icon}</span>
           </div>
           <div className="text-left">
-            <h2 className="font-bold text-gray-800 text-sm">{title}</h2>
-            <p className="text-xs text-gray-400">{count > 0 ? `${count} запис${count === 1 ? 'ь' : count < 5 ? 'и' : 'ей'}` : 'нет данных'}</p>
+            <h2 className="font-bold text-gray-800 dark:text-gray-100 text-sm">{title}</h2>
+            <p className="text-xs text-gray-400 dark:text-gray-500">{count > 0 ? `${count} запис${count === 1 ? 'ь' : count < 5 ? 'и' : 'ей'}` : 'нет данных'}</p>
           </div>
         </div>
-        <span className="material-symbols-outlined text-gray-400 text-xl">
+        <span className="material-symbols-outlined text-gray-400 dark:text-gray-500 text-xl">
           {open ? 'expand_less' : 'expand_more'}
         </span>
       </button>
@@ -63,7 +63,7 @@ function Section({ icon, title, count, color, children, defaultOpen = true }) {
 
 function DiagnosisCard({ d }) {
   return (
-    <div className="bg-gray-50 rounded-2xl p-4 mb-2 last:mb-0">
+    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-4 mb-2 last:mb-0">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -76,9 +76,9 @@ function DiagnosisCard({ d }) {
                     style={{ background: '#FEF3C7', color: '#92400E' }}>хронический</span>
             )}
           </div>
-          <p className="font-semibold text-gray-800 text-sm mt-1 break-words">{d.name}</p>
-          {d.notes && <p className="text-xs text-gray-600 mt-1 break-words">{d.notes}</p>}
-          <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-500 flex-wrap">
+          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm mt-1 break-words">{d.name}</p>
+          {d.notes && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 break-words">{d.notes}</p>}
+          <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
             {d.diagnosed_at && <span>{formatDate(d.diagnosed_at)}</span>}
             {d.doctor_name && <span>· {d.doctor_name}</span>}
           </div>
@@ -91,16 +91,16 @@ function DiagnosisCard({ d }) {
 function AllergyCard({ a }) {
   const sev = SEVERITY_LABEL[a.severity] || SEVERITY_LABEL.mild
   return (
-    <div className="bg-gray-50 rounded-2xl p-4 mb-2 last:mb-0">
+    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-4 mb-2 last:mb-0">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-gray-800 text-sm break-words">{a.allergen}</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm break-words">{a.allergen}</p>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
                   style={{ background: sev.bg, color: sev.color }}>{sev.label}</span>
           </div>
-          {a.reaction && <p className="text-xs text-gray-600 mt-1 break-words">{a.reaction}</p>}
-          {a.noted_at && <p className="text-[11px] text-gray-500 mt-1">{formatDate(a.noted_at)}</p>}
+          {a.reaction && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 break-words">{a.reaction}</p>}
+          {a.noted_at && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{formatDate(a.noted_at)}</p>}
         </div>
       </div>
     </div>
@@ -109,21 +109,21 @@ function AllergyCard({ a }) {
 
 function VaccinationCard({ v }) {
   return (
-    <div className="bg-gray-50 rounded-2xl p-4 mb-2 last:mb-0">
+    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-2xl p-4 mb-2 last:mb-0">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-semibold text-gray-800 text-sm break-words">{v.vaccine_name}</p>
+          <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm break-words">{v.vaccine_name}</p>
           {v.dose_number && (
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
                   style={{ background: '#E0F2FE', color: '#0369A1' }}>доза {v.dose_number}</span>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 flex-wrap">
+        <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
           {v.given_at && <span><span className="material-symbols-outlined text-[12px] align-middle">event</span> {formatDate(v.given_at)}</span>}
           {v.expires_at && <span>· действует до {formatDate(v.expires_at)}</span>}
           {v.batch_number && <span>· серия {v.batch_number}</span>}
         </div>
-        {v.doctor_name && <p className="text-[11px] text-gray-500 mt-1">{v.doctor_name}</p>}
+        {v.doctor_name && <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">{v.doctor_name}</p>}
       </div>
     </div>
   )
@@ -132,8 +132,8 @@ function VaccinationCard({ v }) {
 function EmptyState({ icon, text }) {
   return (
     <div className="text-center py-6">
-      <span className="material-symbols-outlined text-3xl text-gray-300">{icon}</span>
-      <p className="text-xs text-gray-400 mt-2">{text}</p>
+      <span className="material-symbols-outlined text-3xl text-gray-300 dark:text-gray-500">{icon}</span>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{text}</p>
     </div>
   )
 }
@@ -149,7 +149,7 @@ function TimelineItem({ it }) {
   const c = colors[it.type] || { bg: '#F3F4F6', fg: '#6B7280' }
   const dateStr = it.date ? formatDate(it.date) : '—'
   return (
-    <div className="bg-white rounded-2xl p-3 flex items-start gap-3"
+    <div className="bg-white dark:bg-gray-800 rounded-2xl p-3 flex items-start gap-3"
          style={{ border: '1px solid rgba(0,0,0,.06)' }}>
       <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
            style={{ background: c.bg }}>
@@ -161,12 +161,12 @@ function TimelineItem({ it }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded"
                 style={{ background: c.bg, color: c.fg }}>{it.category}</span>
-          <span className="text-[11px] text-gray-400">{dateStr}</span>
+          <span className="text-[11px] text-gray-400 dark:text-gray-500">{dateStr}</span>
         </div>
-        <div className="text-[14px] font-semibold text-gray-800 mt-1 truncate">{it.title || '—'}</div>
-        {it.subtitle && <div className="text-[12px] text-gray-500 mt-0.5 line-clamp-2">{it.subtitle}</div>}
+        <div className="text-[14px] font-semibold text-gray-800 dark:text-gray-100 mt-1 truncate">{it.title || '—'}</div>
+        {it.subtitle && <div className="text-[12px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">{it.subtitle}</div>}
         {it.price > 0 && (
-          <div className="text-[11px] text-gray-400 mt-1">
+          <div className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">
             {it.price.toLocaleString('ru')} ₽{it.payment_method ? ` · ${it.payment_method}` : ''}
           </div>
         )}
@@ -215,7 +215,7 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
     return (
       <div className="space-y-3">
         {[0,1,2].map(i => (
-          <div key={i} className="bg-white rounded-3xl p-5 animate-pulse"
+          <div key={i} className="bg-white dark:bg-gray-800 rounded-3xl p-5 animate-pulse"
                style={{ border: '1px solid rgba(0,0,0,.06)' }}>
             <div className="h-5 bg-gray-100 rounded w-1/2 mb-2" />
             <div className="h-3 bg-gray-100 rounded w-3/4" />
@@ -227,7 +227,7 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
 
   if (error) {
     return (
-      <div className="bg-white rounded-3xl p-5 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)' }}>
         <p className="text-sm text-red-500">{error}</p>
         <button onClick={load} className="text-xs text-blue-500 mt-2">Повторить</button>
@@ -238,14 +238,14 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
   const total = diagnoses.length + allergies.length + vaccinations.length + timeline.length
   if (total === 0) {
     return (
-      <div className="bg-white rounded-3xl p-8 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
         <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
              style={{ background: 'linear-gradient(135deg,#E0F2FE,#BAE6FD)' }}>
           <span className="material-symbols-outlined text-blue-400 text-3xl">medical_information</span>
         </div>
-        <p className="text-gray-700 font-bold">Медкарта пуста</p>
-        <p className="text-gray-400 text-sm mt-1">Здесь появятся ваши диагнозы, аллергии и прививки</p>
+        <p className="text-gray-700 dark:text-gray-200 font-bold">Медкарта пуста</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">Здесь появятся ваши диагнозы, аллергии и прививки</p>
       </div>
     )
   }
@@ -260,7 +260,7 @@ export default function MedCardTab({ sessionToken, apiBase = '/api' }) {
               <TimelineItem key={`${it.type}-${i}`} it={it} />
             ))}
             {timeline.length > 50 && (
-              <div className="text-center text-[12px] text-gray-400 py-2">
+              <div className="text-center text-[12px] text-gray-400 dark:text-gray-500 py-2">
                 Показано 50 из {timeline.length}
               </div>
             )}

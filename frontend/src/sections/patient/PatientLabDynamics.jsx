@@ -43,7 +43,7 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
 
   if (loading) {
     return (
-      <div className="p-6 text-center text-gray-400 text-sm">
+      <div className="p-6 text-center text-gray-400 dark:text-gray-500 text-sm">
         <div className="inline-block animate-pulse">Загрузка динамики анализов…</div>
       </div>
     )
@@ -53,7 +53,7 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
     return (
       <div className="p-6 text-center">
         <div className="text-4xl mb-2">⚠️</div>
-        <div className="text-gray-600 text-sm">{error}</div>
+        <div className="text-gray-600 dark:text-gray-300 text-sm">{error}</div>
       </div>
     )
   }
@@ -64,8 +64,8 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
     return (
       <div className="p-6 text-center">
         <div className="text-5xl mb-3">📊</div>
-        <div className="text-gray-700 text-sm font-semibold">Пока нет данных анализов</div>
-        <div className="text-gray-400 text-xs mt-1">
+        <div className="text-gray-700 dark:text-gray-200 text-sm font-semibold">Пока нет данных анализов</div>
+        <div className="text-gray-400 dark:text-gray-500 text-xs mt-1">
           После первого анализа здесь появится динамика ваших показателей
         </div>
       </div>
@@ -76,7 +76,7 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
     <div className="space-y-3 p-2">
       {/* Заголовок и селектор периода */}
       <div className="px-2">
-        <div className="text-xs text-gray-500 mb-2">
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
           Изменение показателей за выбранный период. Зелёная зона на графике — диапазон нормы.
         </div>
         <div className="flex gap-2">
@@ -107,7 +107,7 @@ export default function PatientLabDynamics({ apiBase, sessionToken }) {
         />
       ))}
 
-      <div className="text-[10px] text-gray-400 text-center pt-2 px-4">
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 text-center pt-2 px-4">
         Данные импортируются автоматически из МИС после каждого анализа.
         Норма-диапазоны — референсные значения для взрослых.
       </div>
@@ -136,12 +136,12 @@ function AnalyteCard({ a, isExpanded, onToggle }) {
       <button
         type="button"
         onClick={onToggle}
-        className="w-full px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50"
+        className="w-full px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50 dark:bg-gray-700/30"
       >
         <div className="text-2xl flex-shrink-0" aria-hidden>{a.icon}</div>
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-sm truncate">{a.name}</div>
-          <div className="text-[11px] text-gray-500 mt-0.5">
+          <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
             {a.count} {a.count === 1 ? 'измерение' : a.count < 5 ? 'измерения' : 'измерений'}
             {a.last_date && ` · ${new Date(a.last_date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })}`}
           </div>
@@ -149,7 +149,7 @@ function AnalyteCard({ a, isExpanded, onToggle }) {
         <div className="text-right flex-shrink-0">
           <div className="font-bold text-lg leading-tight" style={{ color: statusColor }}>
             {a.last_value}
-            <span className="text-[11px] text-gray-500 font-normal ml-1">{a.unit}</span>
+            <span className="text-[11px] text-gray-500 dark:text-gray-400 font-normal ml-1">{a.unit}</span>
           </div>
           <div className="flex items-center gap-1.5 justify-end mt-0.5">
             <span
@@ -169,7 +169,7 @@ function AnalyteCard({ a, isExpanded, onToggle }) {
           </div>
         </div>
         <span
-          className="material-symbols-outlined text-gray-400 ml-1 transition-transform"
+          className="material-symbols-outlined text-gray-400 dark:text-gray-500 ml-1 transition-transform"
           style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', fontSize: 20 }}
           aria-hidden
         >
@@ -181,7 +181,7 @@ function AnalyteCard({ a, isExpanded, onToggle }) {
         <div className="px-3 pb-3 pt-1 border-t" style={{ borderColor: '#f1f5f9' }}>
           <SvgLineChart analyte={a} statusColor={statusColor} hasNorm={hasNorm} />
           {hasNorm && (
-            <div className="text-[11px] text-gray-500 text-center mt-1">
+            <div className="text-[11px] text-gray-500 dark:text-gray-400 text-center mt-1">
               Норма:{' '}
               <span className="font-semibold text-green-700">
                 {a.norm_min} – {a.norm_max} {a.unit}

@@ -123,7 +123,7 @@ export default function PatientChatHub({ sessionToken, patientPhone, tenantSlug,
           />
         )}
         {segment === 'clinic' && (
-          <Suspense fallback={<div className="text-center py-12 text-gray-400 text-sm">Загрузка…</div>}>
+          <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 text-sm">Загрузка…</div>}>
             <ClinicSegmentWrap onGoSubscription={onGoSubscription} onSwitchToSupport={() => setSegment('support')} />
           </Suspense>
         )}
@@ -337,8 +337,8 @@ function SupportSegment({ sessionToken, patientPhone, onSwitchToClinic, pendingI
           <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: '#FEF3C7' }}>
             <span className="material-symbols-outlined text-2xl" style={{ color: '#92400E', fontVariationSettings: "'FILL' 1" }}>hourglass_empty</span>
           </div>
-          <p className="font-bold text-gray-800 text-sm mb-1">Чат поддержки скоро откроется</p>
-          <p className="text-[12px] text-gray-500 leading-relaxed mb-3">
+          <p className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">Чат поддержки скоро откроется</p>
+          <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed mb-3">
             Пока напишите нам на почту, мы ответим в течение суток
           </p>
           <a
@@ -360,7 +360,7 @@ function SupportSegment({ sessionToken, patientPhone, onSwitchToClinic, pendingI
           >
             {messages.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-[13px] text-gray-500">Задайте вопрос — наша команда поможет.</p>
+                <p className="text-[13px] text-gray-500 dark:text-gray-400">Задайте вопрос — наша команда поможет.</p>
               </div>
             ) : (
               messages.map(m => (
@@ -575,8 +575,8 @@ function AiSegment({ apiBase, patientPhone, tenantSlug, sessionToken }) {
         <div className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg,#E0E7FF,#F3E8FF)' }}>
           <span className="material-symbols-outlined text-2xl" style={{ color: '#7C3AED', fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
         </div>
-        <p className="font-bold text-gray-800 text-sm mb-1">AI-ассистент недоступен</p>
-        <p className="text-[12px] text-gray-500 leading-relaxed">
+        <p className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">AI-ассистент недоступен</p>
+        <p className="text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed">
           Подключите модуль «AI-ассистент» в магазине модулей клиники
         </p>
       </div>
@@ -584,7 +584,7 @@ function AiSegment({ apiBase, patientPhone, tenantSlug, sessionToken }) {
   }
 
   if (state === 'loading' || state === 'idle') {
-    return <div className="text-center py-12 text-gray-400 text-sm">Подключаем AI…</div>
+    return <div className="text-center py-12 text-gray-400 dark:text-gray-500 text-sm">Подключаем AI…</div>
   }
 
   if (state === 'error') {
@@ -615,7 +615,7 @@ function AiSegment({ apiBase, patientPhone, tenantSlug, sessionToken }) {
       >
         {messages.length === 0 ? (
           <div className="text-center py-6">
-            <p className="text-[13px] text-gray-500">Спросите что-нибудь — например, «Что делать при температуре 38?»</p>
+            <p className="text-[13px] text-gray-500 dark:text-gray-400">Спросите что-нибудь — например, «Что делать при температуре 38?»</p>
           </div>
         ) : (
           messages.map(m => <SupportBubble key={m.id} message={{ ...m, role: m.role === 'assistant' ? 'support' : m.role }} />)

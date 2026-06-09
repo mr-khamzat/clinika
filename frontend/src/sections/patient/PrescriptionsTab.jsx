@@ -18,7 +18,7 @@ function formatDate(iso) {
 function PrescriptionCard({ p }) {
   const isLive = p.source === 'mis'
   return (
-    <div className="bg-white rounded-3xl p-4"
+    <div className="bg-white dark:bg-gray-800 rounded-3xl p-4"
          style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
@@ -27,31 +27,31 @@ function PrescriptionCard({ p }) {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-semibold text-gray-800 text-sm break-words">{p.drug_name || '—'}</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100 text-sm break-words">{p.drug_name || '—'}</p>
             {!isLive && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
                     style={{ background: '#FEF3C7', color: '#92400E' }}>из кэша</span>
             )}
           </div>
           {p.dosage && (
-            <p className="text-xs text-gray-700 mt-1">
-              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400">scale</span>
+            <p className="text-xs text-gray-700 dark:text-gray-200 mt-1">
+              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400 dark:text-gray-500">scale</span>
               {' '}Дозировка: <span className="font-medium">{p.dosage}</span>
             </p>
           )}
           {p.frequency && (
-            <p className="text-xs text-gray-700 mt-1">
-              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400">schedule</span>
+            <p className="text-xs text-gray-700 dark:text-gray-200 mt-1">
+              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400 dark:text-gray-500">schedule</span>
               {' '}Частота: <span className="font-medium">{p.frequency}</span>
             </p>
           )}
           {p.duration && (
-            <p className="text-xs text-gray-700 mt-1">
-              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400">timer</span>
+            <p className="text-xs text-gray-700 dark:text-gray-200 mt-1">
+              <span className="material-symbols-outlined text-[12px] align-middle text-gray-400 dark:text-gray-500">timer</span>
               {' '}Длительность: <span className="font-medium">{p.duration}</span>
             </p>
           )}
-          <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 flex-wrap">
+          <div className="flex items-center gap-2 mt-2 text-[11px] text-gray-500 dark:text-gray-400 flex-wrap">
             {p.prescribed_at && <span>{formatDate(p.prescribed_at)}</span>}
             {p.doctor_name && <span>· {p.doctor_name}</span>}
           </div>
@@ -89,7 +89,7 @@ export default function PrescriptionsTab({ sessionToken, apiBase = '/api' }) {
     return (
       <div className="space-y-3">
         {[0,1].map(i => (
-          <div key={i} className="bg-white rounded-3xl p-5 animate-pulse"
+          <div key={i} className="bg-white dark:bg-gray-800 rounded-3xl p-5 animate-pulse"
                style={{ border: '1px solid rgba(0,0,0,.06)' }}>
             <div className="h-5 bg-gray-100 rounded w-3/4 mb-2" />
             <div className="h-3 bg-gray-100 rounded w-1/2" />
@@ -101,7 +101,7 @@ export default function PrescriptionsTab({ sessionToken, apiBase = '/api' }) {
 
   if (error) {
     return (
-      <div className="bg-white rounded-3xl p-5 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-5 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)' }}>
         <p className="text-sm text-red-500">{error}</p>
         <button onClick={load} className="text-xs text-blue-500 mt-2">Повторить</button>
@@ -111,14 +111,14 @@ export default function PrescriptionsTab({ sessionToken, apiBase = '/api' }) {
 
   if (items.length === 0) {
     return (
-      <div className="bg-white rounded-3xl p-8 text-center"
+      <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 text-center"
            style={{ border: '1px solid rgba(0,0,0,.06)', boxShadow: '0 2px 12px rgba(0,0,0,.04)' }}>
         <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
              style={{ background: 'linear-gradient(135deg,#E0F7FA,#B2EBF2)' }}>
           <span className="material-symbols-outlined text-cyan-600 text-3xl">medication</span>
         </div>
-        <p className="text-gray-700 font-bold">Назначений пока нет</p>
-        <p className="text-gray-400 text-sm mt-1">
+        <p className="text-gray-700 dark:text-gray-200 font-bold">Назначений пока нет</p>
+        <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
           {misAvailable
             ? 'Здесь появятся лекарства, выписанные врачом'
             : 'МИС недоступна — назначения появятся, когда связь восстановится'}

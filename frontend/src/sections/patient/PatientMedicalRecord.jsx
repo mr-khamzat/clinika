@@ -32,7 +32,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
 
   if (loading) {
     return (
-      <div className="p-8 text-center text-gray-400 text-sm">
+      <div className="p-8 text-center text-gray-400 dark:text-gray-500 text-sm">
         <div className="inline-block w-10 h-10 rounded-full border-4 border-cyan-200 border-t-cyan-600 animate-spin mb-3" />
         <div>Загрузка медкарты…</div>
       </div>
@@ -98,7 +98,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
         style={{ background: 'linear-gradient(135deg,#0A2342 0%,#0097A7 100%)' }}
       >
         <div className="flex items-start gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur grid place-items-center text-2xl font-bold border border-white/30 flex-shrink-0">
+          <div className="w-16 h-16 rounded-2xl bg-white dark:bg-gray-800/20 backdrop-blur grid place-items-center text-2xl font-bold border border-white/30 flex-shrink-0">
             {initials}
           </div>
           <div className="flex-1 min-w-0">
@@ -134,7 +134,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
           <button
             type="button"
             onClick={onDownloadPdf}
-            className="px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-white/30 text-xs font-semibold backdrop-blur transition flex-shrink-0"
+            className="px-3 py-2 rounded-xl bg-white dark:bg-gray-800/15 hover:bg-white dark:bg-gray-800/25 border border-white/30 text-xs font-semibold backdrop-blur transition flex-shrink-0"
             title="Скачать PDF медкарты"
           >
             ⬇ PDF
@@ -222,7 +222,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
                   </div>
                 )}
                 {(p.doctor || p.prescribed_at) && (
-                  <div className="text-[11px] text-gray-500 mt-1">
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
                     {p.doctor}
                     {p.doctor && p.prescribed_at && ' · '}
                     {p.prescribed_at && fmtDate(p.prescribed_at)}
@@ -250,13 +250,13 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
                     <span className="text-xl flex-shrink-0">{l.icon || '🧪'}</span>
                     <div className="min-w-0">
                       <div className="font-semibold text-sm truncate">{l.name}</div>
-                      <div className="text-xs text-gray-500">{fmtDate(l.date)}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{fmtDate(l.date)}</div>
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0 ml-2">
                     <div className="font-bold" style={{ color: c }}>
                       {l.value}
-                      {l.unit && <span className="text-xs text-gray-500 ml-1">{l.unit}</span>}
+                      {l.unit && <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">{l.unit}</span>}
                     </div>
                   </div>
                 </div>
@@ -279,7 +279,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
                 <span className="text-2xl flex-shrink-0">📄</span>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-sm truncate">{d.title}</div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
                     {d.doctor && <>{d.doctor} · </>}
                     {fmtDate(d.date)}
                   </div>
@@ -327,10 +327,10 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
                 <div className="min-w-0">
                   <div className="truncate">{v.name}</div>
                   {v.lot && (
-                    <div className="text-[11px] text-gray-500 font-mono">партия {v.lot}</div>
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400 font-mono">партия {v.lot}</div>
                   )}
                 </div>
-                <span className="text-gray-500 text-xs flex-shrink-0 ml-2">
+                <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0 ml-2">
                   {fmtDate(v.date)}
                 </span>
               </div>
@@ -347,7 +347,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
             {visits.slice(0, 20).map((v, i) => (
               <div key={i} className="relative mb-4 last:mb-0">
                 <div className="absolute -left-[18px] top-1.5 w-3 h-3 rounded-full bg-cyan-500 border-2 border-white dark:border-gray-800 shadow" />
-                <div className="text-xs text-gray-500 flex items-center gap-2 flex-wrap">
+                <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-2 flex-wrap">
                   <span>{fmtDate(v.date)}{v.time && ` · ${v.time}`}</span>
                   {v.source === 'mis' && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
@@ -371,7 +371,7 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
                   {v.clinic && <> · {v.clinic}</>}
                 </div>
                 {v.notes && (
-                  <div className="text-xs text-gray-500 mt-1 italic">«{v.notes}»</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">«{v.notes}»</div>
                 )}
               </div>
             ))}
@@ -386,12 +386,12 @@ export default function PatientMedicalRecord({ apiBase, sessionToken }) {
         recent_labs.length === 0 &&
         documents.length === 0 &&
         referrals.length === 0 && (
-        <div className="p-8 text-center text-gray-400 text-sm rounded-2xl border border-dashed dark:border-gray-700">
+        <div className="p-8 text-center text-gray-400 dark:text-gray-500 text-sm rounded-2xl border border-dashed dark:border-gray-700">
           В медкарте пока пусто. Данные появятся после первого визита или синхронизации с МИС.
         </div>
       )}
 
-      <div className="text-[10px] text-gray-400 text-center pt-2">
+      <div className="text-[10px] text-gray-400 dark:text-gray-500 text-center pt-2">
         Данные собраны из МИС, наших приёмов и лаб-результатов.
         Обновлено: {data.generated_at ? new Date(data.generated_at).toLocaleString('ru-RU') : '—'}
       </div>
@@ -413,7 +413,7 @@ function Stat({ label, value, icon }) {
     <div className="rounded-xl bg-white dark:bg-gray-800 border dark:border-gray-700 p-3 text-center shadow-sm">
       <div className="text-xl">{icon}</div>
       <div className="text-base font-bold mt-1">{value}</div>
-      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
     </div>
   )
 }

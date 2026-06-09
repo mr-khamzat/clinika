@@ -172,7 +172,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
       {/* Панель чата */}
       {open && (
         <div
-          className="fixed z-50 flex flex-col bg-white shadow-2xl"
+          className="fixed z-50 flex flex-col bg-white dark:bg-gray-800 shadow-2xl"
           style={{
             right: 18, bottom: 92,
             width: 'min(calc(100vw - 36px), 340px)',
@@ -202,13 +202,13 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
           {/* Сообщения */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2" style={{ background: '#F8FAFC' }}>
             {state === 'loading' && (
-              <div className="text-xs text-gray-500">Загрузка…</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Загрузка…</div>
             )}
             {state === 'error' && (
               <div className="text-xs text-red-600">Ошибка соединения. Попробуйте позже.</div>
             )}
             {state === 'ready' && messages.length === 0 && (
-              <div className="text-xs text-gray-500 leading-relaxed">
+              <div className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                 Здравствуйте! Я помогу с вопросами о клинике: часы работы, как
                 записаться, какие документы нужны. По симптомам дам общие
                 рекомендации (не диагноз!). Сложный вопрос — переключу на менеджера.
@@ -237,7 +237,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
           </div>
 
           {/* Footer с input */}
-          <div className="border-t border-gray-100 p-2 flex items-center gap-2 bg-white">
+          <div className="border-t border-gray-100 dark:border-gray-800 p-2 flex items-center gap-2 bg-white dark:bg-gray-800">
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -262,7 +262,7 @@ export default function PatientAiWidget({ apiBase, patientPhone, tenantSlug }) {
           {convStatus !== 'escalated' && state === 'ready' && (
             <button
               onClick={escalate}
-              className="w-full text-[11px] py-1.5 text-gray-500 hover:text-gray-700 border-t border-gray-50"
+              className="w-full text-[11px] py-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 border-t border-gray-50 dark:border-gray-800"
             >
               Передать вопрос менеджеру
             </button>

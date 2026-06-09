@@ -101,7 +101,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
     }
   }
 
-  if (loading) return <div className="text-center py-12 text-sm text-gray-400">Загрузка…</div>
+  if (loading) return <div className="text-center py-12 text-sm text-gray-400 dark:text-gray-500">Загрузка…</div>
 
   return (
     <div className="space-y-4">
@@ -109,7 +109,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
       {/* Шапка */}
       <div className="flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm text-gray-500">Всего: {appts.length}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Всего: {appts.length}</div>
           {upcoming.length > 0 && (
             <div className="text-xs text-emerald-600 font-semibold">
               {upcoming.length} {upcoming.length === 1 ? 'предстоящая' : 'предстоящих'}
@@ -132,7 +132,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
       {/* Предстоящие */}
       {upcoming.length > 0 && (
         <div>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1">Предстоящие</div>
+          <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 px-1">Предстоящие</div>
           <div className="space-y-2.5">
             {upcoming.map(a => (
               <ApptCard key={a.id} apt={a} onPick={() => setActive(a)} highlight />
@@ -144,7 +144,7 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
       {/* История */}
       {past.length > 0 && (
         <div>
-          <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 px-1 mt-4">История</div>
+          <div className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 px-1 mt-4">История</div>
           <div className="space-y-2">
             {past.map(a => (
               <ApptCard key={a.id} apt={a} onPick={() => setActive(a)} compact />
@@ -154,9 +154,9 @@ export default function AppointmentsTab({ sessionToken, onBookNew }) {
       )}
 
       {appts.length === 0 && (
-        <div className="bg-white rounded-2xl p-10 text-center border border-gray-100">
-          <span className="material-symbols-outlined text-5xl text-gray-300 mb-2">event_available</span>
-          <p className="text-sm text-gray-400">Записей пока нет</p>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-10 text-center border border-gray-100 dark:border-gray-800">
+          <span className="material-symbols-outlined text-5xl text-gray-300 dark:text-gray-500 mb-2">event_available</span>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Записей пока нет</p>
           {onBookNew && (
             <button onClick={onBookNew} className="mt-3 px-4 py-2 rounded-xl bg-cyan-600 text-white text-sm font-bold">
               Записаться к врачу
@@ -190,7 +190,7 @@ function ApptCard({ apt, onPick, highlight, compact }) {
   const tu = timeUntil(apt.appointment_date, apt.start_time)
   return (
     <button onClick={onPick}
-      className="w-full bg-white rounded-2xl p-4 border border-gray-100 shadow-sm text-left active:scale-[0.99] transition flex items-start gap-3"
+      className="w-full bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 shadow-sm text-left active:scale-[0.99] transition flex items-start gap-3"
       style={highlight ? { borderColor: 'rgba(0,151,167,0.25)', background: 'linear-gradient(180deg, #ffffff, #f0fbfc)' } : {}}>
       <div className="w-12 h-12 rounded-2xl flex flex-col items-center justify-center flex-shrink-0"
         style={{ background: st.bg, color: st.c }}>
@@ -205,13 +205,13 @@ function ApptCard({ apt, onPick, highlight, compact }) {
             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">{tu}</span>
           )}
         </div>
-        <div className={`font-bold text-gray-900 ${compact ? 'text-sm' : 'text-[15px]'} truncate`}>{apt.doctor_name}</div>
-        <div className="text-xs text-gray-500 truncate">{apt.specialty || '—'} · {apt.clinic_name}</div>
+        <div className={`font-bold text-gray-900 dark:text-gray-100 ${compact ? 'text-sm' : 'text-[15px]'} truncate`}>{apt.doctor_name}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{apt.specialty || '—'} · {apt.clinic_name}</div>
       </div>
 
       <div className="flex flex-col items-end gap-1 flex-shrink-0">
         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: st.bg, color: st.c }}>{st.l}</span>
-        <span className="material-symbols-outlined text-[18px] text-gray-300">chevron_right</span>
+        <span className="material-symbols-outlined text-[18px] text-gray-300 dark:text-gray-500">chevron_right</span>
       </div>
     </button>
   )
@@ -227,10 +227,10 @@ function ApptDetailsSheet({ apt, onClose, onCancel, onReschedule }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-      <div className="bg-white w-full md:max-w-md md:rounded-3xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 w-full md:max-w-md md:rounded-3xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-bold">Запись на приём</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 dark:text-gray-500 text-2xl leading-none">×</button>
         </div>
 
         <div className="rounded-2xl p-4 mb-4" style={{ background: st.bg }}>
@@ -242,7 +242,7 @@ function ApptDetailsSheet({ apt, onClose, onCancel, onReschedule }) {
             </div>
             {apt.qr_code && (
               <img src={`data:image/png;base64,${apt.qr_code}`} alt="QR"
-                className="w-20 h-20 rounded-lg bg-white p-1 border" />
+                className="w-20 h-20 rounded-lg bg-white dark:bg-gray-800 p-1 border" />
             )}
           </div>
         </div>
@@ -302,9 +302,9 @@ function Row({ icon, label, value, sub }) {
         <span className="material-symbols-outlined text-[18px] text-cyan-700">{icon}</span>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] uppercase font-bold text-gray-400">{label}</div>
-        <div className="text-sm font-semibold text-gray-900 break-words">{value}</div>
-        {sub && <div className="text-xs text-gray-500 break-words">{sub}</div>}
+        <div className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500">{label}</div>
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100 break-words">{value}</div>
+        {sub && <div className="text-xs text-gray-500 dark:text-gray-400 break-words">{sub}</div>}
       </div>
     </div>
   )
@@ -353,12 +353,12 @@ function RescheduleSheet({ apt, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm">
-      <div className="bg-white w-full md:max-w-md md:rounded-3xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 w-full md:max-w-md md:rounded-3xl rounded-t-3xl p-5 md:p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-bold">Перенос записи</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg hover:bg-gray-100 text-gray-400 dark:text-gray-500 text-2xl leading-none">×</button>
         </div>
-        <div className="text-xs text-gray-500 mb-3">{apt.doctor_name}</div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">{apt.doctor_name}</div>
 
         <div className="flex gap-1.5 mb-3 overflow-x-auto -mx-1 px-1 pb-1">
           {days.map((d, i) => {
@@ -381,16 +381,16 @@ function RescheduleSheet({ apt, onClose, onDone }) {
         </div>
 
         {loading ? (
-          <div className="text-center text-gray-400 py-8 text-sm">Загрузка слотов…</div>
+          <div className="text-center text-gray-400 dark:text-gray-500 py-8 text-sm">Загрузка слотов…</div>
         ) : slots.length === 0 ? (
-          <div className="text-center text-gray-400 py-8 text-sm">Свободных слотов нет</div>
+          <div className="text-center text-gray-400 dark:text-gray-500 py-8 text-sm">Свободных слотов нет</div>
         ) : (
           <div className="grid grid-cols-4 gap-2 mb-3">
             {slots.filter(s => s.available !== false).map(s => {
               const t = (s.start_time || s.time || '').slice(0, 5)
               return (
                 <button key={t} onClick={() => setTime(t)}
-                  className={`py-2 rounded-xl text-sm font-bold tabular-nums transition ${time === t ? 'bg-cyan-600 text-white shadow' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'}`}>
+                  className={`py-2 rounded-xl text-sm font-bold tabular-nums transition ${time === t ? 'bg-cyan-600 text-white shadow' : 'bg-gray-50 dark:bg-gray-700/30 text-gray-700 dark:text-gray-200 hover:bg-gray-100'}`}>
                   {t}
                 </button>
               )
