@@ -644,73 +644,173 @@ function StatusBadge({ status }) {
   )
 }
 
-// ── Referral Card ─────────────────────────────────────────────────────────────
+// ═════ БЛОК: ReferralCard — премиум glass-morph карточка направления ═════
+// Поля: to_clinic_name, service_name, short_code, qr_code, status, created_at,
+// from_clinic_name, to_clinic_phone, to_clinic_address, service_price, appointment_at.
+// Логика рендера qr_code сохранена; кнопки звонка/маршрута/WA добавлены опционально.
 function ReferralCard({ referral, index, onQr }) {
-  const [g1, g2] = CARD_GRADS[index % CARD_GRADS.length]
-  const isActive = referral.status === 'created' || referral.status === 'confirmed'
+  // CARD_GRADS оставлен для обратной совместимости (не используется в новом UI).
+  void CARD_GRADS
+  const status = String(referral.status || '').toLowerCase()
+  const isActive = status === 'created' || status === 'confirmed'
+
+  // ── цвет inset color-bar и статус-чипа по статусу ──
+  const STATUS_COLOR = {
+    created:          { bar: '#0097A7', chipBg: 'rgba(0,151,167,.12)',   chipText: '#00626F', label: 'Активно'      },
+    confirmed:        { bar: '#10B981', chipBg: 'rgba(16,185,129,.12)',  chipText: '#047857', label: 'Подтверждено' },
+    cancel_requested: { bar: '#F59E0B', chipBg: 'rgba(245,158,11,.12)',  chipText: '#92400E', label: 'На отмене'    },
+    cancelled:        { bar: '#EF4444', chipBg: 'rgba(239,68,68,.12)',   chipText: '#991B1B', label: 'Отменено'     },
+    expired:          { bar: '#9CA3AF', chipBg: 'rgba(156,163,175,.15)', chipText: '#4B5563', label: 'Истекло'      },
+  }
+  const sc = STATUS_COLOR[status] || STATUS_COLOR.created
+
+  // ── "создано N дней назад" ──
+  const daysAgo = (() => {
+    if (!referral.created_at) return null
+    const d = Math.floor((Date.now() - new Date(referral.created_at).getTime()) / 86400000)
+    if (isNaN(d)) return null
+    if (d <= 0) return 'сегодня'
+    if (d === 1) return 'вчера'
+    if (d < 5) return `${d} дн. назад`
+    return `${d} дн. назад`
+  })()
+
+  const phone = referral.to_clinic_phone
+  const addr  = referral.to_clinic_address
+  const lat   = referral.to_clinic_latitude
+  const lng   = referral.to_clinic_longitude
+  const price = referral.service_price
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden" style={{ boxShadow: '0 2px 10px rgba(0,0,0,.07)', border: '1px solid rgba(0,0,0,.06)' }}>
-      {/* Compact colour strip */}
-      <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${g1}, ${g2})` }}>
-        <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full" style={{ background: 'rgba(255,255,255,.08)' }} />
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 relative"
-          style={{ background: 'rgba(255,255,255,.2)' }}>
-          <span className="material-symbols-outlined text-white text-base"
-            style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
-        </div>
-        <div className="flex-1 min-w-0 relative">
-          <p className="text-white font-bold text-sm leading-tight truncate">{referral.to_clinic_name || 'Клиника'}</p>
-          <p className="text-white/65 text-xs truncate mt-0.5">{referral.service_name}</p>
-        </div>
-        <StatusBadge status={referral.status} />
-      </div>
-      {/* Details row */}
-      <div className="px-4 py-2.5 space-y-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
-          <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">calendar_today</span>
-            <span className="font-semibold text-gray-700 dark:text-gray-200">
-              {referral.appointment_at ? fmt(referral.appointment_at) : fmt(referral.created_at)}
-            </span>
+    <div
+      className="relative bg-white dark:bg-gray-900 rounded-2xl overflow-hidden card-pop transition-transform active:scale-[.97]"
+      style={{
+        border: '1px solid rgba(0,0,0,.06)',
+        boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+        animationDelay: `${Math.min(index || 0, 8) * 60}ms`,
+      }}
+    >
+      {/* ── inset color-bar 3px слева ── */}
+      <span aria-hidden="true" style={{ position:'absolute', left:4, top:10, bottom:10, width:3, borderRadius:2, background: sc.bar }} />
+
+      <div className="p-4">
+        {/* ── Hero: иконка + название клиники + статус-chip ── */}
+        <div className="flex items-start gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: 'linear-gradient(135deg,#0097A7,#1565C0)',
+              boxShadow: '0 4px 12px rgba(0,151,167,.30), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings:"'FILL' 1" }}>local_hospital</span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold text-gray-900 dark:text-gray-50 tracking-tight leading-tight truncate">
+              {referral.to_clinic_name || 'Клиника'}
+            </p>
+            {referral.service_name && (
+              <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">{referral.service_name}</p>
+            )}
+          </div>
+
+          <span
+            className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0 tracking-wide"
+            style={{ background: sc.chipBg, color: sc.chipText }}
+          >
+            {sc.label}
           </span>
+        </div>
+
+        {/* ── мета-строка: от клиники + дней назад + код + цена ── */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-gray-500 dark:text-gray-400">
+          {referral.from_clinic_name && (
+            <span className="flex items-center gap-1 min-w-0">
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">arrow_outward</span>
+              <span className="truncate">от {referral.from_clinic_name}</span>
+            </span>
+          )}
+          {daysAgo && (
+            <span className="flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">schedule</span>
+              <span>{daysAgo}</span>
+            </span>
+          )}
           {referral.short_code && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">tag</span>
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">tag</span>
               <span className="font-bold text-gray-700 dark:text-gray-200 tracking-widest">{referral.short_code}</span>
             </span>
           )}
-          {referral.from_clinic_name && (
-            <span className="flex items-center gap-1 min-w-0">
-              <span className="material-symbols-outlined text-[13px] text-gray-400 dark:text-gray-500 dark:text-gray-400">arrow_forward</span>
-              <span className="truncate">{referral.from_clinic_name}</span>
+          {price ? (
+            <span className="ml-auto text-[15px] font-extrabold text-cyan-700 dark:text-cyan-300">
+              {Number(price).toLocaleString('ru-RU')} ₽
             </span>
-          )}
+          ) : null}
         </div>
+
         {referral.notes && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400 italic truncate">"{referral.notes}"</p>
+          <p className="mt-2 text-[11.5px] text-gray-400 dark:text-gray-500 italic line-clamp-2">"{referral.notes}"</p>
         )}
+
+        {/* ── QR-кнопка (большая премиум-градиент) ── */}
         {isActive && referral.qr_code && (
-          <button onClick={() => onQr(referral.qr_code)}
-            className="w-full h-9 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[.98]"
-            style={{ background: 'linear-gradient(135deg,#0097A7,#1565C0)', color: 'white', boxShadow: '0 3px 10px rgba(0,151,167,.25)' }}>
-            <span className="material-symbols-outlined text-base"
-              style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+          <button
+            onClick={() => onQr(referral.qr_code)}
+            className="mt-3 w-full h-11 rounded-xl flex items-center justify-center gap-2 font-bold text-[13px] text-white transition-all active:scale-[.97]"
+            style={{
+              background: 'linear-gradient(135deg,#0097A7,#1565C0)',
+              boxShadow: '0 4px 14px rgba(0,151,167,.35), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
             Показать QR-код
           </button>
         )}
-        {referral.status === 'confirmed' && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600">
-            <span className="material-symbols-outlined text-sm"
-              style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
-            <span className="font-semibold">Подтверждено {referral.confirmed_at ? fmt(referral.confirmed_at) : ''}</span>
+
+        {/* ── Контакты клиники: позвонить / WA / маршрут ── */}
+        {(phone || addr || lat) && (
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
+            {phone && (
+              <a href={buildTel(phone)}
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#E0F7FA', color:'#00838F' }}>
+                <span className="material-symbols-outlined text-[18px]">call</span>
+                <span className="hidden sm:inline">Позвонить</span>
+              </a>
+            )}
+            {phone && (
+              <a href={buildWhatsApp(phone)} target="_blank" rel="noreferrer"
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#E8F5E9', color:'#2E7D32' }}>
+                <span className="material-symbols-outlined text-[18px]">chat</span>
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+            )}
+            {(addr || lat) && (
+              <a href={buildMapUrl(addr, lat, lng)} target="_blank" rel="noreferrer"
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
+                style={{ background:'#FFF3E0', color:'#E65100' }}>
+                <span className="material-symbols-outlined text-[18px]">map</span>
+                <span className="hidden sm:inline">Маршрут</span>
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* ── confirmed-индикатор ── */}
+        {status === 'confirmed' && (
+          <div className="mt-2 flex items-center gap-1.5 text-[11.5px] text-emerald-600 dark:text-emerald-400">
+            <span className="material-symbols-outlined text-[16px]" style={{ fontVariationSettings:"'FILL' 1" }}>check_circle</span>
+            <span className="font-semibold">Подтверждено{referral.confirmed_at ? `, ${fmt(referral.confirmed_at)}` : ''}</span>
           </div>
         )}
       </div>
     </div>
   )
 }
+// ═════ КОНЕЦ БЛОКА: ReferralCard ═════
 
 // ── Visit Card ─────────────────────────────────────────────────────────────────
 function fmtMisDate(str) {
@@ -809,16 +909,33 @@ function fmtAptDate(iso) {
   return `${d.getDate()} ${m[d.getMonth()]}, ${w[d.getDay()]}`
 }
 
+// ═════ БЛОК: AppointmentCard — премиум glass-morph карточка записи к врачу ═════
+// Поля: doctor_name, service_name, clinic_name, appointment_date, start_time,
+// end_time, status (pending/confirmed/cancelled/completed), appointment_type
+// (online/offline), id, patient_token, qr_code, short_code, clinic_phone, clinic_address.
+// Сохранены: doCancel handler, useState, axios POST cancel, Modal confirm.
 function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
   // Замена alert на Toast
   const { toast } = useToast()
   const status = String(apt.status || '').toLowerCase()
-  const cfg = status === 'confirmed'
-    ? { label: 'Подтверждена', dot: '#10B981', bg: 'rgba(16,185,129,.1)', text: '#065F46' }
-    : { label: 'Ожидает',      dot: '#F59E0B', bg: 'rgba(245,158,11,.1)', text: '#92400E' }
+  const aptType = String(apt.appointment_type || 'offline').toLowerCase()
+  const isOnline = aptType === 'online' || aptType === 'telemed' || aptType === 'video'
+
+  // ── статус-цвета (для inset-bar + chip) ──
+  const STATUS_COLOR = {
+    pending:   { bar:'#F59E0B', chipBg:'rgba(245,158,11,.12)',  chipText:'#92400E', label:'Ожидает'      },
+    confirmed: { bar:'#10B981', chipBg:'rgba(16,185,129,.12)',  chipText:'#047857', label:'Подтверждена' },
+    completed: { bar:'#0097A7', chipBg:'rgba(0,151,167,.12)',   chipText:'#00626F', label:'Завершена'    },
+    cancelled: { bar:'#EF4444', chipBg:'rgba(239,68,68,.12)',   chipText:'#991B1B', label:'Отменена'     },
+  }
+  const sc = STATUS_COLOR[status] || STATUS_COLOR.pending
+
   const startHHMM = (apt.start_time || '').slice(0,5)
   const endHHMM   = (apt.end_time   || '').slice(0,5)
   const tooLate = hoursUntil(apt.appointment_date, apt.start_time) < 6
+  const isPast = hoursUntil(apt.appointment_date, apt.start_time) < 0
+  const canManage = (status === 'pending' || status === 'confirmed') && !isPast
+
   const [confirming, setConfirming] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [showCal, setShowCal] = useState(false)
@@ -838,109 +955,166 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl overflow-hidden card-in" style={{ border:'1px solid rgba(0,0,0,.05)', boxShadow:'0 2px 12px rgba(0,0,0,.05)' }}>
-      <div className="px-4 py-3 flex items-center gap-3 relative overflow-hidden"
-        style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-        <div className="absolute -right-3 -top-3 w-16 h-16 rounded-full" style={{ background:'rgba(255,255,255,.08)' }} />
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 relative" style={{ background:'rgba(255,255,255,.2)' }}>
-          <span className="material-symbols-outlined text-white text-lg" style={{ fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
+    <div
+      className="relative bg-white dark:bg-gray-900 rounded-2xl overflow-hidden card-pop transition-transform active:scale-[.97]"
+      style={{
+        border: '1px solid rgba(0,0,0,.06)',
+        boxShadow: '0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+      }}
+    >
+      {/* ── inset color-bar 3px слева ── */}
+      <span aria-hidden="true" style={{ position:'absolute', left:4, top:10, bottom:10, width:3, borderRadius:2, background: sc.bar }} />
+
+      <div className="p-4">
+        {/* ── Hero: тип приёма (телемед/очно) + доктор + статус-chip ── */}
+        <div className="flex items-start gap-3">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{
+              background: isOnline
+                ? 'linear-gradient(135deg,#7C3AED,#1565C0)'
+                : 'linear-gradient(135deg,#0097A7,#1565C0)',
+              boxShadow: isOnline
+                ? '0 4px 12px rgba(124,58,237,.30), inset 0 1px 0 rgba(255,255,255,.25)'
+                : '0 4px 12px rgba(0,151,167,.30), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <span className="material-symbols-outlined text-white text-[20px]" style={{ fontVariationSettings:"'FILL' 1" }}>
+              {isOnline ? 'videocam' : 'stethoscope'}
+            </span>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="text-[14px] font-bold text-gray-900 dark:text-gray-50 tracking-tight leading-tight truncate">
+                {apt.doctor_name || 'Врач'}
+              </p>
+              {isOnline && (
+                <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full flex-shrink-0"
+                  style={{ background:'rgba(124,58,237,.12)', color:'#6D28D9' }}>
+                  Видео
+                </span>
+              )}
+            </div>
+            <p className="text-[11.5px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+              {apt.service_name || apt.specialty || apt.clinic_name || '—'}
+            </p>
+          </div>
+
+          <span
+            className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full flex-shrink-0 tracking-wide"
+            style={{ background: sc.chipBg, color: sc.chipText }}
+          >
+            {sc.label}
+          </span>
         </div>
-        <div className="flex-1 min-w-0 relative">
-          <p className="text-white font-bold text-sm leading-tight truncate">{apt.doctor_name || 'Врач'}</p>
-          <p className="text-white/70 text-xs truncate mt-0.5">{apt.specialty || apt.clinic_name || '—'}</p>
-        </div>
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-full flex-shrink-0"
-          style={{ background:cfg.bg, color:cfg.text }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background:cfg.dot }} />
-          {cfg.label}
-        </span>
-      </div>
-      <div className="px-4 py-3 space-y-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+
+        {/* ── мета-строка: дата + время + клиника ── */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-gray-500 dark:text-gray-400">
           <span className="flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">calendar_today</span>
+            <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">calendar_today</span>
             <span className="font-semibold text-gray-700 dark:text-gray-200">{fmtAptDate(apt.appointment_date)}</span>
           </span>
           {(startHHMM || endHHMM) && (
             <span className="flex items-center gap-1">
-              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">schedule</span>
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">schedule</span>
               <span className="font-semibold text-gray-700 dark:text-gray-200">{startHHMM}{endHHMM ? ` – ${endHHMM}` : ''}</span>
             </span>
           )}
-          {apt.clinic_name && (
+          {apt.clinic_name && !isOnline && (
             <span className="flex items-center gap-1 min-w-0">
-              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500 dark:text-gray-400">location_on</span>
+              <span className="material-symbols-outlined text-[14px] text-gray-400 dark:text-gray-500">location_on</span>
               <span className="truncate">{apt.clinic_name}</span>
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-2 pt-1">
-          {apt.qr_code ? (
-            <button onClick={() => onQr(apt.qr_code)}
-              className="flex-1 h-9 rounded-xl flex items-center justify-center gap-2 font-bold text-xs transition-all active:scale-[.98]"
-              style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', color:'white', boxShadow:'0 3px 10px rgba(0,151,167,.25)' }}>
-              <span className="material-symbols-outlined text-base" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
-              Показать QR
-            </button>
-          ) : (
-            <span className="text-xs text-gray-400 dark:text-gray-500 dark:text-gray-400">QR недоступен</span>
-          )}
           {apt.short_code && (
-            <span className="px-2.5 py-1.5 rounded-lg text-xs font-bold tracking-widest flex-shrink-0"
+            <span className="ml-auto text-[10px] font-bold tracking-widest px-2 py-0.5 rounded-full"
               style={{ background:'#fff8e1', color:'#e65100', border:'1px solid #ffe082' }}>
               {apt.short_code}
             </span>
           )}
         </div>
 
-        {/* Контакты клиники в один клик — адаптив 1/3 кнопки в ряд */}
-        {(apt.clinic_phone || apt.clinic_address || apt.clinic_latitude) && (
-          <div className="grid grid-cols-3 gap-1.5 pt-2">
+        {/* ── Войти в видео — для онлайн confirmed ── */}
+        {isOnline && status === 'confirmed' && (
+          <a
+            href={apt.video_url || '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 w-full h-11 rounded-xl flex items-center justify-center gap-2 font-bold text-[13px] text-white transition-all active:scale-[.97]"
+            style={{
+              background: 'linear-gradient(135deg,#7C3AED,#1565C0)',
+              boxShadow: '0 4px 14px rgba(124,58,237,.35), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings:"'FILL' 1" }}>videocam</span>
+            Войти в видео-приём
+          </a>
+        )}
+
+        {/* ── QR-кнопка (большая премиум-градиент) — для очных ── */}
+        {!isOnline && apt.qr_code && (status === 'pending' || status === 'confirmed') && (
+          <button
+            onClick={() => onQr(apt.qr_code)}
+            className="mt-3 w-full h-11 rounded-xl flex items-center justify-center gap-2 font-bold text-[13px] text-white transition-all active:scale-[.97]"
+            style={{
+              background: 'linear-gradient(135deg,#0097A7,#1565C0)',
+              boxShadow: '0 4px 14px rgba(0,151,167,.35), inset 0 1px 0 rgba(255,255,255,.25)',
+            }}
+          >
+            <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings:"'FILL' 1" }}>qr_code_2</span>
+            Показать QR на ресепшн
+          </button>
+        )}
+
+        {/* ── Контакты клиники: позвонить / WA / маршрут — только для очных ── */}
+        {!isOnline && (apt.clinic_phone || apt.clinic_address || apt.clinic_latitude) && (
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
             {apt.clinic_phone && (
               <a href={buildTel(apt.clinic_phone)}
-                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
                 style={{ background:'#E0F7FA', color:'#00838F' }}>
-                <span className="material-symbols-outlined text-base">call</span>
+                <span className="material-symbols-outlined text-[18px]">call</span>
                 <span className="hidden sm:inline">Позвонить</span>
               </a>
             )}
             {apt.clinic_phone && (
               <a href={buildWhatsApp(apt.clinic_phone)} target="_blank" rel="noreferrer"
-                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
                 style={{ background:'#E8F5E9', color:'#2E7D32' }}>
-                <span className="material-symbols-outlined text-base">chat</span>
+                <span className="material-symbols-outlined text-[18px]">chat</span>
                 <span className="hidden sm:inline">WhatsApp</span>
               </a>
             )}
             {(apt.clinic_address || apt.clinic_latitude) && (
               <a href={buildMapUrl(apt.clinic_address, apt.clinic_latitude, apt.clinic_longitude)} target="_blank" rel="noreferrer"
-                className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold transition-all active:scale-[.97]"
+                className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold transition-all active:scale-[.97]"
                 style={{ background:'#FFF3E0', color:'#E65100' }}>
-                <span className="material-symbols-outlined text-base">map</span>
+                <span className="material-symbols-outlined text-[18px]">map</span>
                 <span className="hidden sm:inline">Маршрут</span>
               </a>
             )}
           </div>
         )}
 
-        {/* Кнопки управления: календарь / перенос / отмена — только для активных */}
-        {(status === 'pending' || status === 'confirmed') && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-2">
+        {/* ── Управление: календарь / перенос / отмена — только для активных ── */}
+        {canManage && (
+          <div className="mt-2 grid grid-cols-3 gap-1.5">
             <div className="relative">
               <button onClick={() => setShowCal(v => !v)}
-                className="w-full h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+                className="w-full h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold border transition-all active:scale-[.97]"
                 style={{ background:'#fff', borderColor:'#E5E7EB', color:'#1A2B3C' }}>
-                <span className="material-symbols-outlined text-base">event_available</span>
-                В календарь
+                <span className="material-symbols-outlined text-[18px]">event_available</span>
+                <span className="hidden sm:inline">Календарь</span>
               </button>
               {showCal && (
                 <div className="absolute z-30 left-0 right-0 mt-1 rounded-xl bg-white dark:bg-gray-900 shadow-lg border border-gray-100 dark:border-gray-800 overflow-hidden">
                   <button onClick={() => { downloadIcs(apt); setShowCal(false) }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800">
+                    className="w-full text-left px-3 py-2 text-[12px] hover:bg-gray-50 dark:hover:bg-gray-800">
                     .ics (Apple/Outlook)
                   </button>
                   <a href={googleCalendarUrl(apt)} target="_blank" rel="noreferrer" onClick={() => setShowCal(false)}
-                    className="w-full block text-left px-3 py-2 text-xs hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-50 dark:border-gray-800">
+                    className="w-full block text-left px-3 py-2 text-[12px] hover:bg-gray-50 dark:hover:bg-gray-800 border-t border-gray-50 dark:border-gray-800">
                     Google Calendar
                   </a>
                 </div>
@@ -948,23 +1122,23 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
             </div>
             <button onClick={() => onRescheduleStart && onRescheduleStart(apt)} disabled={tooLate}
               title={tooLate ? 'Позвоните в клинику' : 'Перенести запись'}
-              className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+              className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold border transition-all active:scale-[.97]"
               style={{ background:'#fff', borderColor:'#E5E7EB', color: tooLate ? '#9CA3AF' : '#1565C0', cursor: tooLate ? 'not-allowed' : 'pointer', opacity: tooLate ? .65 : 1 }}>
-              <span className="material-symbols-outlined text-base">update</span>
+              <span className="material-symbols-outlined text-[18px]">update</span>
               Перенести
             </button>
             <button onClick={() => !tooLate && setConfirming(true)} disabled={tooLate}
               title={tooLate ? 'Позвоните в клинику' : 'Отменить запись'}
-              className="h-9 rounded-xl flex items-center justify-center gap-1 text-xs font-semibold border transition-all active:scale-[.97]"
+              className="h-10 rounded-xl flex items-center justify-center gap-1 text-[12px] font-semibold border transition-all active:scale-[.97]"
               style={{ background:'#fff', borderColor:'#FECACA', color: tooLate ? '#9CA3AF' : '#DC2626', cursor: tooLate ? 'not-allowed' : 'pointer', opacity: tooLate ? .65 : 1 }}>
-              <span className="material-symbols-outlined text-base">close</span>
+              <span className="material-symbols-outlined text-[18px]">close</span>
               Отменить
             </button>
           </div>
         )}
       </div>
 
-      {/* ===== БЛОК: Confirm-модалка отмены через дизайн-систему ===== */}
+      {/* ═════ БЛОК: AppointmentCard — Confirm-модалка отмены ═════ */}
       <Modal
         open={confirming}
         onClose={() => !cancelling && setConfirming(false)}
@@ -988,6 +1162,7 @@ function AppointmentCard({ apt, onQr, onCancelled, onRescheduleStart }) {
     </div>
   )
 }
+// ═════ КОНЕЦ БЛОКА: AppointmentCard ═════
 
 // ── AptControls: блок управления (календарь / перенос / отмена) ─────────────
 function AptControls({ apt, tooLate, onCancelled, onRescheduleStart }) {
@@ -2817,6 +2992,8 @@ export default function PatientCabinet() {
         @keyframes tabSlide { from{opacity:0;transform:translateX(16px)} to{opacity:1;transform:translateX(0)} }
         .tab-enter { animation: tabSlide .25s cubic-bezier(.22,1,.36,1) }
         .card-in { animation: slideUp .35s cubic-bezier(.22,1,.36,1) both }
+        @keyframes cardPop { from{opacity:0;transform:translateY(10px) scale(.98)} to{opacity:1;transform:translateY(0) scale(1)} }
+        .card-pop { animation: cardPop .45s cubic-bezier(.22,1,.36,1) both }
         @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
         @keyframes adGlow { 0%,100%{opacity:.7} 50%{opacity:1} }
       `}</style>
