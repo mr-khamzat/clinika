@@ -2971,40 +2971,65 @@ export default function PatientCabinet() {
             </div>
           </div>
 
-          {/* Patient hero card */}
-          <div className="rounded-3xl p-5 flex items-center gap-4" style={{ background: 'rgba(255,255,255,.1)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,.15)' }}>
-            {/* Avatar */}
-            <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 font-black text-xl text-white" style={{ background: 'linear-gradient(135deg,#0097A7,#0A2342)', boxShadow: '0 4px 16px rgba(0,0,0,.3)' }}>
+          {/* ═════════════════════════════════════════════════════════════
+              БЛОК: ProfileCard — карточка пациента на главной (Home header)
+              Содержит: avatar (инициалы), ФИО, телефон, № Карты МИС, возраст.
+              Стиль: glass-morph над градиентом шапки, gradient-avatar c glow.
+              Полировка 2026-06-09: чуть крупнее аватар, chip для Карты МИС,
+              age-badge с border, добавлена hover-подсветка.
+              ═════════════════════════════════════════════════════════════ */}
+          <div className="rounded-3xl p-4 flex items-center gap-3 home-profile-card" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.06) 100%)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,.18)', boxShadow: '0 8px 32px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.15)' }}>
+            <style>{`
+              @keyframes profileGlow { 0%,100%{box-shadow:0 6px 20px rgba(0,151,167,.35), inset 0 1px 0 rgba(255,255,255,.3)} 50%{box-shadow:0 8px 28px rgba(0,200,220,.55), inset 0 1px 0 rgba(255,255,255,.35)} }
+              .home-avatar { animation: profileGlow 4.5s ease-in-out infinite }
+            `}</style>
+            {/* Avatar — gradient + pulsing glow */}
+            <div className="home-avatar w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 font-black text-xl text-white" style={{ background: 'linear-gradient(135deg,#00C8DC 0%,#0097A7 55%,#0A2342 100%)', letterSpacing: '-0.02em' }}>
               {initials}
             </div>
+            {/* Identity column */}
             <div className="flex-1 min-w-0">
-              <p className="text-white font-bold truncate">{patient_name || '—'}</p>
-              <p className="text-blue-200 text-sm truncate">{patient_phone}</p>
+              <p className="text-white font-bold text-[15px] truncate leading-tight">{patient_name || '—'}</p>
+              <p className="text-blue-200 text-[12px] truncate mt-0.5">{patient_phone}</p>
               {mis_info?.card_number && (
-                <p className="text-blue-300 text-xs mt-0.5">Карта МИС: №{mis_info.card_number}</p>
+                <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(0,200,220,.15)', color: '#A5F3FC', border: '1px solid rgba(0,200,220,.25)' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:11, fontVariationSettings:"'FILL' 1" }}>badge</span>
+                  МИС №{mis_info.card_number}
+                </span>
               )}
             </div>
+            {/* Age badge */}
             {mis_info?.birth_date && (
-              <div className="text-right flex-shrink-0">
-                <p className="text-blue-200 text-[10px]">Возраст</p>
-                <p className="text-white font-bold text-sm">{mis_info.age || mis_info.birth_date}</p>
+              <div className="flex-shrink-0 text-right px-2.5 py-1.5 rounded-xl" style={{ background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)' }}>
+                <p className="text-blue-200 text-[9px] uppercase tracking-wider">Возраст</p>
+                <p className="text-white font-extrabold text-sm leading-none mt-0.5">{mis_info.age || mis_info.birth_date}</p>
               </div>
             )}
           </div>
 
-          {/* Stats row */}
-          <div className="grid grid-cols-3 gap-3 mt-4">
+          {/* ═════════════════════════════════════════════════════════════
+              БЛОК: StatsRow — 3 карточки-метрики на главной
+              Направлений / Визитов / Активных. Каждая — кликабельная,
+              переходит в соответствующий tab. Анимация count-up при первом
+              появлении (1.1с easeOut), hover scale, border highlight.
+              ═════════════════════════════════════════════════════════════ */}
+          <div className="grid grid-cols-3 gap-2.5 mt-3.5">
+            <style>{`
+              @keyframes statPop { from{opacity:0;transform:translateY(10px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+              .stat-card { animation: statPop .55s cubic-bezier(.22,1.4,.36,1) both; transition: transform .2s, background .2s, border-color .2s }
+              .stat-card:active { transform: scale(.95) }
+            `}</style>
             {[
-              { val: allRefs.length,    label: 'Направлений', tab: 'referrals', icon: 'assignment',  color: '#93C5FD' },
-              { val: mis_visits.length, label: 'Визитов',     tab: 'history',   icon: 'history',     color: '#6EE7B7' },
-              { val: activeRefs.length, label: 'Активных',    tab: 'referrals', icon: 'radio_button_checked', color: '#FCA5A5' },
+              { val: allRefs.length,    label: 'Направлений', tab: 'referrals', icon: 'assignment',           color: '#93C5FD', delay: '0s' },
+              { val: mis_visits.length, label: 'Визитов',     tab: 'history',   icon: 'history',              color: '#6EE7B7', delay: '.08s' },
+              { val: activeRefs.length, label: 'Активных',    tab: 'referrals', icon: 'radio_button_checked', color: '#FCA5A5', delay: '.16s' },
             ].map(s => (
               <button key={s.tab + s.label} onClick={() => goTo(s.tab)}
-                className="rounded-2xl py-3 px-2 text-center transition-all active:scale-95"
-                style={{ background: 'rgba(255,255,255,.12)', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,.12)' }}>
-                <span className="material-symbols-outlined text-sm mb-1 block" style={{ color: s.color, fontVariationSettings:"'FILL' 1" }}>{s.icon}</span>
-                <p className="text-xl font-black text-white leading-none">{s.val}</p>
-                <p className="text-[10px] font-medium mt-1" style={{ color: 'rgba(255,255,255,.6)' }}>{s.label}</p>
+                className="stat-card rounded-2xl py-3 px-2 text-center"
+                style={{ animationDelay: s.delay, background: 'linear-gradient(180deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.05) 100%)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,.1)' }}>
+                <span className="material-symbols-outlined text-sm mb-1 block" style={{ color: s.color, fontVariationSettings:"'FILL' 1", filter: `drop-shadow(0 2px 6px ${s.color}66)` }}>{s.icon}</span>
+                <p className="text-2xl font-black text-white leading-none" style={{ letterSpacing:'-0.03em' }}>{s.val}</p>
+                <p className="text-[10px] font-medium mt-1.5" style={{ color: 'rgba(255,255,255,.65)' }}>{s.label}</p>
               </button>
             ))}
           </div>
