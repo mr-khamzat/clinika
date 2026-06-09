@@ -2723,12 +2723,31 @@ export default function PatientCabinet() {
 
   // ── Loading ──
   if (loading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center" style={{ background: 'linear-gradient(160deg,#0A2342 0%,#1565C0 60%,#0097A7 100%)' }}>
-      <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-6" style={{ background: 'rgba(255,255,255,.15)', backdropFilter: 'blur(12px)' }}>
-        <span className="material-symbols-outlined text-white text-4xl animate-pulse" style={{ fontVariationSettings:"'FILL' 1" }}>medical_services</span>
+    <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden" style={{ background: 'linear-gradient(160deg,#0A1929 0%,#0F3460 40%,#0A4B6E 75%,#0F7185 100%)' }}>
+      <style>{`
+        @keyframes blobL1 { 0%,100%{transform:translate(0,0) scale(1) rotate(0)} 50%{transform:translate(70px,-50px) scale(1.15) rotate(80deg)} }
+        @keyframes blobL2 { 0%,100%{transform:translate(0,0) scale(1) rotate(0)} 50%{transform:translate(-60px,40px) scale(1.2) rotate(-90deg)} }
+        @keyframes pulseGlow { 0%,100%{box-shadow:0 0 30px rgba(0,151,167,.45),0 0 60px rgba(21,101,192,.3)} 50%{box-shadow:0 0 60px rgba(0,200,220,.75),0 0 100px rgba(21,101,192,.5)} }
+        @keyframes orbit-dot { from{transform:rotate(0) translateX(50px)} to{transform:rotate(360deg) translateX(50px)} }
+        @keyframes dotPulse { 0%,100%{opacity:.3;transform:scale(.7)} 50%{opacity:1;transform:scale(1.1)} }
+        @keyframes ringSpin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+        @keyframes textFade { 0%,100%{opacity:.5} 50%{opacity:1} }
+        .L-blob { position:absolute; border-radius:50%; filter:blur(60px); mix-blend-mode:screen; pointer-events:none; opacity:.55 }
+        .L-logo { animation: pulseGlow 2.6s ease-in-out infinite }
+        .L-orbit { position:absolute; width:8px; height:8px; border-radius:50%; background:#00C896; box-shadow:0 0 12px #00C896 }
+        .L-text { animation: textFade 2s ease-in-out infinite; letter-spacing:.05em }
+      `}</style>
+      <div className="L-blob" style={{ width: 360, height: 360, background: '#00C8DC', top: '-80px', left: '-60px', animation: 'blobL1 9s ease-in-out infinite' }} />
+      <div className="L-blob" style={{ width: 400, height: 400, background: '#1A5DC8', bottom: '-100px', right: '-80px', animation: 'blobL2 11s ease-in-out infinite' }} />
+      <div className="L-blob" style={{ width: 240, height: 240, background: '#4F46E5', top: '30%', right: '10%', animation: 'blobL1 13s ease-in-out infinite reverse', opacity: .35 }} />
+
+      <div className="relative w-20 h-20 rounded-3xl flex items-center justify-center mb-8 L-logo" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,.22) 0%, rgba(255,255,255,.08) 100%)', backdropFilter: 'blur(16px)', border: '1px solid rgba(255,255,255,.25)' }}>
+        <span className="material-symbols-outlined text-white text-4xl" style={{ fontVariationSettings:"'FILL' 1", filter: 'drop-shadow(0 4px 12px rgba(0,200,220,.7))' }}>medical_services</span>
+        <span className="L-orbit" style={{ top: '50%', left: '50%', marginTop: -4, marginLeft: -4, animation: 'orbit-dot 2.5s linear infinite' }} />
+        <span className="L-orbit" style={{ top: '50%', left: '50%', marginTop: -4, marginLeft: -4, animation: 'orbit-dot 2.5s linear infinite', animationDelay: '-.8s', background: '#00C8DC', boxShadow: '0 0 12px #00C8DC' }} />
+        <span className="L-orbit" style={{ top: '50%', left: '50%', marginTop: -4, marginLeft: -4, animation: 'orbit-dot 2.5s linear infinite', animationDelay: '-1.6s', background: '#FFFFFF', boxShadow: '0 0 12px rgba(255,255,255,.8)' }} />
       </div>
-      <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin mb-3" />
-      <p className="text-blue-200 text-sm">Загрузка кабинета...</p>
+      <p className="text-blue-100 text-base font-medium L-text">Загрузка кабинета…</p>
     </div>
   )
 
