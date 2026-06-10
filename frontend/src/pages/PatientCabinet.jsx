@@ -1517,16 +1517,29 @@ function Stars({ rating, size=14, color='#F59E0B' }) {
 
 function StarSelect({ value, onChange }) {
   const [hover, setHover] = useState(0)
+  const [tap, setTap] = useState(0)
   return (
-    <div style={{ display:'flex', gap:6 }}>
-      {[1,2,3,4,5].map(i => (
-        <span key={i}
-          onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
-          onClick={() => onChange(i)}
-          style={{ fontSize:32, color: i<=(hover||value)?'#F59E0B':'#D1D5DB', cursor:'pointer', transition:'color .15s' }}>
-          ★
-        </span>
-      ))}
+    <div style={{ display:'flex', gap:10, justifyContent:'center', padding:'4px 0' }}>
+      {[1,2,3,4,5].map(i => {
+        const active = i <= (hover || value)
+        return (
+          <button key={i} type="button"
+            onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)}
+            onClick={() => onChange(i)}
+            onPointerDown={() => setTap(i)} onPointerUp={() => setTap(0)} onPointerLeave={() => setTap(0)}
+            style={{
+              background:'none', border:'none', padding:0, cursor:'pointer',
+              fontSize:38, lineHeight:1,
+              color: active ? '#F59E0B' : '#E5E7EB',
+              transform: tap===i ? 'scale(.85)' : (active ? 'scale(1.06)' : 'scale(1)'),
+              transition: 'transform .18s cubic-bezier(.22,1,.36,1), color .18s, filter .18s',
+              filter: active ? 'drop-shadow(0 3px 6px rgba(245,158,11,.45))' : 'none',
+            }}
+            aria-label={`${i} звёзд`}>
+            ★
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -1562,12 +1575,49 @@ function RatingBar({ star, count, total, primary }) {
 function SheetModal({ open, onClose, title, children }) {
   if (!open) return null
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+    <div
+      style={{
+        position:'fixed', inset:0,
+        background:'rgba(15,23,42,.55)',
+        backdropFilter:'blur(12px)',
+        WebkitBackdropFilter:'blur(12px)',
+        zIndex:200,
+        display:'flex', alignItems:'flex-end', justifyContent:'center',
+        animation:'sheetFadeIn .2s ease-out',
+      }}
       onClick={e => { if (e.target===e.currentTarget) onClose() }}>
-      <div style={{ background:'#fff', borderRadius:'22px 22px 0 0', padding:'20px 20px 36px', width:'100%', maxWidth:500, maxHeight:'92vh', overflowY:'auto' }}>
+      <style>{`
+        @keyframes sheetFadeIn { from { opacity:0 } to { opacity:1 } }
+        @keyframes sheetSlideUp { from { transform: translateY(24px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+      `}</style>
+      <div
+        className="dark:bg-gray-900"
+        style={{
+          background:'#fff',
+          borderRadius:'28px 28px 0 0',
+          padding:'18px 20px calc(env(safe-area-inset-bottom,0px) + 28px)',
+          width:'100%', maxWidth:480,
+          maxHeight:'92vh', overflowY:'auto',
+          boxShadow:'0 -8px 32px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.6)',
+          animation:'sheetSlideUp .25s cubic-bezier(.22,1,.36,1)',
+        }}>
+        {/* Handle bar */}
+        <div style={{ width:40, height:4, borderRadius:2, background:'#E5E7EB', margin:'0 auto 14px' }} />
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-          <h3 style={{ margin:0, fontSize:16, color:'#1A2B3C', fontWeight:700 }}>{title}</h3>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, color:'#9CA3AF', cursor:'pointer' }}>✕</button>
+          <h3 className="dark:text-gray-100" style={{ margin:0, fontSize:17, color:'#0F172A', fontWeight:800, letterSpacing:'-.01em' }}>{title}</h3>
+          <button onClick={onClose}
+            className="dark:bg-gray-800 dark:text-gray-400"
+            style={{
+              width:36, height:36, borderRadius:'50%',
+              background:'#F1F5F9', border:'none',
+              fontSize:18, color:'#64748B', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              transition:'transform .15s, background .15s',
+            }}
+            onMouseDown={e => e.currentTarget.style.transform='scale(.92)'}
+            onMouseUp={e => e.currentTarget.style.transform='scale(1)'}
+            onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}
+            aria-label="Закрыть">✕</button>
         </div>
         {children}
       </div>
@@ -1600,40 +1650,142 @@ function ReviewForm({ doctorId, tenantId, primary, onClose, onDone }) {
     finally { setSaving(false) }
   }
 
+  const RATING_HINT = ['', 'Очень плохо', 'Плохо', 'Нормально', 'Хорошо', 'Отлично!']
+  const QUICK_CHIPS = [
+    { label: 'Внимательный', icon: '💬' },
+    { label: 'Профессионал', icon: '🎓' },
+    { label: 'Без ожидания', icon: '⏱️' },
+    { label: 'Чисто', icon: '✨' },
+    { label: 'Доброжелательно', icon: '😊' },
+    { label: 'Объяснил всё', icon: '📋' },
+  ]
+  const [chips, setChips] = useState([])
+  const toggleChip = (lbl) => setChips(c => c.includes(lbl) ? c.filter(x=>x!==lbl) : [...c, lbl])
+
   if (ok) return (
-    <div style={{ textAlign:'center', padding:'28px 0' }}>
-      <div style={{ fontSize:48 }}>🙏</div>
-      <p style={{ fontWeight:700, color:'#1A2B3C', marginTop:8, fontSize:16 }}>Спасибо за отзыв!</p>
-      <p style={{ fontSize:13, color:'#6B7280' }}>Отзыв появится после проверки</p>
+    <div style={{ textAlign:'center', padding:'32px 0' }}>
+      <style>{`@keyframes popIn{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
+      <div style={{
+        width:84, height:84, margin:'0 auto 16px',
+        borderRadius:'50%',
+        background:`linear-gradient(135deg,${primary},#1565C0)`,
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:42, boxShadow:`0 12px 32px ${primary}40`,
+        animation:'popIn .5s cubic-bezier(.22,1,.36,1)',
+      }}>🙏</div>
+      <p className="dark:text-gray-100" style={{ fontWeight:800, color:'#0F172A', marginTop:8, fontSize:18, letterSpacing:'-.01em' }}>Спасибо за отзыв!</p>
+      <p className="dark:text-gray-400" style={{ fontSize:14, color:'#64748B', marginTop:4 }}>Отзыв появится после проверки</p>
     </div>
   )
 
   return (
     <div>
-      <div style={{ marginBottom:16 }}>
-        <p style={{ fontSize:13, color:'#6B7280', marginBottom:10 }}>Ваша оценка:</p>
+      {/* Rating */}
+      <div className="dark:bg-gray-800/40" style={{
+        marginBottom:14,
+        background:'linear-gradient(135deg, #FFF7ED, #FFFBEB)',
+        borderRadius:18, padding:'14px 12px',
+        border:'1px solid #FED7AA40',
+      }}>
+        <p style={{ fontSize:12, color:'#92400E', marginBottom:8, fontWeight:600, textAlign:'center', letterSpacing:.3, textTransform:'uppercase' }}>Ваша оценка</p>
         <StarSelect value={rating} onChange={setRating} />
+        <p style={{ fontSize:13, color: rating ? '#92400E' : '#A8A29E', textAlign:'center', marginTop:8, fontWeight:600, minHeight:18, transition:'color .2s' }}>
+          {RATING_HINT[rating] || 'Тапните на звезду'}
+        </p>
       </div>
+
+      {/* Quick chips */}
+      <p className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', marginBottom:8, fontWeight:600 }}>Что понравилось?</p>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>
+        {QUICK_CHIPS.map(c => {
+          const sel = chips.includes(c.label)
+          return (
+            <button key={c.label} type="button" onClick={() => toggleChip(c.label)}
+              className={sel ? '' : 'dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'}
+              style={{
+                padding:'7px 12px', borderRadius:'999px',
+                border:`1.5px solid ${sel ? primary : '#E5E7EB'}`,
+                background: sel ? `${primary}15` : '#fff',
+                color: sel ? primary : '#475569',
+                fontSize:12, fontWeight:600,
+                cursor:'pointer',
+                transition:'all .18s',
+                transform: sel ? 'scale(1)' : 'scale(1)',
+              }}
+              onPointerDown={e => e.currentTarget.style.transform='scale(.94)'}
+              onPointerUp={e => e.currentTarget.style.transform='scale(1)'}
+              onPointerLeave={e => e.currentTarget.style.transform='scale(1)'}>
+              <span style={{ marginRight:4 }}>{c.icon}</span>{c.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Comment */}
+      <p className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', marginBottom:6, fontWeight:600 }}>Комментарий</p>
       <textarea value={comment} onChange={e=>setComment(e.target.value)}
         placeholder="Расскажите о своём визите..." rows={4}
-        style={{ width:'100%', padding:'12px', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:14, outline:'none', resize:'vertical', fontFamily:'inherit', boxSizing:'border-box' }} />
+        className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+        style={{
+          width:'100%', padding:'12px 14px',
+          border:'1.5px solid #E5E7EB', borderRadius:14,
+          fontSize:14, outline:'none', resize:'vertical',
+          fontFamily:'inherit', boxSizing:'border-box',
+          transition:'border-color .15s, box-shadow .15s',
+        }}
+        onFocus={e => { e.target.style.borderColor = primary; e.target.style.boxShadow = `0 0 0 4px ${primary}1F` }}
+        onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none' }} />
+
+      {/* Name + anon */}
       <div style={{ display:'flex', gap:10, marginTop:10, alignItems:'center' }}>
         <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ваше имя" disabled={anon}
-          style={{ flex:1, padding:'11px 12px', border:'1.5px solid #E5E7EB', borderRadius:10, fontSize:14, outline:'none', opacity:anon?0.4:1 }} />
-        <label style={{ display:'flex', gap:6, alignItems:'center', fontSize:13, color:'#6B7280', cursor:'pointer', whiteSpace:'nowrap' }}>
-          <input type="checkbox" checked={anon} onChange={e=>setAnon(e.target.checked)} />
+          className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+          style={{
+            flex:1, padding:'11px 14px', border:'1.5px solid #E5E7EB',
+            borderRadius:12, fontSize:14, outline:'none',
+            opacity:anon?0.4:1, transition:'all .15s', boxSizing:'border-box',
+          }}
+          onFocus={e => { if(!anon){ e.target.style.borderColor = primary; e.target.style.boxShadow = `0 0 0 4px ${primary}1F` } }}
+          onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none' }} />
+        <label className="dark:text-gray-400" style={{ display:'flex', gap:6, alignItems:'center', fontSize:13, color:'#64748B', cursor:'pointer', whiteSpace:'nowrap', fontWeight:600 }}>
+          <input type="checkbox" checked={anon} onChange={e=>setAnon(e.target.checked)} style={{ accentColor: primary, width:16, height:16 }} />
           Анонимно
         </label>
       </div>
-      {err && <p style={{ color:'#EF4444', fontSize:13, marginTop:8 }}>{err}</p>}
-      <div style={{ display:'flex', gap:8, marginTop:14 }}>
-        <button onClick={submit} disabled={saving||!rating}
-          style={{ flex:1, padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer', opacity:(saving||!rating)?0.6:1 }}>
-          {saving?'Отправка...':'Отправить'}
-        </button>
+
+      {err && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:10, padding:'8px 12px', background:'#FEF2F2', borderRadius:10, border:'1px solid #FECACA' }}>
+          <span style={{ color:'#EF4444', fontSize:14 }}>⚠️</span>
+          <p style={{ color:'#B91C1C', fontSize:13, margin:0, fontWeight:600 }}>{err}</p>
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:8, marginTop:16 }}>
         <button onClick={onClose}
-          style={{ padding:'13px 16px', background:'none', border:'1.5px solid #E5E7EB', borderRadius:12, fontSize:14, color:'#6B7280', cursor:'pointer' }}>
+          className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300"
+          style={{
+            padding:'13px 18px', background:'#fff',
+            border:'1.5px solid #E5E7EB', borderRadius:14,
+            fontSize:14, color:'#64748B', cursor:'pointer', fontWeight:600,
+            transition:'transform .15s',
+          }}
+          onPointerDown={e => e.currentTarget.style.transform='scale(.97)'}
+          onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
           Отмена
+        </button>
+        <button onClick={submit} disabled={saving||!rating}
+          style={{
+            flex:1, padding:'13px',
+            background:`linear-gradient(135deg,${primary},#1565C0)`,
+            color:'#fff', border:'none', borderRadius:14,
+            fontSize:14, fontWeight:700, cursor:'pointer',
+            opacity:(saving||!rating)?0.55:1,
+            boxShadow: (saving||!rating) ? 'none' : `0 6px 20px ${primary}45`,
+            transition:'transform .15s, box-shadow .15s, opacity .15s',
+          }}
+          onPointerDown={e => { if(!saving && rating) e.currentTarget.style.transform='scale(.97)' }}
+          onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+          {saving?'Отправка...':'Отправить отзыв'}
         </button>
       </div>
     </div>
@@ -1713,15 +1865,46 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
     finally { setBooking(false) }
   }
 
+  // Прогресс по wizard: дата → слот → имя
+  const stepProgress = selSlot ? 100 : (selDate ? 66 : 33)
+
   if (done) return (
-    <div style={{ textAlign:'center', padding:'16px 0' }}>
-      <div style={{ fontSize:48, marginBottom:8 }}>✅</div>
-      <h4 style={{ margin:'0 0 6px', color:'#1A2B3C', fontSize:17 }}>Запись создана!</h4>
-      <p style={{ fontSize:13, color:'#6B7280', marginBottom:16 }}>{fmt(done.appointment_date)}, {done.start_time}</p>
-      {done.qr_code && <img src={done.qr_code.startsWith('data:')?done.qr_code:`data:image/png;base64,${done.qr_code}`} alt="QR" style={{ width:150, height:150, borderRadius:12, border:'1px solid #E5E7EB', marginBottom:10 }} />}
-      {done.short_code && <p style={{ fontSize:14, color:'#6B7280' }}>Код: <b style={{ fontSize:22, color:'#1A2B3C' }}>{done.short_code}</b></p>}
+    <div style={{ textAlign:'center', padding:'20px 0' }}>
+      <style>{`@keyframes popIn{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.15)}100%{transform:scale(1);opacity:1}}`}</style>
+      <div style={{
+        width:88, height:88, margin:'0 auto 14px',
+        borderRadius:'50%',
+        background:`linear-gradient(135deg, #10B981, #059669)`,
+        display:'flex', alignItems:'center', justifyContent:'center',
+        fontSize:46, color:'#fff', boxShadow:'0 12px 32px rgba(16,185,129,.4)',
+        animation:'popIn .5s cubic-bezier(.22,1,.36,1)',
+      }}>✓</div>
+      <h4 className="dark:text-gray-100" style={{ margin:'0 0 6px', color:'#0F172A', fontSize:19, fontWeight:800, letterSpacing:'-.01em' }}>Запись создана!</h4>
+      <p className="dark:text-gray-400" style={{ fontSize:14, color:'#64748B', marginBottom:18 }}>{fmt(done.appointment_date)}, {done.start_time}</p>
+      {done.qr_code && (
+        <div style={{ display:'inline-block', padding:8, background:'#fff', borderRadius:18, boxShadow:'0 6px 20px rgba(0,0,0,.08)', border:'1px solid #E5E7EB', marginBottom:12 }}>
+          <img src={done.qr_code.startsWith('data:')?done.qr_code:`data:image/png;base64,${done.qr_code}`} alt="QR" style={{ width:148, height:148, borderRadius:12, display:'block' }} />
+        </div>
+      )}
+      {done.short_code && (
+        <p className="dark:text-gray-400" style={{ fontSize:13, color:'#64748B', marginBottom:2 }}>
+          Код подтверждения
+        </p>
+      )}
+      {done.short_code && (
+        <p className="dark:text-gray-100" style={{ fontSize:28, color:'#0F172A', fontWeight:800, letterSpacing:'.15em', margin:'4px 0 0' }}>{done.short_code}</p>
+      )}
       <button onClick={onClose}
-        style={{ marginTop:14, padding:'12px 28px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer' }}>
+        style={{
+          marginTop:18, padding:'13px 32px',
+          background:`linear-gradient(135deg,${primary},#1565C0)`,
+          color:'#fff', border:'none', borderRadius:14,
+          fontSize:14, fontWeight:700, cursor:'pointer',
+          boxShadow:`0 6px 18px ${primary}40`,
+          transition:'transform .15s',
+        }}
+        onPointerDown={e => e.currentTarget.style.transform='scale(.97)'}
+        onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
         Готово
       </button>
     </div>
@@ -1730,19 +1913,31 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
   // Если у врача вообще нет расписания
   if (!availLoading && !hasAnySchedule) return (
     <div>
-      <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:16, padding:'12px', background:'#F8FAFF', borderRadius:12 }}>
-        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={44} primary={primary} />
+      <div className="dark:bg-gray-800/50" style={{
+        display:'flex', gap:12, alignItems:'center',
+        marginBottom:16, padding:'14px',
+        background:'linear-gradient(135deg, #F0F9FF, #F8FAFF)',
+        borderRadius:18,
+        border:'1px solid rgba(21,101,192,.08)',
+      }}>
+        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={48} primary={primary} />
         <div>
-          <div style={{ fontWeight:700, fontSize:14, color:'#1A2B3C' }}>{doctor.full_name}</div>
-          <div style={{ fontSize:12, color:'#6B7280' }}>{doctor.specialty}</div>
+          <div className="dark:text-gray-100" style={{ fontWeight:700, fontSize:15, color:'#0F172A' }}>{doctor.full_name}</div>
+          <div className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B' }}>{doctor.specialty}</div>
         </div>
       </div>
       <div style={{ textAlign:'center', padding:'24px 12px' }}>
-        <div style={{ fontSize:42, marginBottom:8 }}>📅</div>
-        <p style={{ fontWeight:700, color:'#1A2B3C', fontSize:15, margin:'0 0 4px' }}>У врача пока нет расписания</p>
-        <p style={{ fontSize:13, color:'#6B7280', margin:0 }}>Запишитесь позже — расписание появится в кабинете</p>
+        <div style={{ fontSize:48, marginBottom:10 }}>📅</div>
+        <p className="dark:text-gray-100" style={{ fontWeight:700, color:'#0F172A', fontSize:16, margin:'0 0 6px' }}>У врача пока нет расписания</p>
+        <p className="dark:text-gray-400" style={{ fontSize:13, color:'#64748B', margin:0 }}>Запишитесь позже — расписание появится в кабинете</p>
         <button onClick={onClose}
-          style={{ marginTop:18, padding:'11px 24px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer' }}>
+          style={{
+            marginTop:18, padding:'12px 28px',
+            background:`linear-gradient(135deg,${primary},#1565C0)`,
+            color:'#fff', border:'none', borderRadius:14,
+            fontSize:14, fontWeight:700, cursor:'pointer',
+            boxShadow:`0 6px 18px ${primary}40`,
+          }}>
           Закрыть
         </button>
       </div>
@@ -1751,20 +1946,57 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
 
   return (
     <div>
-      <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:16, padding:'12px', background:'#F8FAFF', borderRadius:12 }}>
-        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={44} primary={primary} />
-        <div>
-          <div style={{ fontWeight:700, fontSize:14, color:'#1A2B3C' }}>{doctor.full_name}</div>
-          <div style={{ fontSize:12, color:'#6B7280' }}>{doctor.specialty}</div>
+      {/* Doctor header (premium glass) */}
+      <div className="dark:bg-gray-800/40" style={{
+        display:'flex', gap:12, alignItems:'center',
+        marginBottom:14, padding:'14px',
+        background:'linear-gradient(135deg, #F0F9FF, #F8FAFF)',
+        borderRadius:18,
+        border:'1px solid rgba(21,101,192,.08)',
+        boxShadow:'0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+      }}>
+        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={48} primary={primary} />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div className="dark:text-gray-100" style={{ fontWeight:700, fontSize:15, color:'#0F172A' }}>{doctor.full_name}</div>
+          <div className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B' }}>{doctor.specialty}</div>
         </div>
       </div>
-      <p style={{ fontSize:13, fontWeight:600, color:'#1A2B3C', marginBottom:10 }}>Выберите дату:</p>
+
+      {/* Wizard progress bar */}
+      <div style={{ marginBottom:16 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+          <span style={{ fontSize:11, color: selDate ? primary : '#94A3B8', fontWeight:700, letterSpacing:.4 }}>1. ДАТА</span>
+          <span style={{ fontSize:11, color: selSlot ? primary : (selDate ? '#0F172A' : '#94A3B8'), fontWeight:700, letterSpacing:.4 }}>2. ВРЕМЯ</span>
+          <span style={{ fontSize:11, color: selSlot ? '#0F172A' : '#94A3B8', fontWeight:700, letterSpacing:.4 }}>3. ИМЯ</span>
+        </div>
+        <div className="dark:bg-gray-700" style={{ height:6, borderRadius:3, background:'#E5E7EB', overflow:'hidden' }}>
+          <div style={{
+            height:'100%', width:`${stepProgress}%`,
+            background:`linear-gradient(90deg,${primary},#1565C0)`,
+            borderRadius:3,
+            transition:'width .35s cubic-bezier(.22,1,.36,1)',
+            boxShadow:`0 0 8px ${primary}60`,
+          }} />
+        </div>
+      </div>
+
+      <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите дату</p>
 
       {availLoading ? (
-        <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка расписания...</p>
+        <div style={{ display:'flex', gap:6, paddingBottom:6, marginBottom:14, overflow:'hidden' }}>
+          {[0,1,2,3,4,5].map(i => (
+            <div key={i} className="dark:bg-gray-800" style={{
+              flexShrink:0, width:64, height:64, borderRadius:14,
+              background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+              backgroundSize:'200% 100%',
+              animation:`pcShimmer 1.4s ease-in-out ${i*.08}s infinite`,
+            }} />
+          ))}
+          <style>{`@keyframes pcShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+        </div>
       ) : (
-        <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:6, marginBottom:14, scrollbarWidth:'none' }}>
-          {dates.map(d => {
+        <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, marginBottom:14, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+          {dates.map((d, idx) => {
             const key = isoDate(d)
             const info = availMap?.[key]
             const free = info?.free_slots || 0
@@ -1772,21 +2004,37 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
             const isSel = selDate && isoDate(selDate) === key
             return (
               <button key={d.toISOString()} onClick={() => pickDate(d)} disabled={!enabled}
+                className={!isSel && enabled ? 'dark:bg-gray-800 dark:border-gray-700' : ''}
                 style={{
-                  flexShrink:0, minWidth:54, padding:'8px 6px', borderRadius:10,
+                  flexShrink:0, minWidth:62, padding:'10px 6px',
+                  borderRadius:14,
                   border:`1.5px solid ${isSel?primary:(enabled?'#E5E7EB':'#F3F4F6')}`,
-                  background:isSel?primary+'18':(enabled?'#fff':'#F9FAFB'),
-                  cursor:enabled?'pointer':'not-allowed',
+                  background: isSel ? `linear-gradient(135deg,${primary},#1565C0)` : (enabled?'#fff':'#F9FAFB'),
+                  cursor: enabled ? 'pointer' : 'not-allowed',
                   textAlign:'center',
-                  opacity:enabled?1:.55,
+                  opacity: enabled ? 1 : .5,
                   position:'relative',
-                }}>
-                <div style={{ fontWeight:600, fontSize:12, color:isSel?primary:(enabled?'#1A2B3C':'#9CA3AF') }}>
-                  {d.getDate()} {MONTHS_R[d.getMonth()]}
+                  boxShadow: isSel ? `0 6px 16px ${primary}40` : 'none',
+                  transition: 'transform .15s, box-shadow .15s',
+                  animation: `popIn .35s cubic-bezier(.22,1,.36,1) ${Math.min(idx*0.025, 0.3)}s both`,
+                }}
+                onPointerDown={e => { if(enabled) e.currentTarget.style.transform='scale(.94)' }}
+                onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+                <div style={{ fontSize:9, color: isSel ? 'rgba(255,255,255,.7)' : '#9CA3AF', fontWeight:600, marginBottom:2, textTransform:'uppercase', letterSpacing:.4 }}>
+                  {DAYS_R[d.getDay()]}
                 </div>
-                <div style={{ fontSize:10, color:'#9CA3AF' }}>{DAYS_R[d.getDay()]}</div>
+                <div style={{ fontWeight:800, fontSize:18, color: isSel ? '#fff' : (enabled?'#0F172A':'#9CA3AF'), lineHeight:1 }}>
+                  {d.getDate()}
+                </div>
+                <div style={{ fontSize:9, color: isSel ? 'rgba(255,255,255,.7)' : '#9CA3AF', fontWeight:600, marginTop:2 }}>
+                  {MONTHS_R[d.getMonth()]}
+                </div>
                 {enabled && (
-                  <div style={{ fontSize:9, color: isSel?primary:'#10B981', fontWeight:700, marginTop:2 }}>
+                  <div style={{
+                    fontSize:9,
+                    color: isSel ? '#fff' : '#10B981',
+                    fontWeight:700, marginTop:3,
+                  }}>
                     {free} {free === 1 ? 'слот' : (free < 5 ? 'слота' : 'слотов')}
                   </div>
                 )}
@@ -1797,33 +2045,88 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
       )}
 
       {!availLoading && availMap && Object.values(availMap).every(d => !d.free_slots) && (
-        <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>
-          На ближайшие 2 недели свободных слотов нет
-        </p>
+        <div className="dark:bg-amber-900/20" style={{ textAlign:'center', padding:'14px 12px', background:'#FFFBEB', borderRadius:14, border:'1px solid #FDE68A', margin:'8px 0 14px' }}>
+          <div style={{ fontSize:22, marginBottom:4 }}>📭</div>
+          <p style={{ color:'#92400E', fontSize:13, margin:0, fontWeight:600 }}>На ближайшие 2 недели свободных слотов нет</p>
+        </div>
       )}
 
       {selDate && (
-        slotsLoading
-          ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка слотов...</p>
-          : slots.length===0
-            ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Нет свободных слотов</p>
-            : <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
-                {slots.map(s => (
+        <>
+          <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите время</p>
+          {slotsLoading ? (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+              {[0,1,2,3,4,5,6,7].map(i => (
+                <div key={i} className="dark:bg-gray-800" style={{
+                  height:38, borderRadius:10,
+                  background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+                  backgroundSize:'200% 100%',
+                  animation:`pcShimmer 1.4s ease-in-out ${i*.06}s infinite`,
+                }} />
+              ))}
+            </div>
+          ) : slots.length===0 ? (
+            <p className="dark:text-gray-400" style={{ textAlign:'center', color:'#94A3B8', fontSize:13, padding:'14px 0' }}>Нет свободных слотов</p>
+          ) : (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+              {slots.map((s, idx) => {
+                const sel = selSlot===s.start_time
+                return (
                   <button key={s.start_time} onClick={() => setSlot(s.start_time)}
-                    style={{ padding:'9px 4px', borderRadius:8, border:`1.5px solid ${selSlot===s.start_time?primary:'#E5E7EB'}`, background:selSlot===s.start_time?primary+'18':'#fff', color:selSlot===s.start_time?primary:'#1A2B3C', fontWeight:selSlot===s.start_time?700:400, cursor:'pointer', fontSize:13 }}>
+                    className={!sel ? 'dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200' : ''}
+                    style={{
+                      padding:'11px 4px', borderRadius:12,
+                      border:`1.5px solid ${sel?primary:'#E5E7EB'}`,
+                      background: sel ? `linear-gradient(135deg,${primary},#1565C0)` : '#fff',
+                      color: sel?'#fff':'#0F172A',
+                      fontWeight: sel?700:600,
+                      cursor:'pointer', fontSize:13,
+                      boxShadow: sel ? `0 4px 12px ${primary}40` : 'none',
+                      transition:'all .15s',
+                      animation: `popIn .3s cubic-bezier(.22,1,.36,1) ${Math.min(idx*0.025, 0.25)}s both`,
+                    }}
+                    onPointerDown={e => e.currentTarget.style.transform='scale(.94)'}
+                    onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
                     {s.start_time}
                   </button>
-                ))}
-              </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
+
       {selSlot && (
-        <div>
+        <div style={{ animation:'popIn .3s cubic-bezier(.22,1,.36,1)' }}>
           <input value={name} onChange={e=>setName(e.target.value)} placeholder="Ваше имя"
-            style={{ width:'100%', padding:'11px 12px', border:'1.5px solid #E5E7EB', borderRadius:10, fontSize:14, outline:'none', marginBottom:10, boxSizing:'border-box' }} />
-          {err && <p style={{ color:'#EF4444', fontSize:13, marginBottom:8 }}>{err}</p>}
+            className="dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100"
+            style={{
+              width:'100%', padding:'12px 14px',
+              border:'1.5px solid #E5E7EB', borderRadius:12,
+              fontSize:14, outline:'none', marginBottom:10, boxSizing:'border-box',
+              transition:'border-color .15s, box-shadow .15s',
+            }}
+            onFocus={e => { e.target.style.borderColor = primary; e.target.style.boxShadow = `0 0 0 4px ${primary}1F` }}
+            onBlur={e => { e.target.style.borderColor = '#E5E7EB'; e.target.style.boxShadow = 'none' }} />
+          {err && (
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, padding:'8px 12px', background:'#FEF2F2', borderRadius:10, border:'1px solid #FECACA' }}>
+              <span style={{ fontSize:14 }}>⚠️</span>
+              <p style={{ color:'#B91C1C', fontSize:13, margin:0, fontWeight:600 }}>{err}</p>
+            </div>
+          )}
           <button onClick={book} disabled={booking}
-            style={{ width:'100%', padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:12, fontSize:14, fontWeight:600, cursor:'pointer', opacity:booking?0.7:1 }}>
-            {booking?'Запись...':`Записаться на ${selSlot}`}
+            style={{
+              width:'100%', padding:'14px',
+              background:`linear-gradient(135deg,${primary},#1565C0)`,
+              color:'#fff', border:'none', borderRadius:14,
+              fontSize:14, fontWeight:700, cursor:'pointer',
+              opacity: booking ? 0.65 : 1,
+              boxShadow: booking ? 'none' : `0 6px 20px ${primary}45`,
+              transition:'transform .15s, box-shadow .15s, opacity .15s',
+            }}
+            onPointerDown={e => { if(!booking) e.currentTarget.style.transform='scale(.98)' }}
+            onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+            {booking ? 'Запись...' : `Записаться на ${selSlot}`}
           </button>
         </div>
       )}
@@ -1897,20 +2200,74 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center" style={{ background:'rgba(0,0,0,.5)' }} onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-gray-900 dark:text-gray-100 text-base">Перенос записи</h3>
-          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 dark:text-gray-400 text-2xl leading-none">×</button>
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">{apt.doctor_name} · {apt.clinic_name}</p>
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center"
+      style={{ background:'rgba(15,23,42,.55)', backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', animation:'rmFadeIn .2s ease-out' }}
+      onClick={onClose}>
+      <style>{`
+        @keyframes rmFadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes rmSlideUp { from{transform:translateY(24px);opacity:0} to{transform:translateY(0);opacity:1} }
+        @keyframes rmShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+        @keyframes rmPop { 0%{transform:scale(.4);opacity:0} 60%{transform:scale(1.08)} 100%{transform:scale(1);opacity:1} }
+      `}</style>
+      <div
+        className="bg-white dark:bg-gray-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl max-h-[92vh] overflow-y-auto"
+        style={{
+          padding:'18px 20px calc(env(safe-area-inset-bottom,0px) + 22px)',
+          boxShadow:'0 -8px 32px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,.6)',
+          animation:'rmSlideUp .25s cubic-bezier(.22,1,.36,1)',
+        }}
+        onClick={e => e.stopPropagation()}>
+        {/* Handle */}
+        <div className="sm:hidden" style={{ width:40, height:4, borderRadius:2, background:'#E5E7EB', margin:'0 auto 14px' }} />
 
-        <p style={{ fontSize:13, fontWeight:600, color:'#1A2B3C', marginBottom:8 }}>Выберите новую дату:</p>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{
+              width:36, height:36, borderRadius:12,
+              background:`linear-gradient(135deg,${primary},#1565C0)`,
+              display:'flex', alignItems:'center', justifyContent:'center',
+              boxShadow:`0 4px 12px ${primary}40`,
+            }}>
+              <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:20, fontVariationSettings:"'FILL' 1" }}>event_repeat</span>
+            </div>
+            <h3 className="font-bold text-gray-900 dark:text-gray-100" style={{ fontSize:17, letterSpacing:'-.01em' }}>Перенос записи</h3>
+          </div>
+          <button onClick={onClose}
+            className="dark:bg-gray-800 dark:text-gray-400"
+            style={{
+              width:36, height:36, borderRadius:'50%',
+              background:'#F1F5F9', border:'none',
+              fontSize:18, color:'#64748B', cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center',
+            }}
+            aria-label="Закрыть">✕</button>
+        </div>
+
+        <div className="dark:bg-gray-800/40" style={{
+          padding:'10px 12px', borderRadius:12,
+          background:'#F8FAFC', border:'1px solid #E2E8F0',
+          marginBottom:14,
+        }}>
+          <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', margin:0 }}>{apt.doctor_name}</p>
+          <p className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', margin:'2px 0 0' }}>{apt.clinic_name}</p>
+        </div>
+
+        <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите новую дату</p>
         {availLoading ? (
-          <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка расписания...</p>
+          <div style={{ display:'flex', gap:8, paddingBottom:6, marginBottom:14, overflow:'hidden' }}>
+            {[0,1,2,3,4,5].map(i => (
+              <div key={i} className="dark:bg-gray-800" style={{
+                flexShrink:0, width:62, height:62, borderRadius:14,
+                background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+                backgroundSize:'200% 100%',
+                animation:`rmShimmer 1.4s ease-in-out ${i*.08}s infinite`,
+              }} />
+            ))}
+          </div>
         ) : (
-          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:6, marginBottom:14, scrollbarWidth:'none' }}>
-            {dates.map(d => {
+          <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:8, marginBottom:14, scrollbarWidth:'none', WebkitOverflowScrolling:'touch' }}>
+            {dates.map((d, idx) => {
               const key = isoDate(d)
               const info = availMap?.[key]
               const free = info?.free_slots || 0
@@ -1918,12 +2275,31 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
               const isSel = selDate && isoDate(selDate) === key
               return (
                 <button key={d.toISOString()} onClick={() => pickDate(d)} disabled={!enabled}
-                  style={{ flexShrink:0, minWidth:54, padding:'8px 6px', borderRadius:10, border:`1.5px solid ${isSel?primary:(enabled?'#E5E7EB':'#F3F4F6')}`, background:isSel?primary+'18':(enabled?'#fff':'#F9FAFB'), cursor:enabled?'pointer':'not-allowed', textAlign:'center', opacity:enabled?1:.55 }}>
-                  <div style={{ fontWeight:600, fontSize:12, color:isSel?primary:(enabled?'#1A2B3C':'#9CA3AF') }}>
-                    {d.getDate()} {MONTHS_R[d.getMonth()]}
+                  className={!isSel && enabled ? 'dark:bg-gray-800 dark:border-gray-700' : ''}
+                  style={{
+                    flexShrink:0, minWidth:62, padding:'10px 6px',
+                    borderRadius:14,
+                    border:`1.5px solid ${isSel?primary:(enabled?'#E5E7EB':'#F3F4F6')}`,
+                    background: isSel ? `linear-gradient(135deg,${primary},#1565C0)` : (enabled?'#fff':'#F9FAFB'),
+                    cursor: enabled ? 'pointer' : 'not-allowed',
+                    textAlign:'center',
+                    opacity: enabled ? 1 : .5,
+                    boxShadow: isSel ? `0 6px 16px ${primary}40` : 'none',
+                    transition:'transform .15s, box-shadow .15s',
+                    animation:`rmPop .35s cubic-bezier(.22,1,.36,1) ${Math.min(idx*0.025, 0.3)}s both`,
+                  }}
+                  onPointerDown={e => { if(enabled) e.currentTarget.style.transform='scale(.94)' }}
+                  onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+                  <div style={{ fontSize:9, color: isSel ? 'rgba(255,255,255,.7)' : '#9CA3AF', fontWeight:600, marginBottom:2, textTransform:'uppercase', letterSpacing:.4 }}>
+                    {DAYS_R[d.getDay()]}
                   </div>
-                  <div style={{ fontSize:10, color:'#9CA3AF' }}>{DAYS_R[d.getDay()]}</div>
-                  {enabled && <div style={{ fontSize:9, color: isSel?primary:'#10B981', fontWeight:700, marginTop:2 }}>{free}</div>}
+                  <div style={{ fontWeight:800, fontSize:18, color: isSel ? '#fff' : (enabled?'#0F172A':'#9CA3AF'), lineHeight:1 }}>
+                    {d.getDate()}
+                  </div>
+                  <div style={{ fontSize:9, color: isSel ? 'rgba(255,255,255,.7)' : '#9CA3AF', fontWeight:600, marginTop:2 }}>
+                    {MONTHS_R[d.getMonth()]}
+                  </div>
+                  {enabled && <div style={{ fontSize:9, color: isSel ? '#fff' : '#10B981', fontWeight:700, marginTop:3 }}>{free}</div>}
                 </button>
               )
             })}
@@ -1931,23 +2307,67 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
         )}
 
         {selDate && (
-          slotsLoading
-            ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка слотов...</p>
-            : slots.length===0
-              ? <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Нет свободных слотов</p>
-              : <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
-                  {slots.map(s => (
+          <>
+            <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите время</p>
+            {slotsLoading ? (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+                {[0,1,2,3,4,5,6,7].map(i => (
+                  <div key={i} className="dark:bg-gray-800" style={{
+                    height:38, borderRadius:10,
+                    background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+                    backgroundSize:'200% 100%',
+                    animation:`rmShimmer 1.4s ease-in-out ${i*.06}s infinite`,
+                  }} />
+                ))}
+              </div>
+            ) : slots.length===0 ? (
+              <p className="dark:text-gray-400" style={{ textAlign:'center', color:'#94A3B8', fontSize:13, padding:'14px 0' }}>Нет свободных слотов</p>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:6, marginBottom:14 }}>
+                {slots.map((s, idx) => {
+                  const sel = selSlot===s.start_time
+                  return (
                     <button key={s.start_time} onClick={() => setSlot(s.start_time)}
-                      style={{ padding:'9px 4px', borderRadius:8, border:`1.5px solid ${selSlot===s.start_time?primary:'#E5E7EB'}`, background:selSlot===s.start_time?primary+'18':'#fff', color:selSlot===s.start_time?primary:'#1A2B3C', fontWeight:selSlot===s.start_time?700:400, cursor:'pointer', fontSize:13 }}>
+                      className={!sel ? 'dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200' : ''}
+                      style={{
+                        padding:'11px 4px', borderRadius:12,
+                        border:`1.5px solid ${sel?primary:'#E5E7EB'}`,
+                        background: sel ? `linear-gradient(135deg,${primary},#1565C0)` : '#fff',
+                        color: sel?'#fff':'#0F172A',
+                        fontWeight: sel?700:600,
+                        cursor:'pointer', fontSize:13,
+                        boxShadow: sel ? `0 4px 12px ${primary}40` : 'none',
+                        transition:'all .15s',
+                        animation:`rmPop .3s cubic-bezier(.22,1,.36,1) ${Math.min(idx*0.025, 0.25)}s both`,
+                      }}
+                      onPointerDown={e => e.currentTarget.style.transform='scale(.94)'}
+                      onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
                       {s.start_time}
                     </button>
-                  ))}
-                </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
         )}
-        {err && <p style={{ color:'#EF4444', fontSize:13, marginBottom:8 }}>{err}</p>}
+        {err && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10, padding:'8px 12px', background:'#FEF2F2', borderRadius:10, border:'1px solid #FECACA' }}>
+            <span style={{ fontSize:14 }}>⚠️</span>
+            <p style={{ color:'#B91C1C', fontSize:13, margin:0, fontWeight:600 }}>{err}</p>
+          </div>
+        )}
         <button onClick={submit} disabled={!selSlot || busy}
-          className="w-full h-12 rounded-2xl text-sm font-bold text-white transition-all"
-          style={{ background:`linear-gradient(135deg,${primary},#1565C0)`, opacity: (!selSlot || busy) ? .55 : 1 }}>
+          className="w-full transition-all"
+          style={{
+            padding:'14px', borderRadius:14,
+            background:`linear-gradient(135deg,${primary},#1565C0)`,
+            color:'#fff', border:'none',
+            fontSize:14, fontWeight:700, cursor:'pointer',
+            opacity: (!selSlot || busy) ? .55 : 1,
+            boxShadow: (!selSlot || busy) ? 'none' : `0 6px 20px ${primary}45`,
+          }}
+          onPointerDown={e => { if(selSlot && !busy) e.currentTarget.style.transform='scale(.98)' }}
+          onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
           {busy ? 'Переносим...' : (selSlot ? `Перенести на ${selSlot}` : 'Выберите время')}
         </button>
       </div>
@@ -1988,123 +2408,272 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
   const breakdown = profile?.rating_breakdown || {}
   const hasSchedule = (profile?.doctor?.has_schedule) ?? doc.has_schedule
 
+  const initials = (d.full_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:300, background:'var(--cabinet-bg, #F0F4F8)', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
-      <style>{`@keyframes docProfIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}`}</style>
+    <div className="dark:bg-gray-950"
+      style={{ position:'fixed', inset:0, zIndex:300, background:'var(--cabinet-bg, #F0F4F8)', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
+      <style>{`
+        @keyframes docProfIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes dpCardIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes dpRingSpin{to{transform:rotate(360deg)}}
+      `}</style>
 
       {/* Header с back-button — z-index приоритетный, чтобы кнопка была кликабельна на мобильнике */}
-      <div style={{ position:'sticky', top:0, zIndex:50, background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', paddingTop:'env(safe-area-inset-top,0px)', boxShadow:'0 2px 12px rgba(0,0,0,.15)' }}>
-        <div style={{ display:'flex', alignItems:'center', padding:'10px 12px', gap:10 }}>
+      <div style={{
+        position:'sticky', top:0, zIndex:50,
+        background:`linear-gradient(135deg,${primary},#1565C0)`,
+        color:'#fff', paddingTop:'env(safe-area-inset-top,0px)',
+        boxShadow:'0 4px 20px rgba(0,0,0,.18)',
+      }}>
+        <div style={{ display:'flex', alignItems:'center', padding:'12px 14px', gap:10 }}>
           <button onClick={onClose} aria-label="Назад"
-            style={{ width:44, height:44, minWidth:44, borderRadius:14, background:'rgba(255,255,255,.22)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            style={{
+              width:44, height:44, minWidth:44, borderRadius:14,
+              background:'rgba(255,255,255,.22)',
+              backdropFilter:'blur(8px)',
+              border:'1px solid rgba(255,255,255,.15)',
+              cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+              transition:'transform .15s',
+            }}
+            onPointerDown={e => e.currentTarget.style.transform='scale(.92)'}
+            onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
             <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:24 }}>arrow_back</span>
           </button>
           <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ margin:0, fontSize:11, color:'rgba(255,255,255,.7)', fontWeight:600, letterSpacing:.5, textTransform:'uppercase' }}>Профиль врача</p>
-            <p style={{ margin:0, fontSize:14, color:'#fff', fontWeight:700, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{d.full_name}</p>
+            <p style={{ margin:0, fontSize:10, color:'rgba(255,255,255,.7)', fontWeight:700, letterSpacing:.6, textTransform:'uppercase' }}>Профиль врача</p>
+            <p style={{ margin:'2px 0 0', fontSize:15, color:'#fff', fontWeight:800, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', letterSpacing:'-.01em' }}>{d.full_name}</p>
           </div>
           <button onClick={onClose} aria-label="Закрыть"
-            style={{ width:40, height:40, borderRadius:12, background:'rgba(255,255,255,.18)', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+            style={{
+              width:40, height:40, borderRadius:12,
+              background:'rgba(255,255,255,.18)',
+              backdropFilter:'blur(8px)',
+              border:'1px solid rgba(255,255,255,.12)',
+              cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0,
+            }}>
             <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:22 }}>close</span>
           </button>
         </div>
       </div>
 
       {/* Контент */}
-      <div style={{ flex:1, overflowY:'auto', padding:'16px 14px 110px', maxWidth:560, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
-        {/* Карточка с фото и основной инфой */}
-        <div style={{ background:'#fff', borderRadius:24, padding:20, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
+      <div style={{ flex:1, overflowY:'auto', padding:'16px 14px 120px', maxWidth:560, width:'100%', margin:'0 auto', boxSizing:'border-box' }}>
+        {/* Hero card */}
+        <div className="dark:bg-gray-900"
+          style={{
+            background:'#fff', borderRadius:28,
+            padding:'22px 20px',
+            boxShadow:'0 8px 28px rgba(0,0,0,.07), inset 0 1px 0 rgba(255,255,255,.6)',
+            border:'1px solid rgba(15,23,42,.05)',
+            marginBottom:14,
+            animation:'dpCardIn .4s cubic-bezier(.22,1,.36,1)',
+          }}>
           <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
-            {/* Большое фото / placeholder */}
-            {d.photo_url ? (
-              <img src={d.photo_url} alt={d.full_name}
-                style={{ width:96, height:96, borderRadius:24, objectFit:'cover', flexShrink:0, boxShadow:'0 4px 14px rgba(0,0,0,.1)' }} />
-            ) : (
-              <div style={{ width:96, height:96, borderRadius:24, background:`linear-gradient(135deg,${primary},#1565C0)`, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontWeight:700, fontSize:32, flexShrink:0, boxShadow:'0 4px 14px rgba(0,0,0,.1)' }}>
-                {(d.full_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()}
+            {/* Avatar with conic-gradient ring */}
+            <div style={{ position:'relative', width:104, height:104, flexShrink:0 }}>
+              <div style={{
+                position:'absolute', inset:0, borderRadius:'50%',
+                background: `conic-gradient(from 0deg, ${primary}, #1565C0, #A855F7, ${primary})`,
+                padding: 3,
+                boxShadow: `0 8px 24px ${primary}30`,
+              }}>
+                <div className="dark:bg-gray-900" style={{ width:'100%', height:'100%', borderRadius:'50%', background:'#fff', padding:2 }}>
+                  {d.photo_url ? (
+                    <img src={d.photo_url} alt={d.full_name}
+                      style={{ width:'100%', height:'100%', borderRadius:'50%', objectFit:'cover', display:'block' }} />
+                  ) : (
+                    <div style={{
+                      width:'100%', height:'100%', borderRadius:'50%',
+                      background:`linear-gradient(135deg,${primary},#1565C0)`,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      color:'#fff', fontWeight:800, fontSize:32, letterSpacing:'-.02em',
+                    }}>{initials}</div>
+                  )}
+                </div>
               </div>
-            )}
+            </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <h2 style={{ margin:'0 0 4px', fontSize:18, fontWeight:800, color:'#1A2B3C', lineHeight:1.25 }}>{d.full_name}</h2>
-              <p style={{ margin:'0 0 6px', fontSize:14, color:primary, fontWeight:700 }}>{d.specialty || 'Врач'}</p>
+              <h2 className="dark:text-gray-100" style={{ margin:'0 0 6px', fontSize:19, fontWeight:800, color:'#0F172A', lineHeight:1.25, letterSpacing:'-.01em' }}>{d.full_name}</h2>
+              <div style={{
+                display:'inline-block', padding:'4px 10px', borderRadius:'999px',
+                background:`${primary}15`, color: primary,
+                fontSize:12, fontWeight:700, marginBottom:8, letterSpacing:.2,
+              }}>{d.specialty || 'Врач'}</div>
               {d.experience_years && (
-                <p style={{ margin:'0 0 4px', fontSize:12, color:'#6B7280' }}>
-                  <span style={{ fontWeight:600, color:'#1A2B3C' }}>Стаж:</span> {d.experience_years} лет
+                <p className="dark:text-gray-400" style={{ margin:'0 0 4px', fontSize:13, color:'#64748B', display:'flex', alignItems:'center', gap:6 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:14, color:primary, fontVariationSettings:"'FILL' 1" }}>workspace_premium</span>
+                  Стаж <b className="dark:text-gray-200" style={{ color:'#0F172A' }}>{d.experience_years} лет</b>
                 </p>
               )}
               {d.clinic_name && (
-                <p style={{ margin:0, fontSize:12, color:'#9CA3AF' }}>{d.clinic_name}</p>
+                <p className="dark:text-gray-400" style={{ margin:0, fontSize:12, color:'#94A3B8', display:'flex', alignItems:'center', gap:4 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize:13 }}>location_on</span>
+                  {d.clinic_name}
+                </p>
               )}
             </div>
           </div>
 
-          {/* Рейтинг крупно */}
+          {/* Rating section */}
           {avg ? (
-            <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:14, paddingTop:14, borderTop:'1px solid #F3F4F6' }}>
-              <div style={{ fontSize:32, fontWeight:800, color:'#1A2B3C', lineHeight:1 }}>{avg}</div>
+            <div className="dark:bg-amber-900/10" style={{
+              display:'flex', alignItems:'center', gap:14,
+              marginTop:16, padding:'14px',
+              borderRadius:18,
+              background:'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
+              border:'1px solid #FED7AA50',
+            }}>
+              <div style={{ fontSize:36, fontWeight:800, color:'#92400E', lineHeight:1, letterSpacing:'-.02em' }}>{avg}</div>
               <div>
-                <Stars rating={avg} size={16} />
-                <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{totalReviews} {totalReviews===1?'отзыв':(totalReviews<5?'отзыва':'отзывов')}</div>
+                <Stars rating={avg} size={18} />
+                <div className="dark:text-gray-400" style={{ fontSize:12, color:'#92400E', marginTop:4, fontWeight:600 }}>{totalReviews} {totalReviews===1?'отзыв':(totalReviews<5?'отзыва':'отзывов')}</div>
               </div>
             </div>
           ) : (
-            <p style={{ margin:'14px 0 0', paddingTop:14, borderTop:'1px solid #F3F4F6', fontSize:12, color:'#9CA3AF' }}>Пока нет оценок</p>
+            <p className="dark:text-gray-400" style={{ margin:'14px 0 0', paddingTop:14, borderTop:'1px solid #F3F4F6', fontSize:12, color:'#9CA3AF', textAlign:'center' }}>Пока нет оценок</p>
           )}
         </div>
 
-        {/* Биография — полностью без обрезки */}
+        {/* Bio card */}
         {d.bio && (
-          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
-            <h3 style={{ margin:'0 0 8px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>О враче</h3>
-            <p style={{ margin:0, fontSize:14, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{d.bio}</p>
+          <div className="dark:bg-gray-900" style={{
+            background:'#fff', borderRadius:24, padding:18,
+            boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+            border:'1px solid rgba(15,23,42,.04)',
+            marginBottom:14,
+            animation:'dpCardIn .4s cubic-bezier(.22,1,.36,1) .05s both',
+          }}>
+            <h3 className="dark:text-gray-100" style={{ margin:'0 0 10px', fontSize:14, fontWeight:800, color:'#0F172A', display:'flex', alignItems:'center', gap:6 }}>
+              <span className="material-symbols-outlined" style={{ fontSize:18, color:primary, fontVariationSettings:"'FILL' 1" }}>person</span>
+              О враче
+            </h3>
+            <p className="dark:text-gray-300" style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{d.bio}</p>
           </div>
         )}
 
         {d.education && (
-          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
-            <h3 style={{ margin:'0 0 8px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Образование</h3>
-            <p style={{ margin:0, fontSize:14, color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{d.education}</p>
+          <div className="dark:bg-gray-900" style={{
+            background:'#fff', borderRadius:24, padding:18,
+            boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+            border:'1px solid rgba(15,23,42,.04)',
+            marginBottom:14,
+            animation:'dpCardIn .4s cubic-bezier(.22,1,.36,1) .1s both',
+          }}>
+            <h3 className="dark:text-gray-100" style={{ margin:'0 0 10px', fontSize:14, fontWeight:800, color:'#0F172A', display:'flex', alignItems:'center', gap:6 }}>
+              <span className="material-symbols-outlined" style={{ fontSize:18, color:'#A855F7', fontVariationSettings:"'FILL' 1" }}>school</span>
+              Образование
+            </h3>
+            <p className="dark:text-gray-300" style={{ margin:0, fontSize:14, color:'#334155', lineHeight:1.65, whiteSpace:'pre-wrap' }}>{d.education}</p>
           </div>
         )}
 
-        {/* Распределение оценок */}
+        {/* Rating breakdown */}
         {totalReviews > 0 && (
-          <div style={{ background:'#fff', borderRadius:24, padding:18, boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)', marginBottom:14 }}>
-            <h3 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Оценки</h3>
+          <div className="dark:bg-gray-900" style={{
+            background:'#fff', borderRadius:24, padding:18,
+            boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+            border:'1px solid rgba(15,23,42,.04)',
+            marginBottom:14,
+            animation:'dpCardIn .4s cubic-bezier(.22,1,.36,1) .15s both',
+          }}>
+            <h3 className="dark:text-gray-100" style={{ margin:'0 0 12px', fontSize:14, fontWeight:800, color:'#0F172A', display:'flex', alignItems:'center', gap:6 }}>
+              <span className="material-symbols-outlined" style={{ fontSize:18, color:'#F59E0B', fontVariationSettings:"'FILL' 1" }}>bar_chart</span>
+              Распределение оценок
+            </h3>
             {[5,4,3,2,1].map(s => <RatingBar key={s} star={s} count={breakdown[s]||0} total={totalReviews} primary={primary} />)}
           </div>
         )}
 
-        {/* Список отзывов */}
-        <div style={{ background:'#fff', borderRadius:24, padding:'4px 18px 14px', boxShadow:'0 4px 20px rgba(0,0,0,.06)', border:'1px solid rgba(0,0,0,.04)' }}>
-          <h3 style={{ margin:'14px 0 6px', fontSize:14, fontWeight:700, color:'#1A2B3C' }}>Отзывы пациентов</h3>
-          {profLoading && <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'12px 0' }}>Загрузка...</p>}
+        {/* Reviews */}
+        <div className="dark:bg-gray-900" style={{
+          background:'#fff', borderRadius:24,
+          padding:'4px 18px 14px',
+          boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.5)',
+          border:'1px solid rgba(15,23,42,.04)',
+          animation:'dpCardIn .4s cubic-bezier(.22,1,.36,1) .2s both',
+        }}>
+          <h3 className="dark:text-gray-100" style={{ margin:'14px 0 10px', fontSize:14, fontWeight:800, color:'#0F172A', display:'flex', alignItems:'center', gap:6 }}>
+            <span className="material-symbols-outlined" style={{ fontSize:18, color:'#EC4899', fontVariationSettings:"'FILL' 1" }}>reviews</span>
+            Отзывы пациентов
+          </h3>
+          {profLoading && (
+            <div style={{ padding:'14px 0' }}>
+              {[0,1,2].map(i => (
+                <div key={i} className="dark:bg-gray-800" style={{
+                  height:60, marginBottom:10, borderRadius:12,
+                  background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+                  backgroundSize:'200% 100%',
+                  animation:`pcShimmer 1.4s ease-in-out ${i*.1}s infinite`,
+                }} />
+              ))}
+            </div>
+          )}
           {!profLoading && reviews.length === 0 && (
-            <p style={{ textAlign:'center', color:'#9CA3AF', fontSize:13, padding:'14px 0' }}>Отзывов пока нет</p>
+            <div className="dark:text-gray-400" style={{ textAlign:'center', padding:'18px 0', color:'#94A3B8' }}>
+              <div style={{ fontSize:32, marginBottom:6 }}>💬</div>
+              <p style={{ fontSize:13, margin:0 }}>Отзывов пока нет</p>
+            </div>
           )}
           {reviews.map(r => (
-            <div key={r.id} style={{ padding:'12px 0', borderTop:'1px solid #F0F1F5' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                <span style={{ fontWeight:600, fontSize:13, color:'#1A2B3C' }}>{r.is_anonymous ? 'Анонимно' : (r.patient_name || 'Пациент')}</span>
-                <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmt(r.created_at)}</span>
+            <div key={r.id} className="dark:border-gray-800" style={{ padding:'12px 0', borderTop:'1px solid #F0F1F5' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                <span className="dark:text-gray-100" style={{ fontWeight:700, fontSize:13, color:'#0F172A' }}>{r.is_anonymous ? 'Анонимно' : (r.patient_name || 'Пациент')}</span>
+                <span className="dark:text-gray-500" style={{ fontSize:11, color:'#94A3B8' }}>{fmt(r.created_at)}</span>
               </div>
               <Stars rating={r.rating} size={13} />
-              {r.comment && <p style={{ margin:'6px 0 0', fontSize:13, color:'#374151', lineHeight:1.55 }}>{r.comment}</p>}
+              {r.comment && <p className="dark:text-gray-300" style={{ margin:'6px 0 0', fontSize:13, color:'#334155', lineHeight:1.6 }}>{r.comment}</p>}
             </div>
           ))}
         </div>
       </div>
 
-      {/* Плавающие кнопки внизу */}
-      <div style={{ position:'fixed', left:0, right:0, bottom:0, padding:'10px 14px', paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 10px)', background:'rgba(255,255,255,.96)', backdropFilter:'blur(12px)', borderTop:'1px solid rgba(0,0,0,.06)', boxShadow:'0 -4px 20px rgba(0,0,0,.06)', zIndex:6 }}>
-        <div style={{ maxWidth:560, margin:'0 auto', display:'flex', gap:8 }}>
+      {/* Floating action bar */}
+      <div className="dark:bg-gray-900/95 dark:border-gray-800"
+        style={{
+          position:'fixed', left:0, right:0, bottom:0,
+          padding:'12px 14px',
+          paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 12px)',
+          background:'rgba(255,255,255,.92)',
+          backdropFilter:'blur(16px)',
+          WebkitBackdropFilter:'blur(16px)',
+          borderTop:'1px solid rgba(15,23,42,.08)',
+          boxShadow:'0 -8px 24px rgba(0,0,0,.06)',
+          zIndex:6,
+        }}>
+        <div style={{ maxWidth:560, margin:'0 auto', display:'flex', gap:10 }}>
           <button onClick={() => setRevOpen(true)}
-            style={{ flex:1, padding:'13px', background:'#fff', color:primary, border:`1.5px solid ${primary}`, borderRadius:14, fontSize:14, fontWeight:700, cursor:'pointer' }}>
-            ✍️ Отзыв
+            className="dark:bg-gray-800 dark:text-gray-200"
+            style={{
+              flex:1, padding:'14px',
+              background:'#fff', color:primary,
+              border:`1.5px solid ${primary}`,
+              borderRadius:16,
+              fontSize:14, fontWeight:700, cursor:'pointer',
+              transition:'transform .15s',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+            }}
+            onPointerDown={e => e.currentTarget.style.transform='scale(.97)'}
+            onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+            <span className="material-symbols-outlined" style={{ fontSize:18 }}>edit_note</span>
+            Отзыв
           </button>
           {hasSchedule && (
             <button onClick={() => setBookOpen(true)}
-              style={{ flex:2, padding:'13px', background:`linear-gradient(135deg,${primary},#1565C0)`, color:'#fff', border:'none', borderRadius:14, fontSize:14, fontWeight:700, cursor:'pointer', boxShadow:'0 4px 14px rgba(0,151,167,.3)' }}>
+              style={{
+                flex:2, padding:'14px',
+                background:`linear-gradient(135deg,${primary},#1565C0)`,
+                color:'#fff', border:'none', borderRadius:16,
+                fontSize:14, fontWeight:700, cursor:'pointer',
+                boxShadow:`0 8px 22px ${primary}40`,
+                transition:'transform .15s, box-shadow .15s',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              }}
+              onPointerDown={e => e.currentTarget.style.transform='scale(.98)'}
+              onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+              <span className="material-symbols-outlined" style={{ fontSize:20, fontVariationSettings:"'FILL' 1" }}>event_available</span>
               Записаться к врачу
             </button>
           )}
@@ -2514,32 +3083,90 @@ function DoctorsTab({ primary, patientName, patientPhone, onRefreshHistory }) {
 function HealthHub({ sessionToken, phone }) {
   const [sub, setSub] = useState('vitals')
   const SUBS = [
-    { key: 'vitals',        label: 'Показатели', icon: 'monitoring' },
-    { key: 'medcard',       label: 'Карта',      icon: 'medical_information' },
-    { key: 'prescriptions', label: 'Лекарства',  icon: 'medication' },
-    { key: 'documents',     label: 'Документы',  icon: 'folder' },
+    { key: 'vitals',        label: 'Показатели', icon: 'monitoring',           color: '#0097A7' },
+    { key: 'medcard',       label: 'Карта',      icon: 'medical_information',  color: '#1565C0' },
+    { key: 'prescriptions', label: 'Лекарства',  icon: 'medication',           color: '#10B981' },
+    { key: 'documents',     label: 'Документы',  icon: 'folder',               color: '#A855F7' },
   ]
-  // items для <Tabs> — лейблы с иконками material-symbols
-  const tabItems = SUBS.map(s => ({
-    id: s.key,
-    label: (
-      <span className="inline-flex items-center gap-1">
-        <span className="material-symbols-outlined" style={{ fontSize: 15 }}>{s.icon}</span>
-        {s.label}
-      </span>
-    ),
-  }))
+
   return (
     <div>
-      <div className="mb-4 -mx-1 px-1 overflow-x-auto pb-1">
-        <Tabs items={tabItems} value={sub} onChange={setSub} />
+      <style>{`
+        @keyframes hhTabPop { 0%{transform:scale(.85);opacity:0} 100%{transform:scale(1);opacity:1} }
+        @keyframes hhContentIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes hhSkeletonShimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+      `}</style>
+
+      {/* Premium pill-style sub-tabs */}
+      <div className="dark:bg-gray-800/60"
+        style={{
+          display:'flex', gap:4, padding:4, marginBottom:16,
+          background:'linear-gradient(135deg, rgba(241,245,249,.95), rgba(248,250,252,.95))',
+          borderRadius:16,
+          border:'1px solid rgba(15,23,42,.05)',
+          boxShadow:'0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+          overflowX:'auto',
+          scrollbarWidth:'none',
+          WebkitOverflowScrolling:'touch',
+        }}>
+        {SUBS.map((s, idx) => {
+          const active = sub === s.key
+          return (
+            <button key={s.key} onClick={() => setSub(s.key)}
+              className={!active ? 'dark:text-gray-400' : ''}
+              style={{
+                flex:1, minWidth:'fit-content',
+                padding:'10px 14px',
+                borderRadius:12,
+                border:'none',
+                background: active
+                  ? `linear-gradient(135deg, ${s.color}, #1565C0)`
+                  : 'transparent',
+                color: active ? '#fff' : '#64748B',
+                fontWeight: active ? 700 : 600,
+                fontSize:13,
+                cursor:'pointer',
+                display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6,
+                whiteSpace:'nowrap',
+                boxShadow: active ? `0 4px 14px ${s.color}50` : 'none',
+                transition: 'all .25s cubic-bezier(.22,1,.36,1)',
+                animation: `hhTabPop .3s cubic-bezier(.22,1,.36,1) ${idx*0.04}s both`,
+              }}
+              onPointerDown={e => e.currentTarget.style.transform='scale(.96)'}
+              onPointerUp={e => e.currentTarget.style.transform='scale(1)'}
+              onPointerLeave={e => e.currentTarget.style.transform='scale(1)'}>
+              <span className="material-symbols-outlined"
+                style={{
+                  fontSize:18,
+                  fontVariationSettings: active ? "'FILL' 1" : "'FILL' 0",
+                  transition:'font-variation-settings .25s',
+                }}>{s.icon}</span>
+              {s.label}
+            </button>
+          )
+        })}
       </div>
-      <Suspense fallback={<div className="text-center py-12 text-gray-400 dark:text-gray-500 dark:text-gray-400 text-sm">Загрузка…</div>}>
-        {sub === 'vitals'        && <VitalsTab sessionToken={sessionToken} phone={phone} />}
-        {sub === 'medcard'       && <MedCardTab sessionToken={sessionToken} phone={phone} apiBase={API_BASE} />}
-        {sub === 'prescriptions' && <PrescriptionsTab sessionToken={sessionToken} apiBase={API_BASE} />}
-        {sub === 'documents'     && <DocumentsTab sessionToken={sessionToken} apiBase={API_BASE} />}
-      </Suspense>
+
+      {/* Animated content area */}
+      <div key={sub} style={{ animation:'hhContentIn .3s cubic-bezier(.22,1,.36,1)' }}>
+        <Suspense fallback={
+          <div style={{ padding:'8px 0' }}>
+            {[0,1,2].map(i => (
+              <div key={i} className="dark:bg-gray-800" style={{
+                height:80, marginBottom:12, borderRadius:18,
+                background:'linear-gradient(110deg,#F1F5F9 30%,#E5E7EB 50%,#F1F5F9 70%)',
+                backgroundSize:'200% 100%',
+                animation:`hhSkeletonShimmer 1.4s ease-in-out ${i*.1}s infinite`,
+              }} />
+            ))}
+          </div>
+        }>
+          {sub === 'vitals'        && <VitalsTab sessionToken={sessionToken} phone={phone} />}
+          {sub === 'medcard'       && <MedCardTab sessionToken={sessionToken} phone={phone} apiBase={API_BASE} />}
+          {sub === 'prescriptions' && <PrescriptionsTab sessionToken={sessionToken} apiBase={API_BASE} />}
+          {sub === 'documents'     && <DocumentsTab sessionToken={sessionToken} apiBase={API_BASE} />}
+        </Suspense>
+      </div>
     </div>
   )
 }
@@ -4358,40 +4985,136 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
     } finally { setBusy(false) }
   }
 
+  const FAMILY_PALETTE = [
+    ['#0097A7','#1565C0'],
+    ['#A855F7','#EC4899'],
+    ['#10B981','#0097A7'],
+    ['#F59E0B','#EF4444'],
+    ['#6366F1','#A855F7'],
+    ['#EC4899','#F472B6'],
+  ]
+  const gradientFor = (key) => {
+    const s = String(key||'')
+    let h = 0
+    for (let i=0; i<s.length; i++) h = (h*31 + s.charCodeAt(i)) | 0
+    return FAMILY_PALETTE[Math.abs(h) % FAMILY_PALETTE.length]
+  }
+
   return (
     <>
+      <style>{`
+        @keyframes fmCardIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+      `}</style>
       <ConfirmHost />
       {/* ===== БЛОК: Семейный аккаунт — переиспользует <Modal> дизайн-системы ===== */}
-      <Modal open={true} onClose={onClose} title="Семья" size="md">
-        {/* Owner */}
-        <div className="rounded-2xl p-3 mb-3" style={{ background:'#F0F9FF', border:'1px solid #BAE6FD' }}>
-          <p className="text-xs font-semibold text-sky-700 uppercase tracking-wide">Текущий профиль</p>
-          <p className="text-sm font-bold text-gray-800 dark:text-gray-100 mt-0.5">{ownerName || ownerPhone}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">{ownerPhone}</p>
+      <Modal open={true} onClose={onClose} title="Семейный аккаунт" size="md">
+        {/* Owner — premium gradient card */}
+        <div className="rounded-2xl mb-4"
+          style={{
+            padding:'14px 16px',
+            background:'linear-gradient(135deg, #ECFEFF, #EFF6FF)',
+            border:'1px solid rgba(21,101,192,.12)',
+            boxShadow:'0 2px 8px rgba(21,101,192,.06), inset 0 1px 0 rgba(255,255,255,.7)',
+            display:'flex', alignItems:'center', gap:12,
+          }}>
+          <div style={{
+            width:48, height:48, borderRadius:'50%',
+            background:'linear-gradient(135deg,#0097A7,#1565C0)',
+            display:'flex', alignItems:'center', justifyContent:'center',
+            color:'#fff', fontWeight:800, fontSize:17, letterSpacing:'-.02em',
+            flexShrink:0,
+            boxShadow:'0 6px 16px rgba(21,101,192,.35)',
+          }}>
+            {(ownerName || ownerPhone || '?').slice(0,2).toUpperCase()}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:'#0E7490', letterSpacing:.6, margin:0 }}>Текущий профиль</p>
+            <p className="font-bold text-gray-800 dark:text-gray-100 truncate" style={{ fontSize:15, marginTop:2, letterSpacing:'-.01em' }}>{ownerName || ownerPhone}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 truncate" style={{ marginTop:1 }}>{ownerPhone}</p>
+          </div>
+          <span className="material-symbols-outlined" style={{ color:'#0097A7', fontSize:22, fontVariationSettings:"'FILL' 1" }}>verified_user</span>
         </div>
+
+        {/* Section header */}
+        {members.length > 0 && (
+          <p className="text-[11px] font-bold uppercase tracking-wider dark:text-gray-400" style={{ color:'#94A3B8', margin:'0 0 8px', letterSpacing:.5 }}>
+            Члены семьи ({members.length})
+          </p>
+        )}
 
         {/* List */}
         {members.length === 0 ? (
-          <p className="text-center text-sm text-gray-400 dark:text-gray-500 dark:text-gray-400 py-4">Семейный список пуст</p>
+          <div className="dark:bg-gray-800/40" style={{
+            textAlign:'center', padding:'24px 12px',
+            background:'#F8FAFC', borderRadius:18,
+            border:'1px dashed #CBD5E1',
+            marginBottom:14,
+          }}>
+            <div style={{ fontSize:36, marginBottom:6 }}>👨‍👩‍👧</div>
+            <p className="text-sm dark:text-gray-400" style={{ color:'#64748B', margin:0, fontWeight:600 }}>Список пуст</p>
+            <p className="text-xs dark:text-gray-500" style={{ color:'#94A3B8', margin:'4px 0 0' }}>Добавьте детей или близких</p>
+          </div>
         ) : (
-          <div className="space-y-2 mb-3">
-            {members.map(m => (
-              <div key={m.id} className="rounded-2xl p-3 flex items-center gap-3" style={{ background:'#fff', border:'1px solid #E5E7EB' }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm flex-shrink-0" style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)' }}>
-                  {(m.name || m.phone || '?').slice(0,2).toUpperCase()}
+          <div className="space-y-2 mb-4">
+            {members.map((m, idx) => {
+              const [from, to] = gradientFor(m.phone || m.name || m.id)
+              return (
+                <div key={m.id} className="rounded-2xl flex items-center gap-3 dark:bg-gray-800/40 dark:border-gray-700"
+                  style={{
+                    padding:'12px 12px',
+                    background:'#fff',
+                    border:'1px solid #E5E7EB',
+                    boxShadow:'0 2px 6px rgba(0,0,0,.03), inset 0 1px 0 rgba(255,255,255,.5)',
+                    animation:`fmCardIn .3s cubic-bezier(.22,1,.36,1) ${idx*0.04}s both`,
+                  }}>
+                  <div style={{
+                    width:44, height:44, borderRadius:'50%',
+                    background: `linear-gradient(135deg, ${from}, ${to})`,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    color:'#fff', fontWeight:800, fontSize:14, letterSpacing:'-.01em',
+                    flexShrink:0,
+                    boxShadow:`0 4px 12px ${from}40`,
+                  }}>
+                    {(m.name || m.phone || '?').slice(0,2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 dark:text-gray-100 truncate" style={{ fontSize:14, letterSpacing:'-.005em' }}>{m.name || m.phone}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate" style={{ marginTop:1 }}>
+                      {m.relation ? <span style={{ color:'#0097A7', fontWeight:600 }}>{m.relation}</span> : '—'} · {m.phone}
+                    </p>
+                  </div>
+                  <button onClick={() => { setSwitchTarget(m); setShortCode(''); setErr('') }}
+                    style={{
+                      height:34, padding:'0 14px',
+                      borderRadius:10, border:'none',
+                      background:'linear-gradient(135deg,#0097A7,#1565C0)',
+                      color:'#fff', fontSize:12, fontWeight:700,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 12px rgba(21,101,192,.3)',
+                      transition:'transform .15s',
+                      display:'inline-flex', alignItems:'center', gap:4,
+                    }}
+                    onPointerDown={e => e.currentTarget.style.transform='scale(.95)'}
+                    onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+                    <span className="material-symbols-outlined" style={{ fontSize:14 }}>login</span>
+                    Войти
+                  </button>
+                  <button onClick={() => remove(m.id)}
+                    className="dark:bg-gray-800 dark:text-gray-500"
+                    style={{
+                      width:30, height:30, borderRadius:'50%',
+                      background:'#F1F5F9', color:'#94A3B8',
+                      border:'none', cursor:'pointer',
+                      fontSize:14,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      transition:'background .15s, color .15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background='#FEE2E2'; e.currentTarget.style.color='#EF4444' }}
+                    onMouseLeave={e => { e.currentTarget.style.background='#F1F5F9'; e.currentTarget.style.color='#94A3B8' }}
+                    title="Удалить">✕</button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-gray-800 dark:text-gray-100 truncate">{m.name || m.phone}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{m.relation || '—'} · {m.phone}</p>
-                </div>
-                <button onClick={() => { setSwitchTarget(m); setShortCode(''); setErr('') }}
-                  className="h-8 px-3 rounded-lg text-xs font-bold"
-                  style={{ background:'linear-gradient(135deg,#0097A7,#1565C0)', color:'#fff' }}>
-                  Войти
-                </button>
-                <button onClick={() => remove(m.id)} className="text-gray-300 dark:text-gray-500 dark:text-gray-400 text-lg leading-none" title="Удалить">×</button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -4400,43 +5123,112 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
 
         {/* Add form */}
         {showAdd ? (
-          <div className="rounded-2xl p-3 space-y-2 mb-3" style={{ background:'#F8FAFC', border:'1px solid #E2E8F0' }}>
-            <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7..."
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Имя"
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
-            <input value={relation} onChange={e => setRelation(e.target.value)} placeholder="Кто (Супруг, Ребёнок, ...)"
-              className="w-full h-10 px-3 rounded-xl border border-gray-200 dark:border-gray-700 text-sm" />
-            {err && <p className="text-xs text-red-500">{err}</p>}
-            {/* Кнопки формы добавления — дизайн-система */}
-            <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-2xl mb-3 dark:bg-gray-800/40 dark:border-gray-700"
+            style={{
+              padding:'14px',
+              background:'linear-gradient(135deg, #F8FAFC, #F1F5F9)',
+              border:'1px solid #E2E8F0',
+              animation:'fmCardIn .3s cubic-bezier(.22,1,.36,1)',
+            }}>
+            <p className="text-[11px] font-bold uppercase tracking-wider dark:text-gray-400" style={{ color:'#475569', margin:'0 0 10px', letterSpacing:.5 }}>Новый член семьи</p>
+            <div className="space-y-2">
+              <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+7..."
+                className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 text-sm transition-all"
+                style={{ outline:'none' }}
+                onFocus={e => { e.target.style.borderColor = '#0097A7'; e.target.style.boxShadow = '0 0 0 4px rgba(0,151,167,.12)' }}
+                onBlur={e => { e.target.style.borderColor = ''; e.target.style.boxShadow = 'none' }} />
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Имя"
+                className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 text-sm transition-all"
+                style={{ outline:'none' }}
+                onFocus={e => { e.target.style.borderColor = '#0097A7'; e.target.style.boxShadow = '0 0 0 4px rgba(0,151,167,.12)' }}
+                onBlur={e => { e.target.style.borderColor = ''; e.target.style.boxShadow = 'none' }} />
+              <input value={relation} onChange={e => setRelation(e.target.value)} placeholder="Кто (Супруг, Ребёнок, ...)"
+                className="w-full h-11 px-3 rounded-xl border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 text-sm transition-all"
+                style={{ outline:'none' }}
+                onFocus={e => { e.target.style.borderColor = '#0097A7'; e.target.style.boxShadow = '0 0 0 4px rgba(0,151,167,.12)' }}
+                onBlur={e => { e.target.style.borderColor = ''; e.target.style.boxShadow = 'none' }} />
+            </div>
+            {err && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 10px', background:'#FEF2F2', borderRadius:10, border:'1px solid #FECACA' }}>
+                <span style={{ fontSize:13 }}>⚠️</span>
+                <p style={{ color:'#B91C1C', fontSize:12, margin:0, fontWeight:600 }}>{err}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2 mt-3">
               <Button variant="secondary" onClick={() => setShowAdd(false)} disabled={busy}>Отмена</Button>
               <Button onClick={add} disabled={busy}>{busy ? '...' : 'Добавить'}</Button>
             </div>
           </div>
         ) : (
-          <Button variant="secondary" onClick={() => setShowAdd(true)} className="w-full mb-3">
-            + Добавить вручную
-          </Button>
+          <button onClick={() => setShowAdd(true)}
+            className="w-full mb-3 dark:bg-gray-800/40 dark:border-gray-700 dark:text-gray-300"
+            style={{
+              padding:'12px',
+              background:'#fff',
+              border:'1.5px dashed #CBD5E1',
+              borderRadius:14,
+              color:'#475569',
+              fontSize:13, fontWeight:600,
+              cursor:'pointer',
+              display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              transition:'all .15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor='#0097A7'; e.currentTarget.style.color='#0097A7' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor='#CBD5E1'; e.currentTarget.style.color='#475569' }}
+            onPointerDown={e => e.currentTarget.style.transform='scale(.98)'}
+            onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+            <span className="material-symbols-outlined" style={{ fontSize:18 }}>person_add</span>
+            Добавить вручную
+          </button>
         )}
 
         {/* Switch confirm — нужен short_code (proof of access) */}
         {switchTarget && (
-          <div className="rounded-2xl p-3 space-y-2" style={{ background:'#FFFBEB', border:'1px solid #FDE68A' }}>
-            <p className="text-xs font-bold text-amber-800">Войти в профиль: {switchTarget.name || switchTarget.phone}</p>
-            <p className="text-xs text-amber-700 leading-relaxed">
-              Это защитная проверка — введите <b>5-значный код любого направления</b> этого пациента
-              (можно посмотреть на бумажном направлении, в QR-карточке клиники, или в его собственном кабинете).
-              Подойдёт даже код от уже завершённого визита.
+          <div className="rounded-2xl dark:bg-amber-900/20 dark:border-amber-700"
+            style={{
+              padding:'14px',
+              background:'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
+              border:'1px solid #FDE68A',
+              animation:'fmCardIn .3s cubic-bezier(.22,1,.36,1)',
+            }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+              <span className="material-symbols-outlined" style={{ color:'#B45309', fontSize:20, fontVariationSettings:"'FILL' 1" }}>shield_lock</span>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-200" style={{ margin:0 }}>Войти в профиль: {switchTarget.name || switchTarget.phone}</p>
+            </div>
+            <p className="text-xs text-amber-700 dark:text-amber-300 leading-relaxed" style={{ marginBottom:10 }}>
+              Защитная проверка — введите <b>5-значный код любого направления</b> этого пациента
+              (с бумажного направления, QR-карточки или из его кабинета).
             </p>
-            <input value={shortCode} onChange={e => setShortCode(e.target.value.replace(/\D/g,''))} placeholder="Код"
+            <input value={shortCode} onChange={e => setShortCode(e.target.value.replace(/\D/g,''))} placeholder="• • • • •"
               maxLength={5} inputMode="numeric"
-              className="w-full h-10 px-3 rounded-xl border border-amber-300 text-base font-bold tracking-widest text-center" />
-            {err && <p className="text-xs text-red-500">{err}</p>}
-            {/* Кнопки подтверждения переключения профиля — дизайн-система */}
-            <div className="grid grid-cols-2 gap-2">
+              className="w-full h-12 px-3 rounded-xl border border-amber-300 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-100 font-bold text-center transition-all"
+              style={{ fontSize:22, letterSpacing:'.4em', outline:'none' }}
+              onFocus={e => { e.target.style.borderColor = '#F59E0B'; e.target.style.boxShadow = '0 0 0 4px rgba(245,158,11,.15)' }}
+              onBlur={e => { e.target.style.borderColor = ''; e.target.style.boxShadow = 'none' }} />
+            {err && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, padding:'7px 10px', background:'#FEF2F2', borderRadius:10, border:'1px solid #FECACA' }}>
+                <span style={{ fontSize:13 }}>⚠️</span>
+                <p style={{ color:'#B91C1C', fontSize:12, margin:0, fontWeight:600 }}>{err}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2 mt-3">
               <Button variant="secondary" onClick={() => setSwitchTarget(null)} disabled={busy}>Отмена</Button>
-              <Button onClick={doSwitch} disabled={busy || !shortCode}>{busy ? '...' : 'Войти'}</Button>
+              <button onClick={doSwitch} disabled={busy || !shortCode}
+                style={{
+                  height:42, borderRadius:12, border:'none',
+                  background:'linear-gradient(135deg,#0097A7,#1565C0)',
+                  color:'#fff', fontSize:14, fontWeight:700,
+                  cursor: (busy || !shortCode) ? 'not-allowed' : 'pointer',
+                  opacity: (busy || !shortCode) ? .55 : 1,
+                  boxShadow: (busy || !shortCode) ? 'none' : '0 6px 18px rgba(21,101,192,.35)',
+                  display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6,
+                  transition:'transform .15s, opacity .15s',
+                }}
+                onPointerDown={e => { if(!busy && shortCode) e.currentTarget.style.transform='scale(.97)' }}
+                onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+                <span className="material-symbols-outlined" style={{ fontSize:18 }}>login</span>
+                {busy ? '...' : 'Войти'}
+              </button>
             </div>
           </div>
         )}
