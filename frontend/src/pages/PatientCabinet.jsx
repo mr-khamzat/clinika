@@ -1792,6 +1792,7 @@ function ReviewForm({ doctorId, tenantId, primary, onClose, onDone }) {
   )
 }
 
+// ═════ БЛОК: QuickBook — premium 3-step wizard модалка быстрой записи ═════
 function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPhone }) {
   const dates = Array.from({length:14},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return d })
   const [selDate, setSelDate] = useState(null)
@@ -1944,40 +1945,58 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
     </div>
   )
 
+  // ═════ БЛОК: QuickBook — premium 3-step wizard (date → slot → name) ═════
+  const stepIdx = selSlot ? 2 : (selDate ? 1 : 0)
   return (
     <div>
-      {/* Doctor header (premium glass) */}
-      <div className="dark:bg-gray-800/40" style={{
-        display:'flex', gap:12, alignItems:'center',
-        marginBottom:14, padding:'14px',
-        background:'linear-gradient(135deg, #F0F9FF, #F8FAFF)',
-        borderRadius:18,
-        border:'1px solid rgba(21,101,192,.08)',
-        boxShadow:'0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
+      {/* Doctor header — premium glass card */}
+      <div className="dark:bg-gradient-to-br dark:from-gray-800/60 dark:to-gray-900/40 dark:border-gray-700/60" style={{
+        display:'flex', gap:14, alignItems:'center',
+        marginBottom:16, padding:'14px 16px',
+        background:'linear-gradient(135deg, #F0F9FF 0%, #F8FAFF 100%)',
+        borderRadius:20,
+        border:'1px solid rgba(21,101,192,.12)',
+        boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.6)',
       }}>
-        <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={48} primary={primary} />
+        <div style={{
+          padding:2, borderRadius:'50%',
+          background:`conic-gradient(from 140deg, ${primary}, #1565C0, #A855F7, ${primary})`,
+          boxShadow:`0 4px 12px ${primary}30`,
+        }}>
+          <div className="dark:bg-gray-900" style={{ padding:2, background:'#fff', borderRadius:'50%' }}>
+            <DocAvatar name={doctor.full_name} photo={doctor.photo_url} size={44} primary={primary} />
+          </div>
+        </div>
         <div style={{ flex:1, minWidth:0 }}>
-          <div className="dark:text-gray-100" style={{ fontWeight:700, fontSize:15, color:'#0F172A' }}>{doctor.full_name}</div>
-          <div className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B' }}>{doctor.specialty}</div>
+          <div className="dark:text-gray-100" style={{ fontWeight:800, fontSize:15, color:'#0F172A', letterSpacing:'-.01em' }}>{doctor.full_name}</div>
+          <div className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', marginTop:2 }}>{doctor.specialty}</div>
         </div>
       </div>
 
-      {/* Wizard progress bar */}
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
-          <span style={{ fontSize:11, color: selDate ? primary : '#94A3B8', fontWeight:700, letterSpacing:.4 }}>1. ДАТА</span>
-          <span style={{ fontSize:11, color: selSlot ? primary : (selDate ? '#0F172A' : '#94A3B8'), fontWeight:700, letterSpacing:.4 }}>2. ВРЕМЯ</span>
-          <span style={{ fontSize:11, color: selSlot ? '#0F172A' : '#94A3B8', fontWeight:700, letterSpacing:.4 }}>3. ИМЯ</span>
-        </div>
-        <div className="dark:bg-gray-700" style={{ height:6, borderRadius:3, background:'#E5E7EB', overflow:'hidden' }}>
-          <div style={{
-            height:'100%', width:`${stepProgress}%`,
-            background:`linear-gradient(90deg,${primary},#1565C0)`,
-            borderRadius:3,
-            transition:'width .35s cubic-bezier(.22,1,.36,1)',
-            boxShadow:`0 0 8px ${primary}60`,
-          }} />
-        </div>
+      {/* Wizard progress — 3 premium dots */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginBottom:18 }}>
+        {['Дата','Время','Имя'].map((lbl, i) => {
+          const active = i <= stepIdx
+          const current = i === stepIdx
+          return (
+            <div key={lbl} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4 }}>
+                <div style={{
+                  width: current ? 28 : 10, height: 10, borderRadius: 10,
+                  background: active ? `linear-gradient(90deg, ${primary}, #1565C0)` : '#E5E7EB',
+                  boxShadow: active ? `0 0 10px ${primary}70` : 'none',
+                  transition:'all .35s cubic-bezier(.22,1,.36,1)',
+                }} className={!active ? 'dark:!bg-gray-700' : ''} />
+                <span className={current ? '' : 'dark:text-gray-500'} style={{
+                  fontSize:10, fontWeight:700, letterSpacing:.4,
+                  color: current ? primary : (active ? '#0F172A' : '#94A3B8'),
+                  textTransform:'uppercase',
+                }}>{lbl}</span>
+              </div>
+              {i < 2 && <div className="dark:bg-gray-700" style={{ width:18, height:2, background:'#E5E7EB', borderRadius:2, marginBottom:14 }} />}
+            </div>
+          )
+        })}
       </div>
 
       <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите дату</p>
@@ -2116,16 +2135,18 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
           )}
           <button onClick={book} disabled={booking}
             style={{
-              width:'100%', padding:'14px',
-              background:`linear-gradient(135deg,${primary},#1565C0)`,
-              color:'#fff', border:'none', borderRadius:14,
-              fontSize:14, fontWeight:700, cursor:'pointer',
+              width:'100%', height:48, padding:'0 14px',
+              background:`linear-gradient(135deg,${primary} 0%,#1565C0 100%)`,
+              color:'#fff', border:'none', borderRadius:16,
+              fontSize:14, fontWeight:800, cursor:'pointer', letterSpacing:'.01em',
               opacity: booking ? 0.65 : 1,
-              boxShadow: booking ? 'none' : `0 6px 20px ${primary}45`,
+              boxShadow: booking ? 'none' : `0 8px 24px ${primary}50, inset 0 1px 0 rgba(255,255,255,.25)`,
               transition:'transform .15s, box-shadow .15s, opacity .15s',
+              display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8,
             }}
             onPointerDown={e => { if(!booking) e.currentTarget.style.transform='scale(.98)' }}
             onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+            <span className="material-symbols-rounded" style={{ fontSize:18, fontVariationSettings:'"FILL" 1' }}>check_circle</span>
             {booking ? 'Запись...' : `Записаться на ${selSlot}`}
           </button>
         </div>
@@ -2139,6 +2160,7 @@ function QuickBook({ doctor, primary, onClose, onBooked, patientName, patientPho
 //   дней и сеткой слотов; на <Modal> легко уносится, но потеряется специфичная
 //   мобильная динамика (max-height, overflow). Переведём при редизайне формы
 //   записи (вместе с QuickBook/SheetModal).
+// ═════ БЛОК: RescheduleModal — premium модалка переноса записи ═════
 function RescheduleModal({ apt, primary, onClose, onDone }) {
   // Подгружаем доступность по тому же doctor_id что и в записи
   const dates = Array.from({length:14},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return d })
@@ -2220,37 +2242,50 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
         {/* Handle */}
         <div className="sm:hidden" style={{ width:40, height:4, borderRadius:2, background:'#E5E7EB', margin:'0 auto 14px' }} />
 
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        {/* ═════ БЛОК: RescheduleModal — premium header + info glass card ═════ */}
+        <div className="flex items-center justify-between mb-4">
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
             <div style={{
-              width:36, height:36, borderRadius:12,
-              background:`linear-gradient(135deg,${primary},#1565C0)`,
+              width:42, height:42, borderRadius:14,
+              background:`linear-gradient(135deg,${primary} 0%,#1565C0 100%)`,
               display:'flex', alignItems:'center', justifyContent:'center',
-              boxShadow:`0 4px 12px ${primary}40`,
+              boxShadow:`0 6px 18px ${primary}50, inset 0 1px 0 rgba(255,255,255,.3)`,
             }}>
-              <span className="material-symbols-outlined" style={{ color:'#fff', fontSize:20, fontVariationSettings:"'FILL' 1" }}>event_repeat</span>
+              <span className="material-symbols-rounded" style={{ color:'#fff', fontSize:22, fontVariationSettings:"'FILL' 1" }}>event_repeat</span>
             </div>
-            <h3 className="font-bold text-gray-900 dark:text-gray-100" style={{ fontSize:17, letterSpacing:'-.01em' }}>Перенос записи</h3>
+            <div>
+              <h3 className="font-bold text-gray-900 dark:text-gray-100" style={{ fontSize:17, letterSpacing:'-.01em', margin:0 }}>Перенос записи</h3>
+              <p className="dark:text-gray-400" style={{ fontSize:11, color:'#94A3B8', margin:'2px 0 0', fontWeight:600 }}>Выберите новое время</p>
+            </div>
           </div>
           <button onClick={onClose}
-            className="dark:bg-gray-800 dark:text-gray-400"
+            className="dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400"
             style={{
               width:36, height:36, borderRadius:'50%',
               background:'#F1F5F9', border:'none',
               fontSize:18, color:'#64748B', cursor:'pointer',
               display:'flex', alignItems:'center', justifyContent:'center',
+              transition:'background .15s',
             }}
-            aria-label="Закрыть">✕</button>
+            aria-label="Закрыть">
+            <span className="material-symbols-rounded" style={{ fontSize:18 }}>close</span>
+          </button>
         </div>
 
-        <div className="dark:bg-gray-800/40" style={{
-          padding:'10px 12px', borderRadius:12,
-          background:'#F8FAFC', border:'1px solid #E2E8F0',
-          marginBottom:14,
+        {/* Doctor info — premium glass */}
+        <div className="dark:bg-gradient-to-br dark:from-gray-800/60 dark:to-gray-900/40 dark:border-gray-700/60" style={{
+          padding:'12px 14px', borderRadius:16,
+          background:'linear-gradient(135deg, #F0F9FF 0%, #F8FAFF 100%)',
+          border:'1px solid rgba(21,101,192,.12)',
+          boxShadow:'0 4px 16px rgba(0,0,0,.06), inset 0 1px 0 rgba(255,255,255,.6)',
+          marginBottom:18,
+          display:'flex', alignItems:'center', gap:10,
         }}>
-          <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', margin:0 }}>{apt.doctor_name}</p>
-          <p className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', margin:'2px 0 0' }}>{apt.clinic_name}</p>
+          <span className="material-symbols-rounded" style={{ fontSize:22, color:primary, fontVariationSettings:"'FILL' 1" }}>stethoscope</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:800, color:'#0F172A', margin:0, letterSpacing:'-.01em' }}>{apt.doctor_name}</p>
+            <p className="dark:text-gray-400" style={{ fontSize:12, color:'#64748B', margin:'2px 0 0' }}>{apt.clinic_name}</p>
+          </div>
         </div>
 
         <p className="dark:text-gray-100" style={{ fontSize:13, fontWeight:700, color:'#0F172A', marginBottom:10 }}>Выберите новую дату</p>
@@ -2359,15 +2394,17 @@ function RescheduleModal({ apt, primary, onClose, onDone }) {
         <button onClick={submit} disabled={!selSlot || busy}
           className="w-full transition-all"
           style={{
-            padding:'14px', borderRadius:14,
-            background:`linear-gradient(135deg,${primary},#1565C0)`,
+            height:48, padding:'0 14px', borderRadius:16,
+            background:`linear-gradient(135deg,${primary} 0%,#1565C0 100%)`,
             color:'#fff', border:'none',
-            fontSize:14, fontWeight:700, cursor:'pointer',
+            fontSize:14, fontWeight:800, cursor:'pointer', letterSpacing:'.01em',
             opacity: (!selSlot || busy) ? .55 : 1,
-            boxShadow: (!selSlot || busy) ? 'none' : `0 6px 20px ${primary}45`,
+            boxShadow: (!selSlot || busy) ? 'none' : `0 8px 24px ${primary}50, inset 0 1px 0 rgba(255,255,255,.25)`,
+            display:'inline-flex', alignItems:'center', justifyContent:'center', gap:8,
           }}
           onPointerDown={e => { if(selSlot && !busy) e.currentTarget.style.transform='scale(.98)' }}
           onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
+          <span className="material-symbols-rounded" style={{ fontSize:18, fontVariationSettings:"'FILL' 1" }}>event_available</span>
           {busy ? 'Переносим...' : (selSlot ? `Перенести на ${selSlot}` : 'Выберите время')}
         </button>
       </div>
@@ -2410,6 +2447,7 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
 
   const initials = (d.full_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()
 
+  // ═════ БЛОК: DoctorProfileModal — premium fullscreen doctor profile ═════
   return (
     <div className="dark:bg-gray-950"
       style={{ position:'fixed', inset:0, zIndex:300, background:'var(--cabinet-bg, #F0F4F8)', display:'flex', flexDirection:'column', animation:'docProfIn .28s cubic-bezier(.22,1,.36,1)' }}>
@@ -2645,35 +2683,36 @@ function DoctorProfileModal({ doc, tenantId, primary, patientName, patientPhone,
         }}>
         <div style={{ maxWidth:560, margin:'0 auto', display:'flex', gap:10 }}>
           <button onClick={() => setRevOpen(true)}
-            className="dark:bg-gray-800 dark:text-gray-200"
+            className="dark:bg-gray-800/80 dark:text-gray-200 dark:border-gray-700"
             style={{
-              flex:1, padding:'14px',
+              flex:1, height:48,
               background:'#fff', color:primary,
-              border:`1.5px solid ${primary}`,
+              border:`1.5px solid ${primary}40`,
               borderRadius:16,
-              fontSize:14, fontWeight:700, cursor:'pointer',
-              transition:'transform .15s',
+              fontSize:13, fontWeight:700, cursor:'pointer',
+              transition:'transform .15s, background .15s',
               display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              boxShadow:'0 2px 8px rgba(0,0,0,.04), inset 0 1px 0 rgba(255,255,255,.6)',
             }}
             onPointerDown={e => e.currentTarget.style.transform='scale(.97)'}
             onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
-            <span className="material-symbols-outlined" style={{ fontSize:18 }}>edit_note</span>
+            <span className="material-symbols-rounded" style={{ fontSize:18 }}>edit_note</span>
             Отзыв
           </button>
           {hasSchedule && (
             <button onClick={() => setBookOpen(true)}
               style={{
-                flex:2, padding:'14px',
-                background:`linear-gradient(135deg,${primary},#1565C0)`,
+                flex:2, height:48,
+                background:`linear-gradient(135deg,${primary} 0%,#1565C0 100%)`,
                 color:'#fff', border:'none', borderRadius:16,
-                fontSize:14, fontWeight:700, cursor:'pointer',
-                boxShadow:`0 8px 22px ${primary}40`,
+                fontSize:14, fontWeight:800, cursor:'pointer', letterSpacing:'.01em',
+                boxShadow:`0 8px 24px ${primary}50, inset 0 1px 0 rgba(255,255,255,.25)`,
                 transition:'transform .15s, box-shadow .15s',
-                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
               }}
               onPointerDown={e => e.currentTarget.style.transform='scale(.98)'}
               onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
-              <span className="material-symbols-outlined" style={{ fontSize:20, fontVariationSettings:"'FILL' 1" }}>event_available</span>
+              <span className="material-symbols-rounded" style={{ fontSize:20, fontVariationSettings:"'FILL' 1" }}>event_available</span>
               Записаться к врачу
             </button>
           )}
@@ -5000,32 +5039,38 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
     return FAMILY_PALETTE[Math.abs(h) % FAMILY_PALETTE.length]
   }
 
+  // ═════ БЛОК: FamilyModal — premium семейный аккаунт ═════
   return (
     <>
       <style>{`
         @keyframes fmCardIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
       `}</style>
       <ConfirmHost />
-      {/* ===== БЛОК: Семейный аккаунт — переиспользует <Modal> дизайн-системы ===== */}
       <Modal open={true} onClose={onClose} title="Семейный аккаунт" size="md">
-        {/* Owner — premium gradient card */}
-        <div className="rounded-2xl mb-4"
+        {/* Owner — premium glass card with conic-gradient ring */}
+        <div className="rounded-2xl mb-4 dark:bg-gradient-to-br dark:from-cyan-900/30 dark:to-blue-900/20 dark:border-cyan-800/40"
           style={{
             padding:'14px 16px',
-            background:'linear-gradient(135deg, #ECFEFF, #EFF6FF)',
+            background:'linear-gradient(135deg, #ECFEFF 0%, #EFF6FF 100%)',
             border:'1px solid rgba(21,101,192,.12)',
-            boxShadow:'0 2px 8px rgba(21,101,192,.06), inset 0 1px 0 rgba(255,255,255,.7)',
+            boxShadow:'0 4px 16px rgba(21,101,192,.08), inset 0 1px 0 rgba(255,255,255,.7)',
             display:'flex', alignItems:'center', gap:12,
           }}>
           <div style={{
-            width:48, height:48, borderRadius:'50%',
-            background:'linear-gradient(135deg,#0097A7,#1565C0)',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            color:'#fff', fontWeight:800, fontSize:17, letterSpacing:'-.02em',
+            padding:2, borderRadius:'50%',
+            background:'conic-gradient(from 140deg, #0097A7, #1565C0, #A855F7, #0097A7)',
+            boxShadow:'0 6px 18px rgba(21,101,192,.40)',
             flexShrink:0,
-            boxShadow:'0 6px 16px rgba(21,101,192,.35)',
           }}>
-            {(ownerName || ownerPhone || '?').slice(0,2).toUpperCase()}
+            <div className="dark:bg-gray-900" style={{
+              width:48, height:48, borderRadius:'50%',
+              background:'linear-gradient(135deg,#0097A7,#1565C0)',
+              display:'flex', alignItems:'center', justifyContent:'center',
+              color:'#fff', fontWeight:800, fontSize:17, letterSpacing:'-.02em',
+              border:'2px solid #fff',
+            }}>
+              {(ownerName || ownerPhone || '?').slice(0,2).toUpperCase()}
+            </div>
           </div>
           <div style={{ flex:1, minWidth:0 }}>
             <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:'#0E7490', letterSpacing:.6, margin:0 }}>Текущий профиль</p>
@@ -5085,19 +5130,19 @@ function FamilyModal({ ownerName, ownerPhone, members, onClose, onChanged, onSwi
                   </div>
                   <button onClick={() => { setSwitchTarget(m); setShortCode(''); setErr('') }}
                     style={{
-                      height:34, padding:'0 14px',
-                      borderRadius:10, border:'none',
-                      background:'linear-gradient(135deg,#0097A7,#1565C0)',
-                      color:'#fff', fontSize:12, fontWeight:700,
+                      height:36, padding:'0 14px',
+                      borderRadius:12, border:'none',
+                      background:'linear-gradient(135deg,#0097A7 0%,#1565C0 100%)',
+                      color:'#fff', fontSize:12, fontWeight:800, letterSpacing:'.01em',
                       cursor:'pointer',
-                      boxShadow:'0 4px 12px rgba(21,101,192,.3)',
-                      transition:'transform .15s',
-                      display:'inline-flex', alignItems:'center', gap:4,
+                      boxShadow:'0 6px 16px rgba(21,101,192,.35), inset 0 1px 0 rgba(255,255,255,.25)',
+                      transition:'transform .15s, box-shadow .15s',
+                      display:'inline-flex', alignItems:'center', gap:5,
                     }}
                     onPointerDown={e => e.currentTarget.style.transform='scale(.95)'}
                     onPointerUp={e => e.currentTarget.style.transform='scale(1)'}>
-                    <span className="material-symbols-outlined" style={{ fontSize:14 }}>login</span>
-                    Войти
+                    <span className="material-symbols-rounded" style={{ fontSize:15, fontVariationSettings:"'FILL' 1" }}>login</span>
+                    Сменить
                   </button>
                   <button onClick={() => remove(m.id)}
                     className="dark:bg-gray-800 dark:text-gray-500"
