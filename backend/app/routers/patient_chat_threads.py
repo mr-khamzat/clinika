@@ -89,10 +89,18 @@ async def list_threads(
                               session_token or t)
     acc = await _account(db, sess)
     threads = await cs.list_patient_threads(db, acc.id)
+    # Подтягиваем имена клиник одним запросом, чтобы клиент видел название, а не UUID
+    from sqlalchemy import select
+    from app.models.clinic import Clinic
+    clinic_ids = {th.clinic_id for th in threads if th.clinic_id}
+    clinic_names: dict = {}
+    if clinic_ids:
+        res = await db.execute(select(Clinic.id, Clinic.name).where(Clinic.id.in_(clinic_ids)))
+        clinic_names = {str(cid): cname for cid, cname in res.all()}
     out = []
     for th in threads:
         last = await cs.last_message(db, th.id)
-        out.append(cs.serialize_thread(th, last))
+        out.append(cs.serialize_thread(th, last, clinic_name=clinic_names.get(str(th.clinic_id))))
     return {"threads": out}
 
 
